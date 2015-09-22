@@ -4,6 +4,10 @@ title: Data import
 output: bookdown::html_chapter
 ---
 
+```{r, include = FALSE}
+library(readr)
+```
+
 # Data import
 
 ## Overview
@@ -15,7 +19,169 @@ You can't apply any of the tools you've applied so far to your own work, unless 
 * Data from web APIs with httr.
 * Binary file formats (like excel or sas), with haven and readxl.
 
+The common link between all these packages is they all aim to take your data and turn it into a data frame in R, so you can tidy it and then analyse it.
+
 ## Flat files
+
+There are many ways to read flat files into R. If you've be using R for a while, you might be familiar with `read.csv()`, `read.fwf()` and friends. We're not going to use these base functions. Instead we're going to use `read_csv()`, `read_fwf()`, and friends from the readr package. Because:
+
+* These functions are typically much faster (~10x) than the base equivalents.
+  Long run running jobs also have a progress bar, so you can see what's
+  happening. (If you're looking for raw speed, try `data.table::fread()`, 
+  it's slightly less flexible than readr, but can be twice as fast.)
+  
+* They have more flexible parsers: they can read in dates, times, currencies,
+  percentages, and more. 
+  
+* They fail to do some annoying things like converting character vectors to 
+  factors, and munging the column headers to make sure they're valid R 
+  variable names.
+
+* They return objects with class `tbl_df`. As you saw in the dplyr chapter,
+  this provides a nicer printing method, so it's easier to work with large
+  datasets.
+
+* They're designed to be as reproducible as possible - this means that you
+  sometimes need to supply a few more arguments when using them the first
+  time, but they'll definitely work on other peoples computers. The base R
+  functions take a number of settings from system defaults, which means that
+  code that works on your computer might not work on someone elses.
+
+Make sure you have the readr package (`install.packages("readr")`).
+
+Most of readr's functions are concerned with turning flat files into data frames:
+
+* `read_csv()` read comma delimited files, `read_csv2()` reads semi-colon
+  separated files (common in countries where `,` is used as the decimal place),
+  `read_tsv()` reads tab delimited files, and `read_delim()` reads in files
+  with a user supplied delimiter.
+
+* `read_fwf()` reads fixed width files. You can specify fields either by their
+  widths with `fwf_widths()` or theirs position with `fwf_positions()`. 
+  `read_table()` reads a common variation of fixed width files where columns
+  are separated by white space.
+
+* `read_log()` reads Apache style logs. (But also check out
+  [webreadr](https://github.com/Ironholds/webreadr) which is built on top 
+  of `read_log()`, but provides many more helpful tools.)
+
+readr also provides a number of functions for reading files off disk into simpler data structures:
+
+* `read_file()` reads an entire file into a single string.
+
+* `read_lines()` reads a file into a character vector with one element per line.
+
+These might be useful for other programming tasks.
+
+As well as reading data frame disk, readr also provides tools for working with data frames and character vectors in R:
+
+* `type_convert()` applies the same parsing heuristics to the character columns
+  in a data frame. You can override its choices using `col_types`.
+  
+* `parse_datetime()`, `parse_factor()`, `parse_integer()`, etc. Corresponding
+  to each `col_XYZ()` function is a `parse_XYZ()` function that takes a 
+  character vector and returns a parsed vector. We'll use these in examples
+  so you can see how a single piece works at a time.
+
+For the rest of this chapter we'll focus on `read_csv()`. If you understand how to use this function, it will be straightforward to your knowledge to all the other functions in readr.
+
+### Basics
+
+The first two arguments of `read_csv()` are:
+
+* `file`: path (or URL) to the file you want to load. Readr can automatically 
+  decompress files ending in `.zip`, `.gz`, `.bz2`, and `.xz`. This can also
+  be a literal csv file, which is useful for experimenting and creating
+  reproducible examples.
+  
+* `col_names`: column names. There are three options:
+  
+    * `TRUE` (the default), which reads column names from the first row 
+      of the file
+      
+    * `FALSE` number columns sequentially from `X1` to `Xn`.
+    
+    * A character vector, used as column names. If these don't match up
+      with the columns in the data, you'll get a warning message.
+
+EXAMPLE
+
+### Column types
+
+Readr uses a heuristic to figure out the types of your columns: it reads the first 1000 rows. This is fast, and fairly robust. If readr detects the wrong type of data, you'll get warning messages:
+
+EXAMPLE
+
+You can fix these by overriding readr's guesses with the `col_type` argument. 
+
+(Note that if you have a very large file, you might want to set `n_max` to 10,000 or 100,000. That will speed up iteration while you're finding common problems)
+
+* `col_integer()` and `col_double()` specify integer and doubles. `col_number()`
+  is a more flexible parsed for numbers embedded in other strings. It will 
+  look for the first number in a string, ignoring non-numeric prefixes and
+  suffixes. It will also ignoring the grouping mark specified by the locale 
+  (see below for more details).
+  
+* `col_logical()` parses TRUE, T, FALSE and F into a logical vector.
+  
+* `col_character()` leaves strings as is. `col_factor()` allows you to load
+  data directly into a factor if you know what the levels are.
+  
+* `col_skip()` completely ignores a column.
+
+* `col_date()`, `col_datetime()` and `col_time()` parse into dates, date times,
+  and times as described below.
+
+Parsing occurs after leading and trailing whitespace has been removed (if not overridden with `trim_ws = FALSE`) and missing values listed in `na` have been removed.
+
+#### Datetimes
+
+Readr provides three options depending on where you want a date (the number of days since 1970-01-01), a date time (the number of seconds since midnight 1970-01-01), or a time (i.e. the number of seconds since midnight). The defaults read:
+
+* Date times: an [ISO8601](https://en.wikipedia.org/wiki/ISO_8601) date time.
+* Date: a year, optional separator, month, optional separator, day.
+* Time: an hour, optional colon, hour, optional colon, minute, optional colon,
+  optional seconds, optional am/pm.
+
+```{r}
+parse_datetime("2010-10-01T2010")
+parse_date("2010-10-01")
+parse_time("20:10:01")
+```
+
+If these don't work for your data (common!) you can supply your own date time formats, built up of the following pieces:
+
+* Year: `%Y` (4 digits). `%y` (2 digits); 00-69 -> 2000-2069, 70-99 -> 1970-1999.
+
+* Month: `%m` (2 digits), `%b` (abbreviated name), `%B` (full name).
+
+* Day: `%d` (2 digits), `%e` (optional leading space).
+
+* Hour: `%H`.
+
+* Minutes: `%M`.
+
+* Seconds: `%S` (integer seconds), `%OS` (partial seconds).
+
+* Time zone: `%Z` (as name, e.g. `America/Chicago`), `%z` (as offset from UTC, 
+  e.g. `+0800`). If you're American, note that "EST" is a Canadian time zone 
+  that does not have daylight savings time. It is \emph{not} Eastern Standard 
+  Time!
+
+* AM/PM indicator: `%p`.
+
+* Non-digits: `%.` skips one non-digit charcter, `%*` skips any number of 
+  non-digits.
+
+The best way to figure out the correct string is to create a few examples in a character vector, and test with one of the parsing functions. For example:
+
+```{r}
+parse_date("01/02/15", "%m/%d/%y")
+parse_date("01/02/15", "%d/%m/%y")
+parse_date("01/02/15", "%y/%m/%d")
+```
+
+### International data
 
 ## Databases
 
