@@ -27,6 +27,10 @@ You get better very slowly if you don't consciously practice, so this chapter br
 library(magrittr)
 ```
 
+This chapter is not comprehensive, but it will illustrate some patterns that in the long-term that will help you write clear and comprehensive code. 
+
+The goal is not just to write better funtions or to do things that you couldn't do before, but to code with more "ease".
+
 ## Piping
 
 ```R
@@ -121,6 +125,9 @@ There are a number of ways that you could write this:
     read this series of function compositions like it's a set of imperative
     actions. 
     
+    (Behind the scenes magrittr converts this call to the previous form,
+    using `.` as the name of the object. This makes it easier to debug than
+    the first form because it avoids deeply nested fuction calls.)
 
 ## Useful intermediates
 
@@ -205,25 +212,192 @@ The pipe is a powerful tool, but it's not the only tool at your disposal, and it
     
     I think it also gives you a better mental model of how assignment works
     in R. The above code does not modify `mtcars`: it instead creates a 
-    modified copy and then replaces the old version. 
+    modified copy and then replaces the old version (this may seem like a 
+    subtle point but I think it's quite important).  
 
 ## Duplication
 
-A rule of thumb: whenever you copy and paste something more than twice (i.e. so you now have three copies), you should consider making a function instead. For example:
-
-```R
-df$x %>% abs() %>% sqrt() %>% mean()
-df$y %>% abs() %>% sqrt() %>% mean()
-df$z %>% abs() %>% sqrt() %>% mean()
-```
-
-If you've never written a function before, or just want to quickly remove duplication in code that uses magrittr, you can take advantage of a cool feature: if the first argument in the pipeline is `.`, you get a new function, rather than a specific transformation.
-
-```R
-my_f <- . %>% abs() %>% sqrt() %>% mean()
-df$x %>% my_f()
-df$y %>% my_f()
-df$z %>% my_f()
-```
-
 As you become a better R programming, you'll learn more techniques for reducing various types of duplication. This allows you to do more with less, and allows you to express yourself more clearly by taking advantage of powerful programming constructs.
+
+Two main tools for reducing duplication are functions and for-loops. You tend to use for-loops less often in R than in other programming languages because R is a functional programming language. That means that you can extract out common patterns of for loops and put them in a function.
+
+### Extracting out a function
+
+Whenever you've copied and pasted code more than twice, you need to take a look at it and see if you can extract out the common components and make a function. For example, take a look at this code. What does it do?
+
+```{r}
+df <- data.frame(
+  a = rnorm(10),
+  b = rnorm(10),
+  c = rnorm(10),
+  d = rnorm(10)
+)
+
+df$a <- (df$a - min(df$a, na.rm = TRUE)) / 
+  (max(df$a, na.rm = TRUE) - min(df$a, na.rm = TRUE))
+df$b <- (df$b - min(df$b, na.rm = TRUE)) / 
+  (max(df$a, na.rm = TRUE) - min(df$b, na.rm = TRUE))
+df$c <- (df$c - min(df$c, na.rm = TRUE)) / 
+  (max(df$c, na.rm = TRUE) - min(df$c, na.rm = TRUE))
+df$d <- (df$d - min(df$d, na.rm = TRUE)) / 
+  (max(df$d, na.rm = TRUE) - min(df$d, na.rm = TRUE))
+```
+
+You might be able to puzzle out that this rescales each column to 0--1. Did you spot the mistake? I made an error when updating the code for `df$y`, and I forgot to change an `x` to a `y`. Extracting repeated code out into a function is a good idea because it helps make your code more understandable (because you can name the operation), and it prevents you from making this sort of update error.
+
+To write a function you need to first analyse the operation. How many inputs does it have?
+
+```{r, eval = FALSE}
+(df$a - min(df$a, na.rm = TRUE)) /
+  (max(df$a, na.rm = TRUE) - min(df$a, na.rm = TRUE))
+```
+
+It's often a good idea to rewrite the code using some temporary values. Here this function only takes one input, so I'll call it `x`:
+
+```{r}
+x <- 1:10
+(x - min(x, na.rm = TRUE)) / (max(x, na.rm = TRUE) - min(x, na.rm = TRUE))
+```
+
+We can also see some duplication in this code: I'm computing the `min()` and `max()` multiple times, and I could instead do that in one step:
+
+```{r}
+rng <- range(x, na.rm = TRUE)
+(x - rng[1]) / (rng[2] - rng[1])
+```
+
+Now that I've simplified the code, and made sure it works, I can turn it into a function:
+
+```{r}
+rescale01 <- function(x) {
+  rng <- range(x, na.rm = TRUE)
+  (x - rng[1]) / (rng[2] - rng[1])
+}
+```
+
+Always make sure you code works on a simple test case before creating the function!
+
+Now we can use that to simplify our original example:
+
+```{r}
+df$a <- rescale01(df$a)
+df$b <- rescale01(df$b)
+df$c <- rescale01(df$c)
+df$d <- rescale01(df$d)
+```
+
+This makes it more clear what we're doing, and avoids one class of copy-and-paste errors. However, we still have quite a bit of duplication: we're doing the same thing to each column.
+
+### Common looping patterns
+
+Before we tackle the problem of rescaling each column, lets start with a simpler case. Imagine we want to summarise each column with its median. One way to do that is to use a for loop. Every for loop has three main components:
+
+1. Creating the space for the output.
+2. The sequence to loop over.
+3. The body of the loop.
+
+```{r}
+medians <- vector("numeric", ncol(df))
+for (i in 1:ncol(df)) {
+  medians[i] <- median(df[[i]])
+}
+medians
+```
+
+If you do this a lot, you'd probably pull make a function for it:
+
+```{r}
+col_medians <- function(df) {
+  out <- vector("numeric", ncol(df))
+  for (i in 1:ncol(df)) {
+    out[i] <- median(df[[i]])
+  }
+  out
+}
+col_medians(df)
+```
+
+Now imagine that you also want to compute the interquartile range of each column? How would you change the function? What if you also wanted to calculate the min and max?
+
+```{r}
+col_min <- function(df) {
+  out <- vector("numeric", ncol(df))
+  for (i in 1:ncol(df)) {
+    out[i] <- min(df[[i]])
+  }
+  out
+}
+col_max <- function(df) {
+  out <- vector("numeric", ncol(df))
+  for (i in 1:ncol(df)) {
+    out[i] <- max(df[[i]])
+  }
+  out
+}
+```
+
+I've now copied-and-pasted this function three times, so it's time to think about how to generalise it. If you look at these functions, you'll notice that they are very similar: the only difference is the function that gets called.
+
+I mentioned earlier that R is a functional programming language. Practically, what this means is that you can not only pass vectors and data frames to functions, but you can also pass other functions. So you can generalise these `col_*` functions by adding an additional argument:
+
+```{r}
+col_summary <- function(df, fun) {
+  out <- vector("numeric", ncol(df))
+  for (i in 1:ncol(df)) {
+    out[i] <- fun(df[[i]])
+  }
+  out
+}
+col_summary(df, median)
+col_summary(df, min)
+```
+
+We can take this one step further and use another cool feature of R functions: "`...`". "`...`" just takes any additional arguments and allows you to pass them on to another function:
+
+```{r}
+col_summary <- function(df, fun, ...) {
+  out <- vector("numeric", ncol(df))
+  for (i in 1:ncol(df)) {
+    out[i] <- fun(df[[i]], ...)
+  }
+  out
+}
+col_summary(df, median, na.rm = TRUE)
+```
+
+If you've used R for a bit, the behaviour of function might seem familiar: it looks like the `lapply()` or `sapply()` functions. Indeed, all of the apply function in R abstract over common looping patterns.
+
+There are two main differences with `lapply()` and `col_summary()`:
+
+* `lapply()` returns a list. This allows it to work with any R function, not 
+  just those that return numeric output.
+  
+* `lapply()` is written in C, not R. This gives some very minor performance
+  improvements.
+  
+As you learn more about R, you'll learn more functions that allow you to abstract over common patterns of for loops.
+
+### Modifying columns
+
+Going back to our original motivation we want to reduce the duplication in 
+
+```{r, eval = FALSE}
+df$a <- rescale01(df$a)
+df$b <- rescale01(df$b)
+df$c <- rescale01(df$c)
+df$d <- rescale01(df$d)
+```
+
+One way to do that is to combine `lapply()` with data frame subsetting:
+
+```{r}
+df[] <- lapply(df, rescale01)
+```
+
+### Exercises
+
+1.   Adapt `col_summary()` so that it only applies to numeric inputs.
+     You might want to start with an `is_numeric()` function that returns
+     a logical vector that has a TRUE corresponding to each numeric column.
+
+1.   How do `sapply()` and `vapply()` differ from `col_summary()`?
