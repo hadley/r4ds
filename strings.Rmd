@@ -7,6 +7,7 @@ output: bookdown::html_chapter
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(stringr)
+library(stringi)
 ```
 
 # String manipulation
@@ -45,7 +46,7 @@ There are a handful of other special characters. The most common used are `"\n"`
 
 You'll also sometimes strings like `"\u00b5"`, this is a way of writing special characters that works on all platforms:
 
-```R
+```{r}
 x <- "\u00b5"
 x
 ```
@@ -61,6 +62,8 @@ Base R contains many functions to work with strings but we'll generally avoid th
 nchar(NA)
 str_length(NA)
 ```
+
+Every stringr function starts with `str_`. That's particularly useful if you're using RStudio, because by the time you've type `str_`, RStudio will be ready to offer autocomplete for the reminaing characters. That's useful if you can't quite remember the name of the function.
 
 ### Combining strings
 
@@ -85,7 +88,7 @@ str_c("|-", x, "-|")
 str_c("|-", str_replace_na(x), "-|")
 ```
 
-As shown above, `str_c()` is vectorised, automatically recycling the shortest vectors to the same length as the longest:
+As shown above, `str_c()` is vectorised, automatically recycling shorter vectors to the same length as the longest:
 
 ```{r}
 str_c("prefix-", c("a", "b", "c"), "-suffix")
@@ -108,13 +111,19 @@ str_c("Na ", str_dup("na ", 4), "batman!")
 
 ### Subsetting strings
 
-You can extract parts of a string using `str_sub()`:
+You can extract parts of a string using `str_sub()`. `str_sub()` takes two arguments in addition to the string: the position to start at, and the postion to end at (inclusive):
 
 ```{r}
 x <- c("apple", "banana", "pear")
 str_sub(x, 1, 3)
 # negative numbers count backwards from end
 str_sub(x, -3, -1)
+```
+
+`str_sub()` returns the longest string possible. If you don't want this behaviour, you'll need to check `str_length()` yourself.
+
+```{r}
+str_sub("a", 1, 5)
 ```
 
 You can also use `str_sub()` to modify strings:
@@ -124,15 +133,47 @@ str_sub(x, 1, 1) <- str_to_lower(str_sub(x, 1, 1))
 x
 ```
 
+You can use `str_to_lower()`, `str_to_upper()`, and `str_to_title()` to convert the case of a vector. Note that what that means depends on where you are in the world, so these functions all have a locale argument. If left blank it will use the current locale.
+
 ### Exercises
 
 1.  In your own words, describe the difference between `sep` and `collapse`.
 
-## Regular expressions basics
+1.  In code that doesn't use stringr, you'll often see `paste()` and `paste0()`.
+    What's the difference between the two functions? What's stringr function are
+    they equivalent too? How do the functions differ in their handling of 
+    `NA`?
+    
+1.  Use `str_length()` and `str_sub()` to extract the middle character from 
+    a character vector.
+    
+1.  Write a function that turns (e.g.) a vector `c("a", "b", "c")` into 
+    the string `a, b, and c`. Think carefully about what it should do if
+    given a vector of length 0, 1, or 2.
 
-Key to all of these functions are regular expressions. Regular expressions are a very terse language that allow to describe patterns in string. They take a little while to get your head around, but once you've got it you'll find them extremely useful.
+1.  What does `str_wrap()` do? When might you want to use it?
 
-Regular expression are not limited to matching fixed string. You can also use special characters that match patterns. For example, `.` allows you to match any character:
+1.  What does `str_trim()` do? 
+
+## Matching patterns with regular expressions
+
+Regular expressions, regexps for short, a very terse language that allow to describe patterns in string. They take a little while to get your head around, but once you've got it you'll find them extremely useful. 
+
+To learn regular expressions, we'll use `str_show()` and `str_show_all()`. These functions take a character vector and a regular expression, and shows you how they match. We'll start with very simple regular expressions and then gradually move to more and more complicated. Once you've mastered the basics of pattern matching with regular expression, you'll learn all the stringr functions that use them and learn how to use them to solve real problems.
+
+### Fixed matches
+
+The simplest patterns that 
+
+```{r}
+
+```
+
+```{r}
+common <- rcorpora::corpora("words/common")$commonWords
+```
+
+### Match anything and escaping
 
 ```{r}
 str_subset(c("abc", "adc", "bef"), "a.c")
@@ -161,6 +202,35 @@ y <- str_replace(x, "\\\\", "-slash-")
 cat(y, "\n")
 ```
 
+Here I'll write a regular expression like `\.` and the string that represents the regular expression as `"\."`.
+
+Use regular expressions to:
+
+* Solve this crossword puzzle clue: `a??le`
+
+### Anchors
+
+Regular expressions can also match things that are not characters. The most important non-character matches are:
+
+* `^`: the start of the line.
+* `*`: the end of the line.
+
+To force a regular expression to only match a complete string, anchor it with both `^` and `$`.:
+
+```{r}
+str_detect(c("abcdef", "bcd"), "^bcd$")
+```
+
+My favourite mneomic for rememember which is which (from [Evan Misshula](https://twitter.com/emisshula/status/323863393167613953): begin with power (`^`), end with money (`$`).
+
+You can also match the boundary between words with `\b`. I don't find I often use this in R, but I will sometimes use it when I'm doing a find all in RStudio when I want to find the name of a function that's a component of other functions. For example, I'll search for `\bsum\b` to avoid matching `summarise`, `summary`, `rowsum` and so on.
+
+Practice these by finding all common words:
+
+* Start with y.
+* End in x.
+* That are exactly 4 letters long. Without using `str_length()`
+
 ### Character classes and alternatives
 
 As well as `.` there are a number of other special patterns that match more than one character:
@@ -183,10 +253,14 @@ Like with mathematical expression, if precedence ever gets confusing, use parent
 
 ```{r}
 str_detect(c("grey", "gray"), "gr(e|a)y")
-str_detect(c("grey", "gray"), "gr(?:e|a)y")
 ```
 
-Unfortunately parentheses have some other side-effects in regular expressions, which we'll learn about later. Technically, the parentheses you should use are `(?:)` which are called non-capturing parentheses. Most of the time this won't make any difference so it's easy to use `()`, but it sometimes helpful to be aware of `(?:)`.
+Practice these by finding:
+
+* Start with a vowel.
+* That only contain constants.
+* That don't contain any vowels.
+
 
 ### Repetition
 
@@ -202,28 +276,31 @@ Unfortunately parentheses have some other side-effects in regular expressions, w
 
 Note that the precedence of these operators are high, so you write: `colou?r`. That means you'll need to use parentheses for many uses: `bana(na)+` or `ba(na){2,}`.
 
-### Anchors
+Practice these by finding all common words:
 
-Regular expressions can also match things that are not characters. The most important non-character matches are:
+* That contain three or more vowels in a row.
 
-* `^`: the start of the line.
-* `*`: the end of the line.
-
-To force a regular expression to only match a complete string, anchor it with both `^` and `$`.:
+### Grouping and backreferences
 
 ```{r}
-str_detect(c("abcdef", "bcd"), "^bcd$")
+fruit <- rcorpora::corpora("foods/fruits")$fruits
+str_subset(fruit, "(..)\\1")
 ```
 
-My favourite mneomic for rememember which is which (from [Evan Misshula](https://twitter.com/emisshula/status/323863393167613953): begin with power (`^`), end with money (`$`).
+Unfortunately `()` in regexps serve two purposes: you usually use them to disambiguate precedence, but you can also use for grouping. If you're using one set for grouping and one set for disambiguation, things can get confusing. You might want to use `(?:)` instead: it only disambiguates, and doesn't modify the grouping. They are called non-capturing parentheses.
 
-You can also match the boundary between words with `\b`. I don't find I often use this in R, but I will sometimes use it when I'm doing a find all in RStudio when I want to find the name of a function that's a component of other functions. For example, I'll search for `\bsum\b` to avoid matching `summarise`, `summary`, `rowsum` and so on.
+For example:
 
-### Exercises
+```{r}
+str_detect(c("grey", "gray"), "gr(e|a)y")
+str_detect(c("grey", "gray"), "gr(?:e|a)y")
+```
 
-1.   Replace all `/` in a string with `\`.
+Describe in words what these expressions will match:
 
-## Regular expression operations
+* `str_subset(common, "(.)(.)\\2\\1")`
+
+## Tools
 
 The stringr package contains functions for working with strings and patterns. We'll focus on four main categories:
 
@@ -244,6 +321,8 @@ The stringr package contains functions for working with strings and patterns. We
 
 `str_match()`, `str_match_all()`
 
+Note that matches are always non-overlapping. The second match starts after the first is complete.
+
 ### Replacing patterns
 
 `str_replace()`, `str_replace_all()`
@@ -255,6 +334,10 @@ The stringr package contains functions for working with strings and patterns. We
 ### Finding locations
 
 `str_locate()`, `str_locate_all()` gives you the starting and ending positions of each match. These are particularly useful when none of the other functions does exactly what you want. You can use `str_locate()` to find the matching pattern, `str_sub()` to extract and/or modify them.
+
+### Exercises
+
+1.   Replace all `/` in a string with `\`.
 
 ## Other types of pattern
 
@@ -301,3 +384,33 @@ There are a few other functions in base R that accept regular expressions:
     For example, you can find all csv files with `dir(pattern = "\\.csv$")`.
     (If you're more comfortable with "globs" like `*.csv`, you can convert
     them to regular expressions with `glob2rx()`)
+
+## Advanced topics
+
+
+### The stringi package
+
+stringr is built on top of the __stringi__ package. stringr is useful when you're learning because it exposes a minimal set of functions, that have been carefully picked to handle the most common string manipulation functions. stringi on the other hand is designed to be comprehensive. It contains almost every function you might ever need. stringi has `length(ls("package:stringi"))` functions to stringr's `length(ls("package:stringr"))`.
+
+So if you find yourself struggling to do something that doesn't seem natural in stringr, it's worth taking a look at stringi. The use of the two packages are very similar because stringi was designed to mimic stringi's interface. The main difference is the prefix: `str_` vs `stri_`.
+
+### Encoding
+
+Complicated and fraught with difficulty. Best approach is to convert to UTF-8 as soon as possible. All stringr and stringi functions do this. Readr always reads as UTF-8.
+
+* UTF-8
+* Latin1
+* bytes: everything else
+
+Generally, you should fix encoding problems during the data import phase.
+
+Detect encoding operates statistically, by comparing frequency of byte fragments across languages and encodings. Fundamentally heuristic and works better with larger amounts of text (i.e. a whole file, not a single string from that file).
+
+```{r}
+x <- "\xc9migr\xe9 cause c\xe9l\xe8bre d\xe9j\xe0 vu."
+x
+str_conv(x, "ISO-8859-1")
+
+as.data.frame(stringi::stri_enc_detect(x))
+str_conv(x, "ISO-8859-2")
+```
