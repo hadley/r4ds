@@ -12,29 +12,29 @@ library(stringi)
 
 # String manipulation
 
-When working with text data, one of the most powerful tools at your disposal is regular expressions. Regular expressions are a very concise language for describing patterns in strings. When you first look at them, you'll think a cat walked across your keyboard, but as you learn more, you'll see how they allow you to express complex patterns very concisely.
+This chapter introduces you to string manipulation in R. You'll learn the basics of how strings work and how to create them by hand, but the focus of this chapter will be on regular expressions. Character variables typically unstructured or semi-structured data so you need some tools to make order from madness. Regular expressions are a very concise language for describing patterns in strings. When you first look at them, you'll think a cat walked across your keyboard, but as you learn more, you'll see how they allow you to express complex patterns very concisely. The goal of this chapter is not to teach you every detail of regular expressions. Instead we'll give you a solid foundation that allows you to solve a wide variety of problems and point you to resources where you can learn more.
 
-In this chapter, you'll learn the basics of regular expressions using the stringr package. 
-
-```{r}
-library(stringr)
-```
-
-The chapter concludes with a brief look at the stringi package. This package is what stringr uses internally: it's more complex than stringr (and includes many many more functions). stringr includes tools to let you tackle the most common 90% of string manipulation challenges; stringi contains functions to let you tackle the last 10%.
-
-For example, if you have
-
-```{r}
-
-```
-
-The goal of this chapter is not to teach you every detail of regular expressions. Instead we'll give you a solid foundation that allows you to solve a wide variety of problems and point you to resources where you can learn more.
+This chapter will focus on the __stringr__ package. This package provides a consistent set of functions that all work the same way and are easier to learn than the base R equivalents. We'll also take a brief look at the __stringi__ package. This package is what stringr uses internally: it's more complex than stringr (and includes many many more functions). stringr includes tools to let you tackle the most common 90% of string manipulation challenges; stringi contains functions to let you tackle the last 10%.
 
 ## String basics
 
-In R, strings are always stored in a character vector. You can create strings with either single quotes or double quotes: there is no difference in behaviour. I recommend always using `"`, unless you want to create a string that contains multiple `"`, in which case use `'`.
+In R, strings are stored in a character vector. You can create strings with either single quotes or double quotes: there is no difference in behaviour. I recommend always using `"`, unless you want to create a string that contains multiple `"`, in which case use `'`.
 
-To include a literal single or double quote in a string you can use `\` to "escape". Note that when you print a string, you see the escapes. To see the raw contents of the string, use `writeLines()` (or for a length-1 character vector, `cat(x, "\n")`).
+```{r}
+string1 <- "This is a string"
+string2 <- 'If I want to include a "quote" inside a string, I use single quotes'
+```
+
+To include a literal single or double quote in a string you can use `\` to "escape" it:
+
+```{r}
+double_quote <- "\"" # or '"'
+single_quote <- '\'' # or "'"
+```
+
+That means if you want to include a literal `\`, you'll need to double it up: `"\\"`.
+
+Beware that the printed representation of the string is not the same as string itself, because the printed representation shows the escapes. To see the raw contents of the string, use writeLines()`:
 
 ```{r}
 x <- c("\"", "\\")
@@ -42,28 +42,29 @@ x
 writeLines(x)
 ```
 
-There are a handful of other special characters. The most common used are `"\n"`, new line, and `"\t"`, tab, but you can see the complete list by requesting help on `"`: `?'"'`, or `?"'"`.
-
-You'll also sometimes strings like `"\u00b5"`, this is a way of writing special characters that works on all platforms:
+There are a handful of other special characters. The most common used are `"\n"`, new line, and `"\t"`, tab, but you can see the complete list by requesting help on `"`: `?'"'`, or `?"'"`. You'll also sometimes strings like `"\u00b5"`, this is a way of writing non-English  characters that works on all platforms:
 
 ```{r}
 x <- "\u00b5"
 x
 ```
 
-Remember that the representation of a string is different from the string itself.
-
 ### String length
 
-Base R contains many functions to work with strings but we'll generally avoid them because they're inconsistent, and hard to remember. A particularly annoying inconsistency is that the function that computes the number of characters in a string, `nchar()`, returns 2 for `NA` (instead of `NA`)
+Base R contains many functions to work with strings but we'll generally avoid them because they're inconsistent and hard to remember. Their behaviour is particularly inconsistent when it comes to missing values. For examle, `nchar()`, which gives the length of a string, returns 2 for `NA` (instead of `NA`)
 
 ```{r}
 # (Will be fixed in R 3.3.0)
 nchar(NA)
+```
+
+Instead we'll use functions from stringr. These have more evocative names, and all start with `str_`:
+
+```{r}
 str_length(NA)
 ```
 
-Every stringr function starts with `str_`. That's particularly useful if you're using RStudio, because by the time you've type `str_`, RStudio will be ready to offer autocomplete for the reminaing characters. That's useful if you can't quite remember the name of the function.
+The common `str_` prefix is particularly useful if you use RStudio, because typing `str_` trigger autocomplete, so you can easily see all of the stringr functions.
 
 ### Combining strings
 
@@ -94,24 +95,28 @@ As shown above, `str_c()` is vectorised, automatically recycling shorter vectors
 str_c("prefix-", c("a", "b", "c"), "-suffix")
 ```
 
+Objects of length 0 are silently dropped. This is particularly useful in conjunction with `if`:
+
+```{r}
+name <- "Hadley"
+time_of_day <- "morning"
+birthday <- FALSE
+
+str_c("Good ", time_of_day, " ", name,
+  if (birthday) " and HAPPY BIRTHDAY",
+  "."
+)
+```
+
 To collapse vectors into a single string, use `collapse`:
 
 ```{r}
 str_c(c("x", "y", "z"), collapse = ", ")
 ```
 
-When creating strings you might also find `str_pad()` and `str_dup()` useful:
-
-```{r}
-x <- c("apple", "banana", "pear")
-str_pad(x, 10)
-
-str_c("Na ", str_dup("na ", 4), "batman!") 
-```
-
 ### Subsetting strings
 
-You can extract parts of a string using `str_sub()`. `str_sub()` takes two arguments in addition to the string: the position to start at, and the postion to end at (inclusive):
+You can extract parts of a string using `str_sub()`. As well as the string, `str_sub()` takes `start` and `end` argument which give the (inclusive) position of the substring:
 
 ```{r}
 x <- c("apple", "banana", "pear")
@@ -120,63 +125,79 @@ str_sub(x, 1, 3)
 str_sub(x, -3, -1)
 ```
 
-`str_sub()` returns the longest string possible. If you don't want this behaviour, you'll need to check `str_length()` yourself.
+Note that `str_sub()` won't fail if the string is too short: it will just return as much as possible:
 
 ```{r}
 str_sub("a", 1, 5)
 ```
 
-You can also use `str_sub()` to modify strings:
+You can also use the assignment form of `str_sub()`, `` `str_sub<-()` ``, to modify strings:
 
 ```{r}
 str_sub(x, 1, 1) <- str_to_lower(str_sub(x, 1, 1))
 x
 ```
 
-You can use `str_to_lower()`, `str_to_upper()`, and `str_to_title()` to convert the case of a vector. Note that what that means depends on where you are in the world, so these functions all have a locale argument. If left blank it will use the current locale.
+### Locales
+
+Above I used`str_to_lower()` to change to lower case. You can also use `str_to_upper()` or `str_to_title()`. However, changing case is more complicated than it might at first seem because different languages have different rules for changing case. You can pick which set of rules to use by specifying a locale:
+
+```{r}
+str_to_upper("i")
+# In Turkish, an uppercase i has a dot over it:
+str_to_upper("i", locale = "tr")
+```
+
+The locale is specified as ISO 639 language codes, which are two or three letter abbreviations. If you don't already know the code for your language, [Wikipedia](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes) has a good list. If you leave the locale blank, it will use the current locale.
+
+Another important operation that's affected by the locale is sorting. The base R `order()` and `sort()` functions sort strings using the currect locale. If you want robust behaviour across different computers, you may want to use `str_sort()` and `str_order()` which take an additional `locale` argument:
+
+```{r}
+x <- c("apple", "eggplant", "banana")
+str_sort(x, locale = "en")  # English
+str_sort(x, locale = "haw") # Hawaiian
+```
 
 ### Exercises
 
-1.  In your own words, describe the difference between `sep` and `collapse`.
+1.  In your own words, describe the difference between the `sep` and `collapse`
+    arguments to `str_c()`.
 
 1.  In code that doesn't use stringr, you'll often see `paste()` and `paste0()`.
-    What's the difference between the two functions? What's stringr function are
-    they equivalent too? How do the functions differ in their handling of 
+    What's the difference between the two functions? What stringr function are
+    they equivalent to? How do the functions differ in their handling of 
     `NA`?
     
 1.  Use `str_length()` and `str_sub()` to extract the middle character from 
     a character vector.
-    
+
+1.  What does `str_wrap()` do? When might you want to use it?
+
+1.  What does `str_trim()` do? What's the opposite of `str_trim()`?
+
 1.  Write a function that turns (e.g.) a vector `c("a", "b", "c")` into 
     the string `a, b, and c`. Think carefully about what it should do if
     given a vector of length 0, 1, or 2.
 
-1.  What does `str_wrap()` do? When might you want to use it?
-
-1.  What does `str_trim()` do? 
-
 ## Matching patterns with regular expressions
 
-Regular expressions, regexps for short, a very terse language that allow to describe patterns in string. They take a little while to get your head around, but once you've got it you'll find them extremely useful. 
+Regular expressions, regexps for short, are a very terse language that allow to describe patterns in strings. They take a little while to get your head around, but once you've got it you'll find them extremely useful. 
 
-To learn regular expressions, we'll use `str_show()` and `str_show_all()`. These functions take a character vector and a regular expression, and shows you how they match. We'll start with very simple regular expressions and then gradually move to more and more complicated. Once you've mastered the basics of pattern matching with regular expression, you'll learn all the stringr functions that use them and learn how to use them to solve real problems.
+To learn regular expressions, we'll use `str_show()` and `str_show_all()`. These functions take a character vector and a regular expression, and shows you how they match. We'll start with very simple regular expressions and then gradually get more and more complicated. Once you've mastered pattern matching, you'll learn how to apply those ideas with various stringr functions.
 
-### Fixed matches
+### Basics matches
 
-The simplest patterns that 
+The simplest patterns match exact strings:
 
 ```{r}
-
+x <- c("apple", "banana", "pear")
+str_view(x, "an")
 ```
 
-```{r}
-common <- rcorpora::corpora("words/common")$commonWords
-```
-
-### Match anything and escaping
+The next step up in complexity is `.`, which matches any character:
 
 ```{r}
-str_view(c("abc", "adc", "bef"), "a.c")
+str_view(x, ".a.")
 ```
 
 But if "`.`" matches any character, how do you match an actual "`.`"? You need to use an "escape" to tell the regular expression you want to match it exactly, not use the special behaviour. The escape character used by regular expressions is `\`. Unfortunately, that's also the escape character used by strings, so to match a literal "`.`" you need to use `\\.`.
@@ -186,27 +207,29 @@ But if "`.`" matches any character, how do you match an actual "`.`"? You need t
 dot <- "\\."
 
 # But the expression itself only contains one:
-cat(dot, "\n")
+writeLines(dot)
 
 # And this tells R to look for explicit .
 str_view(c("abc", "a.c", "bef"), "a\\.c")
 ```
 
-If `\` is used an escape character, how do you match a literal `\`? Well you need to escape it, creating the regular expression `\\`. And in R that needs to be in a string, so you need to write `"\\\\"` - that's right, you need four backslashes to match one!
+If `\` is used an escape character, how do you match a literal `\`? Well you need to escape it, creating the regular expression `\\`. To create that regular expression, you need to use a string, which also needs to escape `\`. That means to match a literal `\` you need to write `"\\\\"` - you need four backslashes to match one!
 
 ```{r}
 x <- "a\\b"
-cat(x, "\n")
+writeLines(x)
 
-y <- str_replace(x, "\\\\", "-slash-")
-cat(y, "\n")
+str_view(x, "\\\\")
 ```
 
-Here I'll write a regular expression like `\.` and the string that represents the regular expression as `"\."`.
+In this book, I'll write a regular expression like `\.` and the string that represents the regular expression as `"\\."`.
 
-Use regular expressions to:
+### Exercises
+
+* Explain why each of these strings don't match a `\`: `"\"`, `"\\"`, `"\\\"`.
 
 * Solve this crossword puzzle clue: `a??le`
+
 
 ### Anchors
 
