@@ -396,9 +396,18 @@ Now that you've learned the basics of regular expression, it's time to learn how
 * Replace matches with new values.
 * How can you split a string into based on a match.
 
+Because regular expressions are so powerful, it's easy to try and solve every problem with a single regular expression. But since you're in a programming language, it's often easy to break the problem down into smaller pieces. If you find yourself getting stuck trying to create a single regexp that solves your problem, take a step back and think if you could break the problem down in to smaller pieces, solving each challenge before moving onto the next one.
+
 ### Detect matches
 
 To determine if a character vector matches a pattern, use `str_detect()`. It returns a logical vector:
+
+```{r}
+x <- c("apple", "banana", "pear")
+str_detect(x, "e")
+```
+
+Remember that logical vectors are effectively combined with `sum()` and `mean()`. This makes it easy to answer questions about a complete vector:
 
 ```{r}
 # How many common words start with t?
@@ -420,29 +429,124 @@ If you find your regular expression is getting hard to understand, trying breaki
 `str_count()` is similar to `str_detect()` but it returns an integer count of the number of matches, instead of a true/false:
 
 ```{r}
+str_count(x, "a")
+
 # What's the average number of vowels per word?
 mean(str_count(common, "[aeiou]"))
 ```
 
 `str_subset()` is a wrapper for the common pattern `x[str_detect(x, pattern)]`.
 
-### Find matches
+### Exercises
 
-`str_locate()`, `str_locate_all()` gives you the starting and ending positions of each match. These are particularly useful when none of the other functions does exactly what you want. You can use `str_locate()` to find the matching pattern, `str_sub()` to extract and/or modify them.
+1.  For each of the following challenges, try solving with both a single
+    regular expression, and a combination of multiple `str_detect()` calls.
+    
+    1.  Find all words that start or end with `x`.
+    1.  Find all words that start with a vowel and end with a consonant.
+
+1.  What word has the highest number of vowels? What word has the highest
+    proportion of vowels?
 
 ### Extract matches
 
-`str_extract()`, `str_extract_all()`
+To extract the actual text of a match, use `str_extract()`. For that to be useful, we need a somewhat more complicated example. I'm going to use the [Harvard sentences](https://en.wikipedia.org/wiki/Harvard_sentences): these are sentences designed to tested VOIP systems, but we're going to use them as random data.
 
-`str_match()`, `str_match_all()`
+```{r}
+sentences <- readr::read_lines("harvard-sentences.txt")
+length(sentences)
+head(sentences)
+```
 
-Note that matches are always non-overlapping. The second match starts after the first is complete.
+Imagine we want to find all sentences that contain a colour. We first create a vector of colour names, and then turn it into a single regular expression:
+
+```{r}
+colours <- c("red", "orange", "yellow", "green", "blue", "purple")
+colour_match <- str_c(colours, collapse = "|")
+colour_match
+```
+
+Now we can select the sentences that contain a colour, and then extract the colour to figure out which one it is:
+
+```{r}
+has_colour <- str_subset(sentences, colour_match)
+matches <- str_extract(has_colour, colour_match)
+head(matches)
+```
+
+A few sentences contain more than one colour and `str_extract()` only extracts the first:
+
+```{r}
+table(str_count(sentences, colour_match))
+more <- sentences[str_count(sentences, colour_match) > 1]
+more
+
+str_extract(more, colour_match)
+```
+
+To get all matches, use `str_extract_all()`:
+
+```{r}
+str_extract_all(more, colour_match)
+```
+
+This returns a list, which is a little hard to work with, which is why it's not the default. You'll learn more about working with lists in Chapter XYZ. Note that matches are always non-overlapping: the second match starts after the first is complete.
+
+#### Exercises
+
+1.  From the Harvard sentences data, extract:
+
+    1. The first word from each sentence.
+    1. All words ending in `ing`.
+
+### Grouped matches
+
+We talked early about the use of parentheses. You can use them if you want to extract parts of a match. For example, imagine we want to extract nouns from the sentences. As a heuristic, we'll look for any word that comes after "a" or "the":
+
+```{r}
+noun <- "(a|the) ([^ ]+)"
+has_noun <- sentences %>%
+  str_subset(noun) %>%
+  head(10)
+
+str_extract(has_noun, noun)
+```
+
+(Defining a "word" in a regular expression is a little tricky. I've decided to go for a sequence of any characters except for a space.)
+
+`str_extract()` gives us the complete match, but we'd like to be able to dig into the pieces. That's the job of `str_match()`. Instead of a character vector, it returns a matrix, with one column for each group, and one column for the complete match:
+
+```{r}
+str_match(has_noun, noun)
+```
+
+(You can see our heuristic for finding nouns isn't that good as it also picks up adjectives like smooth and parked.)
+
+Like `str_extract()`, if you want all matches, you'll need to use `str_match_all()` and then work with the list that it returns.
+
+#### Exercises
+
 
 ### Replacing matches
 
-`str_replace()`, `str_replace_all()`
+```{r}
+first <- head(sentences)
+str_replace(sentences, "([^ ]+) ([^ ]+)", "\\2 \\1")
+```
+
+`str_replace()` allows you to transform 
+
+Like `str_extract()` and `str_match()`, `str_replace()` only affects the first match. To replace every match, use `str_replace_all()`. Compared to the other two `all()` functions, the output from `str_replace_all()` is simpler because it can stay as a character vector.
+
+
+Multiple replacements
 
 Backreferences.
+
+#### Exercises
+
+1.   Replace all `/` in a string with `\`.
+
 
 ### Splitting
 
@@ -450,9 +554,11 @@ Backreferences.
 
 `boundary()`
 
-### Exercises
 
-1.   Replace all `/` in a string with `\`.
+
+### Find matches
+
+`str_locate()`, `str_locate_all()` gives you the starting and ending positions of each match. These are particularly useful when none of the other functions does exactly what you want. You can use `str_locate()` to find the matching pattern, `str_sub()` to extract and/or modify them.
 
 ## Other types of pattern
 
