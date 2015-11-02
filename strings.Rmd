@@ -7,7 +7,10 @@ output: bookdown::html_chapter
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(stringr)
-library(stringi)
+
+common <- rcorpora::corpora("words/common")$commonWords
+fruit <- rcorpora::corpora("foods/fruits")$fruits
+sentences <- readr::read_lines("harvard-sentences.txt")
 ```
 
 # String manipulation
@@ -143,9 +146,10 @@ x
 Above I used`str_to_lower()` to change to lower case. You can also use `str_to_upper()` or `str_to_title()`. However, changing case is more complicated than it might at first seem because different languages have different rules for changing case. You can pick which set of rules to use by specifying a locale:
 
 ```{r}
-str_to_upper("i")
-# In Turkish, an uppercase i has a dot over it:
-str_to_upper("i", locale = "tr")
+# Turkish has two i's: with and without a dot, and it
+# has a different rule for capitalising them:
+str_to_upper(c("i", "ı"))
+str_to_upper(c("i", "ı"), locale = "tr")
 ```
 
 The locale is specified as ISO 639 language codes, which are two or three letter abbreviations. If you don't already know the code for your language, [Wikipedia](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes) has a good list. If you leave the locale blank, it will use the current locale.
@@ -265,7 +269,6 @@ You can also match the boundary between words with `\b`. I don't find I often us
 1.  Given this corpus of common words:
     
     ```{r}
-    common <- rcorpora::corpora("words/common")$commonWords
     ```
     
     Create regular expressions that find all words that:
@@ -333,7 +336,13 @@ The next step up in power involves control how many times a pattern matches:
 * `{,m}`: at most m
 * `{n,m}`: between n and m
 
-(By default these matches are "greedy": they will match the longest string possible. You can make them "lazy", matching the shortest string possible by putting a `?` after them.)
+```{r}
+```
+
+By default these matches are "greedy": they will match the longest string possible. You can make them "lazy", matching the shortest string possible by putting a `?` after them. This is an advanced feature of regular expressions, but it's useful to know that it exists:
+
+```{r}
+```
 
 Note that the precedence of these operators are high, so you can write: `colou?r` to match either American or British spellings. That means most uses will need parentheses, like `bana(na)+` or `ba(na){2,}`.
 
@@ -359,7 +368,6 @@ Note that the precedence of these operators are high, so you can write: `colou?r
 You learned about parentheses earlier as a way to disambiguate complex expression. They do one other special thing: they also define numeric groups that you can refer to with _backreferences_, `\1`, `\2` etc.For example, the following regular expression finds all fruits that have a pair letters that's repeated.
 
 ```{r}
-fruit <- rcorpora::corpora("foods/fruits")$fruits
 str_view(fruit, "(..)\\1", match = TRUE)
 ```
 
@@ -453,7 +461,6 @@ mean(str_count(common, "[aeiou]"))
 To extract the actual text of a match, use `str_extract()`. For that to be useful, we need a somewhat more complicated example. I'm going to use the [Harvard sentences](https://en.wikipedia.org/wiki/Harvard_sentences): these are sentences designed to tested VOIP systems, but we're going to use them as random data.
 
 ```{r}
-sentences <- readr::read_lines("harvard-sentences.txt")
 length(sentences)
 head(sentences)
 ```
@@ -487,10 +494,18 @@ str_extract(more, colour_match)
 To get all matches, use `str_extract_all()`:
 
 ```{r}
+str_view_all(more, colour_match)
 str_extract_all(more, colour_match)
 ```
 
 This returns a list, which is a little hard to work with, which is why it's not the default. You'll learn more about working with lists in Chapter XYZ. Note that matches are always non-overlapping: the second match starts after the first is complete.
+
+Another options is to convert it to a character matrix with `simplify = TRUE`. Short matches are expanded with `""` to the length of the longest:
+
+```{r}
+x <- c("a", "a b", "a b c")
+str_extract_all(x, "[a-z]", simplify = TRUE)
+```
 
 #### Exercises
 
@@ -498,6 +513,10 @@ This returns a list, which is a little hard to work with, which is why it's not 
 
     1. The first word from each sentence.
     1. All words ending in `ing`.
+
+1.  In the previous example, you might have noticed that our regular expression
+    matched "fickered", which is not a colour. Modify the regex to prevent
+    this problematic match.
 
 ### Grouped matches
 
@@ -529,19 +548,21 @@ Like `str_extract()`, if you want all matches, you'll need to use `str_match_all
 
 ### Replacing matches
 
-```{r}
-first <- head(sentences)
-str_replace(sentences, "([^ ]+) ([^ ]+)", "\\2 \\1")
-```
-
 `str_replace()` allows you to transform 
 
-Like `str_extract()` and `str_match()`, `str_replace()` only affects the first match. To replace every match, use `str_replace_all()`. Compared to the other two `all()` functions, the output from `str_replace_all()` is simpler because it can stay as a character vector.
+```{r}
+sentences %>% 
+  head(5) %>% 
+  str_replace("([^ ]+) ([^ ]+)", "\\2 \\1")
+```
 
+Like `str_extract()` and `str_match()`, `str_replace()` only affects the first match. To replace every match, use `str_replace_all()`. Compared to the other two `all()` functions, the output from `str_replace_all()` is simpler because it can stay as a character vector.
 
 Multiple replacements
 
 Backreferences.
+
+Replacing with a function call (hopefully)
 
 #### Exercises
 
@@ -550,11 +571,42 @@ Backreferences.
 
 ### Splitting
 
-`str_split()`, `str_split_fixed()`. 
+Another useful application is to split strings up into pieces. For example we could split sentences up into words
 
-`boundary()`
+```{r}
+sentences %>%
+  head(5) %>% 
+  str_split(" ")
+```
 
+Note that this function has to return a list: the number of pieces each element is split up into might be difference, so there's no way to put them in a vector. If you're working with a length-1 vector, the easiest thing is to just extra the first element of the list:
 
+```{r}
+"a|b|c|d" %>% 
+  str_split("\\|") %>% 
+  .[[1]]
+```
+
+You'll learn other techniques in the lists chapter.
+
+If you want all strings to be split up into the same number of pieces, you can use `str_split_fixed()`. This outputs a matrix with one row for each string and one column for each piece:
+
+```{r}
+c("Name: Hadley", "County: NZ", "Age: 35") %>% 
+  str_split_fixed(": ", 2)
+```
+
+<!-- Add comment to stringi issue that split should also preserve names -->
+
+Instead of splitting up strings by patterns, you can also split up by a predefined set of boundaries with `boundary()`: by character, by line, by sentence and by word.
+
+```{r}
+x <- "This is a sentence.  This is another sentence."
+str_view_all(x, boundary("word"))
+
+str_split(x, " ")
+str_split(x, boundary("word"))
+```
 
 ### Find matches
 
@@ -562,31 +614,90 @@ Backreferences.
 
 ## Other types of pattern
 
-When you use a pattern that's a string, it's automatically wrapped into a call to `regex()`. Sometimes it's useful to call it explicitly so you can control the 
+When you use a pattern that's a string, it's automatically wrapped into a call to `regex()`:
 
-* `fixed()`: matches exactly that sequence of characters (i.e. ignored
-  all special regular expression pattern).
-  
-* `coll()`: compare strings using standard **coll**ation rules. This is 
-  useful for doing case insensitive matching. Note that `coll()` takes a
-  `locale` parameter that controls which rules are used for comparing
-  characters. Unfortunately different parts of the world use different rules!
-
-```{r}
-# Turkish has two i's: with and without a dot, and it
-# has a different rule for capitalising them:
-str_to_upper(c("i", "ı"))
-str_to_upper(c("i", "ı"), locale = "tr")
-
-# That means you also need to be aware of the difference
-# when doing case insensitive matches:
-i <- c("I", "İ", "i", "ı")
-i
-
-str_subset(i, fixed("i", TRUE))
-str_subset(i, coll("i", TRUE))
-str_subset(i, coll("i", TRUE, locale = "tr"))
+```{r, eval = FALSE}
+# The regular call:
+str_view(fruit, "nana")
+# Is shorthand for
+str_view(fruit, regex("nana"))
 ```
+
+You can use the other arguments of `regex()` to control details of the match:
+
+*   `ignore_case = TRUE` allows characters to match either their uppercase or 
+    lowercase forms. This always uses the current locale.
+    
+    ```{r}
+    bananas <- c("banana", "Banana", "BANANA")
+    str_view(bananas, "banana")
+    str_view(bananas, regex("banana", ignore_case = TRUE))
+    ```
+    
+*   `multiline = TRUE` allows `^` and `$` to match the start and end of each
+    line rather than the start and end of the complete string.
+    
+    ```{r}
+    x <- "Line 1\nLine 2\nLine 3"
+    str_view_all(x, "^Line")
+    str_view_all(x, regex("^Line", multiline = TRUE))
+    ```
+    
+*   `comments = TRUE` allows you to use comments and white space to make 
+    complex regular expressions more understand. Space are ignored, as is 
+    everything after `#`. To match a literal space, you'll need to escape it: 
+    `"\\ "`.
+
+*   `dotall = TRUE` allows `.` to match everything, including `\n`.
+
+There are three other functions you can use instead of `regex()`:
+
+*   `fixed()`: matches exactly that sequence of characters (i.e. ignored
+    all special regular expression pattern). This allows you to avoid complex
+    escaping and is faster than matching regular expressions:
+  
+    ```{r}
+    microbenchmark::microbenchmark(
+      fixed = str_detect(sentences, fixed("the")),
+      regex = str_detect(sentences, "the")
+    )
+    ```
+    
+    The fixed match is almost 3x times faster than the regular expression match.
+    But note the units: here it's only 200 µs faster. 
+  
+*   `coll()`: compare strings using standard **coll**ation rules. This is 
+    useful for doing case insensitive matching. Note that `coll()` takes a
+    `locale` parameter that controls which rules are used for comparing
+    characters. Unfortunately different parts of the world use different rules!
+
+    ```{r}
+    # That means you also need to be aware of the difference
+    # when doing case insensitive matches:
+    i <- c("I", "İ", "i", "ı")
+    i
+    
+    str_subset(i, coll("i", TRUE))
+    str_subset(i, coll("i", TRUE, locale = "tr"))
+    ```
+    
+    Both `fixed()` and `regex()` have `ignore_case` arguments, but they
+    do not allow you to pick the locale: they always use the default locale.
+    You can see what that is with the following code; more on stringi
+    later.
+    
+    ```{r}
+    stringi::stri_locale_info()
+    ```
+
+*   As you saw with `str_split()` you can use `boundary()` to match boundaries.
+    You can also use it with the other functions, all though 
+    
+    ```{r}
+    x <- "This is a sentence."
+    str_view_all(x, boundary("word"))
+    str_extract_all(x, boundary("word"))
+    ```
 
 ## Other uses of regular expressions
 
