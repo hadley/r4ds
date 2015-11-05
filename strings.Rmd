@@ -408,21 +408,23 @@ Because regular expressions are so powerful, it's easy to try and solve every pr
 
 ### Detect matches
 
-To determine if a character vector matches a pattern, use `str_detect()`. It returns a logical vector:
+To determine if a character vector matches a pattern, use `str_detect()`. It returns a logical vector the same length as the input:
 
 ```{r}
 x <- c("apple", "banana", "pear")
 str_detect(x, "e")
 ```
 
-Remember that logical vectors are effectively combined with `sum()` and `mean()`. This makes it easy to answer questions about a complete vector:
+Remember that when you use a logical vector in a numeric context, `FALSE` becomes 0 and `TRUE` becomes 1. That makes `sum()` and `mean()` useful if you want answer questions about matches across a larger vector:
 
 ```{r}
 # How many common words start with t?
 sum(str_detect(common, "^t"))
+# What proportion of common words end with a vowel?
+mean(str_detect(common, "[aeiou]$"))
 ```
 
-When you have complicated logical conditions (e.g. match this or that but not these) combining multiple `str_detect()` calls with logical operators is often easy. A simple example is if you want to find all words that don't contain any vowels:
+When you have complex logical conditions (e.g. match a or b but not c unless d) it's often easier to combine multiple `str_detect()` calls with logical operators, rather than trying to create a single regular expression. For example, here are two ways to find all words that don't contain any vowels:
 
 ```{r}
 # Find all words containing at least one vowel, and negate
@@ -432,33 +434,52 @@ no_vowels_2 <- str_detect(common, "^[^aeiou]+$")
 all.equal(no_vowels_1, no_vowels_2)
 ```
 
-If you find your regular expression is getting hard to understand, trying breaking it up into smaller pieces, giving each piece a name, and then combining with logical operations.
+The results are identical, but I think the first approach is significantly easier to understand. So if you find your regular expression is getting overly complicated, try breaking it up into smaller pieces, giving each piece a name, and then combining with logical operations.
 
-`str_count()` is similar to `str_detect()` but it returns an integer count of the number of matches, instead of a true/false:
+A common use of `str_detect()` is to select the elements that match a pattern. You can do this with logical subsetting, or the convenient `str_subset()` wrapper:
 
 ```{r}
+common[str_detect(common, "x$")]
+str_subset(common, "x$")
+```
+
+A variation on `str_detect()` is `str_count()`: rather than a simple yes or no, it tells you how many matches there are in a string:
+
+```{r}
+x <- c("apple", "banana", "pear")
 str_count(x, "a")
 
-# What's the average number of vowels per word?
+# On average, how many vowels per word?
 mean(str_count(common, "[aeiou]"))
 ```
 
-`str_subset()` is a wrapper for the common pattern `x[str_detect(x, pattern)]`.
+Note that matches never overlap. For example, in `"abababa"`, how many times will the pattern `"aba"` match? Regular expressions say two, not three:
+
+```{r}
+str_count("abababa", "aba")
+str_view_all("abababa", "aba")
+```
+
+Note the use of `str_view_all()`. As you'll shortly learn, many stringr functions come in pairs: one function works with a single match, and the other works with all matches.
 
 ### Exercises
 
-1.  For each of the following challenges, try solving with both a single
+1.  For each of the following challenges, try solving it both a single
     regular expression, and a combination of multiple `str_detect()` calls.
     
     1.  Find all words that start or end with `x`.
+    
     1.  Find all words that start with a vowel and end with a consonant.
+    
+    1.  Are there any words that contain at least one of each different
+        vowel?
 
 1.  What word has the highest number of vowels? What word has the highest
-    proportion of vowels?
+    proportion of vowels? (Hint: what is the denominator?)
 
 ### Extract matches
 
-To extract the actual text of a match, use `str_extract()`. For that to be useful, we need a somewhat more complicated example. I'm going to use the [Harvard sentences](https://en.wikipedia.org/wiki/Harvard_sentences): these are sentences designed to tested VOIP systems, but we're going to use them as random data.
+To extract the actual text of a match, use `str_extract()`. To show that off, we're going to need a more complicated example. I'm going to use the [Harvard sentences](https://en.wikipedia.org/wiki/Harvard_sentences), which were designed to tested VOIP systems, but are also useful for practicing regexs.
 
 ```{r}
 length(sentences)
@@ -481,26 +502,23 @@ matches <- str_extract(has_colour, colour_match)
 head(matches)
 ```
 
-A few sentences contain more than one colour and `str_extract()` only extracts the first:
+Note that `str_extract()` only extracts the first match. We can see that most easily by first selecting all the sentences that have more than 1 match:
 
 ```{r}
-table(str_count(sentences, colour_match))
 more <- sentences[str_count(sentences, colour_match) > 1]
-more
+str_view_all(more, colour_match)
 
 str_extract(more, colour_match)
 ```
 
-To get all matches, use `str_extract_all()`:
+This is a common pattern for stringr functions, because working with a single match allows you to use much simpler data structures. To get all matches, use `str_extract_all()`. It returns either a list or a matrix, based on the value of the `simplify` argument:
 
 ```{r}
-str_view_all(more, colour_match)
 str_extract_all(more, colour_match)
+str_extract_all(more, colour_match, simplify = TRUE)
 ```
 
-This returns a list, which is a little hard to work with, which is why it's not the default. You'll learn more about working with lists in Chapter XYZ. Note that matches are always non-overlapping: the second match starts after the first is complete.
-
-Another options is to convert it to a character matrix with `simplify = TRUE`. Short matches are expanded with `""` to the length of the longest:
+You'll learn more about working with lists in Chapter XYZ. If you use `simplify = TRUE`, note that short matches are expanded to the same length as the longest:
 
 ```{r}
 x <- c("a", "a b", "a b c")
@@ -509,18 +527,19 @@ str_extract_all(x, "[a-z]", simplify = TRUE)
 
 #### Exercises
 
+1.  In the previous example, you might have noticed that the regular
+    expression matched "fickered", which is not a colour. Modify the 
+    regex to fix the problem.
+
 1.  From the Harvard sentences data, extract:
 
     1. The first word from each sentence.
     1. All words ending in `ing`.
-
-1.  In the previous example, you might have noticed that our regular expression
-    matched "fickered", which is not a colour. Modify the regex to prevent
-    this problematic match.
+    1. All plurals.
 
 ### Grouped matches
 
-We talked early about the use of parentheses. You can use them if you want to extract parts of a match. For example, imagine we want to extract nouns from the sentences. As a heuristic, we'll look for any word that comes after "a" or "the":
+Earlier in this chapter we talked about the use of parentheses for clarifying precedence and to use with backreferences when matching. You can also parentheses to extract parts of a complex match. For example, imagine we want to extract nouns from the sentences. As a heuristic, we'll look for any word that comes after "a" or "the". Defining a "word" in a regular expression is a little tricky. Here I use a sequence of at least one character that isn't a space.
 
 ```{r}
 noun <- "(a|the) ([^ ]+)"
@@ -531,47 +550,64 @@ has_noun <- sentences %>%
 str_extract(has_noun, noun)
 ```
 
-(Defining a "word" in a regular expression is a little tricky. I've decided to go for a sequence of any characters except for a space.)
-
-`str_extract()` gives us the complete match, but we'd like to be able to dig into the pieces. That's the job of `str_match()`. Instead of a character vector, it returns a matrix, with one column for each group, and one column for the complete match:
+`str_extract()` gives us the complete match; `str_match()` gives each individual component. Instead of a character vector, it returns a matrix, with one column for the complete match followed by one column for each group:
 
 ```{r}
 str_match(has_noun, noun)
 ```
 
-(You can see our heuristic for finding nouns isn't that good as it also picks up adjectives like smooth and parked.)
+(Unsurprisingly, our heuristic for detecting nouns is poor, and also picks up adjectives like smooth and parked.)
 
-Like `str_extract()`, if you want all matches, you'll need to use `str_match_all()` and then work with the list that it returns.
+```{r}
+num <- str_c("one", "two", "three", "four", "five", "six",
+  "seven", "eight", "nine", "ten", sep = "|")
+
+match <- str_interp("(${num}) ([^ ]+s)\\b")
+sentences %>% 
+  str_subset(match) %>% 
+  head(10) %>% 
+  str_match(match)
+```
+
+Like `str_extract()`, if you want all matches for each string, you'll need `str_match_all()`.
 
 #### Exercises
 
 
 ### Replacing matches
 
-`str_replace()` allows you to transform 
+`str_replace()` and `str_replace_all()` allow you to replace matches with new strings:
+
+```{r}
+x <- c("apple", "pear", "banana")
+str_replace(x, "[aeiou]", "-")
+str_replace_all(x, "[aeiou]", "-")
+```
+
+With `str_replace_all()` you can also perform multiple replacements by supplying a named vector:
+
+```{r}
+x <- c("1 house", "2 cars", "3 people")
+str_replace_all(x, c("1" = "one", "2" = "two", "3" = "three"))
+```
+
+You can refer to groups with backreferences:
 
 ```{r}
 sentences %>% 
   head(5) %>% 
-  str_replace("([^ ]+) ([^ ]+)", "\\2 \\1")
+  str_replace("([^ ]+) ([^ ]+) ([^ ]+)", "\\1 \\3 \\2")
 ```
 
-Like `str_extract()` and `str_match()`, `str_replace()` only affects the first match. To replace every match, use `str_replace_all()`. Compared to the other two `all()` functions, the output from `str_replace_all()` is simpler because it can stay as a character vector.
-
-Multiple replacements
-
-Backreferences.
-
-Replacing with a function call (hopefully)
+<!-- Replacing with a function call (hopefully) -->
 
 #### Exercises
 
 1.   Replace all `/` in a string with `\`.
 
-
 ### Splitting
 
-Another useful application is to split strings up into pieces. For example we could split sentences up into words
+Use `str_split()` to split a string up into pieces. For example, we could split sentences into words:
 
 ```{r}
 sentences %>%
@@ -579,7 +615,7 @@ sentences %>%
   str_split(" ")
 ```
 
-Note that this function has to return a list: the number of pieces each element is split up into might be difference, so there's no way to put them in a vector. If you're working with a length-1 vector, the easiest thing is to just extra the first element of the list:
+Because each component might contain a different number of pieces, this returns a list. If you're working with a length-1 vector, the easiest thing is to just extra the first element of the list:
 
 ```{r}
 "a|b|c|d" %>% 
@@ -587,26 +623,39 @@ Note that this function has to return a list: the number of pieces each element 
   .[[1]]
 ```
 
-You'll learn other techniques in the lists chapter.
-
-If you want all strings to be split up into the same number of pieces, you can use `str_split_fixed()`. This outputs a matrix with one row for each string and one column for each piece:
+Otherwise, like the other stringr functions that return a list, you can use `simplify = TRUE` to return a matrix:
 
 ```{r}
-c("Name: Hadley", "County: NZ", "Age: 35") %>% 
-  str_split_fixed(": ", 2)
+sentences %>%
+  head(5) %>% 
+  str_split(" ", simplify = TRUE)
 ```
 
-<!-- Add comment to stringi issue that split should also preserve names -->
+You can also request a maximum number of pieces;
 
-Instead of splitting up strings by patterns, you can also split up by a predefined set of boundaries with `boundary()`: by character, by line, by sentence and by word.
+```{r}
+fields <- c("Name: Hadley", "County: NZ", "Age: 35")
+fields %>% str_split(": ", n = 2, simplify = TRUE)
+```
+
+Instead of splitting up strings by patterns, you can also split up by character, line, sentence and word `boundary()`s:
 
 ```{r}
 x <- "This is a sentence.  This is another sentence."
 str_view_all(x, boundary("word"))
 
-str_split(x, " ")
-str_split(x, boundary("word"))
+str_split(x, " ")[[1]]
+str_split(x, boundary("word"))[[1]]
 ```
+
+#### Exercises
+
+1.  Split up a string like `"apples, pears, and bananas"` into individual
+    components.
+    
+1.  Why is it's better to split up by `boundary("word")` than `" "`?
+
+1.  What does splitting with an empty string (`""`) do?
 
 ### Find matches
 
@@ -652,9 +701,10 @@ You can use the other arguments of `regex()` to control details of the match:
 
 There are three other functions you can use instead of `regex()`:
 
-*   `fixed()`: matches exactly that sequence of characters (i.e. ignored
-    all special regular expression pattern). This allows you to avoid complex
-    escaping and is faster than matching regular expressions:
+*   `fixed()`: matches exactly the specified sequence of bytes. It ignores
+    all special regular expressions and operates at a very low level. 
+    This allows you to avoid complex escaping can be much faster than 
+    regular expressions:
   
     ```{r}
     microbenchmark::microbenchmark(
@@ -663,9 +713,29 @@ There are three other functions you can use instead of `regex()`:
     )
     ```
     
-    The fixed match is almost 3x times faster than the regular expression match.
-    But note the units: here it's only 200 µs faster. 
-  
+    Here the fixed match is almost 3x times faster than the regular 
+    expression match. However, if you're working with non-English data 
+    `fixed()` can lead to unreliable matches because there are often
+    multiple ways of representing the same character. For example, there
+    are two ways to define "á": either as a single character or as an "a" 
+    plus an accent:
+    
+    ```{r}
+    a1 <- "\u00e1"
+    a2 <- "a\u0301"
+    c(a1, a2)
+    a1 == a2
+    ```
+
+    They render identically, but because they're defined differently, 
+    `fixed()` does find a match. Instead, you can use `coll()`, defined
+    next to respect human character comparison rules:
+
+    ```{r}
+    str_detect(a1, fixed(a2))
+    str_detect(a1, coll(a2))
+    ```
+    
 *   `coll()`: compare strings using standard **coll**ation rules. This is 
     useful for doing case insensitive matching. Note that `coll()` takes a
     `locale` parameter that controls which rules are used for comparing
@@ -689,6 +759,10 @@ There are three other functions you can use instead of `regex()`:
     ```{r}
     stringi::stri_locale_info()
     ```
+    
+    The downside of `coll()` is because the rules for recognising which
+    characters are the same are complicated, `coll()` is relatively slow
+    compared to `regex()` and `fixed()`.
 
 *   As you saw with `str_split()` you can use `boundary()` to match boundaries.
     You can also use it with the other functions, all though 
@@ -699,23 +773,41 @@ There are three other functions you can use instead of `regex()`:
     str_extract_all(x, boundary("word"))
     ```
 
+### Exercises
+
+1.  How would you find all strings containing `\` with `regex()` vs.
+    with `fixed()`?
+
+1.  What are the five most common words in `sentences`?
+
 ## Other uses of regular expressions
 
 There are a few other functions in base R that accept regular expressions:
 
 *   `apropos()` searchs all objects avaiable from the global environment. This
     is useful if you can't quite remember the name of the function.
+    
+    ```{r}
+    apropos("replace")
+    ```
+    
+*   `dir()` lists all the files in a directory. The `pattern` argument takes
+    a regular expression and only return file names that match the pattern.
+    For example, you can find all the rmarkdown files in the current
+    directory with:
+    
+    ```{r}
+    head(dir(pattern = "\\.Rmd$"))
+    ```
+    
+    (If you're more comfortable with "globs" like `*.Rmd`, you can convert
+    them to regular expressions with `glob2rx()`):
    
 *   `ls()` is similar to `apropos()` but only works in the current 
     environment. However, if you have so many objects in your environment
     that you have to use a regular expression to filter them all, you 
     need to think about what you're doing! (And probably use a list instead).
 
-*   `dir()` lists all the files in a directory. The `pattern` argument takes
-    a regular expression and only return file names that match the pattern.
-    For example, you can find all csv files with `dir(pattern = "\\.csv$")`.
-    (If you're more comfortable with "globs" like `*.csv`, you can convert
-    them to regular expressions with `glob2rx()`)
 
 ## Advanced topics
 
@@ -746,3 +838,12 @@ str_conv(x, "ISO-8859-1")
 as.data.frame(stringi::stri_enc_detect(x))
 str_conv(x, "ISO-8859-2")
 ```
+
+### UTF-8
+
+<http://wiki.secondlife.com/wiki/Unicode_In_5_Minutes>
+
+<http://www.joelonsoftware.com/articles/Unicode.html>
+
+Homoglyph attack, https://github.com/reinderien/mimic.
+
