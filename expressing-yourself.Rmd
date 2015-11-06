@@ -1,0 +1,403 @@
+---
+layout: default
+title: Expressing yourself
+output: bookdown::html_chapter
+---
+
+# Expressing yourself in code
+
+Code is a means of communication, not just to the computer, but to other people. This is important because every project you undertake is fundamentally collaborative, and even if you're not working with other people you'll definitely be working with future-you. 
+
+After solving a data analysis challenge, it's often worth looking at your code and thinking about whether or not it's obvious what you've done. If you spend a little time rewriting your code while the ideas are fresh, you can save a lot of time later trying to recreate what your code did.
+
+To me, this is what mastering R as a programming language is all about: making it easier to express yourself, so that over time your becomes more and more clear, and easier to write.  In this chapter, you'll learn some of the most important skills, but to learn more you need to study R as a programming language, not just an interactive environment for data science. We have written two books that will help you do so:
+
+* [Hands on programming with R](http://shop.oreilly.com/product/0636920028574.do),
+  by Garrett Grolemund. This is an introduction to R as a programming language 
+  and is a great place to start if R is your first programming language.
+  
+* [Advanced R](http://adv-r.had.co.nz) by Hadley Wickham. This dives into the
+  details of R the programming language. This is a great place to start if
+  you've programmed in other languages and you want to learn what makes R 
+  special, different, and particularly well suited to data analysis.
+
+You get better very slowly if you don't consciously practice, so this chapter brings together a number of ideas that we mention elsewhere into one focussed chapter on code as communication.
+
+```{r}
+library(magrittr)
+```
+
+This chapter is not comprehensive, but it will illustrate some patterns that in the long-term that will help you write clear and comprehensive code. 
+
+The goal is not just to write better funtions or to do things that you couldn't do before, but to code with more "ease".
+
+## Piping
+
+```R
+foo_foo <- little_bunny()
+```
+
+There are a number of ways that you could write this:
+
+1.  Function composition:
+
+    ```R
+    bop_on(
+      scoop_up(
+        hop_through(foo_foo, forest),
+        field_mouse
+      ), 
+      head
+    )
+    ```
+    
+    The disadvantage is that you have to read from inside-out, from 
+    right-to-left, and that the arguments end up spread far apart 
+    (sometimes called the 
+    [dagwood sandwhich](https://en.wikipedia.org/wiki/Dagwood_sandwich)
+    problem).
+    
+1.  Intermediate state:
+
+    ```R
+    foo_foo_1 <- hop_through(foo_foo, forest)
+    foo_foo_2 <- scoop_up(foo_foo_1, field_mouse)
+    foo_foo_3 <- bop_on(foo_foo_2, head)
+    ```
+    
+    This avoids the nesting, but you now have to name each intermediate element.
+    If there are natural names, use this form. But if you're just numbering
+    them, I don't think it's that useful. Whenever I write code like this, 
+    I invariably write the wrong number somewhere and then spend 10 minutes 
+    scratching my head and trying to figure out what went wrong with my code.
+    
+    You may also worry that this form creates many intermediate copies of your
+    data and takes up a lot of memory. First, in R, I don't think worrying about
+    memory is a useful way to spend your time: worry about it when it becomes
+    a problem (i.e. you run out of memory), not before. Second, R isn't stupid:
+    it will reuse the shared columns in a pipeline of data frame transformations.
+    
+    You can see that using `pryr::object_size()` (unfortunately the built-in
+    `object.size()` doesn't have quite enough smarts to show you this super 
+    important feature of R):
+    
+    ```{R}
+    diamonds <- ggplot2::diamonds
+    pryr::object_size(diamonds)
+    
+    diamonds2 <- dplyr::mutate(diamonds, price_per_carat = price / carat)
+    pryr::object_size(diamonds2)
+    
+    pryr::object_size(diamonds, diamonds2)
+    ```
+    
+    `diamonds` is 3.46 MB, and `diamonds2` is 3.89 MB, but the total size of 
+    `diamonds` and `diamonds2` is only 3.89 MB. How does that work?
+    only 3.89 MB
+
+1.  Overwrite the original:
+
+    ```R
+    foo_foo <- hop_through(foo_foo, forest)
+    foo_foo <- scoop_up(foo_foo, field_mouse)
+    foo_foo <- bop_on(foo_foo, head)
+    ```
+    
+    This is a minor variation of the previous form, where instead of giving
+    each intermediate element its own name, you use the same name, replacing
+    the previous value at each step. This is less typing (and less thinking),
+    so you're less likely to make mistakes. However, it can make debugging
+    painful, because if you make a mistake you'll need to start from
+    scratch again. Also, I think the reptition of the object being transformed
+    (here we've repeated `foo_foo` six times!) obscures the intent of the code.
+    
+1.  Use the pipe 
+
+    ```R
+    foo_foo %>%
+      hop_through(forest) %>%
+      scoop_up(field_mouse) %>%
+      bop_on(head)
+    ```
+    
+    This is my favourite form. The downside is that you need to understand
+    what the pipe does, but once you've mastered that simple task, you can
+    read this series of function compositions like it's a set of imperative
+    actions. 
+    
+    (Behind the scenes magrittr converts this call to the previous form,
+    using `.` as the name of the object. This makes it easier to debug than
+    the first form because it avoids deeply nested fuction calls.)
+
+## Useful intermediates
+
+*   Whenever you write your own function that is used primarily for its 
+    side-effects, you should always return the first argument invisibly, e.g.
+    `invisible(x)`: that way it can easily be used in a pipe. 
+
+    If a function doesn't follow this contract (e.g. `plot()` which returns 
+    `NULL`), you can still use it with magrittr by using the "tee" operator. 
+    `%T>%` works like `%>%` except instead it returns the LHS instead of the 
+    RHS:
+
+    ```{r}
+    library(magrittr)
+    rnorm(100) %>%
+      matrix(ncol = 2) %>%
+      plot() %>%
+      str()
+    
+    rnorm(100) %>%
+      matrix(ncol = 2) %T>%
+      plot() %>%
+      str()
+    ```
+
+*   When you run a pipe interactively, it's easy to see if something
+    goes wrong. When you start writing pipes that are used in production, i.e.
+    they're run automatically and a human doesn't immediately look at the output
+    it's a really good idea to include some assertions that verify the data 
+    looks like expect. One great way to do this is the ensurer package, 
+    writen by Stefan Milton Bache (the author of magrittr). 
+  
+    <http://www.r-statistics.com/2014/11/the-ensurer-package-validation-inside-pipes/>
+
+*   If you're working with functions that don't have a dataframe based API  
+    (i.e. you pass them individual vectors, not a data frame and expressions 
+    to be evaluated in the context of that data frame), you might find `%$%` 
+    useful. It "explodes" out the variables in a data frame so that you can 
+    refer to them explicitly. This is useful when working with many functions 
+    in base R:
+    
+    ```{r}
+    mtcars %$%
+      cor(disp, mpg)
+    ```
+
+## When not to use the pipe
+
+The pipe is a powerful tool, but it's not the only tool at your disposal, and it doesn't solve every problem! Generally, you should reach for another tool when:
+
+* Your pipes get longer than five or six lines. It's a good idea to create 
+  intermediate objects with meaningful names. That helps with debugging,
+  because it's easier to figure out when things went wrong. It also helps
+  understand the problem, because a good name can be very evocative of the
+  purpose.
+  
+* You have multiple inputs or outputs.  
+
+* Instead of creating a linear pipeline where you're primarily transforming
+  one object, you're starting to create a directed graphs with a complex
+  dependency structure. Pipes are fundamentally linear and expressing 
+  complex relationships with them does not often yield clear code.
+
+*   For assignment. magrittr provides the `%<>%` operator which allows you to
+    replace code like:
+  
+    ```R
+    mtcars <- mtcars %>% transform(cyl = cyl * 2)
+    ```
+    
+    with
+     
+    ```R
+    mtcars %<>% transform(cyl = cyl * 2)
+    ```
+    
+    I'm not a fan of this operator because I think assignment is such a 
+    special operation that it should always be clear when it's occuring.
+    In my opinion, a little bit of duplication (i.e. repeating the 
+    name of the object twice), is fine in return for making assignment
+    more explicit.
+    
+    I think it also gives you a better mental model of how assignment works
+    in R. The above code does not modify `mtcars`: it instead creates a 
+    modified copy and then replaces the old version (this may seem like a 
+    subtle point but I think it's quite important).  
+
+## Duplication
+
+As you become a better R programming, you'll learn more techniques for reducing various types of duplication. This allows you to do more with less, and allows you to express yourself more clearly by taking advantage of powerful programming constructs.
+
+Two main tools for reducing duplication are functions and for-loops. You tend to use for-loops less often in R than in other programming languages because R is a functional programming language. That means that you can extract out common patterns of for loops and put them in a function.
+
+### Extracting out a function
+
+Whenever you've copied and pasted code more than twice, you need to take a look at it and see if you can extract out the common components and make a function. For example, take a look at this code. What does it do?
+
+```{r}
+df <- data.frame(
+  a = rnorm(10),
+  b = rnorm(10),
+  c = rnorm(10),
+  d = rnorm(10)
+)
+
+df$a <- (df$a - min(df$a, na.rm = TRUE)) / 
+  (max(df$a, na.rm = TRUE) - min(df$a, na.rm = TRUE))
+df$b <- (df$b - min(df$b, na.rm = TRUE)) / 
+  (max(df$a, na.rm = TRUE) - min(df$b, na.rm = TRUE))
+df$c <- (df$c - min(df$c, na.rm = TRUE)) / 
+  (max(df$c, na.rm = TRUE) - min(df$c, na.rm = TRUE))
+df$d <- (df$d - min(df$d, na.rm = TRUE)) / 
+  (max(df$d, na.rm = TRUE) - min(df$d, na.rm = TRUE))
+```
+
+You might be able to puzzle out that this rescales each column to 0--1. Did you spot the mistake? I made an error when updating the code for `df$y`, and I forgot to change an `x` to a `y`. Extracting repeated code out into a function is a good idea because it helps make your code more understandable (because you can name the operation), and it prevents you from making this sort of update error.
+
+To write a function you need to first analyse the operation. How many inputs does it have?
+
+```{r, eval = FALSE}
+(df$a - min(df$a, na.rm = TRUE)) /
+  (max(df$a, na.rm = TRUE) - min(df$a, na.rm = TRUE))
+```
+
+It's often a good idea to rewrite the code using some temporary values. Here this function only takes one input, so I'll call it `x`:
+
+```{r}
+x <- 1:10
+(x - min(x, na.rm = TRUE)) / (max(x, na.rm = TRUE) - min(x, na.rm = TRUE))
+```
+
+We can also see some duplication in this code: I'm computing the `min()` and `max()` multiple times, and I could instead do that in one step:
+
+```{r}
+rng <- range(x, na.rm = TRUE)
+(x - rng[1]) / (rng[2] - rng[1])
+```
+
+Now that I've simplified the code, and made sure it works, I can turn it into a function:
+
+```{r}
+rescale01 <- function(x) {
+  rng <- range(x, na.rm = TRUE)
+  (x - rng[1]) / (rng[2] - rng[1])
+}
+```
+
+Always make sure you code works on a simple test case before creating the function!
+
+Now we can use that to simplify our original example:
+
+```{r}
+df$a <- rescale01(df$a)
+df$b <- rescale01(df$b)
+df$c <- rescale01(df$c)
+df$d <- rescale01(df$d)
+```
+
+This makes it more clear what we're doing, and avoids one class of copy-and-paste errors. However, we still have quite a bit of duplication: we're doing the same thing to each column.
+
+### Common looping patterns
+
+Before we tackle the problem of rescaling each column, lets start with a simpler case. Imagine we want to summarise each column with its median. One way to do that is to use a for loop. Every for loop has three main components:
+
+1. Creating the space for the output.
+2. The sequence to loop over.
+3. The body of the loop.
+
+```{r}
+medians <- vector("numeric", ncol(df))
+for (i in 1:ncol(df)) {
+  medians[i] <- median(df[[i]])
+}
+medians
+```
+
+If you do this a lot, you'd probably pull make a function for it:
+
+```{r}
+col_medians <- function(df) {
+  out <- vector("numeric", ncol(df))
+  for (i in 1:ncol(df)) {
+    out[i] <- median(df[[i]])
+  }
+  out
+}
+col_medians(df)
+```
+
+Now imagine that you also want to compute the interquartile range of each column? How would you change the function? What if you also wanted to calculate the min and max?
+
+```{r}
+col_min <- function(df) {
+  out <- vector("numeric", ncol(df))
+  for (i in 1:ncol(df)) {
+    out[i] <- min(df[[i]])
+  }
+  out
+}
+col_max <- function(df) {
+  out <- vector("numeric", ncol(df))
+  for (i in 1:ncol(df)) {
+    out[i] <- max(df[[i]])
+  }
+  out
+}
+```
+
+I've now copied-and-pasted this function three times, so it's time to think about how to generalise it. If you look at these functions, you'll notice that they are very similar: the only difference is the function that gets called.
+
+I mentioned earlier that R is a functional programming language. Practically, what this means is that you can not only pass vectors and data frames to functions, but you can also pass other functions. So you can generalise these `col_*` functions by adding an additional argument:
+
+```{r}
+col_summary <- function(df, fun) {
+  out <- vector("numeric", ncol(df))
+  for (i in 1:ncol(df)) {
+    out[i] <- fun(df[[i]])
+  }
+  out
+}
+col_summary(df, median)
+col_summary(df, min)
+```
+
+We can take this one step further and use another cool feature of R functions: "`...`". "`...`" just takes any additional arguments and allows you to pass them on to another function:
+
+```{r}
+col_summary <- function(df, fun, ...) {
+  out <- vector("numeric", ncol(df))
+  for (i in 1:ncol(df)) {
+    out[i] <- fun(df[[i]], ...)
+  }
+  out
+}
+col_summary(df, median, na.rm = TRUE)
+```
+
+If you've used R for a bit, the behaviour of function might seem familiar: it looks like the `lapply()` or `sapply()` functions. Indeed, all of the apply function in R abstract over common looping patterns.
+
+There are two main differences with `lapply()` and `col_summary()`:
+
+* `lapply()` returns a list. This allows it to work with any R function, not 
+  just those that return numeric output.
+  
+* `lapply()` is written in C, not R. This gives some very minor performance
+  improvements.
+  
+As you learn more about R, you'll learn more functions that allow you to abstract over common patterns of for loops.
+
+### Modifying columns
+
+Going back to our original motivation we want to reduce the duplication in 
+
+```{r, eval = FALSE}
+df$a <- rescale01(df$a)
+df$b <- rescale01(df$b)
+df$c <- rescale01(df$c)
+df$d <- rescale01(df$d)
+```
+
+One way to do that is to combine `lapply()` with data frame subsetting:
+
+```{r}
+df[] <- lapply(df, rescale01)
+```
+
+### Exercises
+
+1.   Adapt `col_summary()` so that it only applies to numeric inputs.
+     You might want to start with an `is_numeric()` function that returns
+     a logical vector that has a TRUE corresponding to each numeric column.
+
+1.   How do `sapply()` and `vapply()` differ from `col_summary()`?

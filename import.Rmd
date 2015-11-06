@@ -5,6 +5,7 @@ output: bookdown::html_chapter
 ---
 
 ```{r, include = FALSE}
+library(dplyr)
 library(readr)
 ```
 
@@ -34,8 +35,8 @@ There are many ways to read flat files into R. If you've be using R for a while,
   percentages, and more. 
   
 * They fail to do some annoying things like converting character vectors to 
-  factors, and munging the column headers to make sure they're valid R 
-  variable names.
+  factors, munging the column headers to make sure they're valid R 
+  variable names, and using row names.
 
 * They return objects with class `tbl_df`. As you saw in the dplyr chapter,
   this provides a nicer printing method, so it's easier to work with large
@@ -78,11 +79,6 @@ As well as reading data frame disk, readr also provides tools for working with d
 * `type_convert()` applies the same parsing heuristics to the character columns
   in a data frame. You can override its choices using `col_types`.
   
-* `parse_datetime()`, `parse_factor()`, `parse_integer()`, etc. Corresponding
-  to each `col_XYZ()` function is a `parse_XYZ()` function that takes a 
-  character vector and returns a parsed vector. We'll use these in examples
-  so you can see how a single piece works at a time.
-
 For the rest of this chapter we'll focus on `read_csv()`. If you understand how to use this function, it will be straightforward to your knowledge to all the other functions in readr.
 
 ### Basics
@@ -108,31 +104,69 @@ EXAMPLE
 
 ### Column types
 
-Readr uses a heuristic to figure out the types of your columns: it reads the first 1000 rows. This is fast, and fairly robust. If readr detects the wrong type of data, you'll get warning messages:
+Readr uses a heuristic to figure out the types of your columns: it reads the first 1000 rows and uses some (moderately conservative) heuristics to figure out the type of each column. This is fast, and fairly robust. If readr detects the wrong type of data, you'll get warning messages. Readr prints out the first five, and you can access them all with `problems()`:
 
 EXAMPLE
 
-You can fix these by overriding readr's guesses with the `col_type` argument. 
+Typically, you'll see a lot of warnings if readr has guessed the column type incorrectly. This most often occurs when the first 1000 rows are different to the rest of the data. Perhaps there are a lot of missing data there, or maybe your data is mostly numeric but a few rows have characters. Fortunately, it's easy to fix these problems using the `col_type` argument.
 
 (Note that if you have a very large file, you might want to set `n_max` to 10,000 or 100,000. That will speed up iteration while you're finding common problems)
 
-* `col_integer()` and `col_double()` specify integer and doubles. `col_number()`
-  is a more flexible parsed for numbers embedded in other strings. It will 
-  look for the first number in a string, ignoring non-numeric prefixes and
-  suffixes. It will also ignoring the grouping mark specified by the locale 
-  (see below for more details).
-  
-* `col_logical()` parses TRUE, T, FALSE and F into a logical vector.
-  
-* `col_character()` leaves strings as is. `col_factor()` allows you to load
-  data directly into a factor if you know what the levels are.
-  
-* `col_skip()` completely ignores a column.
+Specifying the `col_type` looks like this:
 
-* `col_date()`, `col_datetime()` and `col_time()` parse into dates, date times,
-  and times as described below.
+```{r, eval = FALSE}
+read_csv("mypath.csv", col_types = col(
+  x = col_integer(),
+  treatment = col_character()
+))
+```
 
-Parsing occurs after leading and trailing whitespace has been removed (if not overridden with `trim_ws = FALSE`) and missing values listed in `na` have been removed.
+You can use the following types of columns
+
+* `col_integer()` (i) and `col_double()` (d) specify integer and doubles. 
+  `col_logical()` (l) parses TRUE, T, FALSE and F into a logical vector.
+  `col_character()` (c) leaves strings as is. 
+
+* `col_number()` (n) is a more flexible parsed for numbers embedded in other 
+  strings. It will look for the first number in a string, ignoring non-numeric 
+  prefixes and suffixes. It will also ignoring the grouping mark specified by 
+  the locale (see below for more details).
+  
+* `col_factor()` (f) allows you to load data directly into a factor if you know 
+  what the levels are.
+  
+* `col_skip()` (_, -) completely ignores a column.
+
+* `col_date()` (D), `col_datetime()` (T) and `col_time()` (t) parse into dates, 
+  date times, and times as described below.
+
+You might have noticed that each column parser has a one letter abbreviation, which you can instead of the full function call (assuming you're happy with the default arguments):
+
+```{r, eval = FALSE}
+read_csv("mypath.csv", col_types = cols(
+  x = "i",
+  treatment = "c"
+))
+```
+
+(If you just have a few columns you supply a single string giving the type for each column: `i__dc`. See the documentation for more details. It's not as easy to understand as the `cols()` specification, so I'm not going to describe it further here.)
+
+By default, any column not mentioned in `cols` will be guessed. If you'd rather those columns are simply not read in, use `cols_only()`. In that case, you can use `col_guess()` (?) if you want to guess the type of a column.
+
+Each `col_XYZ()` function also has a corresponding `parse_XYZ()` that you can use on a character vector. This makes it easier to explore what each of the parsers does interactively.
+
+```{r}
+parse_integer(c("1", "2", "3"))
+parse_logical(c("TRUE", "FALSE", "NA"))
+parse_number(c("$1000", "20%", "3,000"))
+parse_number(c("$1000", "20%", "3,000"))
+```
+
+Parsing occurs after leading and trailing whitespace has been removed (if not overridden with `trim_ws = FALSE`) and missing values listed in `na` have been removed:
+
+```{r}
+parse_logical(c("TRUE ", " ."), na = ".")
+```
 
 #### Datetimes
 
@@ -149,7 +183,7 @@ parse_date("2010-10-01")
 parse_time("20:10:01")
 ```
 
-If these don't work for your data (common!) you can supply your own date time formats, built up of the following pieces:
+If these defaults don't work for your data you can supply your own date time formats, built up of the following pieces:
 
 * Year: `%Y` (4 digits). `%y` (2 digits); 00-69 -> 2000-2069, 70-99 -> 1970-1999.
 
@@ -181,7 +215,41 @@ parse_date("01/02/15", "%d/%m/%y")
 parse_date("01/02/15", "%y/%m/%d")
 ```
 
+Then when you read in the data with `read_csv()` you can easily translate to the `col_date()` format.
+
 ### International data
+
+The goal of readr's locales is to encapsulate the common options that vary between languages and different regions of the world. This includes:
+
+* Names of months and days, used when parsing dates.
+* The default time zones, used when parsing date times.
+* The character encoding, used when reading non-ASCII strings.
+* Default date and time formats, used when guessing column types.
+* The decimal and grouping marks, used when reading numbers.
+
+Readr is designed to be independent of your current locale settings. This makes a bit more hassle in the short term, but makes it much much easier to share your code with others: if your readr code works locally, it will also work for everyone else in the world. The same is not true for base R code, since it often inherits defaults from your system settings. Just because data ingest code works for you doesn't mean that it will work for someone else in another country.
+
+The settings you are most like to need to change are:
+
+*   The names of days and months:
+
+    ```{r}
+    locale("fr")
+    locale("fr", asciify = TRUE)
+    ```
+    
+*   The character encoding used in the file.  If you don't know the encoding
+    you can use `guess_encoding()`. It's not perfect, but if you have a decent
+    sample of text, it's likely to be able to figure it out.
+    
+    Readr converts all strings into UTF-8 as this is safest to work with across
+    platforms. (It's also what every stringr operation does.)
+
+### Exercises
+
+* Parse these dates (incl. non-English examples).
+* Parse these example files.
+* Parse this fixed width file.
 
 ## Databases
 
