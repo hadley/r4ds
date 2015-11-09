@@ -38,6 +38,7 @@ Many of the functions in purrr have equivalent in base R. We'll provide you with
 * What does `mean()` mean? What does `mean` mean?
 * How do you get help about the $ function? How do you normally write
 `[[`(mtcars, 1) ?
+* Argument order
 -->
 
 ## List basics
@@ -168,18 +169,28 @@ This is such a common use of for loops, that the purrr package has five function
 Each of these functions take a list as input, apply a function to each piece and then return a new vector that's the same length as the input. Because the first element is the list to transform, it also makes them particularly suitable for piping:
 
 ```{r}
-l %>% map_int(length)
-l %>% map_dbl(mean)
+map_int(x, length)
+map_dbl(x, mean)
 ```
 
 Note that additional arguments to the map function are passed on to the functions being mapped. That means these two calls are equivalent:
 
 ```{r}
-l %>% map_dbl(mean, trim = 0.5)
-l %>% map_dbl(function(x) mean(x, trim = 0.5))
+map_dbl(x, mean, trim = 0.5)
+map_dbl(x, function(x) mean(x, trim = 0.5))
 ```
 
+Other outputs:
+
+* `flatten()`
+* `dplyr::bind_rows()`
+
 ### Base equivalents
+
+* `lapply()` is effectively identical to `map()`. The advantage to using
+  `map()` is that it shares a consistent naming scheme with the other functions
+  in purrr. As you'll learn in the next section, `map()` functions also work
+  with things other than functions to save you typing.
 
 * `sapply()` is like a box of chocolates: you'll never know what you're going
   to get.
@@ -189,7 +200,70 @@ l %>% map_dbl(function(x) mean(x, trim = 0.5))
   is equivalent to `map_lgl(df, is.numeric)`.  Can also produce matrices, but
   that's rarely useful.
 
-## Map functions
+## Pipelines
+
+`map()` is particularly useful when constructing more complex transformations because it both inputs and outputs a list. That makes it well suited for solving a problem a piece at a time. For example, imagine you want to fit a linear model to each individual in a dataset.
+
+Let's start by working through the whole process on the complete dataset. It's always a good idea to start simple (with a single object), and figure out the basic workflow. Then you can generalise up to the harder problem of applying the same steps to multiple models. 
+
+TODO: find interesting dataset
+
+You could start by creating a list where each element is a data frame for a different person:
+
+```{r}
+models <- mtcars %>% 
+  split(.$cyl) %>% 
+  map(function(df) lm(mpg ~ wt, data = df))
+```
+
+The syntax for creating a function in R is quite long so purrr provides a convenient shortcut. You can use a formula:
+
+```{r}
+models <- mtcars %>% 
+  split(.$cyl) %>% 
+  map(~lm(mpg ~ wt, data = .))
+```
+
+Here I've used the pronoun `.`. You can also use `.x`, `.y`, and `.z` to refer to up to three arguments. If you want to create an function with more than three arguments, do it the regular way!
+
+A common application of these functions is extracting an element so purrr provides a shortcut. For example, to extract the R squared of a model, we need to first run `summary()` and then extract the component called "r.squared":
+
+```{r}
+models %>% 
+  map(summary) %>% 
+  map_dbl(~.$r.squared)
+```
+
+We can simplify this still further by using a character vector
+
+```{r}
+models %>% 
+  map(summary) %>% 
+  map_dbl("r.squared")
+```
+
+Similarly, you can use an integer vector to extract the element in a given position.
+
+### Navigating hierarchy
+
+These techniques are useful in general when working with complex nested object. One way to get such an object is to create many models or other complex things in R. Other times you get a complex object because you're reading in hierarchical data from another source.
+
+A common source of hierarchical data is JSON from a web api.
+
+```{r}
+issues <- jsonlite::fromJSON("https://api.github.com/repos/hadley/r4ds/issues", simplifyVector = FALSE)
+
+length(issues)
+str(issues[[1]])
+```
+ 
+Note that you can use a chararacter vector in any of the map funtions. This will subset recursively, which is particularly useful when you want to dive deep into a nested data structure.
+
+```{r}
+issues %>% map_chr(c("user", "login"))
+issues %>% map_int(c("user", "id"))
+```
+
 
 ### Predicate functions
 
@@ -202,7 +276,7 @@ col_sum <- function(df, f) {
 }
 ```
 
-`is.numeric()` is known as a predicate function: it returns a logical output. There are a couple of purrr functions designed to work specifically with predicate functions:
+`is.numeric()` is a __predicate__: a function that returns a logical output. There are a couple of purrr functions designed to work specifically with predicate functions:
 
 * `keep()` keeps all elements of a list where the predicate is true
 * `discard()` throws aways away elements of the list where the predicate is 
@@ -220,106 +294,9 @@ col_sum <- function(df, f) {
 
 Now we start to see the benefits of piping - it allows us to read of the sequence of transformations done to the list. First we throw away non-numeric columns and then we apply the function `f` to each one.
 
+Other predicate functions: `head_while()`, `tail_while()`, `some()`, `every()`, 
 
-## Nested lists
-
-
-## Map variations
-
-map() is the most important function in purrr. There are two
-variations on the map() theme that make it even more useful:
-
-### Different types of output
-
-When your function returns a single value (i.e. a vector of length 1),
-a list is too heavy. You want to get a vector instead: map_lgl(),
-map_int(), map_dbl(), map_chr().
-
-Why not `sapply()`
-
-Practice: Write a function that applies a numeric summary function to
-each numeric column in a data frame.
-
-```{r}
-col_sum <- function(df, f) {
-  is_num <- sapply(df, is.numeric)
-  sapply(df[is_num, ], f)
-}
-
-map <- function(x, f, ...) {
-  out <- vector("list", length(x))
-  for (i in seq_along(x)) {
-    out[[i]] <- f(x[[i]], ...)
-  }
-}
-```
-
-Define "predicate" and mention discard()/keep() here. Then can reduce
-col_sum() to:
-
-```{r}
-col_sum <- function(df, f) {
-  df %>%
-    keep(is.numeric) %>%
-    map_dbl(f)
-}
-```
-
-### Different types of input
-
-Sometimes you need to vary more than one input to the function: map2(), map3().
-
-
-```{r}
-map2 <- function(x, y, f, ...) {
-  out <- vector("list", length(x))
-  for (i in seq_along(x)) {
-    out[[i]] <- f(x[[i]], y[[i]], ...)
-  }
-  out
-}
-map3 <- function(x, y, z, f, ...) {
-  out <- vector("list", length(x))
-  for (i in seq_along(x)) {
-    out[[i]] <- f(x[[i]], y[[i]], z[[i]], ...)
-  }
-  out
-}
-
-```
-
-stringr example?
-
-Start with simple example. Work up to model fitting: generate test + training data, fit model
-to training, evaluate model with test.
-
-Why you should store related vectors (even if they're lists!) in a
-data frame. Need example that has some covariates so you can (e.g.)
-select all models for females, or under 30s, ...
-
-Covert `map_n` to 
-
-
-### What is `.f`?
-
-Motivation: have vector of models, and want to extract R-squared:
-
-* So far have only used existing functions. You can also write your
-own "anonymous" function.
-* But anonymous functions are so long, you can also use formula
-shortcut. Pronouns: ., .x, .y., .z.
-* But extracting components is so common, you can use character shortcut
-
-```{r}
-models %>% map(summary) %>% map_dbl(function(x) x$r.squared)
-models %>% map(summary) %>% map_dbl(~ .$r.squared)
-models %>% map(summary) %>% map_dbl("r.squared")
-```
-
-(Can also use integer if you want to extract by position).
-
-Challenge: here's a nested json file (e.g. github issues). Flatten and
-turn into a data frame.
+### Exercises
 
 ## Dealing with failure
 
@@ -339,7 +316,7 @@ Challenge: read_csv all the files in this directory. Which ones failed
 and why? Potentially helpful digression into names() and bind_rows(id
 = "xyz"):
 
-```{r}
+```{r, eval = FALSE}
 files <- dir("data", pattern = "\\.csv$")
 files %>%
   setNames(basename(.)) %>%
@@ -348,6 +325,139 @@ files %>%
 ```
 
 (maybe purrr needs set_names)
+
+## Multiple inputs
+
+So far we've focussed on variants that differ primarily in their output. There is a family of useful variants that vary primarily in their input: `map2()`, `map3()` and `map_n()`.
+
+Imagine you want to simulate some random normals with different means. You know how to do that with `map()`:
+
+```{r}
+mu <- c(5, 10, -3)
+mu %>% map(rnorm, n = 10)
+```
+
+What if you also want to vary the standard deviation? That's a job for `map2()` which works with two parallel sets of inputs:
+
+```{r}
+sd <- c(1, 5, 10)
+map2(mu, sd, rnorm, n = 10)
+```
+
+Note that arguments that vary for each call come before the function name, and arguments that are the same for every function call come afterwards.
+
+Like `map()`, conceptually `map2()` is a simple wrapper around a for loop:
+
+```{r}
+map2 <- function(x, y, f, ...) {
+  out <- vector("list", length(x))
+  for (i in seq_along(x)) {
+    out[[i]] <- f(x[[i]], y[[i]], ...)
+  }
+  out
+}
+```
+
+There's also `map3()` which allows you to vary three arguments at a time:
+
+```{r}
+n <- c(1, 5, 10)
+map3(n, mu, sd, rnorm)
+```
+
+(Note that it's not that naturally to use `map2()` and `map3()` in a pipeline because they have mutliple primarily inputs.)
+
+You could imagine `map4()`, `map5()`, `map6()` etc, but that would get tedious quickly. Instead, purrr provides `map_n()` which takes a list of arguments. Here's the `map_n()` call that's equivalent to the prevous `map3()` call:
+
+```{r}
+map_n(list(n, mu, sd), rnorm)
+```
+
+Another advantage of `map_n()` is that you can use named arguments instead of relying on positional matching:
+
+```{r}
+map_n(list(mean = mu, sd = sd, n = n), rnorm)
+```
+
+Since the arguments are all the same length, it makes sense to store them in a dataframe:
+
+```{r}
+params <- dplyr::data_frame(mean = mu, sd = sd, n = n)
+params %>% map_n(rnorm)
+```
+
+As soon as you get beyond simple examples, I think using data frames + `map_n()` is the way to go because the data frame ensures that each column as a name, and is the same length as all the other columns. This makes your code easier to understand (once you've grasped this powerful pattern).
+
+### Models
+
+A natural application of `map2()` is handling test-training pairs when doing model evaluation.  This is an important modelling technique: you should never evaluate a model on the same data it was fit to because it's going to make you overconfident. Instead, it's better to divide the data up and use one piece to fit the model and the other piece to evaluate it. A popular technique for this is called k-fold cross validation. You randomly hold out x% of the data and fit the model to the rest. You need to repeat this a few times because of random variation.
+
+Let's start by writing a function that partitions a dataset into test and training:
+
+```{r}
+partition <- function(df, p) {
+  n <- nrow(df)
+  groups <- rep(c(TRUE, FALSE), n * c(p, 1 - p))
+  sample(groups)
+}
+partition(mtcars, 0.1)
+```
+
+We'll generate 20 random test-training splits, and then create lists of test-training datasets:
+
+```{r}
+partitions <- rerun(200, partition(mtcars, 0.25))
+
+tst <- partitions %>% map(~mtcars[.x, , drop = FALSE])
+trn <- partitions %>% map(~mtcars[!.x, , drop = FALSE])
+```
+
+Then fit the models to each training dataset:
+
+```{r}
+mod <- trn %>% map(~lm(mpg ~ wt, data = .))
+```
+
+If we wanted, we could extract the coefficients using broom, and make a single data frame with `bind_rows()` and then visualise the distributions with ggplot2:
+
+```{r}
+coef <- mod %>% 
+  map(broom::tidy) %>% 
+  dplyr::bind_rows(.id = "i")
+coef
+
+library(ggplot2)
+ggplot(coef, aes(estimate)) + 
+  geom_histogram(bins = 10) + 
+  facet_wrap(~term, scales = "free_x")
+```
+
+But we're most interested in the quality of the models, so we make predictions for each test data set and compute the mean squared distance between predicted and actual:
+
+```{r}
+pred <- map2(mod, tst, predict)
+actl <- map(tst, "mpg")
+
+msd <- function(x, y) sqrt(mean((x - y) ^ 2))
+# TODO: use map2_dbl when available.
+mse <- map2(pred, actl, msd) %>% flatten
+mean(mse)
+
+mod <- lm(mpg ~ wt, data = mtcars)
+base_mse <- msd(mtcars$mpg, predict(mod))
+base_mse
+
+ggplot(, aes(mse)) + 
+  geom_histogram(binwidth = 0.25) + 
+  geom_vline(xintercept = base_mse, colour = "red")
+```
+
+### Data frames
+
+Why you should store related vectors (even if they're lists!) in a
+data frame. Need example that has some covariates so you can (e.g.)
+select all models for females, or under 30s, ...
+
 
 ## "Tidying" lists
 
