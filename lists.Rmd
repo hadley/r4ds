@@ -1,0 +1,367 @@
+---
+layout: default
+title: String manipulation
+output: bookdown::html_chapter
+---
+
+```{r setup, include=FALSE}
+library(purrr)
+set.seed(1014)
+options(digits = 3)
+```
+
+# Lists
+
+In this chapter, you'll learn how to handle lists, R's primarily hierarchical data structure. Lists are sometimes called recursive data structures, because they're one of the few datastructures in R than can contain themselves; a list can have a list as a child.
+
+If you've worked with list-like objects in other environments, you're probably familiar with the for-loop. We'll discuss for loops a little here, but we'll mostly focus on a number functions from the __purrr__ package. The purrr package is designed to make it easy to work with lists by taking care of the details and allowing you to focus on the specific transformation, not the generic boilerplate.
+
+The goal is to allow you to think only about:
+
+1. Each element of the list in isolate. You need to figure out how to 
+   manipulate a single element of the list; purrr takes care of generalising
+   that to every element in the list.
+
+1. How do you move that element a small step towards your final goal.
+   Purrr provides lots of small pieces that you compose together to 
+   solve complex problems.
+
+Together, these features allow you to tackle complex problems by dividing them up into bite size pieces. The resulting code is easy to understand when you re-read it in the future.
+
+Many of the functions in purrr have equivalent in base R. We'll provide you with a few guideposts into base R, but we'll focus on purrr because its functions are more consistent and have fewer surprises.
+
+<!--
+## Warm ups
+
+* What does this for loop do?
+* How is a data frame like a list?
+* What does `mean()` mean? What does `mean` mean?
+* How do you get help about the $ function? How do you normally write
+`[[`(mtcars, 1) ?
+-->
+
+## List basics
+
+* Creating
+* `[` vs `[[`
+* `str()`
+
+## A common pattern of for loops
+
+Lets start by creating a stereotypical list: a 10 element list where each element is contains some random values:
+
+```{r}
+x <- rerun(10, runif(sample(10, 1)))
+str(x)
+```
+
+Imagine we want to compute the length of each element in this list. We might use a for loop:
+
+```{r}
+results <- vector("numeric", length(x))
+for (i in seq_along(x)) {
+  results[i] <- length(x[[i]])
+}
+results
+```
+
+There are three parts to a for loop:
+
+1.  We start by creating a place to store the results of the for loop. We use 
+    `vector()` to create an integer vector that's the same length as the input.
+    It's important to make sure we allocate enough space for all the results
+    up front, otherwise we'll need to grow the results multiple times which
+    is slow.
+
+1.  We determine what to loop over: `i in seq_along(l)`. Each run of the for
+    loop will assign `i` to a different value from `seq_along(l)`. 
+    `seq_along(l)` is equivalent to the more familiar `1:length(l)`
+    with one important difference.
+    
+    What happens if `l` is length zero? Well, `length(l)` will be 0 so we
+    get `1:0` which yields `c(1, 0)`. That's likely to cause problems! You
+    may be sceptical that such a problem would ever occur to you in practice,
+    but once you start writing production code which is run unattended, its
+    easy for inputs to not be what you expect. I recommend taking some common
+    safety measures to avoid problems in future.
+    
+1.  The body of the loop - this does two things. It calculates what we're 
+    really interested (`length()`) and then it stores it in the output 
+    vector.
+
+Because we're likely to use this operation a lot, it makes sense to turn it into a function:
+
+```{r}
+compute_length <- function(x) {
+  results <- vector("numeric", length(x))
+  for (i in seq_along(x)) {
+    results[i] <- length(x[[i]])
+  }
+  results
+}
+compute_length(x)
+```
+
+Now imagine we want to compute the `mean()` of each element. How would our function change? What if we wanted to compute the `median()`?
+
+```{r}
+compute_mean <- function(x) {
+  results <- vector("numeric", length(x))
+  for (i in seq_along(x)) {
+    results[i] <- mean(x[[i]])
+  }
+  results
+}
+compute_mean(x)
+
+compute_median <- function(x) {
+  results <- vector("numeric", length(x))
+  for (i in seq_along(x)) {
+    results[i] <- median(x[[i]])
+  }
+  results
+}
+compute_median(x)
+```
+
+There are a lot of duplication in these functions! Most of the code is for-loop boilerplot and it's hard to see that one function (`mean()` or `median()`) that's actually important.
+
+What would you do if you saw a set of functions like this:
+
+```{r}
+f1 <- function(x) abs(x - mean(x)) ^ 1
+f2 <- function(x) abs(x - mean(x)) ^ 2
+f3 <- function(x) abs(x - mean(x)) ^ 3
+```
+
+You'd notice that there's a lot of duplication, and extract it in to an additional argument:
+
+```{r}
+f <- function(x, i) abs(x - mean(x)) ^ i
+```
+
+You've reduce the chance of bugs (because you now have 1/3 less code), and made it easy to generalise to new situations.
+
+We can do exactly the same thing with `compute_length()`, `compute_median()` and `compute_mean()`:
+
+```{r}
+compute_summary <- function(x, f) {
+  results <- vector("numeric", length(x))
+  for (i in seq_along(x)) {
+    results[i] <- f(x[[i]])
+  }
+  results
+}
+compute_summary(x, mean)
+```  
+
+Instead of hard coding the summary function, we allow it to vary. This is an incredibly powerful technique is is why R is known as a "function" programming language: the arguments to a function can be other functions.
+
+This is such a common use of for loops, that the purrr package has five functions that do exactly that. There's one functions for each type of output:
+
+* `map()`:     list
+* `map_lgl()`: logical vector
+* `map_int()`: integer vector
+* `map_dbl()`: double vector
+* `map_chr()`: character vector
+
+Each of these functions take a list as input, apply a function to each piece and then return a new vector that's the same length as the input. Because the first element is the list to transform, it also makes them particularly suitable for piping:
+
+```{r}
+l %>% map_int(length)
+l %>% map_dbl(mean)
+```
+
+Note that additional arguments to the map function are passed on to the functions being mapped. That means these two calls are equivalent:
+
+```{r}
+l %>% map_dbl(mean, trim = 0.5)
+l %>% map_dbl(function(x) mean(x, trim = 0.5))
+```
+
+### Base equivalents
+
+* `sapply()` is like a box of chocolates: you'll never know what you're going
+  to get.
+  
+* `vapply()` is a safe alternative to `sapply()` because you supply an additional
+  argument that defines the type. But it's long: `vapply(df, is.numeric, logical(1))`
+  is equivalent to `map_lgl(df, is.numeric)`.  Can also produce matrices, but
+  that's rarely useful.
+
+## Map functions
+
+### Predicate functions
+
+Imagine we want to summarise each numeric column of a data frame. We could write this:
+
+```{r}
+col_sum <- function(df, f) {
+  is_num <- df %>% map_lgl(is.numeric)
+  df[is_num] %>% map_dbl(f)
+}
+```
+
+`is.numeric()` is known as a predicate function: it returns a logical output. There are a couple of purrr functions designed to work specifically with predicate functions:
+
+* `keep()` keeps all elements of a list where the predicate is true
+* `discard()` throws aways away elements of the list where the predicate is 
+  true
+  
+That allows us to simply the summary function to:
+
+```{r}
+col_sum <- function(df, f) {
+  df %>%
+    keep(is.numeric) %>%
+    map_dbl(f)
+}
+```
+
+Now we start to see the benefits of piping - it allows us to read of the sequence of transformations done to the list. First we throw away non-numeric columns and then we apply the function `f` to each one.
+
+
+## Nested lists
+
+
+## Map variations
+
+map() is the most important function in purrr. There are two
+variations on the map() theme that make it even more useful:
+
+### Different types of output
+
+When your function returns a single value (i.e. a vector of length 1),
+a list is too heavy. You want to get a vector instead: map_lgl(),
+map_int(), map_dbl(), map_chr().
+
+Why not `sapply()`
+
+Practice: Write a function that applies a numeric summary function to
+each numeric column in a data frame.
+
+```{r}
+col_sum <- function(df, f) {
+  is_num <- sapply(df, is.numeric)
+  sapply(df[is_num, ], f)
+}
+
+map <- function(x, f, ...) {
+  out <- vector("list", length(x))
+  for (i in seq_along(x)) {
+    out[[i]] <- f(x[[i]], ...)
+  }
+}
+```
+
+Define "predicate" and mention discard()/keep() here. Then can reduce
+col_sum() to:
+
+```{r}
+col_sum <- function(df, f) {
+  df %>%
+    keep(is.numeric) %>%
+    map_dbl(f)
+}
+```
+
+### Different types of input
+
+Sometimes you need to vary more than one input to the function: map2(), map3().
+
+
+```{r}
+map2 <- function(x, y, f, ...) {
+  out <- vector("list", length(x))
+  for (i in seq_along(x)) {
+    out[[i]] <- f(x[[i]], y[[i]], ...)
+  }
+  out
+}
+map3 <- function(x, y, z, f, ...) {
+  out <- vector("list", length(x))
+  for (i in seq_along(x)) {
+    out[[i]] <- f(x[[i]], y[[i]], z[[i]], ...)
+  }
+  out
+}
+
+```
+
+stringr example?
+
+Start with simple example. Work up to model fitting: generate test + training data, fit model
+to training, evaluate model with test.
+
+Why you should store related vectors (even if they're lists!) in a
+data frame. Need example that has some covariates so you can (e.g.)
+select all models for females, or under 30s, ...
+
+Covert `map_n` to 
+
+
+### What is `.f`?
+
+Motivation: have vector of models, and want to extract R-squared:
+
+* So far have only used existing functions. You can also write your
+own "anonymous" function.
+* But anonymous functions are so long, you can also use formula
+shortcut. Pronouns: ., .x, .y., .z.
+* But extracting components is so common, you can use character shortcut
+
+```{r}
+models %>% map(summary) %>% map_dbl(function(x) x$r.squared)
+models %>% map(summary) %>% map_dbl(~ .$r.squared)
+models %>% map(summary) %>% map_dbl("r.squared")
+```
+
+(Can also use integer if you want to extract by position).
+
+Challenge: here's a nested json file (e.g. github issues). Flatten and
+turn into a data frame.
+
+## Dealing with failure
+
+Motivation: you try to fit a bunch of models, and they don't all
+succeed/converge. How do you make sure one failure doesn't kill your
+whole process?
+
+Key tool: try()? failwith()? maybe()? (purrr needs to provide a
+definitive answer here)
+
+Use map_lgl() to create logical vector of success/failure. (Or have
+helper function that wraps? succeeded()? failed()?). Extract successes
+and do something to them. Extract cases that lead to failure (e.g.
+which datasets did models fail to converge for)
+
+Challenge: read_csv all the files in this directory. Which ones failed
+and why? Potentially helpful digression into names() and bind_rows(id
+= "xyz"):
+
+```{r}
+files <- dir("data", pattern = "\\.csv$")
+files %>%
+  setNames(basename(.)) %>%
+  map(read_csv) %>%
+  bind_rows(id = "name")
+```
+
+(maybe purrr needs set_names)
+
+## "Tidying" lists
+
+I don't know know how to put this stuff in words yet, but I know it
+when I see it, and I have a good intuition for what operation you
+should do at each step. This is where I was 5 years for tidy data - I
+can do it, but it's so internalised that I don't know what I'm doing
+and I don't know how to teach it to other people.
+
+Two key tools:
+
+* flatten(), flatmap(), and lmap(): sometimes list doesn't have quite
+the right grouping level and you need to change
+
+* zip_n(): sometimes list is "inside out"
+
+Challenges: various weird json files?
