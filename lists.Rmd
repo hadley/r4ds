@@ -183,7 +183,11 @@ map_dbl(x, function(x) mean(x, trim = 0.5))
 Other outputs:
 
 * `flatten()`
+* `map_int()` vs. `map()` + `flatten_int()`
+* `flatmap()`
 * `dplyr::bind_rows()`
+
+Need sidebar/callout about predicate functions somewhere. Better to use purrr's underscore variants because they tend to do what you expect, and 
 
 ### Base equivalents
 
@@ -300,17 +304,41 @@ Other predicate functions: `head_while()`, `tail_while()`, `some()`, `every()`,
 
 ## Dealing with failure
 
-Motivation: you try to fit a bunch of models, and they don't all
-succeed/converge. How do you make sure one failure doesn't kill your
-whole process?
+When you start doing many operations with purrr, you'll soon discover that not everything always succeeds. For example, you might be fitting a bunch of more complicated models, and not every model will converge. How do you ensure that one bad apple doesn't ruin the whole barrel?
 
-Key tool: try()? failwith()? maybe()? (purrr needs to provide a
-definitive answer here)
+Dealing with errors is fundamentally painful because errors are sort of a side-channel to the way that functions usually return values. The best way to handle them is to turn them into a regular output with the `safe()` function.  This function is similar to the `try()` function in base R, but instead of sometimes returning the original output and sometimes returning a error, `safe()` always returns the same type of object: a list with elements `result` and `error`. For any given run, one will always be `NULL`, but because the structure is always the same its easier to deal with.
 
-Use map_lgl() to create logical vector of success/failure. (Or have
-helper function that wraps? succeeded()? failed()?). Extract successes
-and do something to them. Extract cases that lead to failure (e.g.
-which datasets did models fail to converge for)
+Let's illustrate this with a simple example: `log()`:
+
+```{r}
+safe_log <- safe(log)
+str(safe_log(10))
+str(safe_log("a"))
+```
+
+You can see when the function succeeds the result element contains the result and the error element is empty. When the function fails, the result element is empty and the error element contains the error.
+
+This makes it natural to work with map:
+
+```{r}
+x <- list(1, 10, "a")
+y <- x %>% map(safe_log)
+str(y)
+```
+
+This output would be easier to work with if we had two lists: one of all the errors and one of all the results.  Fortunately there's a purrr function that allows us to turn a list "inside out", `zip_n()`:
+
+```{r}
+str(y %>% zip_n())
+```
+
+It's up to you how to deal with these errors, but typically you'd start by looking at the values of `x` where `y` is an error or working with the values of y that are ok:
+
+```{r}
+error <- y %>% map_lgl(~is.null(.$result))
+x[error]
+y[!error] %>% map("result")
+```
 
 Challenge: read_csv all the files in this directory. Which ones failed
 and why? Potentially helpful digression into names() and bind_rows(id
@@ -319,12 +347,9 @@ and why? Potentially helpful digression into names() and bind_rows(id
 ```{r, eval = FALSE}
 files <- dir("data", pattern = "\\.csv$")
 files %>%
-  setNames(basename(.)) %>%
-  map(read_csv) %>%
-  bind_rows(id = "name")
+  set_names(basename(.)) %>%
+  map_df(readr::read_csv, .id = "filename") %>%
 ```
-
-(maybe purrr needs set_names)
 
 ## Multiple inputs
 
