@@ -1,32 +1,33 @@
 language: c
-sudo: required
+sudo: false
 
-before_install:
-  - curl -OL http://raw.github.com/craigcitro/r-travis/master/scripts/travis-tool.sh
-  - chmod 755 ./travis-tool.sh
-  - ./travis-tool.sh bootstrap
+addons:
+  apt:
+    sources:
+      - r-packages-precise
+    packages:
+      - r-base-dev
+      - r-recommended
+      - pandoc
+      - libxml2-dev
+
+env:
+  global:
+    - R_LIBS_USER=~/R/library
+
+cache:
+  directories:
+    - $R_LIBS_USER
+    - vendor/bundle
 
 install:
-  # Install binary pandoc from Rstudio
-  - export PATH="$HOME/pandoc:$PATH"
-  - mkdir $HOME/pandoc
-  - curl -O https://s3.amazonaws.com/rstudio-buildtools/pandoc-1.12.3.zip
-  - unzip -j pandoc-1.12.3.zip pandoc-1.12.3/linux/debian/x86_64/pandoc
-      -d $HOME/pandoc
-  - chmod +x $HOME/pandoc/pandoc
-  - pandoc --version
-  - rm pandoc-1.12.3.zip
+  - bundle install --jobs=3 --retry=3
+  - mkdir -p "$R_LIBS_USER"
+  - Rscript -e 'if (length(find.package("devtools", quiet = TRUE)) == 0L) { install.packages("devtools", repos = "http://cran.rstudio.com") }'
+  - Rscript -e 'devtools::update_packages("devtools", repos = "http://cran.rstudio.com")'
+  - Rscript -e 'devtools::install_deps(repos = "http://cran.rstudio.com", dependencies = TRUE)'
 
-  # Install jekyll
-  - travis_retry gem install mime-types
-  - travis_retry gem install jekyll -v 2.5.3
-
-  # Install R packages
-  - ./travis-tool.sh r_binary_install knitr png
-  - ./travis-tool.sh r_install        broom purrr jsonlite ggplot2 dplyr tidyr pryr stringr htmlwidgets htmltools microbenchmark
-  - ./travis-tool.sh github_package   hadley/bookdown garrettgman/DSR hadley/readr gaborcsardi/rcorpora hadley/stringr
-
-script: jekyll build
+script: bundle exec jekyll build
 
 after_success:
   - cp -r figures/ _site/figures
