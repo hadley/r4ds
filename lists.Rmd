@@ -181,14 +181,6 @@ map_dbl(x, mean, trim = 0.5)
 map_dbl(x, function(x) mean(x, trim = 0.5))
 ```
 
-Other outputs:
-
-* `flatten()`
-* `map_int()` vs. `map()` + `flatten_int()`
-* `flatmap()`
-
-Need sidebar/callout about predicate functions somewhere. Better to use purrr's underscore variants because they tend to do what you expect, and 
-
 ### Base equivalents
 
 * `lapply()` is effectively identical to `map()`. The advantage to using
@@ -268,18 +260,18 @@ issues %>% map_chr(c("user", "login"))
 issues %>% map_int(c("user", "id"))
 ```
 
-### Predicate functions
+### Predicates
 
 Imagine we want to summarise each numeric column of a data frame. We could write this:
 
 ```{r}
 col_sum <- function(df, f) {
-  is_num <- df %>% map_lgl(is.numeric)
+  is_num <- df %>% map_lgl(is_numeric)
   df[is_num] %>% map_dbl(f)
 }
 ```
 
-`is.numeric()` is a __predicate__: a function that returns a logical output. There are a couple of purrr functions designed to work specifically with predicate functions:
+`is_numeric()` is a __predicate__: a function that returns a logical output. There are a couple of purrr functions designed to work specifically with predicate functions:
 
 * `keep()` keeps all elements of a list where the predicate is true
 * `discard()` throws aways away elements of the list where the predicate is 
@@ -295,9 +287,11 @@ col_sum <- function(df, f) {
 }
 ```
 
-Now we start to see the benefits of piping - it allows us to read of the sequence of transformations done to the list. First we throw away non-numeric columns and then we apply the function `f` to each one.
+[Sidebar: list of predicate functions. Better to use purrr's underscore variants because they tend to do what you expect, and are implemented in R so if you're unsure you can read the source]
 
-Other predicate functions: `head_while()`, `tail_while()`, `some()`, `every()`, 
+This is a nice example of the benefits of piping - we can more easily see the sequence of transformations done to the list. First we throw away non-numeric columns and then we apply the function `f` to each one.
+
+Other predicate functionals: `head_while()`, `tail_while()`, `some()`, `every()`, 
 
 ### Exercises
 
@@ -325,19 +319,43 @@ y <- x %>% map(safe_log)
 str(y)
 ```
 
-This output would be easier to work with if we had two lists: one of all the errors and one of all the results.  Fortunately there's a purrr function that allows us to turn a list "inside out", `zip_n()`:
+This output would be easier to work with if we had two lists: one of all the errors and one of all the results:
 
 ```{r}
-str(y %>% zip_n())
+result <- y %>% map("result")
+error <- y %>% map("error")
 ```
+
+(Later on, you'll see another way to attack this problem with `transpose()`)
 
 It's up to you how to deal with these errors, but typically you'd start by looking at the values of `x` where `y` is an error or working with the values of y that are ok:
 
 ```{r}
-error <- y %>% map_lgl(~is.null(.$result))
-x[error]
-y[!error] %>% map("result")
+is_ok <- error %>% map_lgl(is.null)
+x[!is_ok]
+result[is_ok] %>% map_dbl(identity)
 ```
+
+When we have related vectors, it's useful to store in a data frame:
+
+```{r}
+all <- dplyr::data_frame(
+  x = list(1, 10, "a"),
+  y = x %>% map(safe_log),
+  result = y %>% map("result"),
+  error = y %>% map("error"),
+  is_ok = error %>% map_lgl(is.null)
+)
+dplyr::filter(all, is_ok)
+```
+
+Other related functions:
+
+* `maybe()`: if you don't care about the error message, and instead
+  just want a default value on failure.
+  
+* `outputs()`: does a similar job but for other outputs like printed
+  ouput, messages, and warnings.
 
 Challenge: read all the csv files in this directory. Which ones failed
 and why? 
@@ -410,6 +428,39 @@ params %>% map_n(rnorm)
 ```
 
 As soon as you get beyond simple examples, I think using data frames + `map_n()` is the way to go because the data frame ensures that each column as a name, and is the same length as all the other columns. This makes your code easier to understand (once you've grasped this powerful pattern).
+
+There's one more step up in complexity - as well as varying the arguments to the function you might be varying the function itself:
+
+```{r}
+f <- c("runif", "rnorm", "rpois")
+param <- list(
+  list(min = -1, max = 1), 
+  list(sd = 5), 
+  list(lambda = 10)
+)
+```
+
+To handle this case, you can use `invoke_map()`:
+
+```{r}
+invoke_map(f, param, n = 5)
+```
+
+The first argument is a list of functions or character vector of function names, the second argument is a list of lists giving the arguments that vary for each function. The subsequent arguments are passed on to every function.
+
+You can use `dplyr::frame_data()` to create these matching pairs a little easier:
+
+```{r}
+sim <- dplyr::frame_data(
+  ~f,      ~params,
+  "runif", list(min = -1, max = -1),
+  "rnorm", list(sd = 5),
+  "rpois", list(lambda = 10)
+)
+sim %>% dplyr::mutate(
+  samples = invoke_map(f, params, n = 10)
+)
+```
 
 ### Models
 
