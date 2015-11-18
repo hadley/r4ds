@@ -1,6 +1,6 @@
 ---
 layout: default
-title: String manipulation
+title: List manipulation
 output: bookdown::html_chapter
 ---
 
@@ -8,27 +8,27 @@ output: bookdown::html_chapter
 library(purrr)
 set.seed(1014)
 options(digits = 3)
+source("images/embed_jpg.R")
 ```
 
 # Lists
 
-In this chapter, you'll learn how to handle lists, R's primarily hierarchical data structure. Lists are sometimes called recursive data structures, because they're one of the few datastructures in R than can contain themselves; a list can have a list as a child.
+In this chapter, you'll learn how to handle lists, the data structure R uses for complex, hierarchical objects. You've already familiar with vectors, R's data structure for 1d objects. Lists extend these ideas to model objects that are like trees. Lists allow  you to do this because unlike vectors, a list can contain other lists.
 
-If you've worked with list-like objects in other environments, you're probably familiar with the for-loop. We'll discuss for loops a little here, but we'll mostly focus on a number functions from the __purrr__ package. The purrr package is designed to make it easy to work with lists by taking care of the details and allowing you to focus on the specific transformation, not the generic boilerplate.
+If you've worked with list-like objects before, you're probably familiar with the for loop. I'll talk a little bit about for loops here, but the focus will be functions from the __purrr__ package. purrr makes it easier to work with lists by eliminating common for loop boilerplate so you can focus on the specific details. This is the same idea as the apply family of functions in base R (`apply()`, `lapply()`, `tapply()`, etc), but purrr is more consistent and easier to learn.
 
-The goal is to allow you to think only about:
+The goal of using purrr functions instead of for loops is to allow you break common list manipulation challenges into independent pieces: 
 
-1. Each element of the list in isolate. You need to figure out how to 
-   manipulate a single element of the list; purrr takes care of generalising
-   that to every element in the list.
+1. How can you solve the problem for a single element of the list? Once
+   you've solved that problem, purrr takes care of generalising your
+   solution to every element in the list.
 
-1. How do you move that element a small step towards your final goal.
-   Purrr provides lots of small pieces that you compose together to 
-   solve complex problems.
+1. If you're solving a complex problem, how can you break it down into
+   bite sized pieces that allow you to advance one small step towards a 
+   solution? With purrr, you get lots of small pieces that you can
+   combose together with the pipe.
 
-Together, these features allow you to tackle complex problems by dividing them up into bite size pieces. The resulting code is easy to understand when you re-read it in the future.
-
-Many of the functions in purrr have equivalent in base R. We'll provide you with a few guideposts into base R, but we'll focus on purrr because its functions are more consistent and have fewer surprises.
+This structure makes it easier to solve new problems. It also makes it easier to understand your solutions to old problems when you re-read your old code.
 
 <!--
 ## Warm ups
@@ -43,23 +43,93 @@ Many of the functions in purrr have equivalent in base R. We'll provide you with
 
 ## List basics
 
-* Creating
-* `[` vs `[[`
-* `str()`
-
-## A common pattern of for loops
-
-Lets start by creating a stereotypical list: a 10 element list where each element is contains some random values:
+To create a list, you use the `list()` function:
 
 ```{r}
-x <- rerun(10, runif(sample(10, 1)))
+x <- list(1, 2, 3)
 str(x)
 ```
 
-Imagine we want to compute the length of each element in this list. We might use a for loop:
+Unlike the atomic vectors, `lists()` can contain a mix of objects:
 
 ```{r}
-results <- vector("numeric", length(x))
+y <- list("a", 1L, 1.5, TRUE)
+str(y)
+```
+
+`str()` is very helpful when looking at lists because it focusses on the structure, not the contents.
+
+Lists can even contain other lists!
+
+```{r}
+z <- list(list(1, 2), list(3, 4))
+str(z)
+```
+
+There are three ways to subset a list:
+
+*   `[` extracts a sub-list. The result will always be a list.
+
+    ```{r}
+    str(y[1:3])
+    str(y[1])
+    ```
+    
+*   `[[` extracts a single component from a list.
+
+    ```{r}
+    str(y[[1]])
+    str(y[[3]])
+    ```
+
+*   `$` is a shorthand for extracting named elements of a list. It works
+    very similarly to `[[` except that you don't need to use quotes.
+    
+    ```{r}
+    a <- list(x = 1:2, y = 3:4)
+    a$x
+    a[["y"]]
+    ```
+
+It's easy to get confused between `[` and `[[`, but understanding the difference is critical when working with lists. A few months ago I stayed at a hotel with a pretty interesting pepper shaker that I hope will help remember:
+
+```{r, echo = FALSE} 
+embed_jpg("images/pepper.jpg", 300)
+```
+
+If this pepper shaker is your list `x`, then, `x[1]` is a pepper shaker containing a single pepper packet:
+
+```{r, echo = FALSE} 
+embed_jpg("images/pepper-1.jpg", 300)
+```
+
+`x[2]` would look the same, but would contain the second packet. `x[1:2]` would be a pepper shaker containing two pepper packets. 
+
+`x[[1]]` is:
+
+```{r, echo = FALSE} 
+embed_jpg("images/pepper-2.jpg", 300)
+```
+
+If you wanted to get the content of the pepper package, you'd need `x[[1]][[1]]`:
+
+```{r, echo = FALSE} 
+embed_jpg("images/pepper-3.jpg", 300)
+```
+
+## A common pattern of for loops
+
+Lets start by creating a stereotypical list: an eight element list where each element contains a random vector of random length. (You'll learn `rerun()` later.)
+
+```{r}
+x <- rerun(8, runif(sample(5, 1)))
+str(x)
+```
+
+Imagine we want to compute the length of each element in this list. One way to do that is with a for loop:
+
+```{r}
+results <- vector("integer", length(x))
 for (i in seq_along(x)) {
   results[i] <- length(x[[i]])
 }
@@ -68,29 +138,29 @@ results
 
 There are three parts to a for loop:
 
-1.  We start by creating a place to store the results of the for loop. We use 
-    `vector()` to create an integer vector that's the same length as the input.
-    It's important to make sure we allocate enough space for all the results
-    up front, otherwise we'll need to grow the results multiple times which
-    is slow.
+1.  The __results__: `results <- vector("integer", length(x))`. 
+    This creates an integer vector the same length as the input. It's important
+    to enough space for all the results up front, otherwise you have to grow the 
+    results vector at each iteration, which is very slow for large loops.
 
-1.  We determine what to loop over: `i in seq_along(l)`. Each run of the for
-    loop will assign `i` to a different value from `seq_along(l)`. 
-    `seq_along(l)` is equivalent to the more familiar `1:length(l)`
-    with one important difference.
+1.  The __sequence__: `i in seq_along(x)`. This determines what to loop over:
+    each run of the for loop will assign `i` to a different value from 
+    `seq_along(x)`, shorthand for `1:length(x)`. 
     
-    What happens if `l` is length zero? Well, `length(l)` will be 0 so we
-    get `1:0` which yields `c(1, 0)`. That's likely to cause problems! You
-    may be sceptical that such a problem would ever occur to you in practice,
-    but once you start writing production code which is run unattended, its
-    easy for inputs to not be what you expect. I recommend taking some common
-    safety measures to avoid problems in future.
+1.  The __body__: `results[i] <- length(x[[i]])`. This code is run repeatedly, 
+    each time with a different value in `i`. The first iteration will run 
+    `results[1] <- length(x[[1]])`, the second `results[2] <- length(x[[2]])`, 
+    and so on.
     
-1.  The body of the loop - this does two things. It calculates what we're 
-    really interested (`length()`) and then it stores it in the output 
-    vector.
+This loop used a function you might not be familiar with: `seq_along()`. This is a safe version of the more familiar `1:length(l)`. There's one important difference in behaviour. If you have a zero-length vector, `seq_along()` does the right thing:
 
-Because we're likely to use this operation a lot, it makes sense to turn it into a function:
+```{r}
+y <- numeric(0)
+seq_along(y)
+1:length(y)
+```
+
+Figuring out the length of the elements of a list is a common operation, so it makes sense to turn it into a function so we can reuse it again and again:
 
 ```{r}
 compute_length <- function(x) {
@@ -103,7 +173,9 @@ compute_length <- function(x) {
 compute_length(x)
 ```
 
-Now imagine we want to compute the `mean()` of each element. How would our function change? What if we wanted to compute the `median()`?
+(And in fact base R has this already: it's called `lengths()`.)
+
+Now imagine we want to compute the `mean()` of each element. How would our function change? What if we wanted to compute the `median()`? You could create variations of `compute_lengths()` like this:
 
 ```{r}
 compute_mean <- function(x) {
@@ -125,7 +197,7 @@ compute_median <- function(x) {
 compute_median(x)
 ```
 
-There are a lot of duplication in these functions! Most of the code is for-loop boilerplot and it's hard to see that one function (`mean()` or `median()`) that's actually important.
+But this is only two functions we might want to apply to every element of a list, and there's already lot of duplication. Most of the code is for-loop boilerplate and it's hard to see the one function (`length()`, `mean()`, or `median()`) that's actually important.
 
 What would you do if you saw a set of functions like this:
 
@@ -141,9 +213,7 @@ You'd notice that there's a lot of duplication, and extract it in to an addition
 f <- function(x, i) abs(x - mean(x)) ^ i
 ```
 
-You've reduce the chance of bugs (because you now have 1/3 less code), and made it easy to generalise to new situations.
-
-We can do exactly the same thing with `compute_length()`, `compute_median()` and `compute_mean()`:
+You've reduce the chance of bugs (because you now have 1/3 less code), and made it easy to generalise to new situations. We can do exactly the same thing with `compute_length()`, `compute_median()` and `compute_mean()`:
 
 ```{r}
 compute_summary <- function(x, f) {
@@ -156,45 +226,83 @@ compute_summary <- function(x, f) {
 compute_summary(x, mean)
 ```  
 
-Instead of hard coding the summary function, we allow it to vary. This is an incredibly powerful technique is is why R is known as a "function" programming language: the arguments to a function can be other functions.
+Instead of hardcoding the summary function, we allow it to vary, by adding an addition argument that is a function. It can take a while to wrap your head around this, but it's very powerful technique. This is one of the reasons that R is known as a "functional" programming language.
 
-This is such a common use of for loops, that the purrr package has five functions that do exactly that. There's one functions for each type of output:
+## The map functions
 
-* `map()`:     list
-* `map_lgl()`: logical vector
-* `map_int()`: integer vector
-* `map_dbl()`: double vector
-* `map_chr()`: character vector
-* `map_df()`:  a data frame
+This pattern of looping over a list and doing something to each element is so common that the purrr package provides a family of functions to do it for you. Each function always returns the same type of output so there are six variations based on what sort of result you want:
 
-Each of these functions take a list as input, apply a function to each piece and then return a new vector that's the same length as the input. Because the first element is the list to transform, it also makes them particularly suitable for piping:
+* `map()`:     a list.
+* `map_lgl()`: a logical vector.
+* `map_int()`: a integer vector.
+* `map_dbl()`: a double vector.
+* `map_chr()`: a character vector.
+* `map_df()`:  a data frame.
+* `walk():     nothing (called exclusively for side effects).
+
+If none of the specialised versions return exactly what you want, you can always use a `map()` because a list can contain any other object.
+
+Each of these functions take a list as input, applies a function to each piece and then return a new vector that's the same length as the input. The following code uses purrr to do the same computations we did above:
 
 ```{r}
 map_int(x, length)
 map_dbl(x, mean)
+map_dbl(x, median)
 ```
 
-Note that additional arguments to the map function are passed on to the functions being mapped. That means these two calls are equivalent:
+There are a few differences between `map_*()` and `compute_summary()`:
 
-```{r}
-map_dbl(x, mean, trim = 0.5)
-map_dbl(x, function(x) mean(x, trim = 0.5))
-```
+*   They are implemented in C code. This means you can't easily understand their
+    implementation, but it reduces a little overhead so they run even faster
+    than for loops.
+    
+*   The second argument, `.f,` the function to apply to each element can be 
+    a formula, a character vector, or an integer vector. You'll learn about 
+    those handy shortcuts in the next section.
+    
+*   You can pass on additional arguments to `.f`:
 
-### Base equivalents
+    ```{r}
+    map_dbl(x, mean, trim = 0.5)
+    map_dbl(x, function(x) mean(x, trim = 0.5))
+    ```
 
-* `lapply()` is effectively identical to `map()`. The advantage to using
-  `map()` is that it shares a consistent naming scheme with the other functions
-  in purrr. As you'll learn in the next section, `map()` functions also work
-  with things other than functions to save you typing.
+*   They preserve names:
 
-* `sapply()` is like a box of chocolates: you'll never know what you're going
-  to get.
-  
-* `vapply()` is a safe alternative to `sapply()` because you supply an additional
-  argument that defines the type. But it's long: `vapply(df, is.numeric, logical(1))`
-  is equivalent to `map_lgl(df, is.numeric)`.  Can also produce matrices, but
-  that's rarely useful.
+    ```{r}
+    z <- list(x = 1:3, y = 4:5)
+    map_int(z, length)
+    ```
+    
+If you're familiar with the apply family of functions in base R, you might have noticed some similarities with the purrr functions:
+
+*   `lapply()` is basically identical to `map()`. There's no advantage to using 
+    `map()` over `lapply()` except that it's consistent with all the other 
+    functions in purrr.
+
+*   The base `sapply()` is wrapper around `lapply()` that automatically tries 
+    to simplify the results. This is useful for interactive work but is 
+    problematic in a function because you never know what sort of output
+    you'll get:
+    
+    ```{r}
+    df <- data.frame(
+      a = 1L,
+      b = 1.5,
+      y = Sys.time(),
+      z = ordered(1)
+    )
+    
+    str(sapply(df[1:4], class))
+    str(sapply(df[1:2], class))
+    str(sapply(df[3:4], class))
+    ```
+
+*   `vapply()` is a safe alternative to `sapply()` because you supply an additional
+    argument that defines the type. The only problem with `vapply()` is that 
+    it's a lot of typing: `vapply(df, is.numeric, logical(1))` is equivalent to 
+    `map_lgl(df, is.numeric)`. One advantage to `vapply()` over the map 
+    functions is that it can also produce matrices.
 
 ## Pipelines
 
@@ -496,8 +604,7 @@ If we wanted, we could extract the coefficients using broom, and make a single d
 
 ```{r}
 coef <- mod %>% 
-  map(broom::tidy) %>% 
-  map_df(.id = "i")
+  map_df(broom::tidy, .id = "i")
 coef
 
 library(ggplot2)
@@ -513,8 +620,7 @@ pred <- map2(mod, tst, predict)
 actl <- map(tst, "mpg")
 
 msd <- function(x, y) sqrt(mean((x - y) ^ 2))
-# TODO: use map2_dbl when available.
-mse <- map2(pred, actl, msd) %>% flatten
+mse <- map2_dbl(pred, actl, msd)
 mean(mse)
 
 mod <- lm(mpg ~ wt, data = mtcars)
@@ -545,6 +651,6 @@ Two key tools:
 * flatten(), flatmap(), and lmap(): sometimes list doesn't have quite
 the right grouping level and you need to change
 
-* zip_n(): sometimes list is "inside out"
+* transpose(): sometimes list is "inside out"
 
 Challenges: various weird json files?
