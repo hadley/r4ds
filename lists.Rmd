@@ -239,7 +239,7 @@ Instead of hardcoding the summary function, we allow it to vary, by adding an ad
     ```{r}
     results <- vector("integer", 0)
     for (i in seq_along(x)) {
-      results <- results(c, results)
+      results <- c(results, lengths(x[[i]]))
     }
     results
     ```
@@ -334,8 +334,7 @@ If you're familiar with the apply family of functions in base R, you might have 
 
 ## Pipelines
 
-`map()` is particularly useful when constructing more complex transformations because it both inputs and outputs a list. That makes it well suited for solving a problem a piece at a time. 
-
+`map()` is particularly useful when constructing more complex transformations because it inputs and outputs a list. Since a list can contain any object type, `map()` is well suited for complex tasks with many intermediate steps.
 
 TODO: find interesting dataset
 
@@ -349,7 +348,7 @@ models <- mtcars %>%
   map(function(df) lm(mpg ~ wt, data = df))
 ```
 
-The syntax for creating a function in R is quite long so purrr provides a convenient shortcut. You can use a formula:
+The syntax for creating an anonymous function in R is quite long so purrr provides a convenient shortcut: a one-sided formula.
 
 ```{r}
 models <- mtcars %>% 
@@ -357,9 +356,9 @@ models <- mtcars %>%
   map(~lm(mpg ~ wt, data = .))
 ```
 
-Here I've used the pronoun `.`. You can also use `.x`, `.y`, and `.z` to refer to up to three arguments. If you want to create an function with more than three arguments, do it the regular way!
+Here I've used the pronoun `.`. You can also use `.x` and `.y` to refer to up to two arguments. If you want to create an function with more than two arguments, do it the regular way!
 
-A common application of these functions is extracting an element so purrr provides a shortcut. For example, to extract the R squared of a model, we need to first run `summary()` and then extract the component called "r.squared":
+A common application of map functions is extracting a nested element. For example, to extract the R squared of a model, we need to first run `summary()` and then extract the component called "r.squared":
 
 ```{r}
 models %>% 
@@ -367,7 +366,7 @@ models %>%
   map_dbl(~.$r.squared)
 ```
 
-We can simplify this still further by using a character vector
+To make that easier, purrr provides a shortcut: you can use a character vector to select elements by name, or a numeric vector to select elements by position:
 
 ```{r}
 models %>% 
@@ -375,31 +374,69 @@ models %>%
   map_dbl("r.squared")
 ```
 
-Similarly, you can use an integer vector to extract the element in a given position.
-
 ### Navigating hierarchy
 
 These techniques are useful in general when working with complex nested object. One way to get such an object is to create many models or other complex things in R. Other times you get a complex object because you're reading in hierarchical data from another source.
 
-A common source of hierarchical data is JSON from a web api.
+A common source of hierarchical data is JSON from a web API. I've previously downloaded a list of GitHub issues related to this book and saved it as `issues.json`. Now I'm going to load it with jsonlite. By default `fromJSON()` tries to be helpful and simplifies the structure a little. Here I'm going to show you how to do it by hand, so I set `simplifyVector = FALSE`:
 
 ```{r}
-issues <- jsonlite::fromJSON("https://api.github.com/repos/hadley/r4ds/issues", simplifyVector = FALSE)
+# From https://api.github.com/repos/hadley/r4ds/issues
+issues <- jsonlite::fromJSON("issues.json", simplifyVector = FALSE)
+```
 
+There are eight issues, and each issue has a nested structure.
+
+```{r}
 length(issues)
 str(issues[[1]])
 ```
- 
-Note that you can use a chararacter vector in any of the map funtions. This will subset recursively, which is particularly useful when you want to dive deep into a nested data structure.
+
+To work with this sort of data, you typically want to turn it into a data frame by extracting the related vectors that you're most interested in.
+
+```{r}
+issues %>% map_int("id")
+issues %>% map_lgl("locked")
+issues %>% map_chr("state")
+```
+
+You can use the same technique to extract more deeply nested structure. For example, imagine you want to extract the name and id of the user. You could do that in two steps:
+
+```{r}
+users <- issues %>% map("user")
+users %>% map_chr("login")
+users %>% map_int("id")
+```
+
+Or by using a character vector, you can do it in one:
 
 ```{r}
 issues %>% map_chr(c("user", "login"))
 issues %>% map_int(c("user", "id"))
 ```
 
+This is particularly useful when you want to dive deep into a nested data structure.
+
+### Removing a level of hierarchy
+
+As well as indexing deeply into hierarchy, it's sometimes useful to flatten it. That's the job of the flatten family of functions: `flatten()`, `flatten_lgl()`, `flatten_int()`, `flatten_dbl()`, and `flatten_chr()`.
+
+Here we take a list of lists of double vectors, then flatten it to a list of double vectors, then to a double vector.
+
+```{r}
+x <- list(list(a = 1, b = 2), list(c = 3, d = 4))
+x %>% str()
+x %>% flatten() %>% str()
+x %>% flatten() %>% flatten_dbl()
+```
+
+Graphically, that sequence of operations looks like:
+
+`r bookdown::embed_png("diagrams/flatten.png", dpi = 220)`
+
 ### Predicates
 
-Imagine we want to summarise each numeric column of a data frame. We could write this:
+Imagine we want to summarise each numeric column of a data frame. We could do it in two steps. First find the numeric columns in the data frame, and then summarise them.
 
 ```{r}
 col_sum <- function(df, f) {
@@ -408,12 +445,19 @@ col_sum <- function(df, f) {
 }
 ```
 
-`is_numeric()` is a __predicate__: a function that returns a logical output. There are a couple of purrr functions designed to work specifically with predicate functions:
+`is_numeric()` is a __predicate__: a function that returns a logical output. There are a number of of purrr functions designed to work specifically with predicate functions:
 
-* `keep()` keeps all elements of a list where the predicate is true
-* `discard()` throws aways away elements of the list where the predicate is 
-  true
+* `keep()` and `discard()` keeps/discards list elements where the predicate is 
+  true.
   
+* `head_while()` and `tail_while()` keep the first/last elements of a list until
+  you get the first element where the predicate is true.
+  
+* `some()` and `every()` determine if the predicate is true for any or all of
+  the elements.
+
+* `detect()` and `detect_index()`
+
 That allows us to simply the summary function to:
 
 ```{r}
@@ -424,19 +468,83 @@ col_sum <- function(df, f) {
 }
 ```
 
-[Sidebar: list of predicate functions. Better to use purrr's underscore variants because they tend to do what you expect, and are implemented in R so if you're unsure you can read the source]
-
 This is a nice example of the benefits of piping - we can more easily see the sequence of transformations done to the list. First we throw away non-numeric columns and then we apply the function `f` to each one.
 
-Other predicate functionals: `head_while()`, `tail_while()`, `some()`, `every()`, 
+### Built-in predicates
+
+Purrr comes with a number of predicate functions built-in:
+
+|                  | lgl | int | dbl | chr | list | null |
+|------------------|-----|-----|-----|-----|------|------|
+| `is_logical()`   |  x  |     |     |     |      |      |
+| `is_integer()`   |     |  x  |     |     |      |      |
+| `is_double()`    |     |     |  x  |     |      |      |
+| `is_numeric()`   |     |  x  |  x  |     |      |      |
+| `is_character()` |     |     |     |  x  |      |      |
+| `is_atomic()`    |  x  |  x  |  x  |  x  |      |      |
+| `is_list()`      |     |     |     |     |  x   |      |
+| `is_vector()`    |  x  |  x  |  x  |  x  |  x   |      |
+| `is_null()`      |     |     |     |     |      | x    |
+
+Compared to the base R functions, they only inspect the type of object, not the attributes. This means they tend to be less suprising: 
+
+```{r}
+is.atomic(NULL)
+is_atomic(NULL)
+
+is.vector(factor("a"))
+is_vector(factor("a"))
+```
+
+Each predicate also comes with "scalar" and "bare" versions. The scalar version checks that the length is 1 and the bare version checks that the object is a bare vector with no S3 class.
+
+```{r}
+y <- factor(c("a", "b", "c"))
+is_integer(y)
+is_scalar_integer(y)
+is_bare_integer(y)
+```
 
 ### Exercises
 
+1.  Rewrite `map(x, function(df) lm(mpg ~ wt, data = df))` to eliminate the 
+    anonymous function.
+
+1.  A possible base R equivalent of `col_sum` is:
+
+    ```{r}
+    col_sum3 <- function(df, f) {
+      is_num <- sapply(df, is.numeric)
+      df_num <- df[, is_num]
+
+      sapply(df_num, f)
+    }
+    ```
+    
+    But it has a number of bugs as illustrated with the following inputs:
+    
+    ```{r, eval = FALSE}
+    df <- data.frame(z = c("a", "b", "c"), x = 1:3, y = 3:1)
+    # OK
+    col_sum3(df, mean)
+    # Has problems: don't always return numeric vector
+    col_sum3(df[1:2], mean)
+    col_sum3(df[1], mean)
+    col_sum3(df[0], mean)
+    ```
+    
+    What causes the bugs?
+
+1.  Carefully read the documentation of `is.vector()`. What does it actually
+    test for?
+
 ## Dealing with failure
 
-When you start doing many operations with purrr, you'll soon discover that not everything always succeeds. For example, you might be fitting a bunch of more complicated models, and not every model will converge. How do you ensure that one bad apple doesn't ruin the whole barrel?
+When you do many operations on a list, sometimes one will fail. When this happens, you'll get an error message, and no output. This is annoying: why does one failure prevent you from accessing all the other successes? How do you ensure that one bad apple doesn't ruin the whole barrel?
 
-Dealing with errors is fundamentally painful because errors are sort of a side-channel to the way that functions usually return values. The best way to handle them is to turn them into a regular output with the `safely()` function.  This function is similar to the `try()` function in base R, but instead of sometimes returning the original output and sometimes returning a error, `safe()` always returns the same type of object: a list with elements `result` and `error`. For any given run, one will always be `NULL`, but because the structure is always the same its easier to deal with.
+In this section you'll learn how to deal this situation with a new function: `safely()`. `safely()` is an adverb: it takes a function and returns a modified function. In this case, the modified function returns a list with elements `result` (the original result) and `error` (the text of the error if it occured). For any given run, one will always be `NULL`. 
+
+(You might be familiar with the `try()` function in base R. It's similar, but because it sometimes returns the original result and it sometimes returns an error object it's more difficult to work with.)
 
 Let's illustrate this with a simple example: `log()`:
 
@@ -446,7 +554,7 @@ str(safe_log(10))
 str(safe_log("a"))
 ```
 
-You can see when the function succeeds the result element contains the result and the error element is empty. When the function fails, the result element is empty and the error element contains the error.
+When the function succeeds the `result` element contains the result and the error element is empty. When the function fails, the result element is empty and the error element contains the error.
 
 This makes it natural to work with map:
 
@@ -456,66 +564,61 @@ y <- x %>% map(safe_log)
 str(y)
 ```
 
-This output would be easier to work with if we had two lists: one of all the errors and one of all the results:
+This would be easier to work with if we had two lists: one of all the errors and one of all the results. You already know how to extract those!
 
 ```{r}
 result <- y %>% map("result")
 error <- y %>% map("error")
 ```
 
-(Later on, you'll see another way to attack this problem with `transpose()`)
-
-It's up to you how to deal with these errors, but typically you'd start by looking at the values of `x` where `y` is an error or working with the values of y that are ok:
+It's up to you how to deal with the errors, but typically you'll either look at the values of `x` where `y` is an error or work with the values of y that are ok:
 
 ```{r}
-is_ok <- error %>% map_lgl(is.null)
+is_ok <- error %>% map_lgl(is_null)
 x[!is_ok]
-result[is_ok] %>% map_dbl(identity)
-```
-
-When we have related vectors, it's useful to store in a data frame:
-
-```{r}
-all <- dplyr::data_frame(
-  x = list(1, 10, "a"),
-  y = x %>% map(safe_log),
-  result = y %>% map("result"),
-  error = y %>% map("error"),
-  is_ok = error %>% map_lgl(is.null)
-)
-dplyr::filter(all, is_ok)
+result[is_ok] %>% flatten_dbl()
 ```
 
 Other related functions:
 
-* `possibly()`: if you don't care about the error message, and instead
-  just want a default value on failure.
-  
-* `quietly()`: does a similar job but for other outputs like printed
-  ouput, messages, and warnings.
+*   `possibly()`: if you don't care about the error message, and instead
+    just want a default value on failure.
+    
+    ```{r}
+    x <- list(1, 10, "a")
+    x %>% map_dbl(possibly(log, NA_real_))
+    ```
+    
+*   `quietly()`: does a similar job but for other outputs like printed
+    ouput, messages, and warnings.
+    
+    ```{r}
+    x <- list(1, -1)
+    x %>% map(quietly(log)) %>% str()
+    ```
 
-Challenge: read all the csv files in this directory. Which ones failed
-and why? 
+### Exercises
 
-```{r, eval = FALSE}
-files <- dir("data", pattern = "\\.csv$")
-files %>%
-  set_names(., basename(.)) %>%
-  map_df(readr::read_csv, .id = "filename") %>%
-```
+1.  Challenge: read all the csv files in this directory. Which ones failed
+    and why? 
 
-## Multiple inputs
+    ```{r, eval = FALSE}
+    files <- dir("data", pattern = "\\.csv$")
+    files %>%
+      set_names(., basename(.)) %>%
+      map_df(readr::read_csv, .id = "filename") %>%
+    ```
 
-So far we've focussed on variants that differ primarily in their output. There is a family of useful variants that vary primarily in their input: `map2()`, `map3()` and `map_n()`.
+## Parallel maps
 
-Imagine you want to simulate some random normals with different means. You know how to do that with `map()`:
+So far we've mapped along a single list. But often you have mutliple related lists that you need iterate along in parallel. That's the job of the `map2()` and `pmap()` functions. For example, imagine you want to simulate some random normals with different means. You know how to do that with `map()`:
 
 ```{r}
 mu <- c(5, 10, -3)
 mu %>% map(rnorm, n = 10)
 ```
 
-What if you also want to vary the standard deviation? That's a job for `map2()` which works with two parallel sets of inputs:
+What if you also want to vary the standard deviation? You need to iterate along a vector of means and a vector of standard deviations in parallel. That's a job for `map2()` which works with two parallel sets of inputs:
 
 ```{r}
 sd <- c(1, 5, 10)
@@ -524,7 +627,7 @@ map2(mu, sd, rnorm, n = 10)
 
 Note that arguments that vary for each call come before the function name, and arguments that are the same for every function call come afterwards.
 
-Like `map()`, conceptually `map2()` is a simple wrapper around a for loop:
+Like `map()`, conceptually `map2()` is a wrapper around a for loop:
 
 ```{r}
 map2 <- function(x, y, f, ...) {
@@ -536,37 +639,30 @@ map2 <- function(x, y, f, ...) {
 }
 ```
 
-There's also `map3()` which allows you to vary three arguments at a time:
+You could imagine `map3()`, `map4()`, `map5()`, `map6()` etc, but that would get tedious quickly. Instead, purrr provides `pmap()` which takes a list of arguments. You might use that if you wanted to vary the mean, standard deviation, and number of samples:
 
 ```{r}
-n <- c(1, 5, 10)
-map3(n, mu, sd, rnorm)
+n <- c(1, 3, 5)
+pmap(list(n, mu, sd), rnorm)
 ```
 
-(Note that it's not that naturally to use `map2()` and `map3()` in a pipeline because they have mutliple primarily inputs.)
-
-You could imagine `map4()`, `map5()`, `map6()` etc, but that would get tedious quickly. Instead, purrr provides `map_n()` which takes a list of arguments. Here's the `map_n()` call that's equivalent to the prevous `map3()` call:
+However, instead of relying on position matching, it's better to name the arguments. This is more verbose, but you're less likely to make a mistake.
 
 ```{r}
-map_n(list(n, mu, sd), rnorm)
-```
-
-Another advantage of `map_n()` is that you can use named arguments instead of relying on positional matching:
-
-```{r}
-map_n(list(mean = mu, sd = sd, n = n), rnorm)
+pmap(list(mean = mu, sd = sd, n = n), rnorm)
 ```
 
 Since the arguments are all the same length, it makes sense to store them in a dataframe:
 
 ```{r}
 params <- dplyr::data_frame(mean = mu, sd = sd, n = n)
-params %>% map_n(rnorm)
+params$result <- params %>% pmap(rnorm)
+params
 ```
 
-As soon as you get beyond simple examples, I think using data frames + `map_n()` is the way to go because the data frame ensures that each column as a name, and is the same length as all the other columns. This makes your code easier to understand (once you've grasped this powerful pattern).
+As soon as you get beyond simple examples, I think using data frames + `pmap()` is the way to go because the data frame ensures that each column as a name, and is the same length as all the other columns. This makes your code easier to understand once you've grasped this powerful pattern.
 
-There's one more step up in complexity - as well as varying the arguments to the function you might be varying the function itself:
+There's one more step up in complexity - as well as varying the arguments to the function you might also vary the function itself:
 
 ```{r}
 f <- c("runif", "rnorm", "rpois")
@@ -599,7 +695,7 @@ sim %>% dplyr::mutate(
 )
 ```
 
-### Models
+## A case study: modelling
 
 A natural application of `map2()` is handling test-training pairs when doing model evaluation.  This is an important modelling technique: you should never evaluate a model on the same data it was fit to because it's going to make you overconfident. Instead, it's better to divide the data up and use one piece to fit the model and the other piece to evaluate it. A popular technique for this is called k-fold cross validation. You randomly hold out x% of the data and fit the model to the rest. You need to repeat this a few times because of random variation.
 
@@ -661,13 +757,8 @@ ggplot(, aes(mse)) +
   geom_vline(xintercept = base_mse, colour = "red")
 ```
 
-### Data frames
+## Tidy lists
 
-Why you should store related vectors (even if they're lists!) in a
-data frame. Need example that has some covariates so you can (e.g.)
-select all models for females, or under 30s, ...
-
-## "Tidying" lists
 
 I don't know know how to put this stuff in words yet, but I know it
 when I see it, and I have a good intuition for what operation you
@@ -683,3 +774,10 @@ the right grouping level and you need to change
 * transpose(): sometimes list is "inside out"
 
 Challenges: various weird json files?
+
+
+### Data frames
+
+Why you should store related vectors (even if they're lists!) in a
+data frame. Need example that has some covariates so you can (e.g.)
+select all models for females, or under 30s, ...
