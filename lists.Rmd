@@ -332,11 +332,7 @@ If you're familiar with the apply family of functions in base R, you might have 
     
 1.  What does `map(-2:2, rnorm, n = 5)` do. Why?
 
-## Pipelines
-
-`map()` is particularly useful when constructing more complex transformations because it inputs and outputs a list. Since a list can contain any object type, `map()` is well suited for complex tasks with many intermediate steps.
-
-TODO: find interesting dataset
+## Handling hierarchy {#hierarchy}
 
 For example, imagine you want to fit a linear model to each individual in a dataset. Let's start by working through the whole process on the complete dataset. It's always a good idea to start simple (with a single object), and figure out the basic workflow. Then you can generalise up to the harder problem of applying the same steps to multiple models. 
 
@@ -374,7 +370,8 @@ models %>%
   map_dbl("r.squared")
 ```
 
-### Navigating hierarchy
+
+### Deep nesting
 
 These techniques are useful in general when working with complex nested object. One way to get such an object is to create many models or other complex things in R. Other times you get a complex object because you're reading in hierarchical data from another source.
 
@@ -434,109 +431,28 @@ Graphically, that sequence of operations looks like:
 
 `r bookdown::embed_png("diagrams/flatten.png", dpi = 220)`
 
-### Predicates
+Whenever I get confused about a sequence of flattening operations, I'll often draw a diagram like this to help me understand what's going on.
 
-Imagine we want to summarise each numeric column of a data frame. We could do it in two steps. First find the numeric columns in the data frame, and then summarise them.
+### Switching levels in the hierarchy
 
-```{r}
-col_sum <- function(df, f) {
-  is_num <- df %>% map_lgl(is_numeric)
-  df[is_num] %>% map_dbl(f)
-}
-```
+`transpose()`
 
-`is_numeric()` is a __predicate__: a function that returns a logical output. There are a number of of purrr functions designed to work specifically with predicate functions:
+Useful in cases like
 
-* `keep()` and `discard()` keeps/discards list elements where the predicate is 
-  true.
-  
-* `head_while()` and `tail_while()` keep the first/last elements of a list until
-  you get the first element where the predicate is true.
-  
-* `some()` and `every()` determine if the predicate is true for any or all of
-  the elements.
-
-* `detect()` and `detect_index()`
-
-That allows us to simply the summary function to:
+It's called transpose by analogy to matrices. When you subset a transposed matrix, you transpose the indices. When you subset a transposed list, you transpose the indices:
 
 ```{r}
-col_sum <- function(df, f) {
-  df %>%
-    keep(is.numeric) %>%
-    map_dbl(f)
-}
-```
+x <- list(list(a = 1, b = 3), list(a = 2, b = 4))
+xt <- transpose(x)
 
-This is a nice example of the benefits of piping - we can more easily see the sequence of transformations done to the list. First we throw away non-numeric columns and then we apply the function `f` to each one.
-
-### Built-in predicates
-
-Purrr comes with a number of predicate functions built-in:
-
-|                  | lgl | int | dbl | chr | list | null |
-|------------------|-----|-----|-----|-----|------|------|
-| `is_logical()`   |  x  |     |     |     |      |      |
-| `is_integer()`   |     |  x  |     |     |      |      |
-| `is_double()`    |     |     |  x  |     |      |      |
-| `is_numeric()`   |     |  x  |  x  |     |      |      |
-| `is_character()` |     |     |     |  x  |      |      |
-| `is_atomic()`    |  x  |  x  |  x  |  x  |      |      |
-| `is_list()`      |     |     |     |     |  x   |      |
-| `is_vector()`    |  x  |  x  |  x  |  x  |  x   |      |
-| `is_null()`      |     |     |     |     |      | x    |
-
-Compared to the base R functions, they only inspect the type of object, not the attributes. This means they tend to be less suprising: 
-
-```{r}
-is.atomic(NULL)
-is_atomic(NULL)
-
-is.vector(factor("a"))
-is_vector(factor("a"))
-```
-
-Each predicate also comes with "scalar" and "bare" versions. The scalar version checks that the length is 1 and the bare version checks that the object is a bare vector with no S3 class.
-
-```{r}
-y <- factor(c("a", "b", "c"))
-is_integer(y)
-is_scalar_integer(y)
-is_bare_integer(y)
+x[[1]][[2]]
+xt[[2]][[1]]
 ```
 
 ### Exercises
 
 1.  Rewrite `map(x, function(df) lm(mpg ~ wt, data = df))` to eliminate the 
     anonymous function.
-
-1.  A possible base R equivalent of `col_sum` is:
-
-    ```{r}
-    col_sum3 <- function(df, f) {
-      is_num <- sapply(df, is.numeric)
-      df_num <- df[, is_num]
-
-      sapply(df_num, f)
-    }
-    ```
-    
-    But it has a number of bugs as illustrated with the following inputs:
-    
-    ```{r, eval = FALSE}
-    df <- data.frame(z = c("a", "b", "c"), x = 1:3, y = 3:1)
-    # OK
-    col_sum3(df, mean)
-    # Has problems: don't always return numeric vector
-    col_sum3(df[1:2], mean)
-    col_sum3(df[1], mean)
-    col_sum3(df[0], mean)
-    ```
-    
-    What causes the bugs?
-
-1.  Carefully read the documentation of `is.vector()`. What does it actually
-    test for?
 
 ## Dealing with failure
 
@@ -695,9 +611,116 @@ sim %>% dplyr::mutate(
 )
 ```
 
+
+
+## Predicates
+
+Imagine we want to summarise each numeric column of a data frame. We could do it in two steps. First find the numeric columns in the data frame, and then summarise them.
+
+```{r}
+col_sum <- function(df, f) {
+  is_num <- df %>% map_lgl(is_numeric)
+  df[is_num] %>% map_dbl(f)
+}
+```
+
+`is_numeric()` is a __predicate__: a function that returns a logical output. There are a number of of purrr functions designed to work specifically with predicate functions:
+
+* `keep()` and `discard()` keeps/discards list elements where the predicate is 
+  true.
+  
+* `head_while()` and `tail_while()` keep the first/last elements of a list until
+  you get the first element where the predicate is true.
+  
+* `some()` and `every()` determine if the predicate is true for any or all of
+  the elements.
+
+* `detect()` and `detect_index()`
+
+That allows us to simply the summary function to:
+
+```{r}
+col_sum <- function(df, f) {
+  df %>%
+    keep(is.numeric) %>%
+    map_dbl(f)
+}
+```
+
+This is a nice example of the benefits of piping - we can more easily see the sequence of transformations done to the list. First we throw away non-numeric columns and then we apply the function `f` to each one.
+
+### Built-in predicates
+
+Purrr comes with a number of predicate functions built-in:
+
+|                  | lgl | int | dbl | chr | list | null |
+|------------------|-----|-----|-----|-----|------|------|
+| `is_logical()`   |  x  |     |     |     |      |      |
+| `is_integer()`   |     |  x  |     |     |      |      |
+| `is_double()`    |     |     |  x  |     |      |      |
+| `is_numeric()`   |     |  x  |  x  |     |      |      |
+| `is_character()` |     |     |     |  x  |      |      |
+| `is_atomic()`    |  x  |  x  |  x  |  x  |      |      |
+| `is_list()`      |     |     |     |     |  x   |      |
+| `is_vector()`    |  x  |  x  |  x  |  x  |  x   |      |
+| `is_null()`      |     |     |     |     |      | x    |
+
+Compared to the base R functions, they only inspect the type of object, not the attributes. This means they tend to be less suprising: 
+
+```{r}
+is.atomic(NULL)
+is_atomic(NULL)
+
+is.vector(factor("a"))
+is_vector(factor("a"))
+```
+
+Each predicate also comes with "scalar" and "bare" versions. The scalar version checks that the length is 1 and the bare version checks that the object is a bare vector with no S3 class.
+
+```{r}
+y <- factor(c("a", "b", "c"))
+is_integer(y)
+is_scalar_integer(y)
+is_bare_integer(y)
+```
+
+### Exercises
+
+1.  A possible base R equivalent of `col_sum` is:
+
+    ```{r}
+    col_sum3 <- function(df, f) {
+      is_num <- sapply(df, is.numeric)
+      df_num <- df[, is_num]
+
+      sapply(df_num, f)
+    }
+    ```
+    
+    But it has a number of bugs as illustrated with the following inputs:
+    
+    ```{r, eval = FALSE}
+    df <- data.frame(z = c("a", "b", "c"), x = 1:3, y = 3:1)
+    # OK
+    col_sum3(df, mean)
+    # Has problems: don't always return numeric vector
+    col_sum3(df[1:2], mean)
+    col_sum3(df[1], mean)
+    col_sum3(df[0], mean)
+    ```
+    
+    What causes the bugs?
+
+1.  Carefully read the documentation of `is.vector()`. What does it actually
+    test for?
+
 ## A case study: modelling
 
 A natural application of `map2()` is handling test-training pairs when doing model evaluation.  This is an important modelling technique: you should never evaluate a model on the same data it was fit to because it's going to make you overconfident. Instead, it's better to divide the data up and use one piece to fit the model and the other piece to evaluate it. A popular technique for this is called k-fold cross validation. You randomly hold out x% of the data and fit the model to the rest. You need to repeat this a few times because of random variation.
+
+Why you should store related vectors (even if they're lists!) in a
+data frame. Need example that has some covariates so you can (e.g.)
+select all models for females, or under 30s, ...
 
 Let's start by writing a function that partitions a dataset into test and training:
 
@@ -756,28 +779,3 @@ ggplot(, aes(mse)) +
   geom_histogram(binwidth = 0.25) + 
   geom_vline(xintercept = base_mse, colour = "red")
 ```
-
-## Tidy lists
-
-
-I don't know know how to put this stuff in words yet, but I know it
-when I see it, and I have a good intuition for what operation you
-should do at each step. This is where I was 5 years for tidy data - I
-can do it, but it's so internalised that I don't know what I'm doing
-and I don't know how to teach it to other people.
-
-Two key tools:
-
-* flatten(), flatmap(), and lmap(): sometimes list doesn't have quite
-the right grouping level and you need to change
-
-* transpose(): sometimes list is "inside out"
-
-Challenges: various weird json files?
-
-
-### Data frames
-
-Why you should store related vectors (even if they're lists!) in a
-data frame. Need example that has some covariates so you can (e.g.)
-select all models for females, or under 30s, ...
