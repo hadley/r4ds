@@ -145,7 +145,8 @@ There are three parts to a for loop:
 
 1.  The __sequence__: `i in seq_along(x)`. This determines what to loop over:
     each run of the for loop will assign `i` to a different value from 
-    `seq_along(x)`, shorthand for `1:length(x)`. 
+    `seq_along(x)`, shorthand for `1:length(x)`. It's useful to think of `i`
+    as a pronoun.
     
 1.  The __body__: `results[i] <- length(x[[i]])`. This code is run repeatedly, 
     each time with a different value in `i`. The first iteration will run 
@@ -256,7 +257,7 @@ This pattern of looping over a list and doing something to each element is so co
 * `map_dbl()`: a double vector.
 * `map_chr()`: a character vector.
 * `map_df()`:  a data frame.
-* `walk():     nothing (called exclusively for side effects).
+* `walk()`:    nothing (called exclusively for side effects).
 
 If none of the specialised versions return exactly what you want, you can always use a `map()` because a list can contain any other object.
 
@@ -291,6 +292,8 @@ There are a few differences between `map_*()` and `compute_summary()`:
     z <- list(x = 1:3, y = 4:5)
     map_int(z, length)
     ```
+  
+### Base R
     
 If you're familiar with the apply family of functions in base R, you might have noticed some similarities with the purrr functions:
 
@@ -322,6 +325,10 @@ If you're familiar with the apply family of functions in base R, you might have 
     `map_lgl(df, is.numeric)`. One advantage to `vapply()` over the map 
     functions is that it can also produce matrices.
 
+*   `map_df(x, f)` works is effectively the same as 
+    `do.call("rbind", lapply(x, f))` but it's implemented much more 
+    efficiently.
+
 ### Exercises
 
 1.  How can you determine which columns in a data frame are factors? 
@@ -332,17 +339,24 @@ If you're familiar with the apply family of functions in base R, you might have 
     
 1.  What does `map(-2:2, rnorm, n = 5)` do. Why?
 
+1.  Rewrite `map(x, function(df) lm(mpg ~ wt, data = df))` to eliminate the 
+    anonymous function. 
+
 ## Handling hierarchy {#hierarchy}
 
-For example, imagine you want to fit a linear model to each individual in a dataset. Let's start by working through the whole process on the complete dataset. It's always a good idea to start simple (with a single object), and figure out the basic workflow. Then you can generalise up to the harder problem of applying the same steps to multiple models. 
+As you start to use these functions more frequently, you'll find that you start to create quite complex trees. The techniques in this section will help you work with those structures.
 
-You could start by creating a list where each element is a data frame for a different person:
+### Shortcuts
+
+For example, imagine you want to fit a linear model to each individual in a dataset. For example, the following toy example splits the up the `mtcars` dataset in to three pieces and fits the same linear model to each piece:  
 
 ```{r}
 models <- mtcars %>% 
   split(.$cyl) %>% 
   map(function(df) lm(mpg ~ wt, data = df))
 ```
+
+(Fitting many models is a powerful technique which we'll come back to in the case study at the end of the chapter.)
 
 The syntax for creating an anonymous function in R is quite long so purrr provides a convenient shortcut: a one-sided formula.
 
@@ -352,9 +366,9 @@ models <- mtcars %>%
   map(~lm(mpg ~ wt, data = .))
 ```
 
-Here I've used the pronoun `.`. You can also use `.x` and `.y` to refer to up to two arguments. If you want to create an function with more than two arguments, do it the regular way!
+Here I've used `.` as a pronoun: it refers to the "current" list element (in the same way that `i` referred to the number in the for loop). You can also use `.x` and `.y` to refer to up to two arguments. If you want to create an function with more than two arguments, do it the regular way!
 
-A common application of map functions is extracting a nested element. For example, to extract the R squared of a model, we need to first run `summary()` and then extract the component called "r.squared":
+When you're looking at many models, you might want to extract a summary static like the $R^2$. To do that we need to first run `summary()` and then extract the component called `r.squared`. We could do that using the shorthand for anonymous funtions:
 
 ```{r}
 models %>% 
@@ -362,7 +376,7 @@ models %>%
   map_dbl(~.$r.squared)
 ```
 
-To make that easier, purrr provides a shortcut: you can use a character vector to select elements by name, or a numeric vector to select elements by position:
+But this extracting named components is a really common operation, so purrr provides an even shorter you shortcut: you can use a string:
 
 ```{r}
 models %>% 
@@ -370,12 +384,16 @@ models %>%
   map_dbl("r.squared")
 ```
 
+You can also use a numeric vector to select elements by position: 
+
+```{r}
+x <- list(list(1, 2, 3), list(4, 5, 6), list(7, 8, 9))
+x %>% map_dbl(2)
+```
 
 ### Deep nesting
 
-These techniques are useful in general when working with complex nested object. One way to get such an object is to create many models or other complex things in R. Other times you get a complex object because you're reading in hierarchical data from another source.
-
-A common source of hierarchical data is JSON from a web API. I've previously downloaded a list of GitHub issues related to this book and saved it as `issues.json`. Now I'm going to load it with jsonlite. By default `fromJSON()` tries to be helpful and simplifies the structure a little. Here I'm going to show you how to do it by hand, so I set `simplifyVector = FALSE`:
+Some times you get data structures that are very deeply nested. A common source of hierarchical data is JSON from a web API. I've previously downloaded a list of GitHub issues related to this book and saved it as `issues.json`. Now I'm going to load it with jsonlite. By default `fromJSON()` tries to be helpful and simplifies the structure a little. Here I'm going to show you how to do it by hand, so I set `simplifyVector = FALSE`:
 
 ```{r}
 # From https://api.github.com/repos/hadley/r4ds/issues
@@ -389,7 +407,7 @@ length(issues)
 str(issues[[1]])
 ```
 
-To work with this sort of data, you typically want to turn it into a data frame by extracting the related vectors that you're most interested in.
+To work with this sort of data, you typically want to turn it into a data frame by extracting the related vectors that you're most interested in:
 
 ```{r}
 issues %>% map_int("id")
@@ -416,9 +434,7 @@ This is particularly useful when you want to dive deep into a nested data struct
 
 ### Removing a level of hierarchy
 
-As well as indexing deeply into hierarchy, it's sometimes useful to flatten it. That's the job of the flatten family of functions: `flatten()`, `flatten_lgl()`, `flatten_int()`, `flatten_dbl()`, and `flatten_chr()`.
-
-Here we take a list of lists of double vectors, then flatten it to a list of double vectors, then to a double vector.
+As well as indexing deeply into hierarchy, it's sometimes useful to flatten it. That's the job of the flatten family of functions: `flatten()`, `flatten_lgl()`, `flatten_int()`, `flatten_dbl()`, and `flatten_chr()`. In the code below we take a list of lists of double vectors, then flatten it to a list of double vectors, then to a double vector.
 
 ```{r}
 x <- list(list(a = 1, b = 2), list(c = 3, d = 4))
@@ -435,9 +451,22 @@ Whenever I get confused about a sequence of flattening operations, I'll often dr
 
 ### Switching levels in the hierarchy
 
-`transpose()`
+Other times the hierarchy feels "inside out". For example, when using `safely()`, you get a list like this:
 
-Useful in cases like
+```{r}
+out <- list(
+  list(error = NULL, result = 1),
+  list(error = "ERROR", result = NULL),
+  list(error = NULL, result = 3)
+)
+str(out)
+```
+
+This is a suboptimal arrangement because ideally you'd have a list of errors and a list of results. Earlier we handled this challenge by using `map()` to extract the named components into their own lists. Another approach is to use `transpose()`, which flips the first and second levels in the hierarchy:
+
+```{r}
+out %>% transpose() %>% str()
+```
 
 It's called transpose by analogy to matrices. When you subset a transposed matrix, you transpose the indices. When you subset a transposed list, you transpose the indices:
 
@@ -450,9 +479,6 @@ xt[[2]][[1]]
 ```
 
 ### Exercises
-
-1.  Rewrite `map(x, function(df) lm(mpg ~ wt, data = df))` to eliminate the 
-    anonymous function.
 
 ## Dealing with failure
 
@@ -609,6 +635,20 @@ sim <- dplyr::frame_data(
 sim %>% dplyr::mutate(
   samples = invoke_map(f, params, n = 10)
 )
+```
+
+### Walk
+
+Walk is useful when you want to call a function for its side effects. It returns its input, so you can easily use it in a pipe. Here's an example:
+
+```{r}
+library(ggplot2)
+plots <- mtcars %>% 
+  split(.$cyl) %>% 
+  map(~ggplot(., aes(mpg, wt)) + geom_point())
+paths <- paste0(names(plots), ".pdf")
+
+pwalk(list(paths, plots), ggsave, path = tempdir())
 ```
 
 
