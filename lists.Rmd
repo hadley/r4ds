@@ -251,17 +251,19 @@ Instead of hardcoding the summary function, we allow it to vary, by adding an ad
 
 This pattern of looping over a list and doing something to each element is so common that the purrr package provides a family of functions to do it for you. Each function always returns the same type of output so there are six variations based on what sort of result you want:
 
-* `map()`:     a list.
-* `map_lgl()`: a logical vector.
-* `map_int()`: a integer vector.
-* `map_dbl()`: a double vector.
-* `map_chr()`: a character vector.
-* `map_df()`:  a data frame.
-* `walk()`:    nothing (called exclusively for side effects).
+* `map()`     returns a list.
+* `map_lgl()` returns a logical vector.
+* `map_int()` returns a integer vector.
+* `map_dbl()` returns a double vector.
+* `map_chr()` returns a character vector.
+* `map_df()`  returns a data frame.
+* `walk()`    returns nothing. Walk is a little different to the others because 
+  it's called exclusively its side effects, so it's described in more detail 
+  later, [walk](#walk).
 
 If none of the specialised versions return exactly what you want, you can always use a `map()` because a list can contain any other object.
 
-Each of these functions take a list as input, applies a function to each piece and then return a new vector that's the same length as the input. The following code uses purrr to do the same computations we did above:
+Each of these functions take a list as input, applies a function to each piece and then return a new vector that's the same length as the input. The following code uses purrr to do the same computations as the previous for loops:
 
 ```{r}
 map_int(x, length)
@@ -269,86 +271,33 @@ map_dbl(x, mean)
 map_dbl(x, median)
 ```
 
+Compared to using a for loop, focus is on the operation being performed (i.e. `length()`, `mean()`, or `median()`), not the book-keeping required to loop over every element and store the results.
+
 There are a few differences between `map_*()` and `compute_summary()`:
 
-*   They are implemented in C code. This means you can't easily understand their
-    implementation, but it reduces a little overhead so they run even faster
-    than for loops.
+*   All purrr functions are implemented in C. This means you can't easily 
+    understand their code, but it makes them a little faster.
     
-*   The second argument, `.f,` the function to apply to each element can be 
-    a formula, a character vector, or an integer vector. You'll learn about 
-    those handy shortcuts in the next section.
+*   The second argument, `.f`, the function to apply, can be a formula, a 
+    character vector, or an integer vector. You'll learn about those handy 
+    shortcuts in the next section.
     
-*   You can pass on additional arguments to `.f`:
+*   Any arguments after `.f` will be passed on to it each time its called:
 
     ```{r}
     map_dbl(x, mean, trim = 0.5)
-    map_dbl(x, function(x) mean(x, trim = 0.5))
     ```
 
-*   They preserve names:
+*   The map functions also preserve names:
 
     ```{r}
     z <- list(x = 1:3, y = 4:5)
     map_int(z, length)
     ```
-  
-### Base R
-    
-If you're familiar with the apply family of functions in base R, you might have noticed some similarities with the purrr functions:
-
-*   `lapply()` is basically identical to `map()`. There's no advantage to using 
-    `map()` over `lapply()` except that it's consistent with all the other 
-    functions in purrr.
-
-*   The base `sapply()` is wrapper around `lapply()` that automatically tries 
-    to simplify the results. This is useful for interactive work but is 
-    problematic in a function because you never know what sort of output
-    you'll get:
-    
-    ```{r}
-    df <- data.frame(
-      a = 1L,
-      b = 1.5,
-      y = Sys.time(),
-      z = ordered(1)
-    )
-    
-    str(sapply(df[1:4], class))
-    str(sapply(df[1:2], class))
-    str(sapply(df[3:4], class))
-    ```
-
-*   `vapply()` is a safe alternative to `sapply()` because you supply an additional
-    argument that defines the type. The only problem with `vapply()` is that 
-    it's a lot of typing: `vapply(df, is.numeric, logical(1))` is equivalent to 
-    `map_lgl(df, is.numeric)`. One advantage to `vapply()` over the map 
-    functions is that it can also produce matrices.
-
-*   `map_df(x, f)` works is effectively the same as 
-    `do.call("rbind", lapply(x, f))` but it's implemented much more 
-    efficiently.
-
-### Exercises
-
-1.  How can you determine which columns in a data frame are factors? 
-    (Hint: data frames are lists.)
-
-1.  What happens when you use the map functions on vectors that aren't lists?
-    What does `map(1:5, runif)` do? Why?
-    
-1.  What does `map(-2:2, rnorm, n = 5)` do. Why?
-
-1.  Rewrite `map(x, function(df) lm(mpg ~ wt, data = df))` to eliminate the 
-    anonymous function. 
-
-## Handling hierarchy {#hierarchy}
-
-As you start to use these functions more frequently, you'll find that you start to create quite complex trees. The techniques in this section will help you work with those structures.
 
 ### Shortcuts
 
-For example, imagine you want to fit a linear model to each individual in a dataset. For example, the following toy example splits the up the `mtcars` dataset in to three pieces and fits the same linear model to each piece:  
+There are a few shortcuts that you can use with `.f` in order to save a little typing. Imagine you want to fit a linear model to each individual in a dataset. The following toy example splits the up the `mtcars` dataset in to three pieces and fits the same linear model to each piece:  
 
 ```{r}
 models <- mtcars %>% 
@@ -358,7 +307,7 @@ models <- mtcars %>%
 
 (Fitting many models is a powerful technique which we'll come back to in the case study at the end of the chapter.)
 
-The syntax for creating an anonymous function in R is quite long so purrr provides a convenient shortcut: a one-sided formula.
+The syntax for creating an anonymous function in R is quite verbose so purrr provides a convenient shortcut: a one-sided formula.
 
 ```{r}
 models <- mtcars %>% 
@@ -376,7 +325,7 @@ models %>%
   map_dbl(~.$r.squared)
 ```
 
-But this extracting named components is a really common operation, so purrr provides an even shorter you shortcut: you can use a string:
+But extracting named components is a really common operation, so purrr provides an even shorter shortcut: you can use a string.
 
 ```{r}
 models %>% 
@@ -390,6 +339,68 @@ You can also use a numeric vector to select elements by position:
 x <- list(list(1, 2, 3), list(4, 5, 6), list(7, 8, 9))
 x %>% map_dbl(2)
 ```
+
+### Map applications
+
+???
+
+### Base R
+  
+If you're familiar with the apply family of functions in base R, you might have noticed some similarities with the purrr functions:
+
+*   `lapply()` is basically identical to `map()`. There's no advantage to using 
+    `map()` over `lapply()` except that it's consistent with all the other 
+    functions in purrr.
+
+*   The base `sapply()` is a wrapper around `lapply()` that automatically tries 
+    to simplify the results. This is useful for interactive work but is 
+    problematic in a function because you never know what sort of output
+    you'll get:
+    
+    ```{r}
+    x1 <- list(
+      c(0.27, 0.37, 0.57, 0.91, 0.20),
+      c(0.90, 0.94, 0.66, 0.63, 0.06), 
+      c(0.21, 0.18, 0.69, 0.38, 0.77)
+    )
+    x2 <- list(
+      c(0.50, 0.72, 0.99, 0.38, 0.78), 
+      c(0.93, 0.21, 0.65, 0.13, 0.27), 
+      c(0.39, 0.01, 0.38, 0.87, 0.34)
+    )
+    
+    threshhold <- function(x, cutoff = 0.8) x[x > cutoff]
+    str(sapply(x1, threshhold))
+    str(sapply(x2, threshhold))
+    ```
+
+*   `vapply()` is a safe alternative to `sapply()` because you supply an additional
+    argument that defines the type. The only problem with `vapply()` is that 
+    it's a lot of typing: `vapply(df, is.numeric, logical(1))` is equivalent to 
+    `map_lgl(df, is.numeric)`.
+    
+    One of advantage `vapply()` over the map functions is that it can also 
+    produce matrices - the map functions always produce vectors.
+
+*   `map_df(x, f)` is effectively the same as `do.call("rbind", lapply(x, f))` 
+    but under the hood is much more efficient.
+
+### Exercises
+
+1.  How can you determine which columns in a data frame are factors? 
+    (Hint: data frames are lists.)
+
+1.  What happens when you use the map functions on vectors that aren't lists?
+    What does `map(1:5, runif)` do? Why?
+    
+1.  What does `map(-2:2, rnorm, n = 5)` do. Why?
+
+1.  Rewrite `map(x, function(df) lm(mpg ~ wt, data = df))` to eliminate the 
+    anonymous function. 
+
+## Handling hierarchy {#hierarchy}
+
+As you start to use these functions more frequently, you'll find that you start to create quite complex trees. The techniques in this section will help you work with those structures.
 
 ### Deep nesting
 
@@ -430,7 +441,7 @@ issues %>% map_chr(c("user", "login"))
 issues %>% map_int(c("user", "id"))
 ```
 
-This is particularly useful when you want to dive deep into a nested data structure.
+This is particularly useful when you want to pull one element out of a deeply nested data structure.
 
 ### Removing a level of hierarchy
 
@@ -448,6 +459,8 @@ Graphically, that sequence of operations looks like:
 `r bookdown::embed_png("diagrams/flatten.png", dpi = 220)`
 
 Whenever I get confused about a sequence of flattening operations, I'll often draw a diagram like this to help me understand what's going on.
+
+Base R has `unlist()`, but I recommend avoiding it for the same reason I recommend avoiding `sapply()`: it always succeeds. Even if you data structure accidentally changes, `unlist()` will continue to work silently giving the wrong answer.
 
 ### Switching levels in the hierarchy
 
@@ -506,19 +519,19 @@ y <- x %>% map(safe_log)
 str(y)
 ```
 
-This would be easier to work with if we had two lists: one of all the errors and one of all the results. You already know how to extract those!
+This would be easier to work with if we had two lists: one of all the errors and one of all the results. That's easy to get to with `transpose()`.
 
 ```{r}
-result <- y %>% map("result")
-error <- y %>% map("error")
+y <- y %>% transpose()
+str(y)
 ```
 
 It's up to you how to deal with the errors, but typically you'll either look at the values of `x` where `y` is an error or work with the values of y that are ok:
 
 ```{r}
-is_ok <- error %>% map_lgl(is_null)
+is_ok <- y$error %>% map_lgl(is_null)
 x[!is_ok]
-result[is_ok] %>% flatten_dbl()
+y$result[is_ok] %>% flatten_dbl()
 ```
 
 Other related functions:
@@ -569,7 +582,7 @@ map2(mu, sd, rnorm, n = 10)
 
 Note that arguments that vary for each call come before the function name, and arguments that are the same for every function call come afterwards.
 
-Like `map()`, conceptually `map2()` is a wrapper around a for loop:
+Like `map()`, `map2()` is just a wrapper around a for loop:
 
 ```{r}
 map2 <- function(x, y, f, ...) {
@@ -588,13 +601,13 @@ n <- c(1, 3, 5)
 pmap(list(n, mu, sd), rnorm)
 ```
 
-However, instead of relying on position matching, it's better to name the arguments. This is more verbose, but you're less likely to make a mistake.
+However, instead of relying on position matching, it's better to name the arguments. This is more verbose, but it makes the code clearer.
 
 ```{r}
 pmap(list(mean = mu, sd = sd, n = n), rnorm)
 ```
 
-Since the arguments are all the same length, it makes sense to store them in a dataframe:
+Since the arguments are all the same length, it makes sense to store them in a data frame:
 
 ```{r}
 params <- dplyr::data_frame(mean = mu, sd = sd, n = n)
@@ -602,7 +615,9 @@ params$result <- params %>% pmap(rnorm)
 params
 ```
 
-As soon as you get beyond simple examples, I think using data frames + `pmap()` is the way to go because the data frame ensures that each column as a name, and is the same length as all the other columns. This makes your code easier to understand once you've grasped this powerful pattern.
+As soon as your code gets complicated, I think a data frame is a good approach because it ensures that each column has a name and is the same length as all the other columns. 
+
+### Invoking different functions
 
 There's one more step up in complexity - as well as varying the arguments to the function you might also vary the function itself:
 
@@ -638,7 +653,7 @@ sim %>% dplyr::mutate(
 )
 ```
 
-### Walk
+### Walk {#walk}
 
 Walk is useful when you want to call a function for its side effects. It returns its input, so you can easily use it in a pipe. Here's an example:
 
@@ -652,11 +667,22 @@ paths <- paste0(names(plots), ".pdf")
 pwalk(list(paths, plots), ggsave, path = tempdir())
 ```
 
+`walk()`, `walk2()` and `pwalk()` all invisibly return the first argument. This makes it easier to use them in chains. The following example prints 
 
+```{r, eval = FALSE}
+plots %>% 
+  walk(print) %>% 
+  walk2(paths, ~ggsave(.y, .x, path = tempdir()))
+```
 
 ## Predicates
 
-Imagine we want to summarise each numeric column of a data frame. We could do it in two steps. First find the numeric columns in the data frame, and then summarise them.
+Imagine we want to summarise each numeric column of a data frame. We could do it in two steps:
+
+1. Find all numeric columns.
+1. Sumarise summarise each column.
+
+In code, that would look like:
 
 ```{r}
 col_sum <- function(df, f) {
@@ -665,7 +691,7 @@ col_sum <- function(df, f) {
 }
 ```
 
-`is_numeric()` is a __predicate__: a function that returns a logical output. There are a number of of purrr functions designed to work specifically with predicate functions:
+`is_numeric()` is a __predicate__: a function that returns `TRUE` or `FALSE`. There are a number of of purrr functions designed to work specifically with predicates:
 
 * `keep()` and `discard()` keeps/discards list elements where the predicate is 
   true.
@@ -678,7 +704,7 @@ col_sum <- function(df, f) {
 
 * `detect()` and `detect_index()`
 
-That allows us to simply the summary function to:
+We could use `keep()` to simplify the summary function to:
 
 ```{r}
 col_sum <- function(df, f) {
@@ -688,7 +714,7 @@ col_sum <- function(df, f) {
 }
 ```
 
-This is a nice example of the benefits of piping - we can more easily see the sequence of transformations done to the list. First we throw away non-numeric columns and then we apply the function `f` to each one.
+I like this formulation because you can easily read the sequence of steps.
 
 ### Built-in predicates
 
@@ -706,7 +732,7 @@ Purrr comes with a number of predicate functions built-in:
 | `is_vector()`    |  x  |  x  |  x  |  x  |  x   |      |
 | `is_null()`      |     |     |     |     |      | x    |
 
-Compared to the base R functions, they only inspect the type of object, not the attributes. This means they tend to be less suprising: 
+Compared to the base R functions, they only inspect the type of object, not its attributes. This means they tend to be less suprising: 
 
 ```{r}
 is.atomic(NULL)
@@ -727,7 +753,7 @@ is_bare_integer(y)
 
 ### Exercises
 
-1.  A possible base R equivalent of `col_sum` is:
+1.  A possible base R equivalent of `col_sum()` is:
 
     ```{r}
     col_sum3 <- function(df, f) {
@@ -754,6 +780,15 @@ is_bare_integer(y)
 
 1.  Carefully read the documentation of `is.vector()`. What does it actually
     test for?
+
+## Data frames
+
+i.e. how do dplyr and purrr intersect.
+
+* Why use a data frame?
+* List columns in a data frame
+* Mutate & filter.
+* Creating list columns with `group_by()` and `do()`.
 
 ## A case study: modelling
 
