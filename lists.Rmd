@@ -30,6 +30,8 @@ The goal of using purrr functions instead of for loops is to allow you break com
 
 This structure makes it easier to solve new problems. It also makes it easier to understand your solutions to old problems when you re-read your old code.
 
+In later chapters you'll learn how to apply these ideas when modelling. You can often use multiple simple models to help understand a complex dataset, or you might have multiple models because you're bootstrapping or cross-validating. The techniques you learn in this chapter will be invaluable.
+
 <!--
 ## Warm ups
 
@@ -338,6 +340,8 @@ There are a few differences between `map_*()` and `compute_summary()`:
 
 There are a few shortcuts that you can use with `.f` in order to save a little typing. Imagine you want to fit a linear model to each individual in a dataset. The following toy example splits the up the `mtcars` dataset in to three pieces and fits the same linear model to each piece:  
 
+<!-- Haven't covered modelling yet so might need a different motivating example -->
+
 ```{r}
 models <- mtcars %>% 
   split(.$cyl) %>% 
@@ -562,7 +566,7 @@ y <- x %>% map(safe_log)
 str(y)
 ```
 
-This would be easier to work with if we had two lists: one of all the errors and one of all the results. That's easy to get to with `transpose()`.
+This would be easier to work with if we had two lists: one of all the errors and one of all the results. That's easy to get with `transpose()`.
 
 ```{r}
 y <- y %>% transpose()
@@ -834,69 +838,3 @@ i.e. how do dplyr and purrr intersect.
 * List columns in a data frame
 * Mutate & filter.
 * Creating list columns with `group_by()` and `do()`.
-
-## A case study: modelling
-
-A natural application of `map2()` is handling test-training pairs when doing model evaluation.  This is an important modelling technique: you should never evaluate a model on the same data it was fit to because it's going to make you overconfident. Instead, it's better to divide the data up and use one piece to fit the model and the other piece to evaluate it. A popular technique for this is called k-fold cross validation. You randomly hold out x% of the data and fit the model to the rest. You need to repeat this a few times because of random variation.
-
-Why you should store related vectors (even if they're lists!) in a
-data frame. Need example that has some covariates so you can (e.g.)
-select all models for females, or under 30s, ...
-
-Let's start by writing a function that partitions a dataset into test and training:
-
-```{r}
-partition <- function(df, p) {
-  n <- nrow(df)
-  groups <- rep(c(TRUE, FALSE), n * c(p, 1 - p))
-  sample(groups)
-}
-partition(mtcars, 0.1)
-```
-
-We'll generate 20 random test-training splits, and then create lists of test-training datasets:
-
-```{r}
-partitions <- rerun(200, partition(mtcars, 0.25))
-
-tst <- partitions %>% map(~mtcars[.x, , drop = FALSE])
-trn <- partitions %>% map(~mtcars[!.x, , drop = FALSE])
-```
-
-Then fit the models to each training dataset:
-
-```{r}
-mod <- trn %>% map(~lm(mpg ~ wt, data = .))
-```
-
-If we wanted, we could extract the coefficients using broom, and make a single data frame with `map_df()` and then visualise the distributions with ggplot2:
-
-```{r}
-coef <- mod %>% 
-  map_df(broom::tidy, .id = "i")
-coef
-
-library(ggplot2)
-ggplot(coef, aes(estimate)) + 
-  geom_histogram(bins = 10) + 
-  facet_wrap(~term, scales = "free_x")
-```
-
-But we're most interested in the quality of the models, so we make predictions for each test data set and compute the mean squared distance between predicted and actual:
-
-```{r}
-pred <- map2(mod, tst, predict)
-actl <- map(tst, "mpg")
-
-msd <- function(x, y) sqrt(mean((x - y) ^ 2))
-mse <- map2_dbl(pred, actl, msd)
-mean(mse)
-
-mod <- lm(mpg ~ wt, data = mtcars)
-base_mse <- msd(mtcars$mpg, predict(mod))
-base_mse
-
-ggplot(, aes(mse)) + 
-  geom_histogram(binwidth = 0.25) + 
-  geom_vline(xintercept = base_mse, colour = "red")
-```
