@@ -4,35 +4,673 @@ title: Data transformation
 output: bookdown::html_chapter
 ---
 
+```{r setup, include=FALSE}
+library(dplyr)
+library(nycflights13)
+source("common.R")
+```
+
 # Data transformation {#transform}
 
-Copy from dplyr vignettes.
+When working with data you must:
 
-## Filter
+* Figure out what you want to do.
+
+* Describe those tasks in the form of a computer program.
+
+* Execute the program.
+
+The dplyr package makes these steps fast and easy:
+
+* By constraining your options, it simplifies how you can think about common data manipulation tasks.
+
+* It provides simple "verbs", functions that correspond to the most common data manipulation tasks, to help you translate those thoughts into code.
+
+* It uses efficient data storage backends, so you spend less time waiting for the computer.
+
+Dplyr aims to provide a function for each basic verb of data manipulation:
+
+* `filter()` (and `slice()`)
+* `arrange()`
+* `select()` (and `rename()`)
+* `mutate()` (and `transmute()`)
+* `summarise()`
+* `group_by()`
+
+## Data: nycflights13
+
+To explore the basic data manipulation verbs of dplyr, we'll start with the built in
+`nycflights13` data frame. This dataset contains all `r nrow(nycflights13::flights)` flights that departed from New York City in 2013. The data comes from the US [Bureau of Transportation Statistics](http://www.transtats.bts.gov/DatabaseInfo.asp?DB_ID=120&Link=0), and is documented in `?nycflights13`
+
+```{r}
+library(nycflights13)
+dim(flights)
+head(flights)
+```
+
+dplyr can work with data frames as is, but if you're dealing with large data, it's worthwhile to convert them to a `tbl_df`: this is a wrapper around a data frame that won't accidentally print a lot of data to the screen.
+
+## Filter rows with `filter()`
+
+`filter()` allows you to select a subset of rows in a data frame. The first argument is the name of the data frame. The second and subsequent arguments are the expressions that filter the data frame:
+
+For example, we can select all flights on January 1st with:
+
+```{r}
+filter(flights, month == 1, day == 1)
+```
+
+This is equivalent to the more verbose code in base R:
+
+```{r, eval = FALSE}
+flights[flights$month == 1 & flights$day == 1, ]
+```
+
+`filter()` works similarly to `subset()` except that you can give it any number of filtering conditions, which are joined together with `&` (not `&&` which is easy to do accidentally!).  You can also use other boolean operators:
+
+```{r, eval = FALSE}
+filter(flights, month == 1 | month == 2)
+```
+
+To select rows by position, use `slice()`:
+
+```{r}
+slice(flights, 1:10)
+```
 
 ### Missing values
 
 * Why `NA == NA` is not `TRUE`
 * Why default is `na.rm = FALSE`.
 
-## Mutate
+## Arrange rows with `arrange()`
 
-## Arrange
+`arrange()` works similarly to `filter()` except that instead of filtering or selecting rows, it reorders them. It takes a data frame, and a set of column names (or more complicated expressions) to order by. If you provide more than one column name, each additional column will be used to break ties in the values of preceding columns:
 
-## Select
+```{r}
+arrange(flights, year, month, day)
+```
 
-## Grouped summaries
+Use `desc()` to order a column in descending order:
 
-Overview of different data types and useful summary functions for working with them. Strings and dates covered in more detail in future chapters.   Anything complicated can be put off until data structures chapter.
+```{r}
+arrange(flights, desc(arr_delay))
+```
 
-### Logical
+## Select columns with `select()`
+
+Often you work with large datasets with many columns but only a few are actually of interest to you. `select()` allows you to rapidly zoom in on a useful subset using operations that usually only work on numeric variable positions:
+
+```{r}
+# Select columns by name
+select(flights, year, month, day)
+# Select all columns between year and day (inclusive)
+select(flights, year:day)
+# Select all columns except those from year to day (inclusive)
+select(flights, -(year:day))
+```
+
+This function works similarly to the `select` argument in `base::subset()`. Because the dplyr philosophy is to have small functions that do one thing well, it's its own function in dplyr.
+
+There are a number of helper functions you can use within `select()`, like `starts_with()`, `ends_with()`, `matches()` and `contains()`. These let you quickly match larger blocks of variables that meet some criterion. See `?select` for more details.
+
+You can rename variables with `select()` by using named arguments:
+
+```{r}
+select(flights, tail_num = tailnum)
+```
+
+But because `select()` drops all the variables not explicitly mentioned, it's not that useful. Instead, use `rename()`:
+
+```{r}
+rename(flights, tail_num = tailnum)
+```
+
+## Add new variable with `mutate()`
+
+Besides selecting sets of existing columns, it's often useful to add new columns that are functions of existing columns.  This is the job of `mutate()`:
+
+```{r}
+mutate(flights,
+  gain = arr_delay - dep_delay,
+  speed = distance / air_time * 60)
+```
+
+Note that you can refer to columns that you've just created:
+
+```{r}
+mutate(flights,
+  gain = arr_delay - dep_delay,
+  gain_per_hour = gain / (air_time / 60)
+)
+```
+
+If you only want to keep the new variables, use `transmute()`:
+
+```{r}
+transmute(flights,
+  gain = arr_delay - dep_delay,
+  gain_per_hour = gain / (air_time / 60)
+)
+```
+
+## Summarise values with `summarise()`
+
+The last verb is `summarise()`. It collapses a data frame to a single row (this is exactly equivalent to `plyr::summarise()`):
+
+```{r}
+summarise(flights,
+  delay = mean(dep_delay, na.rm = TRUE))
+```
+
+Below, we'll see how this verb can be very useful.
+
+## Commonalities
+
+You may have noticed that the syntax and function of all these verbs are very similar:
+
+* The first argument is a data frame.
+
+* The subsequent arguments describe what to do with the data frame. Notice that you can refer
+  to columns in the data frame directly without using `$`.
+
+* The result is a new data frame
+
+Together these properties make it easy to chain together multiple simple steps to achieve a complex result.
+
+These five functions provide the basis of a language of data manipulation. At the most basic level, you can only alter a tidy data frame in five useful ways: you can reorder the rows (`arrange()`), pick observations and variables of interest (`filter()` and `select()`), add new variables that are functions of existing variables (`mutate()`), or collapse many values to a summary (`summarise()`). The remainder of the language comes from applying the five functions to different types of data. For example, I'll discuss how these functions work with grouped data.
+
+## Grouped operations
+
+These verbs are useful on their own, but they become really powerful when you apply them to groups of observations within a dataset. In dplyr, you do this by with the `group_by()` function. It breaks down a dataset into specified groups of rows. When you then apply the verbs above on the resulting object they'll be automatically applied "by group". Most importantly, all this is achieved by using the same exact syntax you'd use with an ungrouped object.
+
+Grouping affects the verbs as follows:
+
+* grouped `select()` is the same as ungrouped `select()`, except that 
+  grouping variables are always retained. 
+   
+* grouped `arrange()` orders first by the grouping variables
+
+* `mutate()` and `filter()` are most useful in conjunction with window 
+  functions (like `rank()`, or `min(x) == x`). They are described in detail in 
+  the windows function vignette `vignette("window-functions")`.
+
+* `slice()` extracts rows within each group.
+  
+* `summarise()` is powerful and easy to understand, as described in 
+  more detail below.
+
+In the following example, we split the complete dataset into individual planes and then summarise each plane by counting the number of flights (`count = n()`) and computing the average distance (`dist = mean(Distance, na.rm = TRUE)`) and arrival delay (`delay = mean(ArrDelay, na.rm = TRUE)`). We then use ggplot2 to display the output.
+
+```{r, warning = FALSE, message = FALSE, fig.width = 6}
+library(ggplot2)
+by_tailnum <- group_by(flights, tailnum)
+delay <- summarise(by_tailnum,
+  count = n(),
+  dist = mean(distance, na.rm = TRUE),
+  delay = mean(arr_delay, na.rm = TRUE))
+delay <- filter(delay, count > 20, dist < 2000)
+
+# Interestingly, the average delay is only slightly related to the
+# average distance flown by a plane.
+ggplot(delay, aes(dist, delay)) +
+  geom_point(aes(size = count), alpha = 1/2) +
+  geom_smooth() +
+  scale_size_area()
+```
+
+You use `summarise()` with __aggregate functions__, which take a vector of values and return a single number. There are many useful examples of such functions in base R like `min()`, `max()`, `mean()`, `sum()`, `sd()`, `median()`, and `IQR()`. dplyr provides a handful of others:
+
+* `n()`: the number of observations in the current group
+
+* `n_distinct(x)`:the number of unique values in `x`.
+
+* `first(x)`, `last(x)` and `nth(x, n)` - these work
+  similarly to `x[1]`, `x[length(x)]`, and `x[n]` but give you more control
+  over the result if the value is missing.
+
+For example, we could use these to find the number of planes and the number of flights that go to each possible destination:
+
+```{r}
+destinations <- group_by(flights, dest)
+summarise(destinations,
+  planes = n_distinct(tailnum),
+  flights = n()
+)
+```
 
 When used with numeric functions, `TRUE` is converted to 1 and `FALSE` to 0. This makes `sum()` and `mean()` particularly useful: `sum(x)` gives the number of `TRUE`s in `x`, and `mean(x)` gives the proportion.
 
-### Numeric (integer and double)
+When you group by multiple variables, each summary peels off one level of the grouping. That makes it easy to progressively roll-up a dataset:
 
-### Strings (and factors)
+```{r}
+daily <- group_by(flights, year, month, day)
+(per_day   <- summarise(daily, flights = n()))
+(per_month <- summarise(per_day, flights = sum(flights)))
+(per_year  <- summarise(per_month, flights = sum(flights)))
+```
 
-### Date/times
+However you need to be careful when progressively rolling up summaries like this: it's ok for sums and counts, but you need to think about weighting for means and variances (it's not possible to do this exactly for medians).
 
-## Grouped mutate
+## Piping
+
+The dplyr API is functional in the sense that function calls don't have side-effects. You must always save their results. This doesn't lead to particularly elegant code, especially if you want to do many operations at once. You either have to do it step-by-step:
+
+```{r, eval = FALSE}
+a1 <- group_by(flights, year, month, day)
+a2 <- select(a1, arr_delay, dep_delay)
+a3 <- summarise(a2,
+  arr = mean(arr_delay, na.rm = TRUE),
+  dep = mean(dep_delay, na.rm = TRUE))
+a4 <- filter(a3, arr > 30 | dep > 30)
+```
+
+Or if you don't want to save the intermediate results, you need to wrap the function calls inside each other:
+
+```{r}
+filter(
+  summarise(
+    select(
+      group_by(flights, year, month, day),
+      arr_delay, dep_delay
+    ),
+    arr = mean(arr_delay, na.rm = TRUE),
+    dep = mean(dep_delay, na.rm = TRUE)
+  ),
+  arr > 30 | dep > 30
+)
+```
+
+This is difficult to read because the order of the operations is from inside to out. Thus, the arguments are a long way away from the function. To get around this problem, dplyr provides the `%>%` operator. `x %>% f(y)` turns into `f(x, y)` so you can use it to rewrite multiple operations that you can read left-to-right, top-to-bottom:
+
+```{r, eval = FALSE}
+flights %>%
+  group_by(year, month, day) %>%
+  select(arr_delay, dep_delay) %>%
+  summarise(
+    arr = mean(arr_delay, na.rm = TRUE),
+    dep = mean(dep_delay, na.rm = TRUE)
+  ) %>%
+  filter(arr > 30 | dep > 30)
+```
+
+## Creating
+
+`data_frame()` is a nice way to create data frames. It encapsulates best practices for data frames:
+
+  * It never changes an input's type (i.e., no more `stringsAsFactors = FALSE`!).
+    
+    ```{r}
+    data.frame(x = letters) %>% sapply(class)
+    data_frame(x = letters) %>% sapply(class)
+    ```
+    
+    This makes it easier to use with list-columns:
+    
+    ```{r}
+    data_frame(x = 1:3, y = list(1:5, 1:10, 1:20))
+    ```
+    
+    List-columns are most commonly created by `do()`, but they can be useful to
+    create by hand.
+      
+  * It never adjusts the names of variables:
+  
+    ```{r}
+    data.frame(`crazy name` = 1) %>% names()
+    data_frame(`crazy name` = 1) %>% names()
+    ```
+
+  * It evaluates its arguments lazily and sequentially:
+  
+    ```{r}
+    data_frame(x = 1:5, y = x ^ 2)
+    ```
+
+  * It adds the `tbl_df()` class to the output so that if you accidentally print a large 
+    data frame you only get the first few rows.
+    
+    ```{r}
+    data_frame(x = 1:5) %>% class()
+    ```
+
+  * It changes the behaviour of `[` to always return the same type of object:
+    subsetting using `[` always returns a `tbl_df()` object; subsetting using 
+    `[[` always returns a column.
+    
+    You should be aware of one case where subsetting a `tbl_df()` object  
+    will produce a different result than a `data.frame()` object:
+  
+    ```{r}
+    df <- data.frame(a = 1:2, b = 1:2)
+    str(df[, "a"])
+    
+    tbldf <- tbl_df(df)
+    str(tbldf[, "a"])
+    ```
+    
+  * It never uses `row.names()`. The whole point of tidy data is to 
+    store variables in a consistent way. So it never stores a variable as 
+    special attribute.
+  
+  * It only recycles vectors of length 1. This is because recycling vectors of greater lengths 
+    is a frequent source of bugs.
+
+### Coercion
+
+To complement `data_frame()`, dplyr provides `as_data_frame()` to coerce lists into data frames. It does two things:
+
+* It checks that the input list is valid for a data frame, i.e. that each element
+  is named, is a 1d atomic vector or list, and all elements have the same 
+  length.
+  
+* It sets the class and attributes of the list to make it behave like a data frame.
+  This modification does not require a deep copy of the input list, so it's
+  very fast.
+  
+This is much simpler than `as.data.frame()`. It's hard to explain precisely what `as.data.frame()` does, but it's similar to `do.call(cbind, lapply(x, data.frame))` - i.e. it coerces each component to a data frame and then `cbinds()` them all together. Consequently `as_data_frame()` is much faster than `as.data.frame()`:
+
+```{r}
+l2 <- replicate(26, sample(100), simplify = FALSE)
+names(l2) <- letters
+microbenchmark::microbenchmark(
+  as_data_frame(l2),
+  as.data.frame(l2)
+)
+```
+
+The speed of `as.data.frame()` is not usually a bottleneck when used interactively, but can be a problem when combining thousands of messy inputs into one tidy data frame.
+
+### tbl_dfs vs data.frames
+
+There are three key differences between tbl_dfs and data.frames:
+
+*   When you print a tbl_df, it only shows the first ten rows and all the
+    columns that fit on one screen. It also prints an abbreviated description
+    of the column type:
+    
+    ```{r}
+    data_frame(x = 1:1000)
+    ```
+    
+    You can control the default appearance with options:
+    
+    * `options(dplyr.print_max = n, dplyr.print_min = m)`: if more than `n`
+      rows print `m` rows. Use `options(dplyr.print_max = Inf)` to always
+      show all rows.
+    
+    * `options(dply.width = Inf)` will always print all columns, regardless
+       of the width of the screen.
+
+    
+*   When you subset a tbl\_df with `[`, it always returns another tbl\_df. 
+    Contrast this with a data frame: sometimes `[` returns a data frame and
+    sometimes it just returns a single column:
+    
+    ```{r}
+    df1 <- data.frame(x = 1:3, y = 3:1)
+    class(df1[, 1:2])
+    class(df1[, 1])
+    
+    df2 <- data_frame(x = 1:3, y = 3:1)
+    class(df2[, 1:2])
+    class(df2[, 1])
+    ```
+    
+    To extract a single column it's use `[[` or `$`:
+    
+    ```{r}
+    class(df2[[1]])
+    class(df2$x)
+    ```
+
+*   When you extract a variable with `$`, tbl\_dfs never do partial 
+    matching. They'll throw an error if the column doesn't exist:
+    
+    ```{r, error = TRUE}
+    df <- data.frame(abc = 1)
+    df$a
+    
+    df2 <- data_frame(abc = 1)
+    df2$a
+    ```
+    
+## Two-table verbs
+
+It's rare that a data analysis involves only a single table of data. In practice, you'll normally have many tables that contribute to an analysis, and you need flexible tools to combine them. In dplyr, there are three families of verbs that work with two tables at a time:
+
+* Mutating joins, which add new variables to one table from matching rows in 
+  another.
+
+* Filtering joins, which filter observations from one table based on whether or 
+  not they match an observation in the other table.
+
+* Set operations, which combine the observations in the data sets as if they 
+  were set elements.
+
+(This discussion assumes that you have [tidy data](http://www.jstatsoft.org/v59/i10/), where the rows are observations and the columns are variables. If you're not familiar with that framework, I'd recommend reading up on it first.)
+
+All two-table verbs work similarly. The first two arguments are `x` and `y`, and provide the tables to combine. The output is always a new table with the same type as `x`.
+
+### Mutating joins
+
+Mutating joins allow you to combine variables from multiple tables. For example, take the nycflights13 data. In one table we have flight information with an abbreviation for carrier, and in another we have a mapping between abbreviations and full names. You can use a join to add the carrier names to the flight data:
+
+```{r, warning = FALSE}
+library("nycflights13")
+# Drop unimportant variables so it's easier to understand the join results.
+flights2 <- flights %>% select(year:day, hour, origin, dest, tailnum, carrier)
+
+flights2 %>% 
+  left_join(airlines)
+```
+
+#### Controlling how the tables are matched
+
+As well as `x` and `y`, each mutating join takes an argument `by` that controls which variables are used to match observations in the two tables. There are a few ways to specify it, as I illustrate below with various tables from nycflights13:
+
+  * `NULL`, the default. dplyr will will use all variables that appear in 
+    both tables, a __natural__ join. For example, the flights and 
+    weather tables match on their common variables: year, month, day, hour and 
+    origin.
+    
+    ```{r}
+    flights2 %>% left_join(weather)
+    ```
+
+  * A character vector, `by = "x"`. Like a natural join, but uses only 
+    some of the common variables. For example, `flights` and `planes` have 
+    `year` columns, but they mean different things so we only want to join by 
+    `tailnum`.
+    
+    ```{r}
+    flights2 %>% left_join(planes, by = "tailnum")
+    ```
+    
+    Note that the year columns in the output are disambiguated with a suffix.
+
+  * A named character vector: `by = c("x" = "a")`. This will
+    match variable `x` in table `x` to variable `a` in table `b`. The 
+    variables from use will be used in the output.
+    
+    Each flight has an origin and destination `airport`, so we need to specify
+    which one we want to join to:
+    
+    ```{r}
+    flights2 %>% left_join(airports, c("dest" = "faa"))
+    flights2 %>% left_join(airports, c("origin" = "faa"))
+    ```
+
+#### Types of join
+
+There are four types of mutating join, which differ in their behaviour when a match is not found. We'll illustrate each with a simple example:
+
+```{r}
+(df1 <- data_frame(x = c(1, 2), y = 2:1))
+(df2 <- data_frame(x = c(1, 3), a = 10, b = "a"))
+```
+
+  * `inner_join(x, y)` only includes observations that match in both `x` and `y`.
+    
+    ```{r}
+    df1 %>% inner_join(df2) %>% knitr::kable()
+    ```
+    
+  * `left_join(x, y)` includes all observations in `x`, regardless of whether
+    they match or not. This is the most commonly used join because it ensures 
+    that you don't lose observations from your primary table.
+  
+    ```{r}
+    df1 %>% left_join(df2)
+    ```
+  
+  * `right_join(x, y)` includes all observations in `y`. It's equivalent to 
+    `left_join(y, x)`, but the columns will be ordered differently.
+  
+    ```{r}
+    df1 %>% right_join(df2)
+    df2 %>% left_join(df1)
+    ```
+
+* `full_join()` includes all observations from `x` and `y`.
+
+    ```{r}
+    df1 %>% full_join(df2)
+    ```
+
+The left, right and full joins are collectively know as __outer joins__. When a row doesn't match in an outer join, the new variables are filled in with missing values.
+
+#### Observations
+
+While mutating joins are primarily used to add new variables, they can also generate new observations. If a match is not unique, a join will add all possible combinations (the Cartesian product) of the matching observations:
+
+```{r}
+df1 <- data_frame(x = c(1, 1, 2), y = 1:3)
+df2 <- data_frame(x = c(1, 1, 2), z = c("a", "b", "a"))
+
+df1 %>% left_join(df2)
+```
+
+### Filtering joins
+
+Filtering joins match obserations in the same way as mutating joins, but affect the observations, not the variables. There are two types:
+
+* `semi_join(x, y)` __keeps__ all observations in `x` that have a match in `y`.
+* `anti_join(x, y)` __drops__ all observations in `x` that have a match in `y`.
+
+These are most useful for diagnosing join mismatches. For example, there are many flights in the nycflights13 dataset that don't have a matching tail number in the planes table:
+
+```{r}
+library("nycflights13")
+flights %>% 
+  anti_join(planes, by = "tailnum") %>% 
+  count(tailnum, sort = TRUE)
+```
+
+If you're worried about what observations your joins will match, start with a `semi_join()` or `anti_join()`. `semi_join()` and `anti_join()` never duplicate; they only ever remove observations. 
+
+```{r}
+df1 <- data_frame(x = c(1, 1, 3, 4), y = 1:4)
+df2 <- data_frame(x = c(1, 1, 2), z = c("a", "b", "a"))
+
+# Four rows to start with:
+df1 %>% nrow()
+# And we get four rows after the join
+df1 %>% inner_join(df2, by = "x") %>% nrow()
+# But only two rows actually match
+df1 %>% semi_join(df2, by = "x") %>% nrow()
+```
+
+### Set operations
+
+The final type of two-table verb is set operations. These expect the `x` and `y` inputs to have the same variables, and treat the observations like sets:
+
+* `intersect(x, y)`: return only observations in both `x` and `y`
+* `union(x, y)`: return unique observations in `x` and `y`
+* `setdiff(x, y)`: return observations in `x`, but not in `y`.
+
+Given this simple data:
+
+```{r}
+(df1 <- data_frame(x = 1:2, y = c(1L, 1L)))
+(df2 <- data_frame(x = 1:2, y = 1:2))
+```
+
+The four possibilities are:
+
+```{r}
+intersect(df1, df2)
+# Note that we get 3 rows, not 4
+union(df1, df2)
+setdiff(df1, df2)
+setdiff(df2, df1)
+```
+
+### Databases
+
+Each two-table verb has a straightforward SQL equivalent:
+
+| R                | SQL
+|------------------|--------
+| `inner_join()`   | `SELECT * FROM x JOIN y ON x.a = y.a`
+| `left_join()`    | `SELECT * FROM x LEFT JOIN y ON x.a = y.a`
+| `right_join()`   | `SELECT * FROM x RIGHT JOIN y ON x.a = y.a`
+| `full_join()`    | `SELECT * FROM x FULL JOIN y ON x.a = y.a`
+| `semi_join()`    | `SELECT * FROM x WHERE EXISTS (SELECT 1 FROM y WHERE x.a = y.a)`
+| `anti_join()`    | `SELECT * FROM x WHERE NOT EXISTS (SELECT 1 FROM y WHERE x.a = y.a)`
+| `intersect(x, y)`| `SELECT * FROM x INTERSECT SELECT * FROM y`
+| `union(x, y)`    | `SELECT * FROM x UNION SELECT * FROM y`
+| `setdiff(x, y)`  | `SELECT * FROM x EXCEPT SELECT * FROM y`
+
+`x` and `y` don't have to be tables in the same database. If you specify `copy = TRUE`, dplyr will copy the `y` table into the same location as the `x` variable. This is useful if you've downloaded a summarised dataset and determined a subset of interest that you now want the full data for. You can use `semi_join(x, y, copy = TRUE)` to upload the indices of interest to a temporary table in the same database as `x`, and then perform a efficient semi join in the database. 
+
+If you're working with large data, it maybe also be helpful to set `auto_index = TRUE`. That will automatically add an index on the join variables to the temporary table.
+
+### Coercion rules
+
+When joining tables, dplyr is a little more conservative than base R about the types of variable that it considers equivalent. This is mostly likely to surprise if you're working factors:
+
+  * Factors with different levels are coerced to character with a warning:
+    
+    ```{r}
+    df1 <- data_frame(x = 1, y = factor("a"))
+    df2 <- data_frame(x = 2, y = factor("b"))
+    full_join(df1, df2) %>% str()
+    ```
+
+  * Factors with the same levels in a different order are coerced to character 
+    with a warning:
+  
+    ```{r}
+    df1 <- data_frame(x = 1, y = factor("a", levels = c("a", "b")))
+    df2 <- data_frame(x = 2, y = factor("b", levels = c("b", "a")))
+    full_join(df1, df2) %>% str()
+    ```
+
+  * Factors are preserved only if the levels match exactly:
+    
+    ```{r}
+    df1 <- data_frame(x = 1, y = factor("a", levels = c("a", "b")))
+    df2 <- data_frame(x = 2, y = factor("b", levels = c("a", "b")))
+    full_join(df1, df2) %>% str()
+    ```    
+
+  * A factor and a character are coerced to character with a warning:
+    
+    ```{r}
+    df1 <- data_frame(x = 1, y = "a")
+    df2 <- data_frame(x = 2, y = factor("a"))
+    full_join(df1, df2) %>% str()
+    ```
+    
+Otherwise logicals will be silently upcast to integer, and integer to numeric, but coercing to character will raise an error:
+
+```{r, error = TRUE, purl = FALSE}
+df1 <- data_frame(x = 1, y = 1L)
+df2 <- data_frame(x = 2, y = 1.5)
+full_join(df1, df2) %>% str()
+
+df1 <- data_frame(x = 1, y = 1L)
+df2 <- data_frame(x = 2, y = "a")
+full_join(df1, df2) %>% str()
+```
