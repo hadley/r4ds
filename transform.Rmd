@@ -4,6 +4,7 @@
 library(dplyr)
 library(nycflights13)
 source("common.R")
+options(dplyr.print_min = 6)
 ```
 
 Visualisation is an important tool for insight generation, but it is rare that you get the data in exactly the right form you need for visualisation. Often you'll need to create some new variables or summaries, or maybe you just want to rename the variables or reorder the observations in order to make the data a little easier to work with. You'll learn how to do all that (and more!) in this chapter which will teach you how to transform your data using the dplyr package.
@@ -69,7 +70,7 @@ To create your own new tbl\_df from individual vectors, use `data_frame()`:
 data_frame(x = 1:3, y = c("a", "b", "c"))
 ```
 
-*** 
+--------------------------------------------------------------------------------
 
 There are two other important differences between tbl_dfs and data.frames:
 
@@ -105,48 +106,40 @@ There are two other important differences between tbl_dfs and data.frames:
     df2$a
     ```
 
-***
+--------------------------------------------------------------------------------
     
-## Single table verbs
+## Dplyr verbs
 
-There are five key verbs:
+At the most basic level, you can only alter a tidy data frame in five useful ways: 
 
-* `filter()` picks observations based on their values.
+* reorder the rows (`arrange()`), 
+* pick observations by their values (`filter()`),
+* pick variables by their names (`select()`), 
+* create new variables with functions of existing variables (`mutate()`), or
+* collapse many values down to a single summary (`summarise()`).
 
-* `arrange()` reorders observations.
+These can all be used in conjunction with `group_by()` which changes the scope of each function from operating on the entire dataset to operating on it group-by-group. These six functions verbs for a language of data manipulation.
 
-* `select()` picks variables based on their names.
-
-* `mutate()` allows you to add new variables that are functions of
-  existing variables.
-  
-* `summarise()` reduces many values to a single value.
-
-These can all be used in conjunction with `group_by()` which changes the scope of each function from operating on the entire dataset to operating on it group-by-group. `group_by()` is most useful in conjunction with `summarise()`, but can also be useful with `mutate()`.
-
-All verbs work very similarly: 
+All verbs work similarly: 
 
 1.  The first argument is a data frame.
 
 1.  The subsequent arguments describe what to do with the data frame. 
-    Notice that you can refer to columns in the data frame directly without 
-    using `$`.
+    You can refer to columns in the data frame directly without using `$`.
 
 1.  The result is a new data frame.
 
 Together these properties make it easy to chain together multiple simple steps to achieve a complex result.
 
-These five functions provide the basis of a language of data manipulation. At the most basic level, you can only alter a tidy data frame in five useful ways: you can reorder the rows (`arrange()`), pick observations and variables of interest (`filter()` and `select()`), add new variables that are functions of existing variables (`mutate()`), or collapse many values to a summary (`summarise()`). Each verb is described in turn in the sections below.
-    
 ## Filter rows with `filter()`
 
-`filter()` allows you to select a subset of rows in a data frame. The first argument is the name of the data frame. The second and subsequent arguments are the expressions that filter the data frame. For example, we can select all flights on January 1st with:
+`filter()` allows you to subset observations. The first argument is the name of the data frame. The second and subsequent arguments are the expressions that filter the data frame. For example, we can select all flights on January 1st with:
 
 ```{r}
 filter(flights, month == 1, day == 1)
 ```
 
-When you run this line of code, dplyr executes the filtering operation and returns the modified data frame. dplyr operators never modify their inputs, so if you want to save the results, you'll need to use the assignment operator `<-`:
+When you run this line of code, dplyr executes the filtering operation and returns a new data frame. dplyr functions never modify their inputs, so if you want to save the results, you'll need to use the assignment operator `<-`:
 
 ```{r}
 jan1 <- filter(flights, month == 1, day == 1)
@@ -154,31 +147,36 @@ jan1 <- filter(flights, month == 1, day == 1)
 
 --------------------------------------------------------------------------------
 
-This is equivalent to the more verbose code in base R:
+This is equivalent to the more verbose base code:
 
 ```{r, eval = FALSE}
-flights[flights$month == 1 & flights$day == 1, ]
+flights[flights$month == 1 & flights$day == 1, , drop = FALSE]
 ```
 
-`filter()` works similarly to `subset()` except that you can give it any number of filtering conditions, which are joined together with `&`. 
+(Although `filter()` will also drop missings). `filter()` works similarly to `subset()` except that you can give it any number of filtering conditions, which are joined together with `&`. 
 
 --------------------------------------------------------------------------------
 
 ### Comparisons
 
-* Numeric values: `>`, `>=`, `<`, `<=`, `!=` (not equal), and `==`. 
-
-* Strings: as well as `==` and `!=`, `%in%` is very useful. You'll learn about
-  regular expressions, a powerful tool for matching patterns in string in 
-  strings.
-
-* Dates and times: you can use the same operators as numeric, or the special date
-  extractors you'll learn about in [dates and times]
-
-When you're starting out with R, the easiest mistake to make is to use `=` instead of `==` when testing for equality. When this happens you'll get a somewhat uninformative error:
+R provides the standard suite of numeric comparison operators: `>`, `>=`, `<`, `<=`, `!=` (not equal), and `==` (equal). When you're starting out with R, the easiest mistake to make is to use `=` instead of `==` when testing for equality. When this happens you'll get a somewhat uninformative error:
 
 ```{r, error = TRUE}
 filter(flights, month = 1)
+```
+
+But beware using `==` with floating point numbers:
+
+```{r}
+sqrt(2) ^ 2 == 2
+1/49 * 49 == 1
+```
+
+It's better to check that you're close:
+
+```{r}
+abs(sqrt(2) ^ 2 - 2) < 1e-6
+abs(1/49 * 49 - 1) < 1e-6
 ```
 
 ### Logical operators
@@ -189,21 +187,50 @@ Multiple arguments to `filter()` are combined with "and". To get more complicate
 filter(flights, month == 1 | month == 2)
 ```
 
-The following figure shows the complete set of boolean operations for two sets.
+Note the order isn't like English. This doesn't do what you expect:
+
+```{r, eval = FALSE}
+filter(flights, month == 1 | 2)
+```
+
+Instead you can use the helpful `%in%` shortcut:
+
+```{r}
+filter(flights, month %in% c(1, 2))
+```
+
+The following figure shows the complete set of boolean operations:
 
 ```{r bool-ops, echo = FALSE, fig.cap = "Complete set of boolean operations",  out.width = "75%"}
 knitr::include_graphics("diagrams/transform-logical.png")
 ```
 
-Sometimes you can simplify complicated subsetting by remembering De Morgan's law: `!(x & y)` is the same as `!x | !y`, and `!(x | y)` is the same as `!x & !y`.
+Sometimes you can simplify complicated subsetting by remembering De Morgan's law: `!(x & y)` is the same as `!x | !y`, and `!(x | y)` is the same as `!x & !y`. For example, if you wanted to find flights that weren't delayed (on arrival or departure) by more than two hours, you could use either of the following two filters:
+
+```{r, eval = FALSE}
+filter(flights, !(arr_delay > 120 | dep_delay > 120))
+filter(flights, arr_delay <= 120, dep_delay <= 120)
+```
 
 Note that R has both `&` and `|` and `&&` and `||`. `&` and `|` are vectorised: you give them two vectors of logical values and they return a vector of logical values. `&&` and `||` are scalar operators: you give them individual `TRUE`s or `FALSE`s. They're used if `if` statements when programming. You'll learn about that later on.
 
-Cumulative operations: `cumany()`, `cumall()`.
+Sometimes you want to find all rows after the first `TRUE`, or all rows until the first `FALSE`. The cumulative functions `cumany()` and `cumall()` allow you to find these values:
+
+```{r}
+df <- data_frame(
+  x = c(FALSE, TRUE, FALSE), 
+  y = c(TRUE, FALSE, TRUE)
+)
+
+filter(df, cumany(x)) # all rows after first TRUE
+filter(df, cumall(y)) # all rows until first FALSE
+```
+
+Whenever you start using multipart expressions in your `filter()`, it's typically a good idea to make them explicit variables with `mutate()` so that you can more easily check your work. You'll learn about `mutate()` in the next section.
 
 ### Missing values
 
-One important feature of R that can make comparison tricky is the missing value, `NA`. This represents an unknown value, so any operation involving an unknown value will also be unknown:
+One important feature of R that can make comparison tricky is the missing value, `NA`. `NA` represents an unknown value so missing values are "infectious": any operation involving an unknown value will also be unknown.
 
 ```{r}
 NA > 5
@@ -232,9 +259,9 @@ x == y
 # We don't know!
 ```
 
-If you want to determine if a value is missing, use `is.na()`. (And RStudio will remind you of this by giving a code warning whenever you use `x == NA`)
+If you want to determine if a value is missing, use `is.na()`. (This is such a common mistake RStudio will remind you whenever you use `x == NA`)
 
-Note that `filter()` only includes rows where the condition is `TRUE`; it excludes both `FALSE` and `NA` values. If you want to preserve missing values, ask for them explicitly:
+`filter()` only includes rows where the condition is `TRUE`; it excludes both `FALSE` and `NA` values. If you want to preserve missing values, ask for them explicitly:
 
 ```{r}
 df <- data_frame(x = c(1, NA, 3))
@@ -248,6 +275,7 @@ filter(df, is.na(x) | x > 1)
 
     * Departed in summer.
     * That flew to Houston (`IAH` or `HOU`).
+    * There were operated by United, American, or Delta.
     * That were delayed by more two hours.
     * That arrived more than two hours late, but didn't leave late.
     * We delayed by at least an hour, but made up over 30 minutes in flight.
@@ -270,9 +298,37 @@ Use `desc()` to order a column in descending order:
 arrange(flights, desc(arr_delay))
 ```
 
+Missing values always come at the end:
+
+```{r}
+df <- data_frame(x = c(5, 2, NA))
+arrange(df, x)
+arrange(df, desc(x))
+```
+
+--------------------------------------------------------------------------------
+
+You can accomplish the same thing in base R using subsetting and `order()`:
+
+```{r}
+flights[order(flights$year, flights$month, flights$day), , drop = FALSE]
+```
+
+`arrange()` provides a more convenient way of sorting one variable in descending order with the `desc()` helper function.
+
+--------------------------------------------------------------------------------
+
+### Exercises
+
+1.  How could use `arrange()` to sort all missing values to the start?
+    (Hint: use `is.na()`).
+    
+1.  Sort `flights` to find the most delayed flights. Find the flights that
+    left earliest.
+
 ## Select columns with `select()`
 
-Often you work with large datasets with many columns but only a few are actually of interest to you. `select()` allows you to rapidly zoom in on a useful subset using operations that usually only work on numeric variable positions:
+It's not uncommon to get datasets with hundreds or even thousands of variables. In this case, the first challenge is often narrowing in on the variables you're actually interested in. `select()` allows you to rapidly zoom in on a useful subset using operations based on the names of the variables:
 
 ```{r}
 # Select columns by name
@@ -283,25 +339,50 @@ select(flights, year:day)
 select(flights, -(year:day))
 ```
 
-This function works similarly to the `select` argument in `base::subset()`. Because the dplyr philosophy is to have small functions that do one thing well, it's its own function in dplyr.
+There are a number of helper functions you can use within `select()`:
 
-There are a number of helper functions you can use within `select()`, like `starts_with()`, `ends_with()`, `matches()` and `contains()`. These let you quickly match larger blocks of variables that meet some criterion. See `?select` for more details.
+* `starts_with("abc")`: matches names that begin with "abc".
 
-You can rename variables with `select()` by using named arguments:
+* `ends_with("xyz")`: matches names that end with "xyz".
+
+* `contains("ijk")`: matches name that contain "ijk".
+
+* `matches("(.)\\1")`: selects variables that match a regular expression.  
+   This one matches any variables that contain repeated characters. You'll 
+   learn more about regular expressions in Chapter XYZ.
+   
+*  `num_range("x", 1:3)` matches `x1`, `x2` and `x3`.
+   
+See `?select` for more details.
+
+It's possible to use `select()` to rename variables:
 
 ```{r}
 select(flights, tail_num = tailnum)
 ```
 
-But because `select()` drops all the variables not explicitly mentioned, it's not that useful. Instead, use `rename()`:
+But because `select()` drops all the variables not explicitly mentioned, it's not that useful. Instead, use `rename()`, which is a variant of `select()` that keeps variables by default:
 
 ```{r}
 rename(flights, tail_num = tailnum)
 ```
 
+--------------------------------------------------------------------------------
+
+This function works similarly to the `select` argument in `base::subset()`. Because the dplyr philosophy is to have small functions that do one thing well, it's its own function in dplyr.
+
+--------------------------------------------------------------------------------
+
+### Exericses
+
+1.  Brainstorm as many ways as possible to select `dep_time`, `dep_delay`,
+    `arr_time`, and `arr_delay`.
+
 ## Add new variable with `mutate()`
 
-Besides selecting sets of existing columns, it's often useful to add new columns that are functions of existing columns. This is the job of `mutate()`:
+Besides selecting sets of existing columns, it's often useful to add new columns that are functions of existing columns. This is the job of `mutate()`. 
+
+`mutate()` always adds new columns at the end so we'll start by creating a narrower dataset so we can see the new variables. Remember that when you're in RStudio, the easiest way to see all the columns is `View()`
 
 ```{r}
 flights_sml <- select(flights, 
@@ -328,24 +409,36 @@ mutate(flights_sml,
 If you only want to keep the new variables, use `transmute()`:
 
 ```{r}
-transmute(flights_sml,
+transmute(flights,
   gain = arr_delay - dep_delay,
   gain_per_hour = gain / (air_time / 60)
 )
 ```
 
+--------------------------------------------------------------------------------
+
+`mutate()` is similar to `transform()` in base R, but in `mutate()` you can refer to variables you've just created; in `transform()` you can not.
+
+--------------------------------------------------------------------------------
+
 ### Useful functions
 
-You'll learn about useful functions for strings and dates in their respective chapters. For numbers:
+There are many functions for creating new variables. The key property is that the function must be vectorised: it needs to return the same number of outputs as inputs. There's no way to list every possible function that you might use, but here's a selection of the functions that I use most often:
 
 *   Arithmetic operators: `+`, `-`, `*`, `/`, `^`. These are all vectorised, so 
-    you can work with multiple columns. If you give it a single number it will
-    be expanded to match the length of the column.
+    you can work with multiple columns. These operations use "recycling rules"
+    so if one parameter is shorter than the other, it will be automatically
+    extended to be the same length. This is most useful when one of the 
+    arguments is a single number: `airtime / 60`, `hours * 60 + minute`, etc.
     
-*   Modulo arithmetic: `%%`, `%/%`. Modular arithmetic (division with reminder)
-    is a handy tool to have in your toolbox as it allows you to break integers
-    down into pieces. For example, in the flights dataset, you can compute
-    `hour` and `minute` from `dep_time` with:
+    This is also useful in conjunction with the aggregate functions you'll 
+    learn about later: `x / sum(x)` calculates a proportion, `y - mean(y)` the
+    difference from the mean, ...
+    
+*   Modular arithmetic: `%/%` (integer divison) and `%%` (remainder).
+    `x == y * (x %/% y) + (x %% y)`. Modular arithmetic is a handy tool because 
+    it allows you to break integers up into pieces. For example, in the 
+    flights dataset, you can compute `hour` and `minute` from `dep_time` with:
     
     ```{r}
     transmute(flights,
@@ -355,77 +448,80 @@ You'll learn about useful functions for strings and dates in their respective ch
     )
     ```
   
-*   Logs: `log()`, `log2()`, `log10()`. All else being equal, I recommend
-    using `log2()` because it's easy to interpret: an difference of 1 mean 
-    doubled, a difference of -1 means halved. `log10()` is similarly easy to
-    interpret, as long as your have a very wide range of numbers.
+*   Logs: `log()`, `log2()`, `log10()`. Logarithms are an incredibly useful
+    transformation for dealing with data that ranges over multiple orders of
+    magnitude. They also convert multiplicative relationships to additive, a
+    feature we'll come back to in modelling.
+    
+    All else being equal, I recommend using `log2()` because it's easy to
+    interpret: an difference of 1 on the log scale corresponds to doubling on
+    the original scale and a difference of -1 corresponds to halving.
   
-*   Cumulative calculations: `cumsum()`, `cumprod()`, `cummin()`, `cummax()`,
-    `cummean()`.
-  
-*   Parallel computations: `pmin()`, `pmax()`. Need `psum()` etc for 
-    correct `na.rm = TRUE`.
+*   Cumulative and rolling aggregates: R provides functions for running sums,
+    products, mins and maxes: `cumsum()`, `cumprod()`, `cummin()`, `cummax()`.
+    dplyr provides `cummean()` for cumulative means. If you need rolling
+    aggregates, try `RcppRoll`.
   
 *   Logical comparisons, which you learned about earlier. If you're doing
     a complex sequence of logical operations it's often a good idea to 
     store the interim values in new variables so you can check that each
     step is doing what you expect.
 
-*   `lead()` and `lag()` give offsets. Most useful in conjunction with 
-    `group_by()` which you'll learn about shortly.
+*   Offsets: `lead()` and `lag()` allow you to refer to leading or lagging 
+    values. This allows you to compute running differences (e.g. `x - lag(x)`) 
+    or find when values change (`x != lag(x))`. They are most useful in 
+    conjunction with `group_by()`, which you'll learn about shortly.
 
-*   Various types of ranking: `min_rank()`, `row_number()`, `dense_rank()`,
-    `cume_dist()`, `percent_rank()`, `ntile()`.
+*   Ranking: start with `min_rank()`. It does the most usual type of ranking 
+    (e.g. 1st, 2nd, 2nd, 4th). The default gives smallest values the small
+    ranks; use `desc(x)` to give the largest values the smallest ranks. 
+    
+    If `min_rank()` doesn't do what you need, look at the variants 
+    `row_number()`, `dense_rank()`, `cume_dist()`, `percent_rank()`, 
+    `ntile()`.
 
-## Summarise values with `summarise()`
+### Exercises
+
+```{r, eval = FALSE, echo = FALSE}
+flights <- flights %>% mutate(
+  dep_time = hour * 60 + minute,
+  arr_time = (arr_time %/% 100) * 60 + (arr_time %% 100),
+  airtime2 = arr_time - dep_time,
+  dep_sched = dep_time + dep_delay
+)
+library(ggplot2)
+ggplot(flights, aes(dep_sched)) + geom_histogram(binwidth = 60)
+ggplot(flights, aes(dep_sched %% 60)) + geom_histogram(binwidth = 1)
+ggplot(flights, aes(air_time - airtime2)) + geom_histogram()
+```
+
+1.  Currently `dep_time()` and `arr_time()` are convenient to look at, but
+    hard to compute with because they're not really continuous numbers. 
+    Convert them to a more convenient represention of number of minutes
+    since midnight.
+    
+1.  Compute the scheduled time by adding `dep_delay` to `dep_time`. Plot
+    the distribution of departure times. What do you think causes the 
+    interesting pattern?
+  
+1.  Compare `airtime` with `arr_time - dep_time`. What do you expect to see?
+    What do you see? Why?
+
+## Grouped summaries with `summarise()`
 
 The last verb is `summarise()`. It collapses a data frame to a single row:
 
 ```{r}
-summarise(flights,
-  delay = mean(dep_delay, na.rm = TRUE)
-)
+summarise(flights, delay = mean(dep_delay, na.rm = TRUE))
 ```
 
-It's most useful in conjunction with grouping, so we'll come back to it after we've learned about `group_by()`.
+However, that's not terribly useful until we pair it with `group_by()`. This changes the unit of analysis from the complete dataset to individual groups. When you the dplyr verbs on a grouped data frame they'll be automatically applied "by group".
 
-## Grouped operations
+Grouping lets us compute average delay per day:
 
-These verbs are useful on their own, but they become really powerful when you apply them to groups of observations within a dataset. In dplyr, you do this by with the `group_by()` function. It breaks down a dataset into specified groups of rows. When you then apply the verbs above on the resulting object they'll be automatically applied "by group". Most importantly, all this is achieved by using the same exact syntax you'd use with an ungrouped object.
-
-Grouping affects the verbs as follows:
-
-* grouped `select()` is the same as ungrouped `select()`, except that 
-  grouping variables are always retained. 
-   
-* grouped `arrange()` orders first by the grouping variables
-
-* `mutate()` and `filter()` are most useful in conjunction with window 
-  functions (like `rank()`, or `min(x) == x`). They are described in detail in 
-  the windows function vignette `vignette("window-functions")`.
-
-* `slice()` extracts rows within each group.
-  
-* `summarise()` is powerful and easy to understand, as described in 
-  more detail below.
-
-In the following example, we split the complete dataset into individual planes and then summarise each plane by counting the number of flights (`count = n()`) and computing the average distance (`dist = mean(Distance, na.rm = TRUE)`) and arrival delay (`delay = mean(ArrDelay, na.rm = TRUE)`). We then use ggplot2 to display the output.
-
-```{r, warning = FALSE, message = FALSE, fig.width = 6}
-library(ggplot2)
-by_tailnum <- group_by(flights, tailnum)
-delay <- summarise(by_tailnum,
-  count = n(),
-  dist = mean(distance, na.rm = TRUE),
-  delay = mean(arr_delay, na.rm = TRUE))
-delay <- filter(delay, count > 20, dist < 2000)
-
-# Interestingly, the average delay is only slightly related to the
-# average distance flown by a plane.
-ggplot(delay, aes(dist, delay)) +
-  geom_point(aes(size = count), alpha = 1/2) +
-  geom_smooth() +
-  scale_size_area()
+```{r}
+by_day <- group_by(flights, year, month, day)
+summarise(by_day, delay = mean(dep_delay, na.rm = TRUE))
 ```
 
 ### Useful summaries
@@ -450,6 +546,7 @@ You use `summarise()` with __aggregate functions__, which take a vector of value
   When used with numeric functions, `TRUE` is converted to 1 and `FALSE` to 0. 
   This makes `sum()` and `mean()` particularly useful: `sum(x)` gives the number 
   of `TRUE`s in `x`, and `mean(x)` gives the proportion.
+  
 
 * `first(x)`, `last(x)` and `nth(x, n)` - 
 
@@ -462,6 +559,20 @@ summarise(destinations,
   flights = n()
 )
 ```
+
+Aggregation functions obey the same rules of missing values:
+
+```{r}
+mean(c(1, 5, 10, NA))
+```
+
+But to make life easier they have an `na.rm` argument which will remove the missing values prior to computation:
+
+```{r}
+mean(c(1, 5, 10, NA), na.rm = TRUE)
+```
+
+Whenever you need to use `na.rm` to remove missing values, it's worthwhile to also compute `sum(is.na(x))`. This gives you a count of how many values were missing, which is useful for checking that you're not making inferences on a tiny amount of non-missing data.
 
 ### Grouping by multiple variables
 
@@ -476,9 +587,40 @@ daily <- group_by(flights, year, month, day)
 
 However you need to be careful when progressively rolling up summaries like this: it's ok for sums and counts, but you need to think about weighting for means and variances, and it's not possible to do it exactly for medians.
 
+### Grouping and other verbs
+
+Grouping affects the other verbs as follows:
+
+* grouped `select()` is the same as ungrouped `select()`, except that 
+  grouping variables are always retained. 
+
+* `mutate()` and `filter()` are most useful in conjunction with window 
+  functions (like `rank()`, or `min(x) == x`). They are described in detail in 
+  the windows function vignette `vignette("window-functions")`.
+
 ## Piping
 
 The dplyr API is functional in the sense that function calls don't have side-effects. You must always save their results. This doesn't lead to particularly elegant code, especially if you want to do many operations at once. You either have to do it step-by-step:
+
+In the following example, we split the complete dataset into individual planes and then summarise each plane by counting the number of flights (`count = n()`) and computing the average distance (`dist = mean(Distance, na.rm = TRUE)`) and arrival delay (`delay = mean(ArrDelay, na.rm = TRUE)`). We then use ggplot2 to display the output.
+
+```{r, warning = FALSE, message = FALSE, fig.width = 6}
+library(ggplot2)
+by_tailnum <- group_by(flights, tailnum)
+delay <- summarise(by_tailnum,
+  count = n(),
+  dist = mean(distance, na.rm = TRUE),
+  delay = mean(arr_delay, na.rm = TRUE))
+delay <- filter(delay, count > 20, dist < 2000)
+
+# Interestingly, the average delay is only slightly related to the
+# average distance flown by a plane.
+ggplot(delay, aes(dist, delay)) +
+  geom_point(aes(size = count), alpha = 1/2) +
+  geom_smooth() +
+  scale_size_area()
+```
+
 
 ```{r, eval = FALSE}
 a1 <- group_by(flights, year, month, day)
@@ -518,7 +660,9 @@ flights %>%
   filter(arr > 30 | dep > 30)
 ```
 
-## Two-table verbs
+We'll use piping frequently from now on because it considerably improves the readability of code, and we'll come back to it in more detail in Chapter XYZ.
+
+## Multiple tables of data
 
 It's rare that a data analysis involves only a single table of data. In practice, you'll normally have many tables that contribute to an analysis, and you need flexible tools to combine them. In dplyr, there are three families of verbs that work with two tables at a time:
 
