@@ -4,7 +4,7 @@ library(bookdown)
 library(methods)
 
 args <- commandArgs(trailingOnly = TRUE)
-path <- args[1]
+path <- temp.Rmd
 
 if (!file.exists(path)) {
   stop("Can't find path ", path, call. = FALSE)
