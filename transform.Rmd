@@ -1,8 +1,9 @@
 # Data transformation {#transform}
 
-```{r setup-transform, include=FALSE}
+```{r setup-transform, include = FALSE}
 library(dplyr)
 library(nycflights13)
+library(ggplot2)
 source("common.R")
 options(dplyr.print_min = 6)
 ```
@@ -489,7 +490,7 @@ flights <- flights %>% mutate(
   airtime2 = arr_time - dep_time,
   dep_sched = dep_time + dep_delay
 )
-library(ggplot2)
+
 ggplot(flights, aes(dep_sched)) + geom_histogram(binwidth = 60)
 ggplot(flights, aes(dep_sched %% 60)) + geom_histogram(binwidth = 1)
 ggplot(flights, aes(air_time - airtime2)) + geom_histogram()
@@ -528,51 +529,156 @@ summarise(by_day, delay = mean(dep_delay, na.rm = TRUE))
 
 You use `summarise()` with __aggregate functions__, which take a vector of values and return a single number. 
 
-* Location of "middle": `mean(x)`, `median(x)`
+* Location of "middle": `mean(x)`, `median(x)`. The mean is the sum divided
+  by the length; the median is a value where 50% of `x` is above, and 50% is
+  below.
 
-* Measure of spread: `sd(x)`, `IQR(x)`, `mad(x)`.
+* Measure of spread: `sd(x)`, `IQR(x)`, `mad(x)`. The mean squared deviation,
+  or standard deviation or sd for short, is the standard measure of spread.
+  The interquartile range (`IQR()`) and median absolute deviation `mad(x)`
+  are robust equivalents that maybe more useful if you have outliers.
 
-* By ranked position: `min(x)`, `quantile(x, 0.25)`, `max(x)`
+* By rank: `min(x)`, `quantile(x, 0.25)`, `max(x)`.
 
 * By position: `first(x)`, `nth(x, 2)`, `last(x)`. These work similarly to 
-  `x[1]`, `x[length(x)]`, and `x[n]` but give you more control over the result 
-  if the value is missing.
+  `x[1]`, `x[length(x)]`, and `x[n]` but let you set a default value if that
+  position does not exist (i.e. you're trying to get the 3rd element from a 
+  group that only has two elements).
 
-* Count: `n()`
-
-* Distinct count: `n_distinct(x)`.
+* Counts: `n()`. This takes no arguments, and refers to the current group size.
+  To count the number of non-missing values, use `sum(!is.na(x))`. To count
+  the number of distinct (unique) values, use `n_distinct(x)`.
 
 * Counts and proportions of logical values: `sum(x > 10)`, `mean(y == 0)`
   When used with numeric functions, `TRUE` is converted to 1 and `FALSE` to 0. 
   This makes `sum()` and `mean()` particularly useful: `sum(x)` gives the number 
   of `TRUE`s in `x`, and `mean(x)` gives the proportion.
-  
 
-* `first(x)`, `last(x)` and `nth(x, n)` - 
-
-For example, we could use these to find the number of planes and the number of flights that go to each possible destination:
-
-```{r}
-destinations <- group_by(flights, dest)
-summarise(destinations,
-  planes = n_distinct(tailnum),
-  flights = n()
-)
-```
-
-Aggregation functions obey the same rules of missing values:
+Aggregation functions generally obey the usual rules of missing values:
 
 ```{r}
 mean(c(1, 5, 10, NA))
 ```
 
-But to make life easier they have an `na.rm` argument which will remove the missing values prior to computation:
+(`quantile()` is an exception - it throws an error if there are any missing values present). 
+
+To make life easier, all aggregation functions have an `na.rm` argument which removes the missing values prior to computation:
 
 ```{r}
 mean(c(1, 5, 10, NA), na.rm = TRUE)
 ```
 
-Whenever you need to use `na.rm` to remove missing values, it's worthwhile to also compute `sum(is.na(x))`. This gives you a count of how many values were missing, which is useful for checking that you're not making inferences on a tiny amount of non-missing data.
+### Exercises
+
+## Multiple operations
+
+Imagine we want to explore the relationship between the distance and average delay for each location. Using what you already know about dplyr, you might write code like this:
+
+```{r, fig.width = 6}
+by_dest <- group_by(flights, dest)
+delay <- summarise(by_dest,
+  count = n(),
+  dist = mean(distance, na.rm = TRUE),
+  delay = mean(arr_delay, na.rm = TRUE))
+delay <- filter(delay, count > 20, dest != "HNL")
+
+# Interesting it looks like delays increase with distance up to 
+# ~750 miles and then decrease. Maybe as flights get longer there's
+# more ability to make up delays in the air?
+ggplot(delay, aes(dist, delay)) +
+  geom_point(aes(size = count), alpha = 1/3) +
+  geom_smooth(se = FALSE)
+```
+
+There are three steps:
+
+* Group flights by destination
+
+* Summarise to compute distance, average delay, and number of flights.
+
+* Filter to remove noisy points and Honolulu airport which is almost
+  twice as far away as the next closest airport.
+
+This code is a little frustraing to write because we have to give each intermediate data frame a name, even though we don't care about it. Naming things well is hard, so this slows us down. There's another way to tackle the same problem with the pipe, `%>%`:
+
+```{r}
+delays <- flights %>% 
+  group_by(dest) %>% 
+  summarise(
+    count = n(),
+    dist = mean(distance, na.rm = TRUE),
+    delay = mean(arr_delay, na.rm = TRUE)
+  ) %>% 
+  filter(delay, count > 20, dest != "HNL")
+```
+
+This focuses on the transformations, not what's being transformed, which makes the code easier to read. You can read it as a series of imperative statements: group, then summarise, then filter. As suggested by this reading, a good way to pronounce `%>%` when reading code is "then".
+
+Behind the scenes, `x %>% f(y)` turns into `f(x, y)` so you can use it to rewrite multiple operations that you can read left-to-right, top-to-bottom. We'll use piping frequently from now on because it considerably improves the readability of code, and we'll come back to it in more detail in Chapter XYZ.
+
+The pipe makes it easier to solve complex problems by joining together simple pieces. Each dplyr function does one thing well, helping you advance to your goal with one small step. You can check your work frequently, and if you get stuck, you just need to think: "what's one small thing I could do to advance towards a solution".
+
+The rest of this section explores some practical uses of the pipe when combining multiple dplyr operations to solve real problems.
+
+### Counts
+
+Whenever you do any aggregation, it's always a good idea to include either a count (`n()`), or a count of non-missing values (`sum(!is.na(x))`). That way you can check that you're not drawing conclusions based on very small amounts of data amount of non-missing data.
+
+For example, let's look at the flights that have the highest average delays:
+
+```{r}
+delays <- flights %>% 
+  group_by(flight) %>% 
+  summarise(
+    delay = mean(arr_delay, na.rm = TRUE)
+  )
+
+ggplot(delays, aes(delay)) + 
+  geom_histogram(binwidth = 10)
+```
+
+Wow, there are some flight with massive average delays. I sure wouldn't want to fly on one of those! 
+
+Actually, the story is a little more nuanced. If we also compute the number of non-missing delays for each flight and draw a scatterplot:
+
+```{r}
+delays <- flights %>% 
+  group_by(flight) %>% 
+  summarise(
+    delay = mean(arr_delay, na.rm = TRUE),
+    n = sum(!is.na(arr_delay))
+  )
+
+ggplot(delays, aes(n, delay)) + 
+  geom_point()
+```
+
+You'll see that most of the very delayed flight numbers happen very rarely. The shape of this plot is very characteristic: whenever you plot a mean (or many other summaries) vs number of observations, you'll see that the variation decreases as the sample size increases.
+
+There's another variation on this type of plot as shown below. Here I use the Lahman package to compute the batting average (number of hits / number of attempts) of every major league baseball player.  When I plot the skill of the batter against the number of times batted, you see two patterns:
+
+1.  As above, the variation in our aggregate decreases as we get more 
+    data points.
+    
+2.  There's a correlation between skill and n. This is because baseball
+    teams controls who gets to try and hit the ball, and obviously they'll
+    pick their best players.
+
+```{r}
+batting <- tbl_df(Lahman::Batting)
+
+batters <- batting %>% 
+  group_by(playerID) %>% 
+  summarise(
+    ba = sum(H) / sum(AB),
+    ab = sum(AB)
+  ) %>% 
+  filter(ab > 100)
+
+ggplot(batters, aes(ab, ba)) +
+  geom_point() + 
+  geom_smooth(se = FALSE)
+```
 
 ### Grouping by multiple variables
 
@@ -587,80 +693,13 @@ daily <- group_by(flights, year, month, day)
 
 However you need to be careful when progressively rolling up summaries like this: it's ok for sums and counts, but you need to think about weighting for means and variances, and it's not possible to do it exactly for medians.
 
-### Grouping and other verbs
-
-Grouping affects the other verbs as follows:
-
-* grouped `select()` is the same as ungrouped `select()`, except that 
-  grouping variables are always retained. 
+### Grouped mutates (and filters)
 
 * `mutate()` and `filter()` are most useful in conjunction with window 
   functions (like `rank()`, or `min(x) == x`). They are described in detail in 
   the windows function vignette `vignette("window-functions")`.
 
-## Piping
-
-The dplyr API is functional in the sense that function calls don't have side-effects. You must always save their results. This doesn't lead to particularly elegant code, especially if you want to do many operations at once. You either have to do it step-by-step:
-
-In the following example, we split the complete dataset into individual planes and then summarise each plane by counting the number of flights (`count = n()`) and computing the average distance (`dist = mean(Distance, na.rm = TRUE)`) and arrival delay (`delay = mean(ArrDelay, na.rm = TRUE)`). We then use ggplot2 to display the output.
-
-```{r, warning = FALSE, message = FALSE, fig.width = 6}
-library(ggplot2)
-by_tailnum <- group_by(flights, tailnum)
-delay <- summarise(by_tailnum,
-  count = n(),
-  dist = mean(distance, na.rm = TRUE),
-  delay = mean(arr_delay, na.rm = TRUE))
-delay <- filter(delay, count > 20, dist < 2000)
-
-# Interestingly, the average delay is only slightly related to the
-# average distance flown by a plane.
-ggplot(delay, aes(dist, delay)) +
-  geom_point(aes(size = count), alpha = 1/2) +
-  geom_smooth() +
-  scale_size_area()
-```
-
-
-```{r, eval = FALSE}
-a1 <- group_by(flights, year, month, day)
-a2 <- select(a1, arr_delay, dep_delay)
-a3 <- summarise(a2,
-  arr = mean(arr_delay, na.rm = TRUE),
-  dep = mean(dep_delay, na.rm = TRUE))
-a4 <- filter(a3, arr > 30 | dep > 30)
-```
-
-Or if you don't want to save the intermediate results, you need to wrap the function calls inside each other:
-
-```{r}
-filter(
-  summarise(
-    select(
-      group_by(flights, year, month, day),
-      arr_delay, dep_delay
-    ),
-    arr = mean(arr_delay, na.rm = TRUE),
-    dep = mean(dep_delay, na.rm = TRUE)
-  ),
-  arr > 30 | dep > 30
-)
-```
-
-This is difficult to read because the order of the operations is from inside to out. Thus, the arguments are a long way away from the function. To get around this problem, dplyr provides the `%>%` operator. `x %>% f(y)` turns into `f(x, y)` so you can use it to rewrite multiple operations that you can read left-to-right, top-to-bottom:
-
-```{r, eval = FALSE}
-flights %>%
-  group_by(year, month, day) %>%
-  select(arr_delay, dep_delay) %>%
-  summarise(
-    arr = mean(arr_delay, na.rm = TRUE),
-    dep = mean(dep_delay, na.rm = TRUE)
-  ) %>%
-  filter(arr > 30 | dep > 30)
-```
-
-We'll use piping frequently from now on because it considerably improves the readability of code, and we'll come back to it in more detail in Chapter XYZ.
+A grouped filter is basically like a grouped mutate followed by a regular filter. I generally avoid them except for quick and dirty manipulations. Otherwise it's too hard to check that you've done the manipulation correctly.
 
 ## Multiple tables of data
 
