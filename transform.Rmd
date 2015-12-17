@@ -11,6 +11,7 @@ library(nycflights13)
 library(ggplot2)
 source("common.R")
 options(dplyr.print_min = 6)
+knitr::opts_chunk$set(fig.path = "figures/")
 ```
 
 Visualisation is an important tool for insight generation, but it is rare that you get the data in exactly the right form you need for visualisation. Often you'll need to create some new variables or summaries, or maybe you just want to rename the variables or reorder the observations in order to make the data a little easier to work with. You'll learn how to do all that (and more!) in this chapter which will teach you how to transform your data using the dplyr package.
@@ -530,6 +531,19 @@ by_day <- group_by(flights, year, month, day)
 summarise(by_day, delay = mean(dep_delay, na.rm = TRUE))
 ```
 
+### Grouping by multiple variables
+
+When you group by multiple variables, each summary peels off one level of the grouping. That makes it easy to progressively roll-up a dataset:
+
+```{r}
+daily <- group_by(flights, year, month, day)
+(per_day   <- summarise(daily, flights = n()))
+(per_month <- summarise(per_day, flights = sum(flights)))
+(per_year  <- summarise(per_month, flights = sum(flights)))
+```
+
+However you need to be careful when progressively rolling up summaries like this: it's ok for sums and counts, but you need to think about weighting for means and variances, and it's not possible to do it exactly for medians.
+
 ### Useful summaries
 
 You use `summarise()` with __aggregate functions__, which take a vector of values and return a single number. 
@@ -623,6 +637,10 @@ Behind the scenes, `x %>% f(y)` turns into `f(x, y)` so you can use it to rewrit
 
 The pipe makes it easier to solve complex problems by joining together simple pieces. Each dplyr function does one thing well, helping you advance to your goal with one small step. You can check your work frequently, and if you get stuck, you just need to think: "what's one small thing I could do to advance towards a solution".
 
+Where does `%>%` come from.
+
+Most of the packages you'll learn through this book have been designed to work with the pipe (tidyr, dplyr, stringr, purrr, ...). The only exception is ggplot2: it was developed considerably before the discovery of the pipe. Unfortunately the next iteration of ggplot2, ggvis, which does use the pipe, isn't ready from prime time yet. 
+
 The rest of this section explores some practical uses of the pipe when combining multiple dplyr operations to solve real problems.
 
 ### Counts
@@ -660,7 +678,22 @@ ggplot(delays, aes(n, delay)) +
 
 You'll see that most of the very delayed flight numbers happen very rarely. The shape of this plot is very characteristic: whenever you plot a mean (or many other summaries) vs number of observations, you'll see that the variation decreases as the sample size increases.
 
-There's another variation on this type of plot as shown below. Here I use the Lahman package to compute the batting average (number of hits / number of attempts) of every major league baseball player.  When I plot the skill of the batter against the number of times batted, you see two patterns:
+When looking at this sort of plot, it's often useful to filter out the groups with the smallest numbers of observations, so you can see more of the pattern and less of the extreme variation in the smallest groups. This what the following code does, and also shows you a handy pattern for integrating ggplot2 into dplyr flows. It's a bit painful that you have to switch from `%>%` to `+`, but once you get the hang of it, it's quite convenient.
+
+```{r}
+delays %>% 
+  filter(n > 25) %>% 
+  ggplot(aes(n, delay)) + 
+    geom_point()
+```
+
+--------------------------------------------------------------------------------
+
+RStudio tip: useful keyboard shortcut is Cmd + Shift + P. This resends the previously sent chunk from the editor to the console. This is very convenient when you're (e.g.) exploring the value of `n` in the example above. You send the whole block once with Cmd + Enter, then you modify the value of `n` and press Cmd + Shift + P to resend the complete block.
+
+--------------------------------------------------------------------------------
+
+There's another common variation of this type of pattern. Let's look at how the average performance of batters in baseball is related to the number of times they're at bat. Here I use the Lahman package to compute the batting average (number of hits / number of attempts) of every major league baseball player.  When I plot the skill of the batter against the number of times batted, you see two patterns:
 
 1.  As above, the variation in our aggregate decreases as we get more 
     data points.
@@ -677,34 +710,54 @@ batters <- batting %>%
   summarise(
     ba = sum(H) / sum(AB),
     ab = sum(AB)
-  ) %>% 
-  filter(ab > 100)
+  )
 
-ggplot(batters, aes(ab, ba)) +
-  geom_point() + 
-  geom_smooth(se = FALSE)
+batters %>% 
+  filter(ab > 100) %>% 
+  ggplot(aes(ab, ba)) +
+    geom_point() + 
+    geom_smooth(se = FALSE)
 ```
 
-### Grouping by multiple variables
-
-When you group by multiple variables, each summary peels off one level of the grouping. That makes it easy to progressively roll-up a dataset:
+This also has important implications for ranking. If you naively sort on `desc(ba)`, the people with the best batting averages are clearly lucky, not skilled:
 
 ```{r}
-daily <- group_by(flights, year, month, day)
-(per_day   <- summarise(daily, flights = n()))
-(per_month <- summarise(per_day, flights = sum(flights)))
-(per_year  <- summarise(per_month, flights = sum(flights)))
+batters %>% arrange(desc(ba))
 ```
 
-However you need to be careful when progressively rolling up summaries like this: it's ok for sums and counts, but you need to think about weighting for means and variances, and it's not possible to do it exactly for medians.
+You can find a good explanation of this problem at <http://varianceexplained.org/r/empirical_bayes_baseball/> and <http://www.evanmiller.org/how-not-to-sort-by-average-rating.html>.
 
 ### Grouped mutates (and filters)
 
-* `mutate()` and `filter()` are most useful in conjunction with window 
-  functions (like `rank()`, or `min(x) == x`). They are described in detail in 
-  the windows function vignette `vignette("window-functions")`.
+Grouping is definitely most useful in conjunction with `summarise()`, but you can also do convenient operations with `mutate()` and `filter()`:
 
-A grouped filter is basically like a grouped mutate followed by a regular filter. I generally avoid them except for quick and dirty manipulations. Otherwise it's too hard to check that you've done the manipulation correctly.
+*   Find the worst members of each group:
+
+    ```{r}
+    flights %>% 
+      group_by(year, month, day) %>%
+      filter(rank(arr_delay) < 10)
+    ```
+
+*   Find all groups bigger than a threshold:
+
+    ```{r}
+    popular_dests <- flights %>% 
+      group_by(dest) %>% 
+      filter(n() > 365)
+    ```
+
+*   Standardise to compute per group metrics:
+
+    ```{r}
+    popular_dests %>% 
+      filter(arr_delay > 0) %>% 
+      mutate(prop_delay = arr_delay / sum(arr_delay))
+    ```
+
+You can see more uses in window functions vignette `vignette("window-functions")`.
+
+A grouped filter is basically like a grouped mutate followed by an ungrouped filter. I generally avoid them except for quick and dirty manipulations. Otherwise it's too hard to check that you've done the manipulation correctly.
 
 ## Multiple tables of data
 
@@ -727,8 +780,7 @@ All two-table verbs work similarly. The first two arguments are `x` and `y`, and
 
 Mutating joins allow you to combine variables from multiple tables. For example, take the nycflights13 data. In one table we have flight information with an abbreviation for carrier, and in another we have a mapping between abbreviations and full names. You can use a join to add the carrier names to the flight data:
 
-```{r, warning = FALSE}
-library("nycflights13")
+```{r}
 # Drop unimportant variables so it's easier to understand the join results.
 flights2 <- flights %>% select(year:day, hour, origin, dest, tailnum, carrier)
 
@@ -832,7 +884,6 @@ Filtering joins match obserations in the same way as mutating joins, but affect 
 These are most useful for diagnosing join mismatches. For example, there are many flights in the nycflights13 dataset that don't have a matching tail number in the planes table:
 
 ```{r}
-library("nycflights13")
 flights %>% 
   anti_join(planes, by = "tailnum") %>% 
   count(tailnum, sort = TRUE)
@@ -936,7 +987,7 @@ When joining tables, dplyr is a little more conservative than base R about the t
     
 Otherwise logicals will be silently upcast to integer, and integer to numeric, but coercing to character will raise an error:
 
-```{r, error = TRUE, purl = FALSE}
+```{r, error = TRUE}
 df1 <- data_frame(x = 1, y = 1L)
 df2 <- data_frame(x = 2, y = 1.5)
 full_join(df1, df2) %>% str()
