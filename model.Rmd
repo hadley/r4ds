@@ -5,31 +5,285 @@ title: Model
 
 # Model
 
-After reading this chapter, what can you do that you couldn't before?
+Models are one of the most important tools for data scientists, because models describe relationships. Would you list out every value of a variable, or would you state the mean? Would you list out every pair of values, or would you state the function between variables?
 
-Focus on fitting a single model, and understanding it with broom. Focus on linear models. Focus on intutition and computation tools. No mathematics.
+### Outline
 
-Review caret and mlr.
+*Section 1* will explain what models are and what they can do for you.
 
-"Feature engineering":
+*Section 2* will show you how to use R to build linear models, the most commonly used modeling tool. The section introduces R's model syntax, a general syntax that you can reuse with any of R's modelling functions.
 
-* Factors
-* Interactions
-* Splines
-* Log transform
+*Section 3* will teach you to build and interpret multivariate linear models, models that use more than one variable to make a prediction.
+
+*Section 4* will explain how to use categorical variables in your models and how to interpret the results.
+
+*Section 5* will present a logical way to extend models to non-linear settings.
+
+### Prerequisites
+
+To access the functions and data sets that we will use in the chapter, load the `ggplot2`, `dplyr`, `mgcv`, `splines`, and `broom` packages:
+
+```{r}
+# install.packages("")
+library(ggplot2)
+library(dplyr)
+library(mgcv)
+library(splines)
+library(broom)
+```
+
+**Note: the current examples use a data set that will be replaced in later drafts.**
+  
+## What is a model?
+
+1. A model is just a summary, like a mean, median, or variance.
+    + Example problem/data set
+    
+```{r echo = FALSE}
+heights <- read.csv("data/heights.csv")
+```
+
+```{r}
+head(heights)
+```
+    
+2. As normally taught, modeling is a conflation of three subjects
+    + Models as summaries
+    + Hypothesis testing
+    + Predictive modeling
+3. C. This chapter shows how to build a model and use it as a summary. The methods for building a model apply to all three subjects.
+  
+## How to build a model
+
+1. Best fit
+    + Best fit of what? A certain class of function.
+    + But how do you know which class to use? In some cases, the data can provide suggestions. In other cases existing theory can provide suggestions. But ultimately, you'll never know for sure. But that's okay, good enough is good enough.
+2. What does best fit mean?
+    + It may or may not accurately describe the true relationship. Heck, there might not even be a true relationship. But it is the best guess given the data.
+    + Example problem/data set
+    + It does not mean causation exists. Causation is just one type of relations, which is difficult enough to define, let alone prove.
+3. How do you find the best fit?
+    + With an algorithm. There is an algorithm to fit each specific class of function. We will cover some of the most useful here.
+4. How do you know how good the fit is? 
+    + Adjusted $R^{2}$
+5. Are we making assumptions when we fit a model?
+    + No. Not unless you assume that you've selected the correct type of function (and I see no reason why you should assume that).
+    + Assumptions come when you start hypothesis testing.
+
+## Linear models
+
+1. Linear models fit linear functions
+2. How to fit in R
+    + model syntax, which is reusable with all model functions
+
+```{r}
+earn ~ height 
+lm(earn ~ height, data = heights)
+```
+
+    + save model output
+```{r}
+hmod <- lm(earn ~ height, data = heights)
+coef(hmod)
+summary(hmod)
+```
+
+    + visualize
+```{r}
+ggplot(data = heights, mapping = aes(x = height, y = earn)) +
+  geom_point() +
+  geom_smooth(method = lm)
+```
+    
+    + intercept or no intercept
+```{r}
+0 + earn ~ height 
+lm(earn ~ 0 + height, data = heights)
+lm(earn ~ 0 + height, data = heights)
+```
+
+3. How to interpret
+    + extract information. Resid. Predict.
+```{r eval = FALSE}
+resid(hmod)
+predict(hmod)
+```
+    + Interpret coefficient
+4. How to use the results (with `broom`)
+    + tidy. augment. glance.
+```{r eval = FALSE}
+tidy(hmod)
+augment(hmod)
+glance(hmod)
+```
+
+```{r}
+heights %>% 
+  group_by(sex)  %>% 
+  do(glance(lm(earn ~ height, data = .)))
+```
+
+## Categorical data
+
+```{r}
+smod <- lm(earn ~ sex, data = heights)
+smod
+```
+
+1. Factors
+
+```{r}
+heights$sex <- factor(heights$sex, levels = c("male", "female"))
+
+smod2 <- lm(earn ~ sex, data = heights)
+
+smod
+smod2
+```
+
+2. How to interpret
+
+```{r}
+coef(smod)
+```
 
 
-[Applied Predictive Modeling](http://amzn.com/1461468485). 
-[An Introduction to Statistical Learning](http://amzn.com/1461471370)
+## Multiple Variables
 
-# Other model families
+1. How to fit multivariate models in R
 
-List of important classes on modelling; paragraph about why it's useful/different to lm, and a pointer to where to learn more.
+```{r}
+mmod <- lm(earn ~ height + sex, data = heights)
+mmod
+```
 
-* Generalised linear models: logistic, ...
+2. How to interpret
 
-* Hierarchical models
+```{r}
+coef(mmod)
+```
 
-* Random forrests
+3. Interaction effects
 
-* Unsupervised techniques
+```{r}
+lm(earn ~ height + sex, data = heights)
+lm(earn ~ height + sex + height:sex, data = heights)
+lm(earn ~ height * sex, data = heights)
+```
+
+```{r}
+lm(earn ~ height + ed, data = heights)
+lm(earn ~ height * ed, data = heights)
+```
+
+4. Partition variance
+    + Checking residuals
+```{r}
+m1 <- lm(earn ~ height, data = heights)
+# plot histogram of residuals
+# plot residulas vs. sex
+m2 <- lm(earn ~ height + sex, data = heights)
+# plot histogram of residuals
+# plot residuals vs. education
+m3 <- lm(earn ~ height + sex + ed, data = heights)
+# plot histogram of residuals
+m4 <- lm(earn ~ height + sex + race + ed + age, 
+  data = heights)
+# plot histogram of residuals
+m5 <- lm(earn ~ ., data = heights)
+```
+
+
+## Non-linear functions (recipes?)
+
+0. Transformations
+    + Log
+```{r}
+ggplot(diamonds, aes(x = carat, y = price)) +
+  geom_point()
+ggplot(diamonds, aes(x = log(carat), y = log(price))) +
+  geom_point()
+```
+
+```{r}
+lm(log(price) ~ log(carat), data = diamonds)
+# visualize model line
+```
+
+    + Logit with `glm()`
+    
+    
+What if no handy transformation exists?
+
+```{r}
+ggplot(data = heights, mapping = aes(x= age, y = earn)) + 
+  geom_point() +
+  geom_smooth() + 
+  coord_cartesian(ylim = c(0, 50000))
+```
+
+1. Polynomials
+    + How to fit
+    
+```{r}
+lm(earn ~ poly(age, 3), data = heights)
+
+ggplot(data = heights, mapping = aes(x= age, y = earn)) +
+  geom_point() +
+  geom_smooth(method = lm, formula = y ~ poly(x, 3))
+```
+
+    + How to interpret
+    + Strengths and Weaknesses
+2. Splines
+    + How to fit. Knots. Different types of splines.
+```{r eval = FALSE}
+bs(degree = 1) # linear splines
+bs()           # cubic splines
+ns()           # natural splines
+```
+
+```{r}
+lm(earn ~ ns(age, knots = c(40, 60)), data = heights)
+lm(earn ~ ns(age, df = 4), data = heights)
+```    
+
+```{r}
+lm(earn ~ ns(age, df = 6), data = heights)
+
+ggplot(data = heights, mapping = aes(x= age, y = earn)) +
+  geom_point() +
+  geom_smooth(method = lm, formula = y ~ ns(x, df = 6)) +  
+  coord_cartesian(ylim = c(0, 50000))
+```
+
+    + How to interpret
+    + Strengths and weaknesses
+    
+    
+3. General Additive Models
+    + How to fit
+    
+```{r}
+gmod <- gam(earn ~ s(height), data = heights)
+
+ggplot(data = heights, mapping = aes(x= age, y = earn)) +
+  geom_point() +
+  geom_smooth(method = gam, formula = y ~ s(x))
+```
+    + How to interpret
+    + Strengths and weaknesses
+    
+```{r eval = FALSE}
+# Linear z
+gam(y ~ s(x) + z, data = df)
+
+# Smooth x and smooth z
+gam(y ~ s(x) + s(z), data = df)
+
+# Smooth surface of x and z 
+# (a smooth function that takes both x and z)
+gam(y ~ s(x, z), data = df)
+```
+
+
