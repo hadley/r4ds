@@ -376,14 +376,14 @@ rename(flights, tail_num = tailnum)
 
 --------------------------------------------------------------------------------
 
-This function works similarly to the `select` argument in `base::subset()`. Because the dplyr philosophy is to have small functions that do one thing well, it's its own function in dplyr.
+This function works similarly to the `select` argument in `base::subset()`. Because the dplyr philosophy is to have small functions that do one thing well, it is its own function in dplyr.
 
 --------------------------------------------------------------------------------
 
 ### Exericses
 
 1.  Brainstorm as many ways as possible to select `dep_time`, `dep_delay`,
-    `arr_time`, and `arr_delay`.
+    `arr_time`, and `arr_delay` from `flights`.
 
 ## Add new variable with `mutate()`
 
@@ -409,7 +409,8 @@ Note that you can refer to columns that you've just created:
 ```{r}
 mutate(flights_sml,
   gain = arr_delay - dep_delay,
-  gain_per_hour = gain / (air_time / 60)
+  hours = air_time / 60,
+  gain_per_hour = gain / hours
 )
 ```
 
@@ -418,7 +419,8 @@ If you only want to keep the new variables, use `transmute()`:
 ```{r}
 transmute(flights,
   gain = arr_delay - dep_delay,
-  gain_per_hour = gain / (air_time / 60)
+  hours = air_time / 60,
+  gain_per_hour = gain / hours
 )
 ```
 
@@ -430,7 +432,7 @@ transmute(flights,
 
 ### Useful functions
 
-There are many functions for creating new variables. The key property is that the function must be vectorised: it needs to return the same number of outputs as inputs. There's no way to list every possible function that you might use, but here's a selection of the functions that I use most often:
+There are many functions for creating new variables. The key property is that the function must be vectorised: it needs to return the same number of outputs as inputs. There's no way to list every possible function that you might use, but here's a selection of functions that are frequently useful:
 
 *   Arithmetic operators: `+`, `-`, `*`, `/`, `^`. These are all vectorised, so 
     you can work with multiple columns. These operations use "recycling rules"
@@ -438,11 +440,12 @@ There are many functions for creating new variables. The key property is that th
     extended to be the same length. This is most useful when one of the 
     arguments is a single number: `airtime / 60`, `hours * 60 + minute`, etc.
     
-    This is also useful in conjunction with the aggregate functions you'll 
-    learn about later: `x / sum(x)` calculates a proportion, `y - mean(y)` the
-    difference from the mean, ...
+    Arithmetic operators are also useful in conjunction with the aggregate
+    functions you'll learn about later. For example, `x / sum(x)` calculates 
+    the proportion of a total and `y - mean(y)` computes the difference from 
+    the mean, and so on.
     
-*   Modular arithmetic: `%/%` (integer divison) and `%%` (remainder).
+*   Modular arithmetic: `%/%` (integer divison) and `%%` (remainder), where
     `x == y * (x %/% y) + (x %% y)`. Modular arithmetic is a handy tool because 
     it allows you to break integers up into pieces. For example, in the 
     flights dataset, you can compute `hour` and `minute` from `dep_time` with:
@@ -463,26 +466,39 @@ There are many functions for creating new variables. The key property is that th
     All else being equal, I recommend using `log2()` because it's easy to
     interpret: an difference of 1 on the log scale corresponds to doubling on
     the original scale and a difference of -1 corresponds to halving.
-  
-*   Cumulative and rolling aggregates: R provides functions for running sums,
-    products, mins and maxes: `cumsum()`, `cumprod()`, `cummin()`, `cummax()`.
-    dplyr provides `cummean()` for cumulative means. If you need rolling
-    aggregates, try `RcppRoll`.
-  
-*   Logical comparisons, which you learned about earlier. If you're doing
-    a complex sequence of logical operations it's often a good idea to 
-    store the interim values in new variables so you can check that each
-    step is doing what you expect.
 
 *   Offsets: `lead()` and `lag()` allow you to refer to leading or lagging 
     values. This allows you to compute running differences (e.g. `x - lag(x)`) 
     or find when values change (`x != lag(x))`. They are most useful in 
     conjunction with `group_by()`, which you'll learn about shortly.
+  
+*   Cumulative and rolling aggregates: R provides functions for running sums,
+    products, mins and maxes: `cumsum()`, `cumprod()`, `cummin()`, `cummax()`.
+    dplyr provides `cummean()` for cumulative means. If you need rolling
+    aggregates (i.e. a sum computed over a rolling window), try the RcppRoll
+    package.
 
-*   Ranking: start with `min_rank()`. It does the most usual type of ranking 
+*   Logical comparisons, `<`, `<=`, `>`, `>=`, `!=`, which you learned about
+    earlier. If you're doing a complex sequence of logical operations it's 
+    often a good idea to store the interim values in new variables so you can
+    check that each step is doing what you expect.
+
+*   Ranking: there are a number of ranking functions, but you should 
+    start with `min_rank()`. It does the most usual type of ranking 
     (e.g. 1st, 2nd, 2nd, 4th). The default gives smallest values the small
     ranks; use `desc(x)` to give the largest values the smallest ranks. 
     
+    ```{r}
+    x <- c(1, 2, 2, NA, 3, 4)
+    data_frame(
+      row_number(x),
+      min_rank(x),
+      dense_rank(x),
+      percent_rank(x),
+      cume_dist(x)
+    ) %>% knitr::kable()
+    ```
+
     If `min_rank()` doesn't do what you need, look at the variants 
     `row_number()`, `dense_rank()`, `cume_dist()`, `percent_rank()`, 
     `ntile()`.
@@ -514,6 +530,10 @@ ggplot(flights, aes(air_time - airtime2)) + geom_histogram()
 1.  Compare `airtime` with `arr_time - dep_time`. What do you expect to see?
     What do you see? Why?
 
+1.  Find the 10 most delayed flights each day using a ranking function. 
+    How do you want to handle ties? Carefully read the documentation for
+    `min_rank()`.
+
 ## Grouped summaries with `summarise()`
 
 The last verb is `summarise()`. It collapses a data frame to a single row:
@@ -522,89 +542,16 @@ The last verb is `summarise()`. It collapses a data frame to a single row:
 summarise(flights, delay = mean(dep_delay, na.rm = TRUE))
 ```
 
-However, that's not terribly useful until we pair it with `group_by()`. This changes the unit of analysis from the complete dataset to individual groups. When you the dplyr verbs on a grouped data frame they'll be automatically applied "by group".
-
-Grouping lets us compute average delay per day:
+That's not terribly useful unless we pair it with `group_by()`. This changes the unit of analysis from the complete dataset to individual groups. When you the dplyr verbs on a grouped data frame they'll be automatically applied "by group". For example, if we applied exactly the same code to a data frame grouped by day, we get the average delay per day:
 
 ```{r}
 by_day <- group_by(flights, year, month, day)
 summarise(by_day, delay = mean(dep_delay, na.rm = TRUE))
 ```
 
-### Grouping by multiple variables
+Together `group_by()` and `summarise()` provide one of tools that you'll use most commonly when working with dplyr: groued summaries. But before we go any further with this idea, we need to introduce a powerful new idea: the pipe.
 
-When you group by multiple variables, each summary peels off one level of the grouping. That makes it easy to progressively roll-up a dataset:
-
-```{r}
-daily <- group_by(flights, year, month, day)
-(per_day   <- summarise(daily, flights = n()))
-(per_month <- summarise(per_day, flights = sum(flights)))
-(per_year  <- summarise(per_month, flights = sum(flights)))
-```
-
-However you need to be careful when progressively rolling up summaries like this: it's ok for sums and counts, but you need to think about weighting for means and variances, and it's not possible to do it exactly for medians.
-
-### Useful summaries
-
-You use `summarise()` with __aggregate functions__, which take a vector of values and return a single number. 
-
-* Location of "middle": `mean(x)`, `median(x)`. The mean is the sum divided
-  by the length; the median is a value where 50% of `x` is above, and 50% is
-  below.
-
-* Measure of spread: `sd(x)`, `IQR(x)`, `mad(x)`. The mean squared deviation,
-  or standard deviation or sd for short, is the standard measure of spread.
-  The interquartile range (`IQR()`) and median absolute deviation `mad(x)`
-  are robust equivalents that maybe more useful if you have outliers.
-
-* By rank: `min(x)`, `quantile(x, 0.25)`, `max(x)`.
-
-* By position: `first(x)`, `nth(x, 2)`, `last(x)`. These work similarly to 
-  `x[1]`, `x[length(x)]`, and `x[n]` but let you set a default value if that
-  position does not exist (i.e. you're trying to get the 3rd element from a 
-  group that only has two elements).
-
-* Counts: `n()`. This takes no arguments, and refers to the current group size.
-  To count the number of non-missing values, use `sum(!is.na(x))`. To count
-  the number of distinct (unique) values, use `n_distinct(x)`.
-
-* Counts and proportions of logical values: `sum(x > 10)`, `mean(y == 0)`
-  When used with numeric functions, `TRUE` is converted to 1 and `FALSE` to 0. 
-  This makes `sum()` and `mean()` particularly useful: `sum(x)` gives the number 
-  of `TRUE`s in `x`, and `mean(x)` gives the proportion.
-
-Aggregation functions generally obey the usual rules of missing values:
-
-```{r}
-mean(c(1, 5, 10, NA))
-```
-
-(`quantile()` is an exception - it throws an error if there are any missing values present). 
-
-To make life easier, all aggregation functions have an `na.rm` argument which removes the missing values prior to computation:
-
-```{r}
-mean(c(1, 5, 10, NA), na.rm = TRUE)
-```
-
-### Exercises
-
-1.  Brainstorm at least 5 different ways to assess the typically delay 
-    characteristics of a group of flights. Consider the following scenarios:
-    
-    * A flight is 15 minutes early 50% of the time, and 15 minutes late 50% of 
-      the time.
-      
-    * A flight is always 10 minutes late.
-
-    * A flight is 30 minutes early 50% of the time, and 30 minutes late 50% of 
-      the time.
-      
-    * 99% of the time a flight is on time. 1% of the time it's 2 hours late.
-    
-    Which is more important: arrival delay or departure delay?
-
-## Multiple operations
+### Combining multiple operations with the pipe
 
 Imagine we want to explore the relationship between the distance and average delay for each location. Using what you already know about dplyr, you might write code like this:
 
@@ -633,7 +580,9 @@ There are three steps:
 * Filter to remove noisy points and Honolulu airport which is almost
   twice as far away as the next closest airport.
 
-This code is a little frustraing to write because we have to give each intermediate data frame a name, even though we don't care about it. Naming things well is hard, so this slows us down. There's another way to tackle the same problem with the pipe, `%>%`:
+This code is a little frustraing to write because we have to give each intermediate data frame a name, even though we don't care about it. Naming things well is hard, so this slows us down. 
+
+There's another way to tackle the same problem with the pipe, `%>%`:
 
 ```{r}
 delays <- flights %>% 
@@ -650,13 +599,41 @@ This focuses on the transformations, not what's being transformed, which makes t
 
 Behind the scenes, `x %>% f(y)` turns into `f(x, y)` so you can use it to rewrite multiple operations that you can read left-to-right, top-to-bottom. We'll use piping frequently from now on because it considerably improves the readability of code, and we'll come back to it in more detail in Chapter XYZ.
 
-The pipe makes it easier to solve complex problems by joining together simple pieces. Each dplyr function does one thing well, helping you advance to your goal with one small step. You can check your work frequently, and if you get stuck, you just need to think: "what's one small thing I could do to advance towards a solution".
-
-Where does `%>%` come from.
-
 Most of the packages you'll learn through this book have been designed to work with the pipe (tidyr, dplyr, stringr, purrr, ...). The only exception is ggplot2: it was developed considerably before the discovery of the pipe. Unfortunately the next iteration of ggplot2, ggvis, which does use the pipe, isn't ready from prime time yet. 
 
-The rest of this section explores some practical uses of the pipe when combining multiple dplyr operations to solve real problems.
+### Missing values
+
+Back to making summaries: You use `summarise()` with __aggregate functions__, which take a vector of values and return a single number. 
+
+```{r}
+flights %>% 
+  group_by(year, month, day) %>% 
+  summarise(mean = mean(dep_delay), median = median(dep_delay))
+```
+
+Unfortunately this gives us a lot of missing vaules because aggregation functions generally obey the usual rules of missing values: if there's any missing value in the input, the output will be a missing value. Fortunately, all aggregation functions have an `na.rm` argument which removes the missing values prior to computation:
+
+```{r}
+flights %>% 
+  group_by(year, month, day) %>% 
+  summarise(
+    mean = mean(dep_delay, na.rm = TRUE), 
+    median = median(dep_delay, na.rm = TRUE)
+  )
+```
+
+In this case, where missing values represent cancelled flights, we could also tackle the problem by first removing the cancelled flights:
+
+```{r}
+not_cancelled <- filter(flights, !is.na(dep_time))
+
+not_cancelled %>% 
+  group_by(year, month, day) %>% 
+  summarise(
+    mean = mean(dep_delay), 
+    median = median(dep_delay)
+  )
+```
 
 ### Counts
 
@@ -675,7 +652,7 @@ ggplot(delays, aes(delay)) +
   geom_histogram(binwidth = 10)
 ```
 
-Wow, there are some flight with massive average delays. I sure wouldn't want to fly on one of those! 
+Wow, there are some flights with massive average delays. I sure wouldn't want to fly on one of those! 
 
 Actually, the story is a little more nuanced. If we also compute the number of non-missing delays for each flight and draw a scatterplot:
 
@@ -742,7 +719,128 @@ batters %>% arrange(desc(ba))
 
 You can find a good explanation of this problem at <http://varianceexplained.org/r/empirical_bayes_baseball/> and <http://www.evanmiller.org/how-not-to-sort-by-average-rating.html>.
 
-### Grouped mutates (and filters)
+### Other aggregation functions.
+
+There are many other useful aggregations:
+
+*   Measure of location: we've used `mean(x)`, but `median(x)` is also
+    useful.The mean is the sum divided by the length; the median is a value 
+    where 50% of `x` is above, and 50% is below.
+
+*   Measure of spread: `sd(x)`, `IQR(x)`, `mad(x)`. The mean squared deviation,
+    or standard deviation or sd for short, is the standard measure of spread.
+    The interquartile range (`IQR()`) and median absolute deviation `mad(x)`
+    are robust equivalents that maybe more useful if you have outliers.
+    
+    ```{r}
+    # Why is distance to some destinations more variable than others?
+    not_cancelled %>% 
+      group_by(dest) %>% 
+      summarise(distance_sd = sd(distance)) %>% 
+      arrange(desc(distance_sd))
+    ```
+  
+*   By rank: `min(x)`, `quantile(x, 0.25)`, `max(x)`.
+
+    ```{r}
+    # When do the first and last flights leave each day?
+    not_cancelled %>% 
+      group_by(year, month, day) %>% 
+      summarise(
+        first = min(dep_time),
+        last = max(dep_time)
+      )
+    ```
+  
+*   By position: `first(x)`, `nth(x, 2)`, `last(x)`. These work similarly to 
+    `x[1]`, `x[length(x)]`, and `x[n]` but let you set a default value if that
+    position does not exist (i.e. you're trying to get the 3rd element from a 
+    group that only has two elements).
+    
+*   Counts: `n()`. This takes no arguments, and refers to the current group size.
+    To count the number of non-missing values, use `sum(!is.na(x))`. To count
+    the number of distinct (unique) values, use `n_distinct(x)`.
+    
+    ```{r}
+    # Which destinations have the most carriers?
+    not_cancelled %>% 
+      group_by(dest) %>% 
+      summarise(carriers = n_distinct(carrier)) %>% 
+      arrange(desc(carriers))
+    ```
+    
+    Counts are so useful that dplyr provides a couple of helpers if all you
+    want is a count:
+    
+    ```{r}
+    not_cancelled %>% count(dest)
+    ```
+    
+    You can optionally provide a weight variable. For example, you could use 
+    this to "count" the total number of miles a plane flew
+    
+    ```{r}
+    not_cancelled %>% 
+      count(tailnum, wt = distance)
+    ```
+  
+*   Counts and proportions of logical values: `sum(x > 10)`, `mean(y == 0)`
+    When used with numeric functions, `TRUE` is converted to 1 and `FALSE` to 0. 
+    This makes `sum()` and `mean()` particularly useful: `sum(x)` gives the
+    number of `TRUE`s in `x`, and `mean(x)` gives the proportion.
+    
+    ```{r}
+    # How many flights left before 5am? (these usually indicate delayed
+    # flights from the previous day)
+    not_cancelled %>% 
+      group_by(year, month, day) %>% 
+      summarise(n_early = sum(dep_time < 500))
+    
+    # What proportion of flights are delayed by more than an hour?
+    not_cancelled %>% 
+      group_by(year, month, day) %>% 
+      summarise(hour_perc = mean(arr_delay > 60, na.rm = TRUE))
+    ```
+
+### Grouping by multiple variables
+
+When you group by multiple variables, each summary peels off one level of the grouping. That makes it easy to progressively roll-up a dataset:
+
+```{r}
+daily <- group_by(flights, year, month, day)
+(per_day   <- summarise(daily, flights = n()))
+(per_month <- summarise(per_day, flights = sum(flights)))
+(per_year  <- summarise(per_month, flights = sum(flights)))
+```
+
+However you need to be careful when progressively rolling up summaries like this: it's ok for sums and counts, but you need to think about weighting for means and variances, and it's not possible to do it exactly for medians.
+
+### Ungrouping
+
+`ungroup()`
+
+### Exercises
+
+1.  Brainstorm at least 5 different ways to assess the typically delay 
+    characteristics of a group of flights. Consider the following scenarios:
+    
+    * A flight is 15 minutes early 50% of the time, and 15 minutes late 50% of 
+      the time.
+      
+    * A flight is always 10 minutes late.
+
+    * A flight is 30 minutes early 50% of the time, and 30 minutes late 50% of 
+      the time.
+      
+    * 99% of the time a flight is on time. 1% of the time it's 2 hours late.
+    
+    Which is more important: arrival delay or departure delay?
+
+1.  Which carrier has the worst delays? Challenge: can you disentangle the
+    effects of bad airports vs. bad carriers? Why/why not? (Hint: think about
+    `flights %>% group_by(carrier, dest) %>% summarise(n())`)
+
+## Grouped mutates (and filters)
 
 Grouping is definitely most useful in conjunction with `summarise()`, but you can also do convenient operations with `mutate()` and `filter()`:
 
@@ -772,7 +870,7 @@ Grouping is definitely most useful in conjunction with `summarise()`, but you ca
 
 A grouped filter is basically like a grouped mutate followed by an ungrouped filter. I generally avoid them except for quick and dirty manipulations. Otherwise it's too hard to check that you've done the manipulation correctly.
 
-Function that work most naturally in grouped mutates and filtered are known as  window functions (vs. aggregate or summary functions used in grouped summaries). You can learn more about useful window functions in the corresponding vignette: `vignette("window-functions")`.
+Functions that work most naturally in grouped mutates and filters are known as  window functions (vs. aggregate or summary functions used in grouped summaries). You can learn more about useful window functions in the corresponding vignette: `vignette("window-functions")`.
 
 ### Exercises
 
@@ -802,9 +900,9 @@ It's rare that a data analysis involves only a single table of data. In practice
 * Set operations, which combine the observations in the data sets as if they 
   were set elements.
 
-(This discussion assumes that you have [tidy data](http://www.jstatsoft.org/v59/i10/), where the rows are observations and the columns are variables. If you're not familiar with that framework, I'd recommend reading up on it first.)
+If you've used SQL before you're probably familiar with the mutating joins (these are the classic left join, right join, etc), but you might not know about the filtering joins (semi and anti joins) or the set operations.
 
-All two-table verbs work similarly. The first two arguments are `x` and `y`, and provide the tables to combine. The output is always a new table with the same type as `x`.
+All two-table verbs work similarly. The first two arguments are the two data frames to combine, and the output is always a new data frame. If you don't specify the details of the join, dplyr will guess based on the common variables, and will print a message. If you want to suppress that message, supply more arguments.
 
 ### Mutating joins
 
@@ -830,7 +928,7 @@ As well as `x` and `y`, each mutating join takes an argument `by` that controls 
     ```{r}
     flights2 %>% left_join(weather)
     ```
-
+    
   * A character vector, `by = "x"`. Like a natural join, but uses only 
     some of the common variables. For example, `flights` and `planes` have 
     `year` columns, but they mean different things so we only want to join by 
@@ -891,11 +989,17 @@ There are four types of mutating join, which differ in their behaviour when a ma
     df1 %>% full_join(df2)
     ```
 
-The left, right and full joins are collectively know as __outer joins__. When a row doesn't match in an outer join, the new variables are filled in with missing values.
+The left, right and full joins are collectively known as __outer joins__. When a row doesn't match in an outer join, the new variables are filled in with missing values.
 
-#### Observations
+--------------------------------------------------------------------------------
 
-While mutating joins are primarily used to add new variables, they can also generate new observations. If a match is not unique, a join will add all possible combinations (the Cartesian product) of the matching observations:
+`base::merge()` can mimic all four types of join. The advantages of the specific dplyr verbs is that they more clearly convey the intent of your code (the difference between the joins is really important but concealed in the arguments of `merge()`). dplyr's joins are also much faster than `merge()` and don't mess with the order of the rows.
+
+--------------------------------------------------------------------------------
+
+#### New observations
+
+While mutating joins are primarily used to add new variables, they can also generate new "observations". If a match is not unique, a join will add all possible combinations (the Cartesian product) of the matching observations:
 
 ```{r}
 df1 <- data_frame(x = c(1, 1, 2), y = 1:3)
@@ -918,6 +1022,8 @@ flights %>%
   anti_join(planes, by = "tailnum") %>% 
   count(tailnum, sort = TRUE)
 ```
+
+(Can you spot the commonality amongst these tail numbers? What does a tailnum of `""` represent?)
 
 If you're worried about what observations your joins will match, start with a `semi_join()` or `anti_join()`. `semi_join()` and `anti_join()` never duplicate; they only ever remove observations. 
 
@@ -958,71 +1064,4 @@ setdiff(df1, df2)
 setdiff(df2, df1)
 ```
 
-### Databases
-
-Each two-table verb has a straightforward SQL equivalent:
-
-| R                | SQL
-|------------------|--------
-| `inner_join()`   | `SELECT * FROM x JOIN y ON x.a = y.a`
-| `left_join()`    | `SELECT * FROM x LEFT JOIN y ON x.a = y.a`
-| `right_join()`   | `SELECT * FROM x RIGHT JOIN y ON x.a = y.a`
-| `full_join()`    | `SELECT * FROM x FULL JOIN y ON x.a = y.a`
-| `semi_join()`    | `SELECT * FROM x WHERE EXISTS (SELECT 1 FROM y WHERE x.a = y.a)`
-| `anti_join()`    | `SELECT * FROM x WHERE NOT EXISTS (SELECT 1 FROM y WHERE x.a = y.a)`
-| `intersect(x, y)`| `SELECT * FROM x INTERSECT SELECT * FROM y`
-| `union(x, y)`    | `SELECT * FROM x UNION SELECT * FROM y`
-| `setdiff(x, y)`  | `SELECT * FROM x EXCEPT SELECT * FROM y`
-
-`x` and `y` don't have to be tables in the same database. If you specify `copy = TRUE`, dplyr will copy the `y` table into the same location as the `x` variable. This is useful if you've downloaded a summarised dataset and determined a subset of interest that you now want the full data for. You can use `semi_join(x, y, copy = TRUE)` to upload the indices of interest to a temporary table in the same database as `x`, and then perform a efficient semi join in the database. 
-
-If you're working with large data, it maybe also be helpful to set `auto_index = TRUE`. That will automatically add an index on the join variables to the temporary table.
-
-### Coercion rules
-
-When joining tables, dplyr is a little more conservative than base R about the types of variable that it considers equivalent. This is mostly likely to surprise if you're working factors:
-
-  * Factors with different levels are coerced to character with a warning:
-    
-    ```{r}
-    df1 <- data_frame(x = 1, y = factor("a"))
-    df2 <- data_frame(x = 2, y = factor("b"))
-    full_join(df1, df2) %>% str()
-    ```
-
-  * Factors with the same levels in a different order are coerced to character 
-    with a warning:
-  
-    ```{r}
-    df1 <- data_frame(x = 1, y = factor("a", levels = c("a", "b")))
-    df2 <- data_frame(x = 2, y = factor("b", levels = c("b", "a")))
-    full_join(df1, df2) %>% str()
-    ```
-
-  * Factors are preserved only if the levels match exactly:
-    
-    ```{r}
-    df1 <- data_frame(x = 1, y = factor("a", levels = c("a", "b")))
-    df2 <- data_frame(x = 2, y = factor("b", levels = c("a", "b")))
-    full_join(df1, df2) %>% str()
-    ```    
-
-  * A factor and a character are coerced to character with a warning:
-    
-    ```{r}
-    df1 <- data_frame(x = 1, y = "a")
-    df2 <- data_frame(x = 2, y = factor("a"))
-    full_join(df1, df2) %>% str()
-    ```
-    
-Otherwise logicals will be silently upcast to integer, and integer to numeric, but coercing to character will raise an error:
-
-```{r, error = TRUE}
-df1 <- data_frame(x = 1, y = 1L)
-df2 <- data_frame(x = 2, y = 1.5)
-full_join(df1, df2) %>% str()
-
-df1 <- data_frame(x = 1, y = 1L)
-df2 <- data_frame(x = 2, y = "a")
-full_join(df1, df2) %>% str()
-```
+These are the least commonly used two-table operations. They can be useful to break a single complex filtering operation into simpler pieces.
