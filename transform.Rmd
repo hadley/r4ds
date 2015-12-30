@@ -603,72 +603,66 @@ Most of the packages you'll learn through this book have been designed to work w
 
 ### Missing values
 
-Back to making summaries: You use `summarise()` with __aggregate functions__, which take a vector of values and return a single number. 
+You may have wondered about the `na.rm` argument we used above. What happens if we don't set it?
 
 ```{r}
 flights %>% 
   group_by(year, month, day) %>% 
-  summarise(mean = mean(dep_delay), median = median(dep_delay))
+  summarise(mean = mean(dep_delay))
 ```
 
-Unfortunately this gives us a lot of missing vaules because aggregation functions generally obey the usual rules of missing values: if there's any missing value in the input, the output will be a missing value. Fortunately, all aggregation functions have an `na.rm` argument which removes the missing values prior to computation:
+We get a lot of missing values! That's because aggregation functions obey the usual rule of missing values: if there's any missing value in the input, the output will be a missing value. Fortunately, all aggregation functions have an `na.rm` argument which removes the missing values prior to computation:
 
 ```{r}
 flights %>% 
   group_by(year, month, day) %>% 
-  summarise(
-    mean = mean(dep_delay, na.rm = TRUE), 
-    median = median(dep_delay, na.rm = TRUE)
-  )
+  summarise(mean = mean(dep_delay, na.rm = TRUE))
 ```
 
 In this case, where missing values represent cancelled flights, we could also tackle the problem by first removing the cancelled flights:
 
 ```{r}
-not_cancelled <- filter(flights, !is.na(dep_time))
+not_cancelled <- filter(flights, !is.na(dep_delay), !is.na(arr_delay))
 
 not_cancelled %>% 
   group_by(year, month, day) %>% 
-  summarise(
-    mean = mean(dep_delay), 
-    median = median(dep_delay)
-  )
+  summarise(mean = mean(dep_delay))
 ```
 
 ### Counts
 
 Whenever you do any aggregation, it's always a good idea to include either a count (`n()`), or a count of non-missing values (`sum(!is.na(x))`). That way you can check that you're not drawing conclusions based on very small amounts of data amount of non-missing data.
 
-For example, let's look at the flights that have the highest average delays:
+For example, let's look at the planes (identified by their tail number) that have the highest average delays:
 
 ```{r}
-delays <- flights %>% 
-  group_by(flight) %>% 
+delays <- not_cancelled %>% 
+  group_by(tailnum) %>% 
   summarise(
-    delay = mean(arr_delay, na.rm = TRUE)
+    delay = mean(arr_delay), n()
   )
 
 ggplot(delays, aes(delay)) + 
   geom_histogram(binwidth = 10)
 ```
 
-Wow, there are some flights with massive average delays. I sure wouldn't want to fly on one of those! 
+Wow, there are some planes that have an _average_ delay of 5 hours!
 
-Actually, the story is a little more nuanced. If we also compute the number of non-missing delays for each flight and draw a scatterplot:
+The story is actually a little more nuanced. We can get more insight if we draw a scatterplot of number of flights vs. average delay:
 
 ```{r}
-delays <- flights %>% 
-  group_by(flight) %>% 
+delays <- not_cancelled %>% 
+  group_by(tailnum) %>% 
   summarise(
     delay = mean(arr_delay, na.rm = TRUE),
-    n = sum(!is.na(arr_delay))
+    n = n()
   )
 
 ggplot(delays, aes(n, delay)) + 
   geom_point()
 ```
 
-You'll see that most of the very delayed flight numbers happen very rarely. The shape of this plot is very characteristic: whenever you plot a mean (or many other summaries) vs number of observations, you'll see that the variation decreases as the sample size increases.
+Not suprisingly, there is much more variation in the average delay when there are few flights. The shape of this plot is very characteristic: whenever you plot a mean (or many other summaries) vs number of observations, you'll see that the variation decreases as the sample size increases.
 
 When looking at this sort of plot, it's often useful to filter out the groups with the smallest numbers of observations, so you can see more of the pattern and less of the extreme variation in the smallest groups. This what the following code does, and also shows you a handy pattern for integrating ggplot2 into dplyr flows. It's a bit painful that you have to switch from `%>%` to `+`, but once you get the hang of it, it's quite convenient.
 
@@ -690,9 +684,8 @@ There's another common variation of this type of pattern. Let's look at how the 
 1.  As above, the variation in our aggregate decreases as we get more 
     data points.
     
-2.  There's a correlation between skill and n. This is because baseball
-    teams controls who gets to try and hit the ball, and obviously they'll
-    pick their best players.
+2.  There's a positive correlation between skill and n. This is because teams
+    control who gets to play, and obviously they'll pick their best players.
 
 ```{r}
 batting <- tbl_df(Lahman::Batting)
@@ -719,13 +712,26 @@ batters %>% arrange(desc(ba))
 
 You can find a good explanation of this problem at <http://varianceexplained.org/r/empirical_bayes_baseball/> and <http://www.evanmiller.org/how-not-to-sort-by-average-rating.html>.
 
-### Other aggregation functions.
+### Other summary functions.
 
-There are many other useful aggregations:
+Just using means, counts, and sum can get you a long way, but R provides many other useful summary functions:
 
 *   Measure of location: we've used `mean(x)`, but `median(x)` is also
     useful.The mean is the sum divided by the length; the median is a value 
     where 50% of `x` is above, and 50% is below.
+    
+    It's sometimes useful to combine aggregation with logical subsetting:
+    
+    ```{r}
+    not_cancelled %>% 
+      group_by(year, month, day) %>% 
+      summarise(
+        avg_delay1 = mean(arr_delay),
+        avg_delay2 = mean(arr_delay[arr_delay > 0])
+      )
+    ```
+    
+     mean(arr_delay[arr_delay > 0])
 
 *   Measure of spread: `sd(x)`, `IQR(x)`, `mad(x)`. The mean squared deviation,
     or standard deviation or sd for short, is the standard measure of spread.
@@ -755,11 +761,27 @@ There are many other useful aggregations:
 *   By position: `first(x)`, `nth(x, 2)`, `last(x)`. These work similarly to 
     `x[1]`, `x[length(x)]`, and `x[n]` but let you set a default value if that
     position does not exist (i.e. you're trying to get the 3rd element from a 
-    group that only has two elements).
+    group that only has two elements). 
     
-*   Counts: `n()`. This takes no arguments, and refers to the current group size.
-    To count the number of non-missing values, use `sum(!is.na(x))`. To count
-    the number of distinct (unique) values, use `n_distinct(x)`.
+    These functions are complementary to filtering on ranks. Filtering gives
+    you all variables, which each observation in a separate row. Summarising
+    gives you one row per group, with multiple variables:
+    
+    ```{r}
+    not_cancelled %>% 
+      group_by(year, month, day) %>% 
+      mutate(r = rank(desc(dep_time))) %>% 
+      filter(r %in% c(1, n()))
+    
+    not_cancelled %>% 
+      group_by(year, month, day) %>% 
+      summarise(first_dep = first(dep_time), last_dep = last(dep_time))
+    ```
+
+*   Counts: You've seen `n()`, which takes no arguments, and returns the 
+    size of the current group. To count the number of non-missing values, use
+    `sum(!is.na(x))`. To count the number of distinct (unique) values, use
+    `n_distinct(x)`.
     
     ```{r}
     # Which destinations have the most carriers?
@@ -769,15 +791,15 @@ There are many other useful aggregations:
       arrange(desc(carriers))
     ```
     
-    Counts are so useful that dplyr provides a couple of helpers if all you
-    want is a count:
+    Counts are so useful that dplyr provides a helper if all you want is a 
+    count:
     
     ```{r}
     not_cancelled %>% count(dest)
     ```
     
     You can optionally provide a weight variable. For example, you could use 
-    this to "count" the total number of miles a plane flew
+    this to "count" (sum) the total number of miles a plane flew:
     
     ```{r}
     not_cancelled %>% 
@@ -813,11 +835,11 @@ daily <- group_by(flights, year, month, day)
 (per_year  <- summarise(per_month, flights = sum(flights)))
 ```
 
-However you need to be careful when progressively rolling up summaries like this: it's ok for sums and counts, but you need to think about weighting for means and variances, and it's not possible to do it exactly for medians.
+Becareful when progressively rolling up summaries: it's ok for sums and counts, but you need to think about weighting for means and variances, and it's not possible to do it exactly for rank-based statistics like the median (i.e. the sum of groupwise sums is the overall sum, but the median of groupwise medians is not the overall median).
 
 ### Ungrouping
 
-`ungroup()`
+If you need to remove grouping, and return to operations on ungrouped data, use `ungroup()`. 
 
 ### Exercises
 
@@ -836,13 +858,16 @@ However you need to be careful when progressively rolling up summaries like this
     
     Which is more important: arrival delay or departure delay?
 
+1.  Look at the number of cancelled flights per day. Is there are pattern?
+    Is the proportion of cancelled flights related to the average delay?
+
 1.  Which carrier has the worst delays? Challenge: can you disentangle the
     effects of bad airports vs. bad carriers? Why/why not? (Hint: think about
     `flights %>% group_by(carrier, dest) %>% summarise(n())`)
 
 ## Grouped mutates (and filters)
 
-Grouping is definitely most useful in conjunction with `summarise()`, but you can also do convenient operations with `mutate()` and `filter()`:
+Grouping is most useful in conjunction with `summarise()`, but you can also do convenient operations with `mutate()` and `filter()`:
 
 *   Find the worst members of each group:
 
@@ -868,9 +893,9 @@ Grouping is definitely most useful in conjunction with `summarise()`, but you ca
       mutate(prop_delay = arr_delay / sum(arr_delay))
     ```
 
-A grouped filter is basically like a grouped mutate followed by an ungrouped filter. I generally avoid them except for quick and dirty manipulations. Otherwise it's too hard to check that you've done the manipulation correctly.
+A grouped filter is a grouped mutate followed by an ungrouped filter. I generally avoid them except for quick and dirty manipulations: otherwise it's hard to check that you've done the manipulation correctly.
 
-Functions that work most naturally in grouped mutates and filters are known as  window functions (vs. aggregate or summary functions used in grouped summaries). You can learn more about useful window functions in the corresponding vignette: `vignette("window-functions")`.
+Functions that work most naturally in grouped mutates and filters are known as  window functions (vs. summary functions used for summaries). You can learn more about useful window functions in the corresponding vignette: `vignette("window-functions")`.
 
 ### Exercises
 
@@ -891,14 +916,13 @@ Functions that work most naturally in grouped mutates and filters are known as  
 
 It's rare that a data analysis involves only a single table of data. In practice, you'll normally have many tables that contribute to an analysis, and you need flexible tools to combine them. In dplyr, there are three families of verbs that work with two tables at a time:
 
-* Mutating joins, which add new variables to one table from matching rows in 
-  another.
+* Mutating joins, which add new variables to one data frame from matching rows 
+  in another.
 
-* Filtering joins, which filter observations from one table based on whether or 
-  not they match an observation in the other table.
+* Filtering joins, which filter observations from one data frame based on 
+  whether or not they match an observation in the other table.
 
-* Set operations, which combine the observations in the data sets as if they 
-  were set elements.
+* Set operations, which treat observations like they were set elements.
 
 If you've used SQL before you're probably familiar with the mutating joins (these are the classic left join, right join, etc), but you might not know about the filtering joins (semi and anti joins) or the set operations.
 
@@ -989,6 +1013,12 @@ There are four types of mutating join, which differ in their behaviour when a ma
     df1 %>% full_join(df2)
     ```
 
+Or visually:
+
+```{r, echo = FALSE}
+knitr::include_graphics("diagrams/transform-joins.png")
+```
+
 The left, right and full joins are collectively known as __outer joins__. When a row doesn't match in an outer join, the new variables are filled in with missing values.
 
 --------------------------------------------------------------------------------
@@ -999,7 +1029,7 @@ The left, right and full joins are collectively known as __outer joins__. When a
 
 #### New observations
 
-While mutating joins are primarily used to add new variables, they can also generate new "observations". If a match is not unique, a join will add all possible combinations (the Cartesian product) of the matching observations:
+Note that mutating joins are primarily used to add new variables, but they can also generate new "observations". If a match is not unique, a join will add all possible combinations (the Cartesian product) of the matching observations:
 
 ```{r}
 df1 <- data_frame(x = c(1, 1, 2), y = 1:3)
@@ -1008,6 +1038,27 @@ df2 <- data_frame(x = c(1, 1, 2), z = c("a", "b", "a"))
 df1 %>% left_join(df2)
 ```
 
+#### Exercises
+
+1.  Compute the average delay by destination, then join on the `airports`
+    data frame so you can show the spatial distribution of delays.
+    
+1.  What happened on June 13 2013? Display the spatial pattern of delays,
+    and then use google to cross-reference with the weather.
+    
+    ```{r, eval = FALSE, include = FALSE}
+    worst <- filter(not_cancelled, month == 6, day == 13)
+    worst %>% 
+      group_by(dest) %>% 
+      summarise(delay = mean(arr_delay), n = n()) %>% 
+      filter(n > 5) %>% 
+      inner_join(airports, by = c("dest" = "faa")) %>% 
+      ggplot(aes(lon, lat)) +
+        borders("state") +
+        geom_point(aes(size = n, colour = delay)) +
+        coord_quickmap()
+    ```
+
 ### Filtering joins
 
 Filtering joins match obserations in the same way as mutating joins, but affect the observations, not the variables. There are two types:
@@ -1015,7 +1066,17 @@ Filtering joins match obserations in the same way as mutating joins, but affect 
 * `semi_join(x, y)` __keeps__ all observations in `x` that have a match in `y`.
 * `anti_join(x, y)` __drops__ all observations in `x` that have a match in `y`.
 
-These are most useful for diagnosing join mismatches. For example, there are many flights in the nycflights13 dataset that don't have a matching tail number in the planes table:
+Semi joins are useful when you've summarised and filtered, and then want to match back up to the original data. For example, say you only want to look at flights to the top 10 destinations:
+
+```{r}
+top_dest <- flights %>% 
+  count(dest, sort = TRUE) %>%
+  head(10)
+
+flights %>% semi_join(top_dest)
+```
+
+Anti joins are useful for diagnosing join mismatches. For example, there are many flights in the nycflights13 dataset that don't have a matching tail number in the planes table:
 
 ```{r}
 flights %>% 
@@ -1023,21 +1084,10 @@ flights %>%
   count(tailnum, sort = TRUE)
 ```
 
-(Can you spot the commonality amongst these tail numbers? What does a tailnum of `""` represent?)
+#### Exercises
 
-If you're worried about what observations your joins will match, start with a `semi_join()` or `anti_join()`. `semi_join()` and `anti_join()` never duplicate; they only ever remove observations. 
-
-```{r}
-df1 <- data_frame(x = c(1, 1, 3, 4), y = 1:4)
-df2 <- data_frame(x = c(1, 1, 2), z = c("a", "b", "a"))
-
-# Four rows to start with:
-df1 %>% nrow()
-# And we get four rows after the join
-df1 %>% inner_join(df2, by = "x") %>% nrow()
-# But only two rows actually match
-df1 %>% semi_join(df2, by = "x") %>% nrow()
-```
+1.  What does a tailnum of `""` represent? What do all tail numbers that don't
+    have matching records in `planes` have in common?
 
 ### Set operations
 
