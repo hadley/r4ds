@@ -10,7 +10,7 @@ library(dplyr)
 library(nycflights13)
 library(ggplot2)
 source("common.R")
-options(dplyr.print_min = 6)
+options(dplyr.print_min = 6, dplyr.print_max = 6)
 knitr::opts_chunk$set(fig.path = "figures/")
 ```
 
@@ -146,33 +146,50 @@ Together these properties make it easy to chain together multiple simple steps t
 filter(flights, month == 1, day == 1)
 ```
 
+--------------------------------------------------------------------------------
+
+This is equivalent to the more verbose base code:
+
+```{r, eval = FALSE}
+flights[flights$month == 1 & flights$day == 1 & 
+  !is.na(flights$month) & !is.na(flights$day), , drop = FALSE]
+```
+
+Or to:
+
+```{r, eval = FALSE}
+subset(flights, month == 1 & day == 1)
+```
+
+`filter()` works similarly to `subset()` except that you can give it any number of filtering conditions, which are joined together with `&`. 
+
+--------------------------------------------------------------------------------
+
 When you run this line of code, dplyr executes the filtering operation and returns a new data frame. dplyr functions never modify their inputs, so if you want to save the results, you'll need to use the assignment operator `<-`:
 
 ```{r}
 jan1 <- filter(flights, month == 1, day == 1)
 ```
 
---------------------------------------------------------------------------------
+R either prints out the results, or saves them to a variable. If you want to do both, surround the assignment in parentheses:
 
-This is equivalent to the more verbose base code:
-
-```{r, eval = FALSE}
-flights[flights$month == 1 & flights$day == 1, , drop = FALSE]
+```{r}
+(dec25 <- filter(flights, month == 12, day == 25))
 ```
-
-(Although `filter()` will also drop missings). `filter()` works similarly to `subset()` except that you can give it any number of filtering conditions, which are joined together with `&`. 
-
---------------------------------------------------------------------------------
 
 ### Comparisons
 
-R provides the standard suite of numeric comparison operators: `>`, `>=`, `<`, `<=`, `!=` (not equal), and `==` (equal). When you're starting out with R, the easiest mistake to make is to use `=` instead of `==` when testing for equality. When this happens you'll get a somewhat uninformative error:
+R provides the standard suite of numeric comparison operators: `>`, `>=`, `<`, `<=`, `!=` (not equal), and `==` (equal). 
+
+When you're starting out with R, the easiest mistake to make is to use `=` instead of `==` when testing for equality. When this happens you'll get a somewhat uninformative error:
 
 ```{r, error = TRUE}
 filter(flights, month = 1)
 ```
 
-But beware using `==` with floating point numbers:
+Whenever you see this message, check for `=` instead of `==`.
+
+Beware using `==` with floating point numbers:
 
 ```{r}
 sqrt(2) ^ 2 == 2
@@ -914,7 +931,18 @@ Functions that work most naturally in grouped mutates and filters are known as  
 
 ## Multiple tables of data
 
-It's rare that a data analysis involves only a single table of data. In practice, you'll normally have many tables that contribute to an analysis, and you need flexible tools to combine them. In dplyr, there are three families of verbs that work with two tables at a time:
+It's rare that a data analysis involves only a single table of data. In practice, you'll normally have many tables that contribute to an analysis, and you need flexible tools to combine them. For example nycflights13 has four additional data frames that you might want to combine with `flights`:
+
+* `airlines`: a lookup table from carrier code to full airline name
+
+* `planes`: information about each plane, identified by `tailnum`
+
+* `airports`: information about each airport, identified by the `faa` airport
+  code
+
+* `weather`: the weather at each airport for each hour.
+
+There are three families of verbs that let you combine two data frames:
 
 * Mutating joins, which add new variables to one data frame from matching rows 
   in another.
@@ -930,24 +958,41 @@ All two-table verbs work similarly. The first two arguments are the two data fra
 
 ### Mutating joins
 
-Mutating joins allow you to combine variables from multiple tables. For example, take the nycflights13 data. In one table we have flight information with an abbreviation for carrier, and in another we have a mapping between abbreviations and full names. You can use a join to add the carrier names to the flight data:
+Mutating joins allow you to combine variables from multiple tables. For example, imagine you want to add the full airline name to the `flights` data. You can join the `airlines` and `carrier` data frames:
 
 ```{r}
 # Drop unimportant variables so it's easier to understand the join results.
 flights2 <- flights %>% select(year:day, hour, origin, dest, tailnum, carrier)
 
+flights2
+airlines
+
 flights2 %>% 
   left_join(airlines)
 ```
 
-#### Controlling how the tables are matched
+The result of joining airlines on to flights is an additional variable: carrier. This is why I call this type of join a mutating join.
 
-As well as `x` and `y`, each mutating join takes an argument `by` that controls which variables are used to match observations in the two tables. There are a few ways to specify it, as I illustrate below with various tables from nycflights13:
+There are two important properties of the join:
 
-  * `NULL`, the default. dplyr will will use all variables that appear in 
-    both tables, a __natural__ join. For example, the flights and 
-    weather tables match on their common variables: year, month, day, hour and 
-    origin.
+* What variables are used to connect the two data frames. In this case,
+  the data frames are joined by `carrier` (as indicated by the helpful) 
+  message. That meanes for each observation in `flights`, the matching
+  airline is found by looking up `carrier`. You can match by multiple columns,
+  and the columns don't need to have the same name in both tables, as 
+  described in [controlling matching](#join-by).
+  
+* How non-matches are handled. Here we used a left join which means it 
+  keeps all the rows on the lefthand side whether or not there's a match to
+  the right hand side. [Types of join](#join-type) describes the four options.
+
+#### Controlling how the tables are matched {#join-by}
+
+As well as `x` and `y`, each mutating join takes an argument `by` that controls which variables are used to match observations in the two tables. There are a few ways to specify it, as illustrated below:
+
+  * The default `by = NULL` will use all variables that appear in both tables, 
+    a so called __natural__ join. For example, the flights and weather tables 
+    match on their common variables: year, month, day, hour and origin.
     
     ```{r}
     flights2 %>% left_join(weather)
@@ -962,33 +1007,37 @@ As well as `x` and `y`, each mutating join takes an argument `by` that controls 
     flights2 %>% left_join(planes, by = "tailnum")
     ```
     
-    Note that the year columns in the output are disambiguated with a suffix.
+    Note that the year columns (which appear in both input data frames,
+    but are not constrained to be equal) are disambiguated in the output with 
+    a suffix.
 
   * A named character vector: `by = c("x" = "a")`. This will
     match variable `x` in table `x` to variable `a` in table `b`. The 
     variables from use will be used in the output.
     
-    Each flight has an origin and destination `airport`, so we need to specify
-    which one we want to join to:
+    For example, if we want to draw a map we need to combine the flights data
+    with the airports data which contains the location (`lat` and `long`) of
+    each airport. Each flight has an origin and destination `airport`, so we 
+    need to specify which one we want to join to:
     
     ```{r}
     flights2 %>% left_join(airports, c("dest" = "faa"))
     flights2 %>% left_join(airports, c("origin" = "faa"))
     ```
 
-#### Types of join
+#### Types of join {#join-type}
 
 There are four types of mutating join, which differ in their behaviour when a match is not found. We'll illustrate each with a simple example:
 
 ```{r}
-(df1 <- data_frame(x = c(1, 2), y = 2:1))
-(df2 <- data_frame(x = c(1, 3), a = 10, b = "a"))
+(df1 <- data_frame(x = c(1, 2), y = "y"))
+(df2 <- data_frame(x = c(1, 3), z = "z"))
 ```
 
   * `inner_join(x, y)` only includes observations that match in both `x` and `y`.
     
     ```{r}
-    df1 %>% inner_join(df2) %>% knitr::kable()
+    df1 %>% inner_join(df2)
     ```
     
   * `left_join(x, y)` includes all observations in `x`, regardless of whether
@@ -998,16 +1047,20 @@ There are four types of mutating join, which differ in their behaviour when a ma
     ```{r}
     df1 %>% left_join(df2)
     ```
+    
+    Note that values that correspond to missing observations are filled in 
+    with `NA`.
   
-  * `right_join(x, y)` includes all observations in `y`. It's equivalent to 
-    `left_join(y, x)`, but the columns will be ordered differently.
+  * `right_join(x, y)` includes all observations in `y`.
   
     ```{r}
     df1 %>% right_join(df2)
-    df2 %>% left_join(df1)
     ```
+    
+    `right_join(x, y)` gives the same output as `left_join(y, x)`, but the
+    columns  are ordered differently.
 
-* `full_join()` includes all observations from `x` and `y`.
+* `full_join()` includes all observations from either `x` or `y`.
 
     ```{r}
     df1 %>% full_join(df2)
@@ -1086,8 +1139,8 @@ flights %>%
 
 #### Exercises
 
-1.  What does a tailnum of `""` represent? What do all tail numbers that don't
-    have matching records in `planes` have in common?
+1.  What does it mean is a flight has a missing `tailnum`? What do the tail
+    numbers that don't have a matching record in `planes` have in common?
 
 ### Set operations
 
