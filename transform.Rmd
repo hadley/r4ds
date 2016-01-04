@@ -39,10 +39,9 @@ The dplyr package makes these steps fast and easy:
 
 In this chapter you'll learn the key verbs of dplyr in the context of a new dataset on flights departing New York City in 2013.
 
-## Data: nycflights13
+## nycflights13
 
-To explore the basic data manipulation verbs of dplyr, we'll start with the built in
-`nycflights13` data frame. This dataset contains all `r format(nrow(nycflights13::flights), big.mark = ",")` flights that departed from New York City in 2013. The data comes from the US [Bureau of Transportation Statistics](http://www.transtats.bts.gov/DatabaseInfo.asp?DB_ID=120&Link=0), and is documented in `?nycflights13`.
+To explore the basic data manipulation verbs of dplyr, we'll use the `flights` data frame from the nycflights13 package. This data frame contains all `r format(nrow(nycflights13::flights), big.mark = ",")` flights that departed from New York City in 2013. The data comes from the US [Bureau of Transportation Statistics](http://www.transtats.bts.gov/DatabaseInfo.asp?DB_ID=120&Link=0), and is documented in `?nycflights13`.
 
 ```{r}
 library(dplyr)
@@ -50,7 +49,7 @@ library(nycflights13)
 flights
 ```
 
-The first important thing to notice about this dataset is that it prints a little differently to most data frames: it only shows the first ten rows and all the columns that fit on one screen. If you want to see the whole dataset, use `View()` which will open the dataset in the RStudio viewer.
+The first important thing to notice about this dataset is that it prints a little differently to most data frames: it only shows the first few rows and all the columns that fit on one screen. If you want to see the whole dataset, use `View()` which will open the dataset in the RStudio viewer.
 
 It also prints an abbreviated description of the column type:
 
@@ -58,8 +57,6 @@ It also prints an abbreviated description of the column type:
 * dbl: double (real)
 * chr: character
 * lgl: logical
-* date: dates
-* time: times
 
 It prints differently because it has a different "class" to usual data frames:
 
@@ -67,7 +64,7 @@ It prints differently because it has a different "class" to usual data frames:
 class(flights)
 ```
 
-This is called a `tbl_df` (prounced tibble diff) or a `data_frame` (pronunced "data underscore frame"; cf. `data dot frame`)
+This is called a `tbl_df` (prounced tibble diff) or a `data_frame` (pronunced "data underscore frame"; cf. `data dot frame`). Generally, however, we want worry about this relatively minor difference and will refer to everything as data frames.
 
 You'll learn more about how that works in data structures. If you want to convert your own data frames to this special case, use `as.data_frame()`. I recommend it for large data frames as it makes interactive exploration much less painful.
 
@@ -114,10 +111,10 @@ There are two other important differences between tbl_dfs and data.frames:
     ```
 
 --------------------------------------------------------------------------------
-    
+
 ## Dplyr verbs
 
-At the most basic level, you can only alter a tidy data frame in five useful ways: 
+There are five dplyr functions that you will use to do the vast majority of data manipulations:
 
 * reorder the rows (`arrange()`), 
 * pick observations by their values (`filter()`),
@@ -125,7 +122,7 @@ At the most basic level, you can only alter a tidy data frame in five useful way
 * create new variables with functions of existing variables (`mutate()`), or
 * collapse many values down to a single summary (`summarise()`).
 
-These can all be used in conjunction with `group_by()` which changes the scope of each function from operating on the entire dataset to operating on it group-by-group. These six functions verbs for a language of data manipulation.
+These can all be used in conjunction with `group_by()` which changes the scope of each function from operating on the entire dataset to operating on it group-by-group. These six functions the provide the verbs for a language of data manipulation.
 
 All verbs work similarly: 
 
@@ -155,7 +152,7 @@ flights[flights$month == 1 & flights$day == 1 &
   !is.na(flights$month) & !is.na(flights$day), , drop = FALSE]
 ```
 
-Or to:
+Or with the base `subset()` function:
 
 ```{r, eval = FALSE}
 subset(flights, month == 1 & day == 1)
@@ -171,7 +168,7 @@ When you run this line of code, dplyr executes the filtering operation and retur
 jan1 <- filter(flights, month == 1, day == 1)
 ```
 
-R either prints out the results, or saves them to a variable. If you want to do both, surround the assignment in parentheses:
+R either prints out the results, or saves them to a variable. If you want to do both, wrap the assignment in parentheses:
 
 ```{r}
 (dec25 <- filter(flights, month == 12, day == 25))
@@ -208,19 +205,19 @@ abs(1/49 * 49 - 1) < 1e-6
 Multiple arguments to `filter()` are combined with "and". To get more complicated expressions, you can use boolean operators yourself:
 
 ```{r, eval = FALSE}
-filter(flights, month == 1 | month == 2)
+filter(flights, month == 11 | month == 12)
 ```
 
-Note the order isn't like English. This doesn't do what you expect:
+Note the order isn't like English. This expression doesn't find on months that equal 11 or 12. Instead it finds all months that equal `11 | 12`, which is `TRUE`. In a numeric context (like here), `TRUE` becomes one, so this finds all flights in January, not November or December.
 
 ```{r, eval = FALSE}
-filter(flights, month == 1 | 2)
+filter(flights, month == 11 | 12)
 ```
 
 Instead you can use the helpful `%in%` shortcut:
 
 ```{r}
-filter(flights, month %in% c(1, 2))
+filter(flights, month %in% c(11, 12))
 ```
 
 The following figure shows the complete set of boolean operations:
@@ -916,10 +913,19 @@ Functions that work most naturally in grouped mutates and filters are known as  
 
 ### Exercises
 
+1.  Refer back to the table of useful mutate and filtering functions. 
+    Describe how each operation changes when you combine it with grouping.
+
 1.  Which plane (`tailnum`) has the worst on-time record?
 
 1.  What time of day should you fly if you want to avoid delays as much
     as possible?
+    
+1.  Delays are typically temporarily correlated: even once the problem that
+    caused the initial delay has been resolved, later flights are delayed 
+    to allow earlier flights to leave. Using `lag()` explore how the delay
+    of a flight is related to the delay of the flight that left just
+    before.
     
 1.  Look at each destination. Can you find flights that are suspiciously
     fast? (i.e. flights that represent a potential data entry error). Compute
@@ -931,16 +937,16 @@ Functions that work most naturally in grouped mutates and filters are known as  
 
 ## Multiple tables of data
 
-It's rare that a data analysis involves only a single table of data. In practice, you'll normally have many tables that contribute to an analysis, and you need flexible tools to combine them. For example nycflights13 has four additional data frames that you might want to combine with `flights`:
+It's rare that a data analysis involves only a single table of data. You often have many tables that contribute to an analysis, and you need flexible tools to combine them. For example, the nycflights13 package has four additional data frames that contain useful additional metadata about `flights`:
 
-* `airlines`: a lookup table from carrier code to full airline name
+* `airlines` lets you look up the full carrier name from its abbreviated code.
 
-* `planes`: information about each plane, identified by `tailnum`
+* `planes` gives information about each plane, identified by its `tailnum`.
 
-* `airports`: information about each airport, identified by the `faa` airport
-  code
+* `airports` gives information about each airport, identified by the `faa`
+  airport code.
 
-* `weather`: the weather at each airport for each hour.
+* `weather` gives the weather at each airport at each hour.
 
 There are three families of verbs that let you combine two data frames:
 
@@ -988,32 +994,35 @@ There are two important properties of the join:
 
 #### Controlling how the tables are matched {#join-by}
 
-As well as `x` and `y`, each mutating join takes an argument `by` that controls which variables are used to match observations in the two tables. There are a few ways to specify it, as illustrated below:
+When joining multiple tables of data, it's useful to think about the "key", the combination of variables that uniquely identifies each observation. Sometimes that's a single variable. For example each airport is uniquely identified by a three letter `faa` code, each carrier is uniquely identified by its two letter abbreviation, and each plane by its `tailnum`. `weather` is more complex: to uniquely identify an observation you need to know when (`year`, `month`, `day`, `hour`) and where it happened (`origin`).
 
-  * The default `by = NULL` will use all variables that appear in both tables, 
-    a so called __natural__ join. For example, the flights and weather tables 
-    match on their common variables: year, month, day, hour and origin.
+When you combine two tables of data, you do so by matching the keys in each table. You can control the matching behaviour using the `by` argument:
+
+  * The default, `by = NULL`, uses all variables that appear in both tables, 
+    the so called __natural__ join. For example, the flights and weather tables 
+    match on their common variables: `year`, `month`, `day`, `hour` and
+    `origin`.
     
     ```{r}
     flights2 %>% left_join(weather)
     ```
     
-  * A character vector, `by = "x"`. Like a natural join, but uses only 
+  * A character vector, `by = "x"`. This is like a natural join, but uses only 
     some of the common variables. For example, `flights` and `planes` have 
-    `year` columns, but they mean different things so we only want to join by 
+    `year` variables, but they mean different things so we only want to join by 
     `tailnum`.
     
     ```{r}
     flights2 %>% left_join(planes, by = "tailnum")
     ```
     
-    Note that the year columns (which appear in both input data frames,
+    Note that the `year` variables (which appear in both input data frames,
     but are not constrained to be equal) are disambiguated in the output with 
     a suffix.
 
-  * A named character vector: `by = c("x" = "a")`. This will
-    match variable `x` in table `x` to variable `a` in table `b`. The 
-    variables from use will be used in the output.
+  * A named character vector: `by = c("a" = "b")`. This will
+    match variable `a` in table `x` to variable `y` in table `b`. The 
+    variables from `x` will be used in the output.
     
     For example, if we want to draw a map we need to combine the flights data
     with the airports data which contains the location (`lat` and `long`) of
@@ -1034,7 +1043,8 @@ There are four types of mutating join, which differ in their behaviour when a ma
 (df2 <- data_frame(x = c(1, 3), z = "z"))
 ```
 
-  * `inner_join(x, y)` only includes observations that match in both `x` and `y`.
+  * `inner_join(x, y)` only includes observations that match in both `x` and 
+    `y`:
     
     ```{r}
     df1 %>% inner_join(df2)
@@ -1051,7 +1061,7 @@ There are four types of mutating join, which differ in their behaviour when a ma
     Note that values that correspond to missing observations are filled in 
     with `NA`.
   
-  * `right_join(x, y)` includes all observations in `y`.
+  * `right_join(x, y)` includes all observations in `y`:
   
     ```{r}
     df1 %>% right_join(df2)
@@ -1060,7 +1070,7 @@ There are four types of mutating join, which differ in their behaviour when a ma
     `right_join(x, y)` gives the same output as `left_join(y, x)`, but the
     columns  are ordered differently.
 
-* `full_join()` includes all observations from either `x` or `y`.
+* `full_join()` includes all observations that appear in either `x` or `y`:
 
     ```{r}
     df1 %>% full_join(df2)
@@ -1076,7 +1086,7 @@ The left, right and full joins are collectively known as __outer joins__. When a
 
 --------------------------------------------------------------------------------
 
-`base::merge()` can mimic all four types of join. The advantages of the specific dplyr verbs is that they more clearly convey the intent of your code (the difference between the joins is really important but concealed in the arguments of `merge()`). dplyr's joins are also much faster than `merge()` and don't mess with the order of the rows.
+`base::merge()` can mimic all four types of mutating join. The advantages of the specific dplyr verbs is that they more clearly convey the intent of your code (the difference between the joins is really important but concealed in the arguments of `merge()`). dplyr's joins are also much faster than `merge()` and don't mess with the order of the rows.
 
 --------------------------------------------------------------------------------
 
@@ -1094,7 +1104,24 @@ df1 %>% left_join(df2)
 #### Exercises
 
 1.  Compute the average delay by destination, then join on the `airports`
-    data frame so you can show the spatial distribution of delays.
+    data frame so you can show the spatial distribution of delays. Here's an
+    easy way to draw a map of the United States:
+    
+    ```{r, include = FALSE}
+    airports %>% 
+      semi_join(flights, c("faa" = "dest")) %>% 
+      ggplot(aes(lon, lat)) + 
+        borders("state") +
+        geom_point() +
+        coord_quickmap()
+    ```
+    
+    You might want to use the `size` or `colour` of the points to display
+    the average delay for each airport.
+
+1.  Is there a relationship between the age of a plane and its delays?
+
+1.  What weather conditions make it more likely to see a delay?
     
 1.  What happened on June 13 2013? Display the spatial pattern of delays,
     and then use google to cross-reference with the weather.
@@ -1119,17 +1146,30 @@ Filtering joins match obserations in the same way as mutating joins, but affect 
 * `semi_join(x, y)` __keeps__ all observations in `x` that have a match in `y`.
 * `anti_join(x, y)` __drops__ all observations in `x` that have a match in `y`.
 
-Semi joins are useful when you've summarised and filtered, and then want to match back up to the original data. For example, say you only want to look at flights to the top 10 destinations:
+Semi joins are for matching filtered summary tables back to the original rows. For example, imagine you've found the top ten most popular destinations:
 
 ```{r}
 top_dest <- flights %>% 
   count(dest, sort = TRUE) %>%
   head(10)
+top_dest
+```
 
+Now you want to find each flight that went to one of those destinations. You could construct a filter yourself:
+
+```{r}
+flights %>% filter(dest %in% top_dest$dest)
+```
+
+But it's difficult to extend that approach to multiple variables. For example, imagine that you'd found the 10 days with highest average delays. How would you construct the filter statement that used `year`, `month`, and `day` to match it back to `flights`?
+
+Instead you can use a semi join, which connects the two tables like a mutating join, but instead of adding new columns, only keeps the rows in `x` that have a match in `y`:
+
+```{r}
 flights %>% semi_join(top_dest)
 ```
 
-Anti joins are useful for diagnosing join mismatches. For example, there are many flights in the nycflights13 dataset that don't have a matching tail number in the planes table:
+The inverse of a semi join is an anti join. An anti join keeps the rows that _don't_ have a match, and are useful for diagnosing join mismatches. For example, when connecting `flights` and `planes`, you might be interested to know that there are many `flights` that don't have a match in `planes`:
 
 ```{r}
 flights %>% 
@@ -1139,15 +1179,25 @@ flights %>%
 
 #### Exercises
 
-1.  What does it mean is a flight has a missing `tailnum`? What do the tail
-    numbers that don't have a matching record in `planes` have in common?
+1.  What does it mean for a flight to have a missing `tailnum`? What do the 
+    tail numbers that don't have a matching record in `planes` have in common?
+    (Hint: one variable explains ~90% of the problem.)
+
+1.  Find the 48 hours (over the course of the whole year) that have the worst
+    delays. Cross-reference it with the `weather` data. Can you see any 
+    patterns? 
+    
+1.  What does `anti_join(flights, airports, by = c("dest" = "faa"))` tell you?
+    What does `anti_join(airports, flights, by = c("dest" = "faa"))` tell you?
 
 ### Set operations
 
-The final type of two-table verb is set operations. These expect the `x` and `y` inputs to have the same variables, and treat the observations like sets:
+The final type of two-table verb is set operations. Generally, I use these the least frequnetly, but they are occassionally useful when you want to break a single complex filter into simpler pieces that you then combine.
 
-* `intersect(x, y)`: return only observations in both `x` and `y`
-* `union(x, y)`: return unique observations in `x` and `y`
+All these operations work with a complete row, comparing the values of every variable. These expect the `x` and `y` inputs to have the same variables, and treat the observations like sets:
+
+* `intersect(x, y)`: return only observations in both `x` and `y`.
+* `union(x, y)`: return unique observations in `x` and `y`.
 * `setdiff(x, y)`: return observations in `x`, but not in `y`.
 
 Given this simple data:
@@ -1166,5 +1216,3 @@ union(df1, df2)
 setdiff(df1, df2)
 setdiff(df2, df1)
 ```
-
-These are the least commonly used two-table operations. They can be useful to break a single complex filtering operation into simpler pieces.
