@@ -11,7 +11,7 @@ library(nycflights13)
 library(ggplot2)
 source("common.R")
 options(dplyr.print_min = 6, dplyr.print_max = 6)
-knitr::opts_chunk$set(fig.path = "figures/")
+knitr::opts_chunk$set(fig.path = "figures/", cache = TRUE)
 ```
 
 Visualisation is an important tool for insight generation, but it is rare that you get the data in exactly the right form you need for visualisation. Often you'll need to create some new variables or summaries, or maybe you just want to rename the variables or reorder the observations in order to make the data a little easier to work with. You'll learn how to do all that (and more!) in this chapter which will teach you how to transform your data using the dplyr package.
@@ -962,7 +962,7 @@ If you've used SQL before you're probably familiar with the mutating joins (thes
 
 All two-table verbs work similarly. The first two arguments are the two data frames to combine, and the output is always a new data frame. If you don't specify the details of the join, dplyr will guess based on the common variables, and will print a message. If you want to suppress that message, supply more arguments.
 
-### Mutating joins
+### Mutating joins {#mutating-joins}
 
 Mutating joins allow you to combine variables from multiple tables. For example, imagine you want to add the full airline name to the `flights` data. You can join the `airlines` and `carrier` data frames:
 
@@ -974,23 +974,138 @@ flights2
 airlines
 
 flights2 %>% 
-  left_join(airlines)
+  inner_join(airlines)
 ```
 
 The result of joining airlines on to flights is an additional variable: carrier. This is why I call this type of join a mutating join.
 
-There are two important properties of the join:
+There are three important things you need to understand about how joins work:
 
-* What variables are used to connect the two data frames. In this case,
-  the data frames are joined by `carrier` (as indicated by the helpful) 
-  message. That meanes for each observation in `flights`, the matching
-  airline is found by looking up `carrier`. You can match by multiple columns,
-  and the columns don't need to have the same name in both tables, as 
-  described in [controlling matching](#join-by).
-  
-* How non-matches are handled. Here we used a left join which means it 
-  keeps all the rows on the lefthand side whether or not there's a match to
-  the right hand side. [Types of join](#join-type) describes the four options.
+* The different types of matches (1-to-1, 1-to-many, many-to-many).
+
+* What happens when a row doesn't match.
+
+* How you control what variables used to generate the match.
+
+These are described in the following sections using a visual abstraction and code. The following diagram shows a schematic of a data frame. The coloured column represents the "key" variable: these are used to match the rows between the tables. The labelled column represents the "value" columns that are carried along for the ride.
+
+```{r, echo = FALSE, out.width = "10%"}
+knitr::include_graphics("diagrams/join-setup.png")
+```
+```{r}
+data_frame(key = 1:5, x = paste0("x", 1:5))
+```
+
+### Matches {#join-matches}
+
+There are three ways that the keys might match: one-to-one, one-to-many, and many-to-many.
+
+*    In a one-to-one match, each key in `x` matches one key in `y`. This sort of
+     match is useful when you two tables that have data about the same thing and
+     you want to align the rows.
+
+    ```{r, echo = FALSE, out.width = "100%"}
+    knitr::include_graphics("diagrams/join-one-to-one.png")
+    ```
+    
+    ```{r}
+    x <- data_frame(key = 1:5, x = paste0("x", 1:5))
+    y <- data_frame(key = c(3, 5, 2, 4, 1), y = paste0("y", 1:5))
+    inner_join(x, y, by = "key")
+    ```
+    
+*   In a one-to-many match, each key in `x` matches multiple keys in `y`. This
+    is useful when you want to add in additional information.
+    
+    ```{r, echo = FALSE, out.width = "100%"}
+    knitr::include_graphics("diagrams/join-one-to-many.png")
+    ```
+    
+    ```{r}
+    x <- data_frame(key = c(3, 3, 1, 4, 4), x = paste0("x", 1:5))
+    y <- data_frame(key = 1:4, y = paste0("y", 1:4))
+    inner_join(x, y, by = "key")
+    ```
+
+*   Finally, you can have a many-to-many match, where there are duplicated
+    keys in `x` and duplicate keys in `y`. When this happens, every possible
+    combination is created in the output.
+
+    ```{r, echo = FALSE, out.width = "100%"}
+    knitr::include_graphics("diagrams/join-many-to-many.png")
+    ```
+    ```{r}
+    x <- data_frame(key = c(1, 2, 2, 4), x = paste0("x", 1:4))
+    y <- data_frame(key = c(1, 2, 2, 4), y = paste0("y", 1:4))
+    inner_join(x, y, by = "key")
+    ```    
+
+#### Missing matches {#join-types}
+
+You might also wonder what happens when there isn't a match. This is controlled by the type of "join": inner, left, right, or outer. I'll show each type of join with a picture, and the corresponding R code. Here are the tables we will use:
+
+```{r, echo = FALSE, out.width = "25%"}
+knitr::include_graphics("diagrams/join-setup2.png")
+```
+```{r}
+(x <- data_frame(key = c(1, 2, 3), x = c("x1", "x2", "x3")))
+(y <- data_frame(key = c(1, 2, 4), y = c("y1", "y2", "y3")))
+```
+
+*   In an inner join, only rows that have matching keys are retained:
+
+    ```{r, echo = FALSE, out.width = "50%"}
+    knitr::include_graphics("diagrams/join-inner.png")
+    ```
+    
+    ```{r}
+    x %>% inner_join(y, by = "key")
+    ```
+
+*   In a left join, every row in `x` is kept.  A left join effectively works
+    by adding a "default" match: if a row in `x` doesn't match a row in `y`, 
+    it falls back to matching a row that contains only missing values.
+
+    ```{r, echo = FALSE, out.width = "50%"}
+    knitr::include_graphics("diagrams/join-left.png")
+    ```
+    ```{r}
+    x %>% left_join(y, by = "key")
+    ```
+
+    This is the most commonly used join because it ensures that you don't lose
+    observations from your primary table.
+
+*   A right join is the complement of a left join: every row in `y` is kept.
+
+    ```{r, echo = FALSE, out.width = "50%"}
+    knitr::include_graphics("diagrams/join-right.png")
+    ```
+    ```{r}
+    x %>% right_join(y, by = "key")
+    ```
+
+*   A full join is combines a left join and a right join, keeping every 
+    row in both `x` and `y`.
+
+    ```{r, echo = FALSE, out.width = "50%"}
+    knitr::include_graphics("diagrams/join-full.png")
+    ```
+    ```{r}
+    x %>% full_join(y, by = "key")
+    ```
+
+The left, right and full joins are collectively known as __outer joins__. When a row doesn't match in an outer join, the new variables are filled in with missing values. You can also think about joins heuristically as set operations on the rows of the tables:
+
+```{r, echo = FALSE}
+knitr::include_graphics("diagrams/join-venn.png")
+```
+
+--------------------------------------------------------------------------------
+
+`base::merge()` can mimic all four types of mutating join. The advantages of the specific dplyr verbs is that they more clearly convey the intent of your code (the difference between the joins is really important but concealed in the arguments of `merge()`), and are considerably faster. dplyr's joins also don't mess with the order of the rows.
+
+--------------------------------------------------------------------------------
 
 #### Controlling how the tables are matched {#join-by}
 
@@ -1033,62 +1148,6 @@ When you combine two tables of data, you do so by matching the keys in each tabl
     flights2 %>% left_join(airports, c("dest" = "faa"))
     flights2 %>% left_join(airports, c("origin" = "faa"))
     ```
-
-#### Types of join {#join-type}
-
-There are four types of mutating join, which differ in their behaviour when a match is not found. We'll illustrate each with a simple example:
-
-```{r}
-(df1 <- data_frame(x = c(1, 2), y = "y"))
-(df2 <- data_frame(x = c(1, 3), z = "z"))
-```
-
-  * `inner_join(x, y)` only includes observations that match in both `x` and 
-    `y`:
-    
-    ```{r}
-    df1 %>% inner_join(df2)
-    ```
-    
-  * `left_join(x, y)` includes all observations in `x`, regardless of whether
-    they match or not. This is the most commonly used join because it ensures 
-    that you don't lose observations from your primary table.
-  
-    ```{r}
-    df1 %>% left_join(df2)
-    ```
-    
-    Note that values that correspond to missing observations are filled in 
-    with `NA`.
-  
-  * `right_join(x, y)` includes all observations in `y`:
-  
-    ```{r}
-    df1 %>% right_join(df2)
-    ```
-    
-    `right_join(x, y)` gives the same output as `left_join(y, x)`, but the
-    columns  are ordered differently.
-
-* `full_join()` includes all observations that appear in either `x` or `y`:
-
-    ```{r}
-    df1 %>% full_join(df2)
-    ```
-
-Or visually:
-
-```{r, echo = FALSE}
-knitr::include_graphics("diagrams/transform-joins.png")
-```
-
-The left, right and full joins are collectively known as __outer joins__. When a row doesn't match in an outer join, the new variables are filled in with missing values.
-
---------------------------------------------------------------------------------
-
-`base::merge()` can mimic all four types of mutating join. The advantages of the specific dplyr verbs is that they more clearly convey the intent of your code (the difference between the joins is really important but concealed in the arguments of `merge()`), and are considerably faster. dplyr's joins also don't mess with the order of the rows.
-
---------------------------------------------------------------------------------
 
 #### New observations
 
