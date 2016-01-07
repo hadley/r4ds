@@ -5,19 +5,21 @@ title: Model
 
 # Model
 
-Models are one of the most important tools for data scientists, because models describe relationships. Would you list out every value of a variable, or would you state the mean? Would you list out every pair of values, or would you state the function between variables?
+A model is a function that summarizes how the values of one variable vary in response to the values of other variables. Models play a large role in hypothesis testing and prediction, but for the moment you should think of models just like you think of statistics. A statistic summarizes a *distribution* in a way that is easy to understand; and a model summarizes *covariation* in a way that is easy to understand. In other words, a model is just another way to describe data.
 
+This chapter will explain how to build useful models with R.
+ 
 ### Outline
 
 *Section 1* will explain what models are and what they can do for you.
 
-*Section 2* will show you how to use R to build linear models, the most commonly used modeling tool. The section introduces R's model syntax, a general syntax that you can reuse with any of R's modelling functions.
+*Section 2* will introduce R's model syntax, a general syntax that you can reuse with any of R's modeling functions. In this section, you will use the syntax to build linear models, the most commonly used type of model.
 
-*Section 3* will teach you to build and interpret multivariate linear models, models that use more than one variable to make a prediction.
+*Section 3* will teach you to build and interpret multivariate linear models, models that use more than one explanatory variable to explain the values of a response variable.
 
-*Section 4* will explain how to use categorical variables in your models and how to interpret the results.
+*Section 4* will explain how to use categorical variables in your models and how to interpret the results of models that use categorical variables.
 
-*Section 5* will present a logical way to extend models to non-linear settings.
+*Section 5* will present a logical way to extend linear models to describe non-linear relationships.
 
 ### Prerequisites
 
@@ -31,23 +33,41 @@ library(mgcv)
 library(splines)
 library(broom)
 ```
-
-**Note: the current examples use a data set that will be replaced in later drafts.**
   
 ## What is a model?
 
-1. A model is just a summary, like a mean, median, or variance.
-    + Example problem/data set
-    
+Have you heard that a relationship exists between your height and your income? It sounds far-fetched---and maybe it is---but many people believe that taller people will be promoted faster and valued more for their work, an effect that directly inflates the income of the vertically gifted.
+
+Do you think this is true? Could a relationship exist between a person's height and their income? Luckily, it is easy to measure someone's height as well as their income (and a swath of other related variables to boot), which means that we can collect data relevant to the question. In fact, the Bureau of Labor Statistics has been doing this in a controlled way for over 50 years with the [National Longitudinal Surveys (NLS)](https://www.nlsinfo.org/). The NLS tracks the income, education, and life circumstances of a large cohort of Americans across several decades. In case you are wondering, the point of the NLS is not to study the relationhip between height and income, that's just a lucky accident of the data.
+
+You can load the latest cross-section of NLS data, collected in 2013 with the code below. 
+
 ```{r echo = FALSE}
-heights <- read.csv("data/heights.csv")
+heights <- readRDS("data/heights.RDS")
 ```
+
+I've narrowed the data down to 10 variables:
+
+* `id` - A number ot identify each subject
+* `income` - The self-reported income of each subject
+* `height` - The height of each subject in inches
+* `weight` - The weight of each subject in inches
+* `sex` - The sex of each subject
+* `race` - The race of each subject
+* `education` - The number of years of education completed by each subject
+* `asvab` - Each subject's score on the Armed Services Vocational Aptitude Battery (ASVAB), an intelligence assessment, out of 100.
+* `sat_math` - Each subject's score on the math portion of the Scholastic Aptitude Test (SAT), out of 800.
+* `bdate` - Month of birth with 1 = January.
+
+summary that describes a r, like a mean, median, or variance.
+    + Example problem/data set
+  
 
 ```{r}
 head(heights)
 ```
     
-2. As normally taught, modeling is a conflation of three subjects
+2. As normally taught, modeling conflates three subjects
     + Models as summaries
     + Hypothesis testing
     + Predictive modeling
@@ -77,20 +97,17 @@ head(heights)
     + model syntax, which is reusable with all model functions
 
 ```{r}
-earn ~ height 
-lm(earn ~ height, data = heights)
-```
-
-    + save model output
-```{r}
-hmod <- lm(earn ~ height, data = heights)
-coef(hmod)
-summary(hmod)
+income ~ height 
+mod <- lm(income ~ height, data = heights)
+mod
+tidy(mod)
+glance(mod)
+augment(mod)
 ```
 
     + visualize
 ```{r}
-ggplot(data = heights, mapping = aes(x = height, y = earn)) +
+ggplot(data = heights, mapping = aes(x = height, y = income)) +
   geom_point() +
   geom_smooth(method = lm)
 ```
@@ -98,54 +115,46 @@ ggplot(data = heights, mapping = aes(x = height, y = earn)) +
     + intercept or no intercept
 ```{r}
 0 + earn ~ height 
-lm(earn ~ 0 + height, data = heights)
-lm(earn ~ 0 + height, data = heights)
+tidy(lm(income ~ 0 + height, data = heights))
+tidy(lm(income ~ height, data = heights))
 ```
 
 3. How to interpret
     + extract information. Resid. Predict.
-```{r eval = FALSE}
-resid(hmod)
-predict(hmod)
+```{r}
+augment(mod)$.resid
+augment(mod)$.fitted
 ```
     + Interpret coefficient
-4. How to use the results (with `broom`)
-    + tidy. augment. glance.
-```{r eval = FALSE}
-tidy(hmod)
-augment(hmod)
-glance(hmod)
+```{r}
+tidy(mod)$estimate
 ```
 
 ```{r}
 heights %>% 
   group_by(sex)  %>% 
-  do(glance(lm(earn ~ height, data = .)))
+  do(glance(lm(income ~ height, data = .)))
 ```
 
 ## Categorical data
 
 ```{r}
-smod <- lm(earn ~ sex, data = heights)
+smod <- lm(income ~ sex, data = heights)
 smod
 ```
 
 1. Factors
 
 ```{r}
-heights$sex <- factor(heights$sex, levels = c("male", "female"))
+heights$sex <- factor(heights$sex, levels = c("female", "male"))
 
-smod2 <- lm(earn ~ sex, data = heights)
+smod2 <- lm(income ~ sex, data = heights)
 
-smod
-smod2
+tidy(smod)
+tidy(smod2)
 ```
 
 2. How to interpret
-
-```{r}
-coef(smod)
-```
 
 
 ## Multiple Variables
@@ -153,44 +162,44 @@ coef(smod)
 1. How to fit multivariate models in R
 
 ```{r}
-mmod <- lm(earn ~ height + sex, data = heights)
-mmod
+mmod <- lm(income ~ height + sex, data = heights)
+summary(mmod)
 ```
 
 2. How to interpret
 
 ```{r}
-coef(mmod)
+tidy(mmod)
 ```
 
 3. Interaction effects
 
 ```{r}
-lm(earn ~ height + sex, data = heights)
-lm(earn ~ height + sex + height:sex, data = heights)
-lm(earn ~ height * sex, data = heights)
+tidy(lm(income ~ height + sex, data = heights))
+tidy(lm(income ~ height + sex + height:sex, data = heights))
+tidy(lm(income ~ height * sex, data = heights))
 ```
 
 ```{r}
-lm(earn ~ height + ed, data = heights)
-lm(earn ~ height * ed, data = heights)
+tidy(lm(income ~ height + education, data = heights))
+tidy(lm(income ~ height * education, data = heights))
 ```
 
 4. Partition variance
     + Checking residuals
 ```{r}
-m1 <- lm(earn ~ height, data = heights)
+m1 <- lm(income ~ height, data = heights)
 # plot histogram of residuals
 # plot residulas vs. sex
-m2 <- lm(earn ~ height + sex, data = heights)
+m2 <- lm(income ~ height + sex, data = heights)
 # plot histogram of residuals
 # plot residuals vs. education
-m3 <- lm(earn ~ height + sex + ed, data = heights)
+m3 <- lm(income ~ height + sex + education, data = heights)
 # plot histogram of residuals
-m4 <- lm(earn ~ height + sex + race + ed + age, 
+m4 <- lm(income ~ height + sex + race + education, 
   data = heights)
 # plot histogram of residuals
-m5 <- lm(earn ~ ., data = heights)
+m5 <- lm(income ~ ., data = heights)
 ```
 
 
@@ -216,19 +225,21 @@ lm(log(price) ~ log(carat), data = diamonds)
 What if no handy transformation exists?
 
 ```{r}
-ggplot(data = heights, mapping = aes(x= age, y = earn)) + 
-  geom_point() +
+ggplot(data = heights, mapping = aes(x = education, y = income)) + 
+  geom_boxplot(aes(group = education)) +
   geom_smooth() + 
-  coord_cartesian(ylim = c(0, 50000))
+  coord_cartesian(ylim = c(0, 125000))
 ```
 
 1. Polynomials
     + How to fit
+    + why it doesn't work with missing values
     
 ```{r}
-lm(earn ~ poly(age, 3), data = heights)
+heights2 <- na.omit(heights)
+tidy(lm(income ~ poly(education, 3), data = heights2))
 
-ggplot(data = heights, mapping = aes(x= age, y = earn)) +
+ggplot(data = heights2, mapping = aes(x= education, y = income)) +
   geom_point() +
   geom_smooth(method = lm, formula = y ~ poly(x, 3))
 ```
@@ -244,17 +255,15 @@ ns()           # natural splines
 ```
 
 ```{r}
-lm(earn ~ ns(age, knots = c(40, 60)), data = heights)
-lm(earn ~ ns(age, df = 4), data = heights)
+tidy(lm(income ~ ns(education, knots = c(10, 17)), data = heights))
+tidy(lm(income ~ ns(education, df = 4), data = heights))
 ```    
 
 ```{r}
-lm(earn ~ ns(age, df = 6), data = heights)
-
-ggplot(data = heights, mapping = aes(x= age, y = earn)) +
+ggplot(data = heights, mapping = aes(x= education, y = income)) +
   geom_point() +
-  geom_smooth(method = lm, formula = y ~ ns(x, df = 6)) +  
-  coord_cartesian(ylim = c(0, 50000))
+  geom_smooth(method = lm, formula = y ~ ns(x, df = 4)) +  
+  coord_cartesian(ylim = c(0, 125000))
 ```
 
     + How to interpret
@@ -265,9 +274,9 @@ ggplot(data = heights, mapping = aes(x= age, y = earn)) +
     + How to fit
     
 ```{r}
-gmod <- gam(earn ~ s(height), data = heights)
+gam(income ~ s(education), data = heights)
 
-ggplot(data = heights, mapping = aes(x= age, y = earn)) +
+ggplot(data = heights, mapping = aes(x= education, y = income)) +
   geom_point() +
   geom_smooth(method = gam, formula = y ~ s(x))
 ```
