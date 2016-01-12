@@ -16,7 +16,7 @@ knitr::opts_chunk$set(fig.path = "figures/", cache = TRUE)
 
 It's rare that a data analysis involves only a single table of data. Typically you have many tables of data, and you have to combine them to answer the questions that you're interested in. This type of data is called __relational__ because it concerns the relations between multiple datasets. 
 
-Relations are always defined between a pair of tables. The relationships of three or more tables are always a property of the relations between each pair. To work with relational data you need verbs that work with pairs of tables. There are three families of verbs design to work with relational data:
+Relations are always defined between a pair of tables. (But that pair might be the same table, a so called self-join.) The relationships of three or more tables are always a property of the relations between each pair. To work with relational data you need verbs that work with pairs of tables. There are three families of verbs design to work with relational data:
 
 * __Mutating joins__, which add new variables to one data frame from matching 
   rows in another.
@@ -30,7 +30,7 @@ The most common place to find relational data is in a relational database manage
 
 ## nycflights13 {#nycflights13-relational}
 
-As well as the `flights` dataset that we've worked so far, nycflights13 contains a four related data frames:
+As well as the `flights` table that we've worked so far, nycflights13 contains a four related data frames:
 
 *   `airlines` lets you look up the full carrier name from its abbreviated 
     code:
@@ -58,13 +58,15 @@ As well as the `flights` dataset that we've worked so far, nycflights13 contains
     weather
     ```
 
-One way to show the relationships between the different tables is with a diagram:
+One way to show the relationships between the different tables is with a drawing:
 
 ```{r, echo = FALSE, out.width = "75%"}
 knitr::include_graphics("diagrams/relational-nycflights.png")
 ```
 
-This diagram is a little overwhelming, and it's simple compared to some you'll see in the wild. The key to understanding diagrams like this is to remember each relation always concerns a pair of tables. You don't need to understand the whole diagram; you just need the understand the chain of relations between the tables that you are interested in. For these tables:
+This diagram is a little overwhelming, and it's simple compared to some you'll see in the wild. The key to understanding diagrams like this is to remember each relation always concerns a pair of tables. You don't need to understand the whole diagram; you just need the understand the chain of relations between the tables that you are interested in. 
+
+For nycflights13:
 
 * `flights` connects to `planes` via single variable, `tailnum`. `flights`
   connect `airlines` with the `carrier` variable.
@@ -75,11 +77,11 @@ This diagram is a little overwhelming, and it's simple compared to some you'll s
 * `flights` connects to `weather` via `origin` (the location), and
   `year`, `month`, `day` and `hour` (the time).
 
-The variables used to connect each pair of tables are called __keys__. The __primary key__ uniquely identifies an observation. For example, each plane is uniquely identified by `tailnum`. In other cases, you might need multiple keys to uniquely identify an observation. For example, to identify an observation in `weather` you need five variables: `year`, `month`, `day`, `hour`, and `origin`. Primary keys are coloured grey. The __foreign key__ is the corresponding variable in another table.
+The variables used to connect each pair of tables are called __keys__. The __primary key__ uniquely identifies an observation. For example, each plane is uniquely identified by `tailnum`. In other cases, you might need multiple keys to uniquely identify an observation. For example, to identify an observation in `weather` you need five variables: `year`, `month`, `day`, `hour`, and `origin`. Primary keys are coloured grey. The __foreign key__ is the matching variable in another table.
 
-All relations are implicitly one-to-many. For example, each flight has one plane, but each plane has many flights. In other data, you'll occassionaly see a 1-to-1 relationship. You can think of this as a special case of 1-to-many. It's possible to model many-to-many relations with a many-to-1 relation plus a 1-to-many relation. For example, in this data there's a many-to-many relationship between airlines and airports: each airport flies to many airlines; each airport hosts many airlines.
+Relations are implicitly one-to-many. For example, each flight has one plane, but each plane has many flights. In other data, you'll occassionaly see a 1-to-1 relationship. You can think of this as a special case of 1-to-many. It's possible to model many-to-many relations with a many-to-1 relation plus a 1-to-many relation. For example, in this data there's a many-to-many relationship between airlines and airports: each airport flies to many airlines; each airport hosts many airlines. 
 
-### Exercise
+### Exercises
 
 1.  Imagine you want to draw (approximately) the route each plane flies from
     its origin to its destination. What variables would you need? What tables
@@ -98,13 +100,17 @@ All relations are implicitly one-to-many. For example, each flight has one plane
 
 ## Mutating joins {#mutating-joins}
 
-The first tool we'll look at for combining a pair of tables is the mutating join. Mutating joins allow you to combine variables from multiple tables. They match observations using keys, and then add variables from one table to the other. To explore matching joins with the flights data, we'll first create a smaller dataset. Like `mutate()`, the join functions add variables to the right, so the new variables might not fit on the screen if you have a lot. (Remember, when you're in RStudio you can use `View()` to avoid this problem).
+The first tool we'll look at for combining a pair of tables is the __mutating join__. A mutating join allows you to combine variables from two tables. It first matches observations using keys, then copies across variables from one table to the other. 
+
+Like `mutate()`, the join functions add variables to the right, so the new variables might not fit on the screen if you have a lot. To make it easier to see what's going on in the examples, we'll first create a smaller dataset. 
 
 ```{r}
 # Drop unimportant variables so it's easier to understand the join results.
 flights2 <- flights %>% select(year:day, hour, origin, dest, tailnum, carrier)
 flights2
 ```
+
+(Remember, when you're in RStudio you can use `View()` to avoid this problem). 
 
 For example, imagine you want to add the full airline name to the `flights` data. You can combine the `airlines` and `carrier` data frames with `left_join()`:
 
@@ -113,16 +119,14 @@ flights2 %>%
   left_join(airlines, by = "carrier")
 ```
 
-The result of joining airlines on to flights is an additional variable: `carrier`. This is why I call this type of join a mutating join.
-
-In this case, you could have created achieved the same result using `mutate()` and basic subsetting:
+The result of joining airlines to flights is an additional variable: `carrier`. This is why I call this type of join a mutating join. In this case, you could have got to the same place using `mutate()` and basic subsetting:
 
 ```{r}
 flights2 %>% 
   mutate(carrier = airlines$name[match(carrier, airlines$carrier)])
 ```
 
-But this is hard to generalise when you need to match multiple variables, and doesn't as clearly communicate the action of joining as using an explicit join function.
+But this is hard to generalise when you need to match multiple variables, and takes closer reading to figure out the high-level intent.
 
 There are three important things you need to understand about mutating joins work:
 
@@ -132,135 +136,114 @@ There are three important things you need to understand about mutating joins wor
 
 1. How you control which variables (keys) are used to match observations.
 
-To help you built up an intuition for how joins work and how the various options affect behaviour I'm going to use a visual abstraction of a table: 
+### Understanding joins
 
-```{r, echo = FALSE, out.width = "10%"}
-knitr::include_graphics("diagrams/join-setup.png")
-```
-```{r}
-data_frame(key = 1:5, value = paste0("x", 1:5))
-```
-
-The coloured column represents the "key" variable: these are used to match the rows between the tables. The labelled column represents the "value" columns that are carried along for the ride. The same basic idea generalised to any number of key and value columns.
-
-[Insert basic explanation of joins]
-
-### Missing matches {#join-types}
-
-You might also wonder what happens when there isn't a match. This is controlled by the type of "join": inner, left, right, or full I'll show each type of join with a picture, and the corresponding R code. Here are the tables we will use:
+To help you build up an intuition for how joins work and how the various options affect behaviour I'm going to use represent tables visually:
 
 ```{r, echo = FALSE, out.width = "25%"}
-knitr::include_graphics("diagrams/join-setup2.png")
+knitr::include_graphics("diagrams/join-setup.png")
 ```
 ```{r}
 (x <- data_frame(key = c(1, 2, 3), val_x = c("x1", "x2", "x3")))
 (y <- data_frame(key = c(1, 2, 4), val_y = c("y1", "y2", "y3")))
 ```
 
-The left, right and full joins are collectively known as __outer joins__. When a row doesn't match in an outer join, the new variables are filled in with missing values. You can also think about joins heuristically as set operations on the rows of the tables:
+The coloured column represents the "key" variable: these are used to match the rows between the tables. The grey column represents the "value" columns that are carried along for the ride. In these examples I'll show a single key variable and single value variable, but idea generalises in a straightforward way to multiple keys and multiple values.
 
-```{r, echo = FALSE}
-knitr::include_graphics("diagrams/join-venn.png")
+A join is a way of connecting each row in `x` to zero, one, or more rows in `y`. The following diagram shows each potential match as an intersection of a pair of lines.
+
+```{r, echo = FALSE, out.width = "35%"}
+knitr::include_graphics("diagrams/join-setup2.png")
 ```
 
-#### Inner join
+(If you look closely, you might notice that we've switched the order of the keys and values in `x`. This is to emphasise that joins match based on the key variable; value variable is just carried along for the ride.)
 
-In an inner join, only rows that have matching keys are retained:
+### Inner join {#inner-join}
 
-```{r, echo = FALSE, out.width = "50%"}
+The simplest type of join is the __inner join__. An inner join matches pairs of observations whenever their keys are equal:
+
+```{r, echo = FALSE, out.width = "70%"}
 knitr::include_graphics("diagrams/join-inner.png")
 ```
+
+(To be precise this is an inner equijoin because the keys are matched on equality. Since most joins are equijoins we usually drop that condition.)
+
+The output of an inner join is a new data frame that contains the key, the x values, and the y values. We use `by` to tell the join which column is the key variable.
 
 ```{r}
 x %>% inner_join(y, by = "key")
 ```
 
-#### Left join
+The most important property of an inner join is that rows that don't have matches don't appear in the output. This generally means that inner joins are not appropriate for use in analysis because it's too easy to lose observations.
 
-In a left join, every row in `x` is kept.  A left join effectively works by adding a "default" match: if a row in `x` doesn't match a row in `y`, it falls back to matching a row that contains only missing values.
+### Outer joins {#outer-join}
 
-```{r, echo = FALSE, out.width = "50%"}
-knitr::include_graphics("diagrams/join-left.png")
-```
-```{r}
-x %>% left_join(y, by = "key")
-```
+An inner join only keeps observations that have a match in both tables. An __outer join__ keeps observations that only appear in one of the tables. There are three types of outer joins:
 
-This is the most commonly used join because it ensures that you don't lose
-observations from your primary table.
+* A __left join__ keeps all observations in `x`.
+* A __right join__ keeps all observations in `y`.
+* A __full join__ keeps all observations in `x` and `y`.
 
-#### Right join
+These joins work by adding an additional "virtual" observation to each table. This observation has a key that always matches (if no other key matches), and has missing values. Graphically, that looks like:
 
-A right join is the complement of a left join: every row in `y` is kept.
-
-```{r, echo = FALSE, out.width = "50%"}
-knitr::include_graphics("diagrams/join-right.png")
-```
-```{r}
-x %>% right_join(y, by = "key")
+```{r, echo = FALSE, out.width = "100%"}
+knitr::include_graphics("diagrams/join-inner.png")
 ```
 
-#### Full join
+The most commonly used join is the left join: you use this whenever you lookup additional data out of another table, preserving the original observations even if there isn't match. The left join should be your default join: use it unless you have a strong reason to prefer one of the others.
 
-A full join is combines a left join and a right join, keeping every 
-row in both `x` and `y`.
+Another way of thinking about the different types of joins is as a Venn diagram:
 
-```{r, echo = FALSE, out.width = "50%"}
-knitr::include_graphics("diagrams/join-full.png")
-```
-```{r}
-x %>% full_join(y, by = "key")
+```{r, echo = FALSE}
+knitr::include_graphics("diagrams/join-venn.png")
 ```
 
-### Matches {#join-matches}
+However, this is not a great representation. It might jog your memory about which join preserves the observations in which table. But it suffers from a major limitation: it can't show what happens when keys are duplicated, the topic of the next sections. 
 
-There are three ways that the keys might match: one-to-one, one-to-many, and many-to-many.
+### Duplicate keys {#join-matches}
 
-*    In a one-to-one match, each key in `x` matches one key in `y`. This sort of
-     match is useful when you two tables that have data about the same thing and
-     you want to align the rows.
+So far all the diagrams have assumed that the keys are unique. But obviously that's not always the case. This section explains what happens when the keys are not unique. There are three possibilities:
 
-    ```{r, echo = FALSE, out.width = "100%"}
-    knitr::include_graphics("diagrams/join-one-to-one.png")
-    ```
+1.  There are no duplicate keys: this is what we've assumed so far.
+
+1.  There are duplicate keys in one table. This is useful when you want to
+    add in additional information as there is typically a one-to-many
+    relationship.
     
-    ```{r}
-    x <- data_frame(key = 1:5, val_x = paste0("x", 1:5))
-    y <- data_frame(key = c(3, 5, 2, 4, 1), val_y = paste0("y", 1:5))
-    inner_join(x, y, by = "key")
-    ```
-    
-*   In a one-to-many match, each key in `y` matches multiple keys in `x`. This
-    is useful when you want to add in additional information.
-    
-    ```{r, echo = FALSE, out.width = "100%"}
+    ```{r, echo = FALSE, out.width = "75%"}
     knitr::include_graphics("diagrams/join-one-to-many.png")
     ```
-    
+
+    Note that I've put the key column in a slightly different position
+    in the output. This reflects that the key is a primary key in `y`
+    and a foreign key in `x`.
+
     ```{r}
-    x <- data_frame(key = c(3, 3, 1, 4, 4), val_x = paste0("x", 1:5))
-    y <- data_frame(key = 1:4, val_y = paste0("y", 1:4))
-    inner_join(x, y, by = "key")
+    x <- data_frame(key = c(1, 2, 2, 1), val_x = paste0("x", 1:4))
+    y <- data_frame(key = 1:2, val_y = paste0("y", 1:2))
+    left_join(x, y, by = "key")
     ```
 
-*   Finally, you can have a many-to-many match, where there are duplicated
-    keys in `x` and duplicate keys in `y`. When this happens, every possible
-    combination is created in the output.
-
-    ```{r, echo = FALSE, out.width = "100%"}
+1.  There are duplicate keys in both tables. This behaviour is almost
+    always undesirable so dplyr really should do something to warn you 
+    about it.
+    
+    ```{r, echo = FALSE, out.width = "75%"}
     knitr::include_graphics("diagrams/join-many-to-many.png")
     ```
+    
+    If there are duplicate keys in both tables, you get the Cartesian
+    product of all matches.
+    
     ```{r}
-    x <- data_frame(key = c(1, 2, 2, 4), val_x = paste0("x", 1:4))
-    y <- data_frame(key = c(1, 2, 2, 4), val_y = paste0("y", 1:4))
-    inner_join(x, y, by = "key")
-    ```    
+    x <- data_frame(key = c(1, 2, 2, 3), val_x = paste0("x", 1:4))
+    y <- data_frame(key = c(1, 2, 2, 3), val_y = paste0("y", 1:4))
+    left_join(x, y, by = "key")
+    ```
 
-### Controlling how the tables are matched {#join-by}
+### Defining the key columns {#join-by}
 
-When joining multiple tables of data, it's useful to think about the "key", the combination of variables that uniquely identifies each observation. Sometimes that's a single variable. For example each airport is uniquely identified by a three letter `faa` code, each carrier is uniquely identified by its two letter abbreviation, and each plane by its `tailnum`. `weather` is more complex: to uniquely identify an observation you need to know when (`year`, `month`, `day`, `hour`) and where it happened (`origin`).
-
-When you combine two tables of data, you do so by matching the keys in each table. You can control the matching behaviour using the `by` argument:
+So far, the pairs of tables have always been joined by a single variable, and that variable has the same name in both tables. That constraint was encoded by `by = "key"`.  You can use other values for `by` to connect the tables in other ways:
 
   * The default, `by = NULL`, uses all variables that appear in both tables, 
     the so called __natural__ join. For example, the flights and weather tables 
