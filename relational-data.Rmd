@@ -117,7 +117,7 @@ There are two types of keys:
 
 A variable can be both part of primary key _and_ a foreign key. For example, `origin` is part of the `weather` primary key, and is also a foreign key for the `airport` table.
 
-Once you've identified the primary keys in your tables, it's good practice to verify that they do indeed uniquely identify each observation. One way to do that is `count()` the primary keys and look for entries where `n` is greater than one:
+Once you've identified the primary keys in your tables, it's good practice to verify that they do indeed uniquely identify each observation. One way to do that is to `count()` the primary keys and look for entries where `n` is greater than one:
 
 ```{r}
 planes %>% count(tailnum) %>% filter(n > 1)
@@ -131,11 +131,7 @@ flights %>% count(year, month, day, flight) %>% filter(n > 1)
 flights %>% count(year, month, day, tailnum) %>% filter(n > 1)
 ```
 
-If a table lacks a primary key, it's sometimes useful to add one:
-
-```{r}
-flights %>% mutate(id = row_number())
-```
+When starting to work with this data, I had naively assumed that each flight number would be only used once per day: that would make it much easiser to communicate problems with a specific flight. Unfortunately that is not the case! If a table lacks a primary key, it's sometimes useful to add one with `row_number()`. That makes it easier to match observations if you've done some filtering and want to check back in with the original data. This is called a surrogate key.
 
 A primary key and the corresponding foreign key in another table form a __relation__. Relations are typically one-to-many. For example, each flight has one plane, but each plane has many flights. In other data, you'll occassionaly see a 1-to-1 relationship. You can think of this as a special case of 1-to-many. It's possible to model many-to-many relations with a many-to-1 relation plus a 1-to-many relation. For example, in this data there's a many-to-many relationship between airlines and airports: each airport flies to many airlines; each airport hosts many airlines. 
 
@@ -465,6 +461,36 @@ flights %>%
     
 1.  What does `anti_join(flights, airports, by = c("dest" = "faa"))` tell you?
     What does `anti_join(airports, flights, by = c("dest" = "faa"))` tell you?
+
+## Join problems
+
+The data you've been working with in this chapter has been cleaned up so that you'll have as few problems as possible. Your own data is unlikely to be so nice, so there are a few things that you should do with your own data to make your joins go smoothly.
+
+1.  Start by identifying the variables that form the primary key in each table.
+    You should usually do this based on your understand of the data, not
+    empirically by looking for a combination of variables that give a 
+    unique identifier. If you just look for variables without thinking about
+    what they mean, you might get (un)lucky and find a combination that's 
+    unique in your current data but the relationship might not be true in 
+    general. 
+    
+    ```{r}
+    airports %>% count(alt, lat) %>% filter(n > 1)
+    ```
+
+1.  Check that none of the variables in the primary key are missing. If 
+    a value is missing then it can't identify an observation!
+    
+1.  Check that your foreign keys match primary keys in another table. The
+    best way to do this is with an `anti_join()`. It's common for keys
+    not to match because of data entry errors. Fixing these is often a lot of
+    work. 
+    
+    If you do have missing keys, you'll need to be thoughtful about your 
+    use of inner vs. outer joins, carefully considering whether or not you
+    want to drop rows that don't have a match.
+
+Be aware that simply checking the number of rows before and after the join is not sufficient to ensure that your join has gone smoothly. If you have an inner join with duplicate keys in both tables, you might get unlikely at the number of dropped rows might exactly equal the number of duplicated rows!
 
 ## Set operations {#set-operations}
 
