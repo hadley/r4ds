@@ -12,130 +12,145 @@ knitr::opts_chunk$set(
 )
 ```
 
-Code is a means of communication, not just to the computer, but to other people. This is important because every project you undertake is fundamentally collaborative, and even if you're not working with other people you'll definitely be working with future-you. 
+Code is a tool of communication, not just to the computer, but to other people. This is important because every project you undertake is fundamentally collaborative. Even if you're not working with other people, you'll definitely be working with future-you. You want to write clear code so that future-you doesn't curse present-you when you look at a project again after several months have passed.
 
-After solving a data analysis challenge, it's often worth looking at your code and thinking about whether or not it's obvious what you've done. If you spend a little time rewriting your code while the ideas are fresh, you can save a lot of time later trying to recreate what your code did.
+To me, improving your communication skills is a key part of mastering R as a programming language. Over time, you want your code to becomes more and more clear, and easier to write. In this chapter, you'll learn three important skills that help you to move in this direction: 
 
-To me, this is what mastering R as a programming language is all about: making it easier to express yourself, so that over time your becomes more and more clear, and easier to write.  In this chapter, you'll learn some of the most important skills, but to learn more you need to study R as a programming language, not just an interactive environment for data science. We have written two books that will help you do so:
+1.  We'll dive deep in to the __pipe__, `%>%`, talking more about how it works 
+    and how it gives you a new tool for rewriting your code. You'll also learn 
+    about when not to use the pipe!
 
-* [Hands on programming with R](http://shop.oreilly.com/product/0636920028574.do),
-  by Garrett Grolemund. This is an introduction to R as a programming language 
-  and is a great place to start if R is your first programming language.
-  
-* [Advanced R](http://adv-r.had.co.nz) by Hadley Wickham. This dives into the
-  details of R the programming language. This is a great place to start if
-  you've programmed in other languages and you want to learn what makes R 
-  special, different, and particularly well suited to data analysis.
+1.  Repeating yourself in code is dangerous because it can easily lead to 
+    errors and inconsistencies. We'll talk about how to write __functions__
+    in order to remove duplication in your logic.
+    
+1.  Another important tool for removing duplication is the __for loop__ which
+    allows you to repeat the same action again and again and again. You tend to 
+    use for-loops less often in R than in other programming languages because R 
+    is a functional programming language which means that you can extract out 
+    common patterns of for loops and put them in a function. We'll come back to
+    that idea in XYZ.
 
-You get better very slowly if you don't consciously practice, so this chapter brings together a number of ideas that we mention elsewhere into one focussed chapter on code as communication.
+Removing duplication is an important part of expressing yourself clearly because it lets the reader focus on what's different between operations rather than what's the same. The goal is not just to write better funtions or to do things that you couldn't do before, but to code with more "ease". As you internalise the ideas in this chapter, you should find it easier to re-tackle problems that you've solved in the past with much effort.
 
-```{r}
-library(magrittr)
-```
-
-This chapter is not comprehensive, but it will illustrate some patterns that in the long-term that will help you write clear and comprehensive code. 
-
-The goal is not just to write better funtions or to do things that you couldn't do before, but to code with more "ease".
+Writing code is similar in many ways to writing prose. One parallel which I find particularly useful is that in both cases rewriting is key to clarity. The first expression of your ideas is unlikely to be particularly clear, and you may need to rewrite multiple times. After solving a data analysis challenge, it's often worth looking at your code and thinking about whether or not it's obvious what you've done. If you spend a little time rewriting your code while the ideas are fresh, you can save a lot of time later trying to recreate what your code did. But this doesn't mean you should rewrite every function: you need to balance what you need to achieve now with saving time in the long run.  (But the more you rewrite your functions the more likely you'll first attempt will be clear.)
 
 ## Piping
+
+Let's use code to tell a story about a little bunny named foo foo:
+
+> Little bunny Foo Foo
+> Went hopping through the forest
+> Scooping up the field mice
+> And bopping them on the head
+
+We'll start by defining an object to represent litte bunny Foo Foo:
 
 ```R
 foo_foo <- little_bunny()
 ```
 
-There are a number of ways that you could write this:
+And then we'll use a function for each key verb. There are a number of ways we could use functions to tell this story:
 
-1.  Function composition:
+* Save each step as a new object
 
-    ```R
-    bop_on(
-      scoop_up(
-        hop_through(foo_foo, forest),
-        field_mouse
-      ), 
-      head
-    )
-    ```
-    
-    The disadvantage is that you have to read from inside-out, from 
-    right-to-left, and that the arguments end up spread far apart 
-    (sometimes called the 
-    [dagwood sandwhich](https://en.wikipedia.org/wiki/Dagwood_sandwich)
-    problem).
-    
-1.  Intermediate state:
+### Intermediate steps
 
-    ```R
-    foo_foo_1 <- hop_through(foo_foo, forest)
-    foo_foo_2 <- scoop_up(foo_foo_1, field_mouse)
-    foo_foo_3 <- bop_on(foo_foo_2, head)
-    ```
-    
-    This avoids the nesting, but you now have to name each intermediate element.
-    If there are natural names, use this form. But if you're just numbering
-    them, I don't think it's that useful. Whenever I write code like this, 
-    I invariably write the wrong number somewhere and then spend 10 minutes 
-    scratching my head and trying to figure out what went wrong with my code.
-    
-    You may also worry that this form creates many intermediate copies of your
-    data and takes up a lot of memory. First, in R, I don't think worrying about
-    memory is a useful way to spend your time: worry about it when it becomes
-    a problem (i.e. you run out of memory), not before. Second, R isn't stupid:
-    it will reuse the shared columns in a pipeline of data frame transformations.
-    
-    You can see that using `pryr::object_size()` (unfortunately the built-in
-    `object.size()` doesn't have quite enough smarts to show you this super 
-    important feature of R):
-    
-    ```{R}
-    diamonds <- ggplot2::diamonds
-    pryr::object_size(diamonds)
-    
-    diamonds2 <- dplyr::mutate(diamonds, price_per_carat = price / carat)
-    pryr::object_size(diamonds2)
-    
-    pryr::object_size(diamonds, diamonds2)
-    ```
-    
-    `diamonds` is 3.46 MB, and `diamonds2` is 3.89 MB, but the total size of 
-    `diamonds` and `diamonds2` is only 3.89 MB. How does that work?
-    only 3.89 MB
+```R
+foo_foo_1 <- hop_through(foo_foo, forest)
+foo_foo_2 <- scoop_up(foo_foo_1, field_mice)
+foo_foo_3 <- bop_on(foo_foo_2, head)
+```
 
-1.  Overwrite the original:
+This avoids the nesting, but you now have to name each intermediate element.
+If there are natural names, use this form. But if you're just numbering
+them, I don't think it's that useful. Whenever I write code like this, 
+I invariably write the wrong number somewhere and then spend 10 minutes 
+scratching my head and trying to figure out what went wrong with my code.
 
-    ```R
-    foo_foo <- hop_through(foo_foo, forest)
-    foo_foo <- scoop_up(foo_foo, field_mouse)
-    foo_foo <- bop_on(foo_foo, head)
-    ```
-    
-    This is a minor variation of the previous form, where instead of giving
-    each intermediate element its own name, you use the same name, replacing
-    the previous value at each step. This is less typing (and less thinking),
-    so you're less likely to make mistakes. However, it can make debugging
-    painful, because if you make a mistake you'll need to start from
-    scratch again. Also, I think the reptition of the object being transformed
-    (here we've repeated `foo_foo` six times!) obscures the intent of the code.
-    
-1.  Use the pipe 
+You may also worry that this form creates many intermediate copies of your
+data and takes up a lot of memory. First, in R, I don't think worrying about
+memory is a useful way to spend your time: worry about it when it becomes
+a problem (i.e. you run out of memory), not before. Second, R isn't stupid:
+it will reuse the shared columns in a pipeline of data frame transformations.
 
-    ```R
-    foo_foo %>%
-      hop_through(forest) %>%
-      scoop_up(field_mouse) %>%
-      bop_on(head)
-    ```
-    
-    This is my favourite form. The downside is that you need to understand
-    what the pipe does, but once you've mastered that simple task, you can
-    read this series of function compositions like it's a set of imperative
-    actions. 
-    
-    (Behind the scenes magrittr converts this call to the previous form,
-    using `.` as the name of the object. This makes it easier to debug than
-    the first form because it avoids deeply nested fuction calls.)
+You can see that using `pryr::object_size()` (unfortunately the built-in
+`object.size()` doesn't have quite enough smarts to show you this super 
+important feature of R):
 
-## Useful intermediates
+```{R}
+diamonds <- ggplot2::diamonds
+pryr::object_size(diamonds)
+
+diamonds2 <- dplyr::mutate(diamonds, price_per_carat = price / carat)
+pryr::object_size(diamonds2)
+
+pryr::object_size(diamonds, diamonds2)
+```
+
+`diamonds` is 3.46 MB, and `diamonds2` is 3.89 MB, but the total size of 
+`diamonds` and `diamonds2` is only 3.89 MB. How does that work?
+only 3.89 MB
+
+### Overwrite the original
+
+```R
+foo_foo <- hop_through(foo_foo, forest)
+foo_foo <- scoop_up(foo_foo, field_mice)
+foo_foo <- bop_on(foo_foo, head)
+```
+
+This is a minor variation of the previous form, where instead of giving
+each intermediate element its own name, you use the same name, replacing
+the previous value at each step. This is less typing (and less thinking),
+so you're less likely to make mistakes. However, it can make debugging
+painful, because if you make a mistake you'll need to start from
+scratch again. Also, I think the reptition of the object being transformed
+(here we've repeated `foo_foo` six times!) obscures the intent of the code.
+
+### Function composition
+
+```R
+bop_on(
+  scoop_up(
+    hop_through(foo_foo, forest),
+    field_mice
+  ), 
+  head
+)
+```
+
+The disadvantage is that you have to read from inside-out, from 
+right-to-left, and that the arguments end up spread far apart 
+(sometimes called the 
+[dagwood sandwhich](https://en.wikipedia.org/wiki/Dagwood_sandwich)
+problem).
+
+### Use the pipe 
+
+```R
+foo_foo %>%
+  hop_through(forest) %>%
+  scoop_up(field_mouse) %>%
+  bop_on(head)
+```
+
+This is my favourite form. The downside is that you need to understand
+what the pipe does, but once you've mastered that simple task, you can
+read this series of function compositions like it's a set of imperative
+actions. 
+
+Behind the scenes magrittr converts this to:
+
+```{r, eval = FALSE}
+. <- hop_through(foo_foo, forest)
+. <- scoop_up(., field_mice)
+bop_on(., head)
+```
+using `.` as the name of the object. This makes it easier to debug than
+the first form because it avoids deeply nested fuction calls.)
+
+### Useful intermediates
 
 *   Whenever you write your own function that is used primarily for its 
     side-effects, you should always return the first argument invisibly, e.g.
@@ -180,7 +195,7 @@ There are a number of ways that you could write this:
       cor(disp, mpg)
     ```
 
-## When not to use the pipe
+### When not to use the pipe
 
 The pipe is a powerful tool, but it's not the only tool at your disposal, and it doesn't solve every problem! Generally, you should reach for another tool when:
 
@@ -221,13 +236,7 @@ The pipe is a powerful tool, but it's not the only tool at your disposal, and it
     modified copy and then replaces the old version (this may seem like a 
     subtle point but I think it's quite important).  
 
-## Duplication
-
-As you become a better R programmer, you'll learn more techniques for reducing various types of duplication. This allows you to do more with less, and allows you to express yourself more clearly by taking advantage of powerful programming constructs.
-
-Two main tools for reducing duplication are functions and for-loops. You tend to use for-loops less often in R than in other programming languages because R is a functional programming language. That means that you can extract out common patterns of for loops and put them in a function.
-
-### Extracting out a function
+## Functions
 
 Whenever you've copied and pasted code more than twice, you need to take a look at it and see if you can extract out the common components and make a function. For example, take a look at this code. What does it do?
 
@@ -279,9 +288,17 @@ rescale01 <- function(x) {
   rng <- range(x, na.rm = TRUE)
   (x - rng[1]) / (rng[2] - rng[1])
 }
+rescale01(c(0, 5, 10))
 ```
 
+The result returned from a function is the last thing is does.
+
 Always make sure your code works on a simple test case before creating the function!
+
+Always want to start simple: start with test values and get the body of the function working first.
+Check each step as you go.
+Don’t try and do too much at once!
+“Wrap it up” as a function only once everything works.
 
 Now we can use that to simplify our original example:
 
@@ -292,101 +309,157 @@ df$c <- rescale01(df$c)
 df$d <- rescale01(df$d)
 ```
 
-This makes it more clear what we're doing, and avoids one class of copy-and-paste errors. However, we still have quite a bit of duplication: we're doing the same thing to each column.
+This makes it more clear what we're doing, and avoids one class of copy-and-paste errors. However, we still have quite a bit of duplication: we're doing the same thing to each column. We'll learn how to handle that in the for loop section. But first, lets talk a bit more about functions.
 
-### Common looping patterns
+### Function components
 
-Before we tackle the problem of rescaling each column, lets start with a simpler case. Imagine we want to summarise each column with its median. One way to do that is to use a for loop. Every for loop has three main components:
+* Arguments (incl. default)
+* Body
+* Environment
 
-1. Creating the space for the output.
-2. The sequence to loop over.
-3. The body of the loop.
+### Scoping
 
-```{r}
-medians <- vector("numeric", ncol(df))
-for (i in 1:ncol(df)) {
-  medians[i] <- median(df[[i]])
-}
-medians
-```
+### `...`
 
-If you do this a lot, you should probably make a function for it:
+### Non-standard evaluation
 
-```{r}
-col_medians <- function(df) {
-  out <- vector("numeric", ncol(df))
-  for (i in 1:ncol(df)) {
-    out[i] <- median(df[[i]])
-  }
-  out
-}
-col_medians(df)
-```
+One challenge with writing functions is that many of the functions you've used in this book use non-standard evaluation to minimise typing. This makes these functions great for interactive use, but it does make it more challenging to program with them, because you need to use more advanced techniques.
 
-Now imagine that you also want to compute the interquartile range of each column? How would you change the function? What if you also wanted to calculate the min and max?
+Unfortunately these techniques are beyond the scope of this book, but you can learn the techniques with online resources:
 
-```{r}
-col_min <- function(df) {
-  out <- vector("numeric", ncol(df))
-  for (i in 1:ncol(df)) {
-    out[i] <- min(df[[i]])
-  }
-  out
-}
-col_max <- function(df) {
-  out <- vector("numeric", ncol(df))
-  for (i in 1:ncol(df)) {
-    out[i] <- max(df[[i]])
-  }
-  out
-}
-```
-
-I've now copied-and-pasted this function three times, so it's time to think about how to generalise it. If you look at these functions, you'll notice that they are very similar: the only difference is the function that gets called.
-
-I mentioned earlier that R is a functional programming language. Practically, what this means is that you can not only pass vectors and data frames to functions, but you can also pass other functions. So you can generalise these `col_*` functions by adding an additional argument:
-
-```{r}
-col_summary <- function(df, fun) {
-  out <- vector("numeric", ncol(df))
-  for (i in 1:ncol(df)) {
-    out[i] <- fun(df[[i]])
-  }
-  out
-}
-col_summary(df, median)
-col_summary(df, min)
-```
-
-We can take this one step further and use another cool feature of R functions: "`...`". "`...`" just takes any additional arguments and allows you to pass them on to another function:
-
-```{r}
-col_summary <- function(df, fun, ...) {
-  out <- vector("numeric", ncol(df))
-  for (i in 1:ncol(df)) {
-    out[i] <- fun(df[[i]], ...)
-  }
-  out
-}
-col_summary(df, median, na.rm = TRUE)
-```
-
-If you've used R for a bit, the behaviour of function might seem familiar: it looks like the `lapply()` or `sapply()` functions. Indeed, all of the apply function in R abstract over common looping patterns.
-
-There are two main differences with `lapply()` and `col_summary()`:
-
-* `lapply()` returns a list. This allows it to work with any R function, not 
-  just those that return numeric output.
+* Programming with ggplot2 (an excerpt from the ggplot2 book):
+  http://rpubs.com/hadley/97970
   
-* `lapply()` is written in C, not R. This gives some very minor performance
-  improvements.
-  
-As you learn more about R, you'll learn more functions that allow you to abstract over common patterns of for loops.
+* Programming with dplyr: still hasn't been written.
 
 ### Exercises
 
-1.   Adapt `col_summary()` so that it only applies to numeric inputs.
-     You might want to start with an `is_numeric()` function that returns
-     a logical vector that has a TRUE corresponding to each numeric column.
+1.  Follow <http://nicercode.github.io/intro/writing-functions.html> to 
+    write your own functions to compute the variance and skew of a vector.
 
-1.   How do `sapply()` and `vapply()` differ from `col_summary()`?
+1.  Read the [complete lyrics](https://en.wikipedia.org/wiki/Little_Bunny_Foo_Foo) 
+    to "Little Bunny Foo". There's a lot of duplication in this song. 
+    Extend the initial piping example to recreate the complete song, using 
+    functions to reduce duplication.
+
+## For loops
+
+Before we tackle the problem of rescaling each column, lets start with a simpler case. Imagine we want to summarise each column with its median. One way to do that is to use a for loop. Every for loop has three main components:
+
+```{r}
+results <- vector("numeric", ncol(df))
+for (i in seq_along(df)) {
+  results[[i]] <- median(df[[i]])
+}
+results
+```
+
+There are three parts to a for loop:
+
+1.  The __results__: `results <- vector("integer", length(x))`. 
+    This creates an integer vector the same length as the input. It's important
+    to enough space for all the results up front, otherwise you have to grow the 
+    results vector at each iteration, which is very slow for large loops.
+
+1.  The __sequence__: `i in seq_along(df)`. This determines what to loop over:
+    each run of the for loop will assign `i` to a different value from 
+    `seq_along(df)`, shorthand for `1:length(df)`. It's useful to think of `i`
+    as a pronoun.
+    
+1.  The __body__: `results[i] <- median(df[[i]])`. This code is run repeatedly, 
+    each time with a different value in `i`. The first iteration will run 
+    `results[1] <- median(df[[2]])`, the second `results[2] <- median(df[[2]])`, 
+    and so on.
+
+This loop used a function you might not be familiar with: `seq_along()`. This is a safe version of the more familiar `1:length(l)`. There's one important difference in behaviour. If you have a zero-length vector, `seq_along()` does the right thing:
+
+```{r}
+y <- numeric(0)
+seq_along(y)
+1:length(y)
+```
+
+Lets go back to our original motivation:
+
+```{r}
+df$a <- rescale01(df$a)
+df$b <- rescale01(df$b)
+df$c <- rescale01(df$c)
+df$d <- rescale01(df$d)
+```
+
+In this case the output is already present: we're modifying an existing object. 
+
+Need to think about a data frame as a list of column (we'll make this definition precise later on). The length of a data frame is the number of columns. To extract a single column, you use `[[`.
+
+That makes our for loop quite simple:
+
+```{r}
+for (i in seq_along(df)) {
+  df[[i]] <- rescale01(df[[i]])
+}
+```
+
+For loops are not as important in R as they are in other languages as rather than writing your own for loops, you'll typically use prewritten functions that wrap up common for-loop patterns. You'll learn about those in the next chapter.  These functions are important because they wrap up the book-keeping code related to the for loop, focussing purely on what's happening. For example the two for-loops we wrote above can be rewritten as:
+
+```{r}
+library(purrr)
+
+map_dbl(df, median)
+df[] <- map(df, rescale01)
+```
+
+The focus is now on the function doing the modification, rather than the apparatus of the for-loop.
+
+### Looping patterns
+
+There are three basic ways to loop over a vector:
+
+1.  Loop over the elements: `for (x in xs)`. Most useful for side-effects,
+    but it's difficult to save the output efficiently.
+
+1.  Loop over the numeric indices: `for (i in seq_along(xs))`. Most common
+    form if you want to know the element (`xs[[i]]`) and it's position.
+
+1.  Loop over the names: `for (nm in names(xs))`. Gives you both the name
+    and the position. This is useful if you want to use the name in a
+    plot title or a file name.
+
+The most general form uses `seq_along(xs)`, because from the position you can access both the name and the value:
+
+```{r, eval = FALSE}
+for (i in seq_along(x)) {
+  name <- names(x)[[i]]
+  value <- x[[i]]
+}
+```
+
+### Exercises    
+
+1.  It's common to see for loops that don't preallocate the output and instead
+    increase the length of a vector at each step:
+    
+    ```{r}
+    results <- vector("integer", 0)
+    for (i in seq_along(x)) {
+      results <- c(results, lengths(x[[i]]))
+    }
+    results
+    ```
+    
+    How does this affect performance? 
+
+## Learning more
+
+As you become a better R programmer, you'll learn more techniques for reducing various types of duplication. This allows you to do more with less, and allows you to express yourself more clearly by taking advantage of powerful programming constructs.
+
+To learn more you need to study R as a programming language, not just an interactive environment for data science. We have written two books that will help you do so:
+
+* [Hands on programming with R](http://shop.oreilly.com/product/0636920028574.do),
+  by Garrett Grolemund. This is an introduction to R as a programming language 
+  and is a great place to start if R is your first programming language.
+  
+* [Advanced R](http://adv-r.had.co.nz) by Hadley Wickham. This dives into the
+  details of R the programming language. This is a great place to start if
+  you've programmed in other languages and you want to learn what makes R 
+  special, different, and particularly well suited to data analysis.

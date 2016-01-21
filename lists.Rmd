@@ -189,67 +189,41 @@ for (i in seq_along(x)) {
 results
 ```
 
-There are three parts to a for loop:
-
-1.  The __results__: `results <- vector("integer", length(x))`. 
-    This creates an integer vector the same length as the input. It's important
-    to enough space for all the results up front, otherwise you have to grow the 
-    results vector at each iteration, which is very slow for large loops.
-
-1.  The __sequence__: `i in seq_along(x)`. This determines what to loop over:
-    each run of the for loop will assign `i` to a different value from 
-    `seq_along(x)`, shorthand for `1:length(x)`. It's useful to think of `i`
-    as a pronoun.
-    
-1.  The __body__: `results[i] <- length(x[[i]])`. This code is run repeatedly, 
-    each time with a different value in `i`. The first iteration will run 
-    `results[1] <- length(x[[1]])`, the second `results[2] <- length(x[[2]])`, 
-    and so on.
-    
-This loop used a function you might not be familiar with: `seq_along()`. This is a safe version of the more familiar `1:length(l)`. There's one important difference in behaviour. If you have a zero-length vector, `seq_along()` does the right thing:
+If you do this a lot, you should probably make a function for it:
 
 ```{r}
-y <- numeric(0)
-seq_along(y)
-1:length(y)
+col_medians <- function(df) {
+  out <- vector("numeric", ncol(df))
+  for (i in 1:ncol(df)) {
+    out[i] <- median(df[[i]])
+  }
+  out
+}
+col_medians(df)
 ```
 
-Figuring out the length of the elements of a list is a common operation, so it makes sense to turn it into a function so we can reuse it again and again:
+Now imagine that you also want to compute the interquartile range of each column? How would you change the function? What if you also wanted to calculate the min and max?
 
 ```{r}
-compute_length <- function(x) {
-  results <- vector("numeric", length(x))
-  for (i in seq_along(x)) {
-    results[i] <- length(x[[i]])
+col_min <- function(df) {
+  out <- vector("numeric", ncol(df))
+  for (i in 1:ncol(df)) {
+    out[i] <- min(df[[i]])
   }
-  results
+  out
 }
-compute_length(x)
+col_max <- function(df) {
+  out <- vector("numeric", ncol(df))
+  for (i in 1:ncol(df)) {
+    out[i] <- max(df[[i]])
+  }
+  out
+}
 ```
 
-(In fact base R has this function already: it's called `lengths()`.)
+I've now copied-and-pasted this function three times, so it's time to think about how to generalise it. If you look at these functions, you'll notice that they are very similar: the only difference is the function that gets called.
 
-Now imagine we want to compute the `mean()` of each element. How would our function change? What if we wanted to compute the `median()`? You could create variations of `compute_lengths()` that looked like this:
-
-```{r}
-compute_mean <- function(x) {
-  results <- vector("numeric", length(x))
-  for (i in seq_along(x)) {
-    results[i] <- mean(x[[i]])
-  }
-  results
-}
-compute_mean(x)
-
-compute_median <- function(x) {
-  results <- vector("numeric", length(x))
-  for (i in seq_along(x)) {
-    results[i] <- median(x[[i]])
-  }
-  results
-}
-compute_median(x)
-```
+I mentioned earlier that R is a functional programming language. Practically, what this means is that you can not only pass vectors and data frames to functions, but you can also pass other functions. So you can generalise these `col_*` functions by adding an additional argument:
 
 But this is only two of the many functions we might want to apply to every element of a list, and there's already lot of duplication. Most of the code is for-loop boilerplate and it's hard to see the one function (`length()`, `mean()`, or `median()`) that's actually important.
 
@@ -269,16 +243,32 @@ f <- function(x, i) abs(x - mean(x)) ^ i
 
 You've reduce the chance of bugs (because you now have 1/3 less code), and made it easy to generalise to new situations. We can do exactly the same thing with `compute_length()`, `compute_median()` and `compute_mean()`:
 
+I mentioned earlier that R is a functional programming language. Practically, what this means is that you can not only pass vectors and data frames to functions, but you can also pass other functions. So you can generalise these `col_*` functions by adding an additional argument:
+
 ```{r}
-compute_summary <- function(x, f) {
-  results <- vector("numeric", length(x))
-  for (i in seq_along(x)) {
-    results[i] <- f(x[[i]])
+col_summary <- function(df, fun) {
+  out <- vector("numeric", ncol(df))
+  for (i in 1:ncol(df)) {
+    out[i] <- fun(df[[i]])
   }
-  results
+  out
 }
-compute_summary(x, mean)
-```  
+col_summary(df, median)
+col_summary(df, min)
+```
+
+We can take this one step further and use another cool feature of R functions: "`...`". "`...`" just takes any additional arguments and allows you to pass them on to another function:
+
+```{r}
+col_summary <- function(df, fun, ...) {
+  out <- vector("numeric", ncol(df))
+  for (i in 1:ncol(df)) {
+    out[i] <- fun(df[[i]], ...)
+  }
+  out
+}
+col_summary(df, median, na.rm = TRUE)
+```
 
 Instead of hardcoding the summary function, we allow it to vary, by adding an additional argument that is a function. It can take a while to wrap your head around this, but it's very powerful technique. This is one of the reasons that R is known as a "functional" programming language.
 
@@ -286,19 +276,10 @@ Instead of hardcoding the summary function, we allow it to vary, by adding an ad
 
 1.  Read the documentation for `apply()`. In the 2d case, what two for loops
     does it generalise?
-    
-1.  It's common to see for loops that don't preallocate the output and instead
-    increase the length of a vector at each step:
-    
-    ```{r}
-    results <- vector("integer", 0)
-    for (i in seq_along(x)) {
-      results <- c(results, lengths(x[[i]]))
-    }
-    results
-    ```
-    
-    How does this affect performance? 
+
+1.   Adapt `col_summary()` so that it only applies to numeric columns
+     You might want to start with an `is_numeric()` function that returns
+     a logical vector that has a TRUE corresponding to each numeric column.
 
 ## The map functions
 
