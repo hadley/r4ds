@@ -34,11 +34,13 @@ To me, improving your communication skills is a key part of mastering R as a pro
     common patterns of for loops and put them in a function. We'll come back to
     that idea in XYZ.
 
-Removing duplication is an important part of expressing yourself clearly because it lets the reader focus on what's different between operations rather than what's the same. The goal is not just to write better funtions or to do things that you couldn't do before, but to code with more "ease". As you internalise the ideas in this chapter, you should find it easier to re-tackle problems that you've solved in the past with much effort.
+Removing duplication is an important part of expressing yourself clearly because it lets the reader (i.e. future-you!) focus on what's different between operations rather than what's the same. The goal is not just to write better funtions or to do things that you couldn't do before, but to code with more "ease". As you internalise the ideas in this chapter, you should find it easier to re-tackle problems that you've solved in the past with much effort.
 
 Writing code is similar in many ways to writing prose. One parallel which I find particularly useful is that in both cases rewriting is key to clarity. The first expression of your ideas is unlikely to be particularly clear, and you may need to rewrite multiple times. After solving a data analysis challenge, it's often worth looking at your code and thinking about whether or not it's obvious what you've done. If you spend a little time rewriting your code while the ideas are fresh, you can save a lot of time later trying to recreate what your code did. But this doesn't mean you should rewrite every function: you need to balance what you need to achieve now with saving time in the long run.  (But the more you rewrite your functions the more likely you'll first attempt will be clear.)
 
 ## Piping
+
+Pipes let you transform the way you call deeply nested functions. Using a pipe doesn't affect at all what the code does; behind the scenes it is run in exactly the same way. What the pipe does is change how the code is written and hence how it is read. It tends to transform to a more imperative form (do this, do that, do that other thing, ...)  so that it's easier to read.
 
 ### Piping alternatives
 
@@ -76,7 +78,7 @@ foo_foo_3 <- bop(foo_foo_2, on = head)
 
 The main downside of this form is that it forces you to name each intermediate element. If there are natural names, this form feels natural, and you should use it. But if you're giving then arbitrary unique names, like this example, I don't think it's that useful. Whenever I write code like this, I invariably write the wrong number somewhere and then spend 10 minutes scratching my head and trying to figure out what went wrong with my code.
 
-You may worry that this form creates many intermediate copies of your data and takes up a lot of memory. First, in R, I don't think worrying about memory is a useful way to spend your time: worry about it when it becomes a problem (i.e. you run out of memory), not before. Second, R isn't stupid: it will reuse the shared columns in a pipeline of data frame transformations. Let's take a look at an actual data manipulation pipeline where we add a new column to the `diamonds` dataset from ggplot2:
+You may worry that this form creates many intermediate copies of your data and takes up a lot of memory. First, in R, worrying about memory is not a useful way to spend your time: worry about it when it becomes a problem (i.e. you run out of memory), not before. Second, R isn't stupid: it will reuse the shared columns in a pipeline of data frame transformations. Let's take a look at an actual data manipulation pipeline where we add a new column to the `diamonds` dataset from ggplot2:
 
 ```{r}
 diamonds2 <- mutate(diamonds, price_per_carat = price / carat)
@@ -106,7 +108,7 @@ object_size(diamonds, diamonds2)
 
 #### Overwrite the original
 
-One way to eliminate all of the intermediate objects is to just overwrite the input:
+One way to eliminate the intermediate objects is to just overwrite the same object again and again:
 
 ```{r, eval = FALSE}
 foo_foo <- hop(foo_foo, through = forest)
@@ -114,8 +116,14 @@ foo_foo <- scoop(foo_foo, up = field_mice)
 foo_foo <- bop(foo_foo, on = head)
 ```
 
-This is a minor variation of the previous form, where instead of giving each intermediate element its own name, you use the same name, replacing the previous value at each step. This is less typing (and less thinking), so you're less likely to make mistakes. However, it will make debugging painful: if you make a mistake you'll need to start again from scratch. Also, I think the reptition of the object being transformed (here we've written `foo_foo` six times!) obscures what's changing on each line.
+This is less typing (and less thinking), so you're less likely to make mistakes. However, there are two problems:
 
+1.  It will make debugging painful: if you make a mistake you'll need to start 
+    again from scratch. 
+    
+1.  The reptition of the object being transformed (we've written `foo_foo` six 
+    times!) obscures what's changing on each line. 
+    
 #### Function composition
 
 Another approach is to abandon assignment altogether and just string the function calls together:
@@ -154,9 +162,9 @@ Behind the scenes magrittr converts this to:
 bop(., on = head)
 ```
 
-It's useful to know this because if an error is throw in the middle of the pipe, you'll need to be able to interpret the `traceback()`.
+It's useful to know this because if an error is thrown in the middle of the pipe, you'll need to be able to interpret the `traceback()`.
 
-### Other piping tools
+### Other tools from magrittr
 
 The pipe is provided by the magrittr package, by Stefan Milton Bache. Most of packages you work in this book automatically provide `%>%` for you. You might want to load magrittr yourself if you're using another package, or you want to access some of the other pipe variants that magrittr provides.
 
@@ -261,7 +269,7 @@ df$d <- (df$d - min(df$d, na.rm = TRUE)) /
   (max(df$d, na.rm = TRUE) - min(df$d, na.rm = TRUE))
 ```
 
-You might be able to puzzle out that this rescales each column to 0--1. Did you spot the mistake? I made an error when updating the code for `df$b`, and I forgot to change an `a` to a `b`. Extracting repeated code out into a function is a good idea because it helps make your code more understandable (because you can name the operation), and it prevents you from making this sort of update error.
+You might be able to puzzle out that this rescales each column to 0--1. But did you spot the mistake? I made an error when updating the code for `df$b`, and I forgot to change an `a` to a `b`. Extracting repeated code out into a function is a good idea because it helps make your code more understandable (because you can name the operation), and it prevents you from making this sort of copy-and-paste error.
 
 To write a function you need to first analyse the operation. How many inputs does it have?
 
@@ -277,7 +285,7 @@ x <- 1:10
 (x - min(x, na.rm = TRUE)) / (max(x, na.rm = TRUE) - min(x, na.rm = TRUE))
 ```
 
-We can also see some duplication in this code: I'm computing the `min()` and `max()` multiple times, and I could instead do that in one step:
+There is some duplication in this code: I'm computing the `min()` and `max()` multiple times, and I could instead do that in one step:
 
 ```{r}
 rng <- range(x, na.rm = TRUE)
@@ -294,14 +302,9 @@ rescale01 <- function(x) {
 rescale01(c(0, 5, 10))
 ```
 
-The result returned from a function is the last thing is does.
-
 Always make sure your code works on a simple test case before creating the function!
 
-Always want to start simple: start with test values and get the body of the function working first.
-Check each step as you go.
-Don’t try and do too much at once!
-“Wrap it up” as a function only once everything works.
+Note the process that I followed here: constructing the `function` is the last thing I did. It's much easier to start with code that works on a sample input and then turn it into a function rather than the other way around. You're more likely to get to your final destination if you take small steps and check your work after each step.
 
 Now we can use that to simplify our original example:
 
@@ -312,17 +315,93 @@ df$c <- rescale01(df$c)
 df$d <- rescale01(df$d)
 ```
 
-This makes it more clear what we're doing, and avoids one class of copy-and-paste errors. However, we still have quite a bit of duplication: we're doing the same thing to each column. We'll learn how to handle that in the for loop section. But first, lets talk a bit more about functions.
+This makes it more clear what we're doing, and avoids one class of copy-and-paste errors. However, we still have quite a bit of duplication: we're still doing the same thing to multiple columns. We'll learn how to handle that in the for loop section. But first, lets talk a bit more about functions.
+
+### Practice
+
+Practice turning the following code snippets into functions. Think about how you can re-write them to be as clear an expressive as possible.
 
 ### Function components
 
-* Arguments (incl. default)
-* Body
-* Environment
+There are three attributes that define what a function does:
 
-### Scoping
+1.  The __arguments__ of a function are its inputs. 
 
-### `...`
+1.  The __body__ of a function is the code that it runs each time.
+
+1.  The function __environment__ controls how it looks up values from names
+    (i.e. how it goes from the name `x`, to its value, `10`).
+
+#### Arguments
+
+You can choose to supply default values to your arguments for common options. This is useful so that you don't need to repeat yourself all the time.
+
+```{r}
+foo <- function(x = 1, y = TRUE, z = 10:1) {
+  
+}
+```
+
+Default values can depend on other arguments but don't over use this technique as it's possible to create code that is very difficult to understand:
+
+```{r}
+bar <- function(x = y + 1, y = x + 1) {
+  x * y
+}
+```
+
+On other aspect of arguments you'll commonly see is `...`. This captures any other arguments not otherwise matched. It's useful because you can then send those `...` on to another argument. This is a useful catch all if your function primarily wraps another function.  For example, you might have written your own wrapper designed to add linear model lines to a ggplot:
+
+```{r}
+geom_lm <- function(formula = y ~ x, colour = alpha("steelblue", 0.5), 
+                    size = 2, ...)  {
+  geom_smooth(formula = formula, se = FALSE, method = "lm", colour = colour,
+    size = size, ...)
+}
+```
+
+This allows you to use any other arguments of `geom_smooth()`, even thoses that aren't explicitly listed in your wrapper (and even arguments that don't exist yet in the version of ggplot2 that you're using).
+
+#### Body
+
+The body of the function does the actual work. The return value of a function is the last thing that it does. 
+
+You can use an explicit `return()` statement, but this is not needed, and is best avoided except when you want to return early.
+
+#### Environment
+
+The environment of a function control where values are looked up from. Take this function for example:
+
+```{r}
+f <- function(x) {
+  x + y
+} 
+```
+
+In many programming languages, this would be an error, because `y` is not defined inside the function. However, in R this is valid code. Since `y` is not defined inside the function, R will look in the environment where the function was defined:
+
+```{r}
+y <- 100
+f(10)
+
+y <- 1000
+f(10)
+```
+
+You should avoid functions that work like this because it makes it harder to predict what your function will return. 
+
+This behaviour seems like a recipe for bugs, but by and large it doesn't cause too many, especially as you become a more experienced R programmer. The advantage of this behaviour is from a language stand point it allows R to be very consistent. Every name is looked up using the same set of rules. For `f()` that includes the behaviour of two things that you might not expect: `{` and `+`.
+
+This consistent set of rules allows for a number of powerful tool that are unfortunately beyond the scope of this book, but you can read about in "Advanced R".
+
+#### Exercises
+
+1.  What happens if you try to override the method in `geom_lm()` created
+    above? Why?
+
+### Making functions with magrittr
+
+One cool feature of the pipe is that it's also very easy to create functions with it.
 
 ### Non-standard evaluation
 

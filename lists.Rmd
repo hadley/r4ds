@@ -170,63 +170,59 @@ knitr::include_graphics("images/pepper-3.jpg")
 1.  What happens if you subset a data frame as if you're subsetting a list?
     What are the key differences between a list and a data frame?
 
-## For loops
+## For loops vs functionals
 
-To illustrate for loops, we'll start by creating a stereotypical list: an eight element list where each element contains a random vector of random length. (You'll learn about `rerun()` later.)
-
-```{r}
-x <- rerun(8, runif(sample(5, 1)))
-str(x)
-```
-
-Imagine we want to compute the length of each element in this list. One way to do that is with a for loop:
+Imagine you have a data frame and you want to compute the mean of each column. You might write code like this:
 
 ```{r}
-results <- vector("integer", length(x))
-for (i in seq_along(x)) {
-  results[i] <- length(x[[i]])
+df <- data.frame(
+  a = rnorm(10),
+  b = rnorm(10),
+  c = rnorm(10),
+  d = rnorm(10)
+)
+
+results <- numeric(length(df))
+for (i in seq_along(df)) {
+  results[i] <- mean(df[[i]])
 }
 results
 ```
 
-If you do this a lot, you should probably make a function for it:
+(Here we're taking advantage of the fact that a data frame is a list of the individual columns, so `length()` and `seq_along()` are useful.)
+
+You realise that you're going to want to compute the means of every column pretty frequently, so you extract it out into a function:
 
 ```{r}
-df <- data.frame(x = 1:10, y = rnorm(100))
-col_medians <- function(df) {
-  out <- vector("numeric", ncol(df))
-  for (i in 1:ncol(df)) {
-    out[i] <- median(df[[i]])
+col_mean <- function(df) {
+  results <- numeric(length(df))
+  for (i in seq_along(df)) {
+    results[i] <- mean(df[[i]])
   }
-  out
-}
-col_medians(df)
-```
-
-Now imagine that you also want to compute the interquartile range of each column? How would you change the function? What if you also wanted to calculate the min and max?
-
-```{r}
-col_min <- function(df) {
-  out <- vector("numeric", ncol(df))
-  for (i in 1:ncol(df)) {
-    out[i] <- min(df[[i]])
-  }
-  out
-}
-col_max <- function(df) {
-  out <- vector("numeric", ncol(df))
-  for (i in 1:ncol(df)) {
-    out[i] <- max(df[[i]])
-  }
-  out
+  results
 }
 ```
 
-I've now copied-and-pasted this function three times, so it's time to think about how to generalise it. If you look at these functions, you'll notice that they are very similar: the only difference is the function that gets called.
+But then you think it'd also be helpful to be able to compute the median or the standard deviation:
 
-I mentioned earlier that R is a functional programming language. Practically, what this means is that you can not only pass vectors and data frames to functions, but you can also pass other functions. So you can generalise these `col_*` functions by adding an additional argument:
+```{r}
+col_median <- function(df) {
+  results <- numeric(length(df))
+  for (i in seq_along(df)) {
+    results[i] <- median(df[[i]])
+  }
+  results
+}
+col_sd <- function(df) {
+  results <- numeric(length(df))
+  for (i in seq_along(df)) {
+    results[i] <- sd(df[[i]])
+  }
+  results
+}
+```
 
-But this is only two of the many functions we might want to apply to every element of a list, and there's already lot of duplication. Most of the code is for-loop boilerplate and it's hard to see the one function (`length()`, `mean()`, or `median()`) that's actually important.
+I've now copied-and-pasted this function three times, so it's time to think about how to generalise it. Most of the code is for-loop boilerplate and it's hard to see the one piece (`mean()`, `median()`, `sd()`) that differs.
 
 What would you do if you saw a set of functions like this:
 
@@ -242,14 +238,12 @@ Hopefully, you'd notice that there's a lot of duplication, and extract it out in
 f <- function(x, i) abs(x - mean(x)) ^ i
 ```
 
-You've reduce the chance of bugs (because you now have 1/3 less code), and made it easy to generalise to new situations. We can do exactly the same thing with `compute_length()`, `compute_median()` and `compute_mean()`:
-
-I mentioned earlier that R is a functional programming language. Practically, what this means is that you can not only pass vectors and data frames to functions, but you can also pass other functions. So you can generalise these `col_*` functions by adding an additional argument:
+You've reduce the chance of bugs (because you now have 1/3 less code), and made it easy to generalise to new situations. We can do exactly the same thing with `col_mean()`, `col_median()` and `col_sd()`, by adding an argument that contains the function to apply to each column:
 
 ```{r}
 col_summary <- function(df, fun) {
-  out <- vector("numeric", ncol(df))
-  for (i in 1:ncol(df)) {
+  out <- vector("numeric", length(df))
+  for (i in seq_along(df)) {
     out[i] <- fun(df[[i]])
   }
   out
@@ -258,20 +252,7 @@ col_summary(df, median)
 col_summary(df, min)
 ```
 
-We can take this one step further and use another cool feature of R functions: "`...`". "`...`" just takes any additional arguments and allows you to pass them on to another function:
-
-```{r}
-col_summary <- function(df, fun, ...) {
-  out <- vector("numeric", ncol(df))
-  for (i in 1:ncol(df)) {
-    out[i] <- fun(df[[i]], ...)
-  }
-  out
-}
-col_summary(df, median, na.rm = TRUE)
-```
-
-Instead of hardcoding the summary function, we allow it to vary, by adding an additional argument that is a function. It can take a while to wrap your head around this, but it's very powerful technique. This is one of the reasons that R is known as a "functional" programming language.
+The idea of using a function as an argument to another function is extremely powerful. It might take you a while to wrap your head around it, but it's worth the investment. In the rest of the chapter, you'll learn about and use the purrr package which provides a set of functions that eliminate the need for for-loops for many comon scenarios.
 
 ### Exercises
 
