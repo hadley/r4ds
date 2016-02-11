@@ -249,6 +249,8 @@ When you run a pipe interactively, it's easy to see if something goes wrong. Whe
 
 ## Functions
 
+One of the best ways to grow in your capabilities as a user of R for data science is to write functions. Functions allow you to automate common tasks, instead of using copy-and-paste. Writing good functions is a lifetime journey: you won't learn everything but you'll hopefully get start walking in the right direction.
+
 Whenever you've copied and pasted code more than twice, you need to take a look at it and see if you can extract out the common components and make a function. For example, take a look at this code. What does it do?
 
 ```{r}
@@ -319,7 +321,7 @@ This makes it more clear what we're doing, and avoids one class of copy-and-past
 
 ### Practice
 
-Practice turning the following code snippets into functions. Think about how you can re-write them to be as clear an expressive as possible.
+Practice turning the following code snippets into functions. Think about how you can re-write them to be as clear and expressive as possible.
 
 ### Function components
 
@@ -362,15 +364,116 @@ geom_lm <- function(formula = y ~ x, colour = alpha("steelblue", 0.5),
 
 This allows you to use any other arguments of `geom_smooth()`, even thoses that aren't explicitly listed in your wrapper (and even arguments that don't exist yet in the version of ggplot2 that you're using).
 
+Note that arguments in R are lazily evaluated: they're not computed until they're needed. That means if they're never used, they're never called:
+
+```{r}
+g <- function(a, b, c) {
+  a + b
+}
+g(1, 2, stop("Not used!"))
+```
+
+You can read more about lazy evaluation at <http://adv-r.had.co.nz/Functions.html#lazy-evaluation>
+
 #### Body
 
-The body of the function does the actual work. The return value of a function is the last thing that it does. 
+The body of the function does the actual work. The value returned by the function is the last statement it evaluates. Unlike other languages all statements in R return a value. An `if` statement returns the value from the branch that was chosen:
 
-You can use an explicit `return()` statement, but this is not needed, and is best avoided except when you want to return early.
+```{r}
+greeting <- function(time = lubridate::now()) {
+  hour <- lubridate::hour(time)
+  
+  if (hour < 12) {
+    "Good morning"
+  } else if (hour < 18) {
+    "Good afternoon"
+  } else {
+    "Good evening"
+  }
+}
+greeting()
+```
+
+That also means you can assign the result of an `if` statement to a variable:
+
+```{r}
+y <- 10
+x <- if (y < 20) "Too low" else "Too high"
+```
+
+You can explicitly return early from a function with `return()`. I think it's best to save the use of `return()` to signal when you're returning early for some special reason.
+
+It's sometimes useful when you want to write code like this:
+
+```{r, eval = FALSE}
+f <- function() {
+  if (x) {
+    # Do 
+    # something
+    # that
+    # takes
+    # many
+    # lines
+    # to
+    # express
+  } else {
+    # return something short
+  }
+}
+```
+
+Because you can rewrite it as:
+
+```{r, eval = FALSE}
+
+f <- function() {
+  if (!x) {
+    return(something_short)
+  }
+
+  # Do 
+  # something
+  # that
+  # takes
+  # many
+  # lines
+  # to
+  # express
+}
+```
+
+Some functions return "invisible" values. These are not printed out by default but can be saved to a variable:
+
+```{r}
+f <- function() {
+  invisible(42)
+}
+
+f()
+
+x <- f()
+x
+```
+
+You can also force printing by surrounding the call in parentheses:
+
+```{r}
+(f())
+```
+
+Invisible values are mostly used when your function is called primarily for its side-effects (e.g. printing, plotting, or saving a file). It's nice to be able pipe such functions together, so returning the main input value is useful. This allows you to do things like:
+
+```{r, eval = FALSE}
+library(readr)
+
+mtcars %>% 
+  write_csv("mtcars.csv") %>% 
+  write_tsv("mtcars.tsv")
+```
 
 #### Environment
 
-The environment of a function control where values are looked up from. Take this function for example:
+The environment of a function controls how R finds the value associated with a name. For example, take this function:
 
 ```{r}
 f <- function(x) {
@@ -378,7 +481,7 @@ f <- function(x) {
 } 
 ```
 
-In many programming languages, this would be an error, because `y` is not defined inside the function. However, in R this is valid code. Since `y` is not defined inside the function, R will look in the environment where the function was defined:
+In many programming languages, this would be an error, because `y` is not defined inside the function. In R, this is valid code because R uses rules called lexical scoping to determine the value associated with a name. Since `y` is not defined inside the function, R will look where the function was defined:
 
 ```{r}
 y <- 100
@@ -401,18 +504,92 @@ This consistent set of rules allows for a number of powerful tool that are unfor
 
 ### Making functions with magrittr
 
-One cool feature of the pipe is that it's also very easy to create functions with it.
+Another way to write functions is using magrittr. You've already seen how to run a concrete magrittr pipeline:
+
+```{r}
+library(dplyr)
+mtcars %>% 
+  filter(mpg > 5) %>% 
+  group_by(cyl) %>% 
+  summarise(n = n())
+```
+
+You can easily turn that into a function by using `.` as the first object:
+
+```{r}
+my_fun <- . %>% 
+  filter(mpg > 5) %>% 
+  group_by(cyl) %>% 
+  summarise(n = n())
+my_fun
+
+my_fun(mtcars)
+```
+
+This is a great way to create a quick and dirty function if you've already made one pipe and now want to re-apply it in many places.
 
 ### Non-standard evaluation
 
-One challenge with writing functions is that many of the functions you've used in this book use non-standard evaluation to minimise typing. This makes these functions great for interactive use, but it does make it more challenging to program with them, because you need to use more advanced techniques.
+One challenge with writing functions is that many of the functions you've used in this book use non-standard evaluation to minimise typing. This makes these functions great for interactive use, but it does make it more challenging to program with them, because you need to use more advanced techniques. For example, imagine you find yourself doing this pattern very commonly:
 
-Unfortunately these techniques are beyond the scope of this book, but you can learn the techniques with online resources:
+```{r}
+mtcars %>% 
+  group_by(cyl) %>% 
+  summarise(mean = mean(mpg, na.rm = TRUE), n = n()) %>% 
+  filter(n > 10) %>% 
+  arrange(desc(mean))
+
+ggplot2::diamonds %>% 
+  group_by(cut) %>% 
+  summarise(mean = mean(price, na.rm = TRUE), n = n()) %>% 
+  filter(n > 10) %>% 
+  arrange(desc(mean))
+
+nycflights13::planes %>% 
+  group_by(model) %>% 
+  summarise(mean = mean(year, na.rm = TRUE), n = n()) %>% 
+  filter(n > 100) %>% 
+  arrange(desc(mean))
+```
+
+You'd like to be able to write a function with arguments data frame, group and variable so you could rewrite the above code as:
+
+```{r, eval = FALSE}
+mtcars %>% 
+  mean_by(cyl, mpg, n = 10)
+
+ggplot2::diamonds %>% 
+  mean_by(cut, price, n = 10)
+
+nycflights13::planes %>% 
+  mean_by(model, year, n = 100)
+```
+
+Unfortunately the obvious approach doesn't work:
+
+```{r}
+mean_by <- function(data, group_var, mean_var, n = 10) {
+  data %>% 
+    group_by(group_var) %>% 
+    summarise(mean = mean(mean_var, na.rm = TRUE), n = n()) %>% 
+    filter(n > 100) %>% 
+    arrange(desc(mean))
+}
+```
+
+Because this tells dplyr to group by `group_var` and compute the mean of `mean_var` neither of which exist in the data frame. A similar problem exists in ggplot2. 
+
+I've only really recently understood this problem well, so the solutions are currently rather complicated and beyond the scope of this book. You can learn them online techniques with online resources:
 
 * Programming with ggplot2 (an excerpt from the ggplot2 book):
   http://rpubs.com/hadley/97970
   
 * Programming with dplyr: still hasn't been written.
+
+* Understanding non-standard evaluation in general: 
+  <http://adv-r.had.co.nz/Computing-on-the-language.html>.
+
+This is definitely an advanced topic, and I haven't done a good job of either explaining well or providing tools to make it easy, or being consistent across packages. So don't worry if you find it hard!
 
 ### Exercises
 
