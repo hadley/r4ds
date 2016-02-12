@@ -271,7 +271,7 @@ df$d <- (df$d - min(df$d, na.rm = TRUE)) /
   (max(df$d, na.rm = TRUE) - min(df$d, na.rm = TRUE))
 ```
 
-You might be able to puzzle out that this rescales each column to 0--1. But did you spot the mistake? I made an error when updating the code for `df$b`, and I forgot to change an `a` to a `b`. Extracting repeated code out into a function is a good idea because it helps make your code more understandable (because you can name the operation), and it prevents you from making this sort of copy-and-paste error.
+You might be able to puzzle out that this rescales each column to 0--1. But did you spot the mistake? I made an error when copying-and-pasting the code for `df$b`, and I forgot to change an `a` to a `b`. Extracting repeated code out into a function is a good idea because it helps make your code more understandable (because you can name the operation), and it prevents you from making this class of errors.
 
 To write a function you need to first analyse the operation. How many inputs does it have?
 
@@ -306,7 +306,7 @@ rescale01(c(0, 5, 10))
 
 Always make sure your code works on a simple test case before creating the function!
 
-Note the process that I followed here: constructing the `function` is the last thing I did. It's much easier to start with code that works on a sample input and then turn it into a function rather than the other way around. You're more likely to get to your final destination if you take small steps and check your work after each step.
+Note the process that I followed here: I constructed the `function` last. It's much easier to start with code that works on a sample input and then turn it into a function rather than the other way around. You're more likely to get to your final destination if you take small steps and check your work after each step.
 
 Now we can use that to simplify our original example:
 
@@ -321,18 +321,43 @@ This makes it more clear what we're doing, and avoids one class of copy-and-past
 
 ### Practice
 
-Practice turning the following code snippets into functions. Think about how you can re-write them to be as clear and expressive as possible.
+1.  Practice turning the following code snippets into functions. Think about 
+    what each function does. What would you call it? How many arguments does it
+    need? Can you rewrite it to be more expressive or less duplicative?
+
+    ```{r, eval = FALSE}
+    mean(is.na(x))
+    
+    x / sum(x, na.rm = TRUE)
+    
+    sd(x, na.rm = TRUE) / mean(x, na.rm = TRUE)
+    
+    mean((x - mean(x))^3) / mean((x - mean(x))^2)^(3/2)
+    ```
+
+1. Implement a `fizzbuzz` function. It take a single number as input. If
+   the number is divisible by three, return "fizz". If it's divisible by
+   five return "buzz". If it's divisible by three and five, return "fizzbuzz".
+   Otherwise, return the number.
 
 ### Function components
 
 There are three attributes that define what a function does:
 
-1.  The __arguments__ of a function are its inputs. 
+1.  The __arguments__ of a function are its possible inputs. 
+    Sometimes these are called _formal_ arguments to distinguish them from
+    the actual arguments that a function is called with. For example, the 
+    formal argument of mean are `x`, `trim` and `na.rm`, but a given call
+    might only use some of these arguments.
 
 1.  The __body__ of a function is the code that it runs each time.
+    The last statement evaluated in the function body is what it returns.
+    The return value is not a property of the function because it changes
+    depending on the input values.
 
 1.  The function __environment__ controls how it looks up values from names
-    (i.e. how it goes from the name `x`, to its value, `10`).
+    (i.e. how it goes from the name `x`, to its value, `10`). The set of
+    rules that governs this behaviour is called scoping.
 
 #### Arguments
 
@@ -344,15 +369,17 @@ foo <- function(x = 1, y = TRUE, z = 10:1) {
 }
 ```
 
-Default values can depend on other arguments but don't overuse this technique as it's possible to create code that is very difficult to understand:
+Whenever you have a mix of arguments with and without defaults, those without defaults should come first.
+
+Default values can depend on other arguments but don't overuse this technique as it's possible to create code that is very difficult to understand. What does this function do?
 
 ```{r}
-bar <- function(x = y + 1, y = x + 1) {
+bar <- function(x = y + 1, y = x - 1) {
   x * y
 }
 ```
 
-On other aspect of arguments you'll commonly see is `...`. This captures any other arguments not otherwise matched. It's useful because you can then send those `...` on to another argument. This is a useful catch-all if your function primarily wraps another function.  For example, you might have written your own wrapper designed to add linear model lines to a ggplot:
+There's a special argument that's used quite commonly: `...`. This captures any other arguments not otherwise matched. It's useful because you can then send those `...` on to another argument. This is a useful catch-all if your function primarily wraps another function.  For example, you might have written your own wrapper designed to add linear model lines to a ggplot:
 
 ```{r}
 geom_lm <- function(formula = y ~ x, colour = alpha("steelblue", 0.5), 
@@ -491,20 +518,34 @@ y <- 1000
 f(10)
 ```
 
-You should avoid functions that work like this because it makes it harder to predict what your function will return. 
+This behaviour seems like a recipe for bugs, and indeed you should avoid creating functions like this deliberately, but by and large it doesn't cause too many problems (especially if you regularly restart R to get to a clean slate). The advantage of this behaviour is that from a language standpoint it allows R to be very consistent. Every name is looked up using the same set of rules. For `f()` that includes the behaviour of two things that you might not expect: `{` and `+`.
 
-This behaviour seems like a recipe for bugs, but by and large it doesn't cause too many, especially as you become a more experienced R programmer. The advantage of this behaviour is that from a language standpoint it allows R to be very consistent. Every name is looked up using the same set of rules. For `f()` that includes the behaviour of two things that you might not expect: `{` and `+`.
+This allows you to do devious things like:
 
-This consistent set of rules allows for a number of powerful tools that are unfortunately beyond the scope of this book, but you can read about in "Advanced R".
+```{r}
+`+` <- function(x, y) {
+  if (runif(1) < 0.1) {
+    sum(x, y)
+  } else {
+    sum(x, y) * 1.1
+  }
+}
+table(replicate(1000, 1 + 2))
+rm(`+`)
+```
+
+This is a common phenomenon in R. R gives you a lot of control. You can do many things that are not possible in other programming languages. You can things that 99% of the time extremely ill-advised (like overriding how addition works!), but this power and flexibility is what makes tools like ggplot2 and dplyr possible. Learning how to make good use of this flexibility is beyond the scope of this book, but you can read about in "Advanced R".
 
 #### Exercises
 
+1.  What happens if you call `bar()`? What does the error message mean?
+
 1.  What happens if you try to override the method in `geom_lm()` created
-    above? Why?
+    above (e.g. `geom_lm(method = "glm")`? Why?
 
 ### Making functions with magrittr
 
-Another way to write functions is using magrittr. You've already seen how to run a concrete magrittr pipeline:
+Another way to write functions is using magrittr. You've already seen how to execute a pipeline on a specific dataset:
 
 ```{r}
 library(dplyr)
@@ -514,7 +555,7 @@ mtcars %>%
   summarise(n = n())
 ```
 
-You can easily turn that into a function by using `.` as the first object:
+But you can also create a generic pipeline that you can apply to any object:
 
 ```{r}
 my_fun <- . %>% 
@@ -526,11 +567,11 @@ my_fun
 my_fun(mtcars)
 ```
 
-This is a great way to create a quick and dirty function if you've already made one pipe and now want to re-apply it in many places.
+The key is to use `.` as the initial input in to the pipe. This is a great way to create a quick and dirty function if you've already made one pipe and now want to re-apply it in many places.
 
 ### Non-standard evaluation
 
-One challenge with writing functions is that many of the functions you've used in this book use non-standard evaluation to minimise typing. This makes these functions great for interactive use, but it does make it more challenging to program with them, because you need to use more advanced techniques. For example, imagine you find yourself doing this pattern very commonly:
+One challenge with writing functions is that many of the functions you've used in this book use non-standard evaluation to minimise typing. This makes these functions great for interactive use, but it does make it more challenging to program with them, because you need to use more advanced techniques. For example, imagine you'd written the following duplicated code across a handful of data analysis projects:
 
 ```{r}
 mtcars %>% 
@@ -577,19 +618,7 @@ mean_by <- function(data, group_var, mean_var, n = 10) {
 }
 ```
 
-This fails because it tells dplyr to group by `group_var` and compute the mean of `mean_var` neither of which exist in the data frame. A similar problem exists in ggplot2. 
-
-I've only really recently understood this problem well, so the solutions are currently rather complicated and beyond the scope of this book. You can learn about these techniques online:
-
-* Programming with ggplot2 (an excerpt from the ggplot2 book):
-  http://rpubs.com/hadley/97970
-  
-* Programming with dplyr: still hasn't been written.
-
-* Understanding non-standard evaluation in general: 
-  <http://adv-r.had.co.nz/Computing-on-the-language.html>.
-
-This is definitely an advanced topic, and I haven't done a good job of either explaining well or providing tools to make it easy, or being consistent across packages. So don't worry if you find it hard!
+This fails because it tells dplyr to group by `group_var` and compute the mean of `mean_var` neither of which exist in the data frame. Writing reusable functions for ggplot2 poses a similar problem because `aes(group_var, mean_var)` would look for variables called `group_var` and `mean_var`. It's really only been in the last couple of months that I fully understood this problem, so there aren't currently any great (or general) solutions. However, now that I've understood the problem I think there will be some systematic solutions in the near future.
 
 ### Exercises
 
@@ -694,6 +723,12 @@ for (i in seq_along(x)) {
 ```
 
 ### Exercises    
+
+1.  Convert the song "99 bottles of beer on the wall" to a function. Generalise
+    to any number of any vessel containing any liquid on any surface.
+
+1.  Convert the nursey rhyme "ten in the bed" to a function. Generalise it 
+    to any number of people in any sleeping structure.
 
 1.  It's common to see for loops that don't preallocate the output and instead
     increase the length of a vector at each step:
