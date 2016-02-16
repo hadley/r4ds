@@ -20,7 +20,7 @@ module Jekyll
       f.flush
 
       # http://rubyquicktips.com/post/5862861056/execute-shell-commands
-      content = `_plugins/knit.r temp.Rmd`
+      content = `cd _plugins && ./knit.r ../temp.Rmd`
 
       if $?.exitstatus != 0
         raise "Knitting failed"
