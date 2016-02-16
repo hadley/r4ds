@@ -17,3 +17,9 @@ knitr and pandoc. To create the site, you need:
 * bookdown: `install_github("hadley/bookdown")`
 * [pandoc](http://johnmacfarlane.net/pandoc/)
 * [knitr](http://yihui.name/knitr/): `install.packages("knitr")`
+
+The R packages used in this book can be installed via
+
+```{r}
+devtools::install_github("hadley/r4ds")
+```
