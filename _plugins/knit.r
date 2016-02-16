@@ -1,4 +1,5 @@
-#!/usr/bin/Rscript
+#!/usr/bin/env Rscript
+
 library(rmarkdown)
 library(bookdown)
 library(methods)
