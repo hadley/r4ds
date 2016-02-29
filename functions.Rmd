@@ -30,7 +30,7 @@ Writing code is similar in many ways to writing prose. One parallel which I find
 
 ## Piping
 
-Pipes let you transform the way you call deeply nested functions. Using a pipe doesn't affect at all what the code does; behind the scenes it is run in exactly the same way. What the pipe does is change how the code is written and hence how it is read. It tends to transform to a more imperative form (do this, do that, do that other thing, ...)  so that it's easier to read.
+Pipes let you transform the way you call deeply nested functions. Using a pipe doesn't affect at all what the code does; behind the scenes it is run in (almost) exactly the same way. What the pipe does is change how the code is written and hence how it is read. It tends to transform to a more imperative form (do this, do that, do that other thing, ...) so that it's easier to read.
 
 ### Piping alternatives
 
@@ -216,6 +216,48 @@ library(magrittr)
 
 ### When not to use the pipe
 
+I also made a slight simplifiation when I said that the `x %>% f(y)` is exactly the same as `f(x, y)`. That's not quite true, which you'll see particularly for two classes of functions:
+
+1.  Functions that use the current environment. For example, `assign()`
+    will create a new variable with the given name in the current environment:
+     
+    ```{r}
+    assign("x", 10)
+    x
+    
+    "x" %>% assign(100)
+    x
+    ```
+    
+    The use of assign with the pipe does not work because it assigns it to 
+    a temporary environment used by `%>%`. If you do want to use assign with the
+    pipe, you can be explicit about the environment:
+    
+    ```{r}
+    env <- environment()
+    "x" %>% assign(100, envir = env)
+    x
+    ```
+    
+    Other functions with this problem are `get()`, and `load()`
+
+1.  Functions that use effect how their arguments are computed. In R, arguments
+    are lazy which means they are only computed when the function uses them,
+    not prior to calling the function. This means that the function can affect
+    the global environment in various ways. The pipe forces computation of 
+    each element in series so you can't rely on this behaviour.
+    
+    ```{r, error = TRUE}
+    tryCatch(stop("!"), error = function(e) "An error")
+    
+    stop("!") %>% 
+      tryCatch(error = function(e) "An error")
+    ```
+    
+    There are a relatively wide class of functions with this behaviour including
+    `try()`, `supressMessages()`, `suppressWarnings()`, any function from the
+    withr package, ...
+
 The pipe is a powerful tool, but it's not the only tool at your disposal, and it doesn't solve every problem! Pipes are most useful for rewriting a fairly short linear sequence of operations. I think you should reach for another tool when:
 
 * Your pipes get longer than five or six lines. In that case, create 
@@ -230,6 +272,7 @@ The pipe is a powerful tool, but it's not the only tool at your disposal, and it
 * You are starting to think about a directed graph with a complex
   dependency structure. Pipes are fundamentally linear and expressing 
   complex relationships with them typically does not yield clear code.
+
 
 ### Pipes in production
 
