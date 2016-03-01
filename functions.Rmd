@@ -1,288 +1,8 @@
-# Expressing yourself in code
-
-```{r, include = FALSE}
-library(dplyr)
-diamonds <- ggplot2::diamonds
-```
-
-Code is a tool of communication, not just to the computer, but to other people. This is important because every project you undertake is fundamentally collaborative. Even if you're not working with other people, you'll definitely be working with future-you. You want to write clear code so that future-you doesn't curse present-you when you look at a project again after several months have passed.
-
-To me, improving your communication skills is a key part of mastering R as a programming language. Over time, you want your code to become more and more clear, and easier to write. In this chapter, you'll learn three important skills that help you move in this direction: 
-
-1.  We'll dive deep into the __pipe__, `%>%`, talking more about how it works 
-    and how it gives you a new tool for rewriting your code. You'll also learn 
-    about when not to use the pipe!
-
-1.  Repeating yourself in code is dangerous because it can easily lead to 
-    errors and inconsistencies. We'll talk about how to write __functions__
-    in order to remove duplication in your logic.
-    
-1.  Another important tool for removing duplication is the __for loop__ which
-    allows you to repeat the same action again and again and again. You tend to 
-    use for-loops less often in R than in other programming languages because R 
-    is a functional programming language which means that you can extract out 
-    common patterns of for loops and put them in a function. We'll come back to
-    that idea in XYZ.
-
-Removing duplication is an important part of expressing yourself clearly because it lets the reader (i.e. future-you!) focus on what's different between operations rather than what's the same. The goal is not just to write better functions or to do things that you couldn't do before, but to code with more "ease". As you internalise the ideas in this chapter, you should find it easier to re-tackle problems that you've solved in the past with much effort.
-
-Writing code is similar in many ways to writing prose. One parallel which I find particularly useful is that in both cases rewriting is key to clarity. The first expression of your ideas is unlikely to be particularly clear, and you may need to rewrite multiple times. After solving a data analysis challenge, it's often worth looking at your code and thinking about whether or not it's obvious what you've done. If you spend a little time rewriting your code while the ideas are fresh, you can save a lot of time later trying to recreate what your code did. But this doesn't mean you should rewrite every function: you need to balance what you need to achieve now with saving time in the long run.  (But the more you rewrite your functions the more likely you'll first attempt will be clear.)
-
-## Piping
-
-Pipes let you transform the way you call deeply nested functions. Using a pipe doesn't affect at all what the code does; behind the scenes it is run in (almost) exactly the same way. What the pipe does is change how the code is written and hence how it is read. It tends to transform to a more imperative form (do this, do that, do that other thing, ...) so that it's easier to read.
-
-### Piping alternatives
-
-To explore how you can write the same code in many different ways, let's use code to tell a story about a little bunny named foo foo:
-
-> Little bunny Foo Foo  
-> Went hopping through the forest  
-> Scooping up the field mice  
-> And bopping them on the head  
-
-We'll start by defining an object to represent little bunny Foo Foo:
-
-```{r, eval = FALSE}
-foo_foo <- little_bunny()
-```
-
-And then we'll use a function for each key verb `hop()`, `scoop()`, and `bop()`. Using this object and these verbs, there are a number of ways we could retell the story in code:
-
-* Save each intermediate step as a new object
-* Rewrite the original object multiple times
-* Compose functions
-* Use the pipe
-
-Below we work through each approach, showing you the code and talking about the advantages and disadvantages.
-
-#### Intermediate steps
-
-The simplest and most robust approach to sequencing multiple function calls is to save each intermediary as a new object:
-
-```{r, eval = FALSE}
-foo_foo_1 <- hop(foo_foo, through = forest)
-foo_foo_2 <- scoop(foo_foo_1, up = field_mice)
-foo_foo_3 <- bop(foo_foo_2, on = head)
-```
-
-The main downside of this form is that it forces you to name each intermediate element. If there are natural names, this form feels natural, and you should use it. But if you're giving then arbitrary unique names, like this example, I don't think it's that useful. Whenever I write code like this, I invariably write the wrong number somewhere and then spend 10 minutes scratching my head and trying to figure out what went wrong with my code.
-
-You may worry that this form creates many intermediate copies of your data and takes up a lot of memory. First, in R, worrying about memory is not a useful way to spend your time: worry about it when it becomes a problem (i.e. you run out of memory), not before. Second, R isn't stupid: it will reuse the shared columns in a pipeline of data frame transformations. Let's take a look at an actual data manipulation pipeline where we add a new column to the `diamonds` dataset from ggplot2:
-
-```{r}
-diamonds2 <- mutate(diamonds, price_per_carat = price / carat)
-
-library(pryr)
-object_size(diamonds)
-object_size(diamonds2)
-object_size(diamonds, diamonds2)
-```
-
-`pryr::object_size()` gives the memory occupied by all of its arguments. The results seem counterintuitive at first:
-
-* `diamonds` takes up 3.46 MB,
-* `diamonds2` takes up 3.89 MB,
-* `diamonds` and `diamonds2` together take up 3.89 MB!
-
-How can that work? Well, `diamonds2` has 10 columns in common with `diamonds`: there's no need to duplicate all that data so both data frames share the vectors. R will only create a copy of a vector if you modify it. Modifying a single value will mean that the data frames can no longer share as much memory. The individual sizes will be unchanged, but the collective size will increase:
-
-```{r}
-diamonds$carat[1] <- NA
-object_size(diamonds)
-object_size(diamonds2)
-object_size(diamonds, diamonds2)
-```
-
-(Note that we use `pryr::object_size()` here, not the built-in `object.size()`, because it doesn't have quite enough smarts.)
-
-#### Overwrite the original
-
-One way to eliminate the intermediate objects is to just overwrite the same object again and again:
-
-```{r, eval = FALSE}
-foo_foo <- hop(foo_foo, through = forest)
-foo_foo <- scoop(foo_foo, up = field_mice)
-foo_foo <- bop(foo_foo, on = head)
-```
-
-This is less typing (and less thinking), so you're less likely to make mistakes. However, there are two problems:
-
-1.  It will make debugging painful: if you make a mistake you'll need to start 
-    again from scratch. 
-    
-1.  The repetition of the object being transformed (we've written `foo_foo` six 
-    times!) obscures what's changing on each line. 
-    
-#### Function composition
-
-Another approach is to abandon assignment altogether and just string the function calls together:
-
-```{r, eval = FALSE}
-bop(
-  scoop(
-    hop(foo_foo, through = forest),
-    up = field_mice
-  ), 
-  on = head
-)
-```
-
-Here the disadvantage is that you have to read from inside-out, from right-to-left, and that the arguments end up spread far apart (sometimes called the 
-[dagwood sandwhich](https://en.wikipedia.org/wiki/Dagwood_sandwich) problem).
-
-#### Use the pipe 
-
-Finally, we can use the pipe:
-
-```{r, eval = FALSE}
-foo_foo %>%
-  hop(through = forest) %>%
-  scoop(up = field_mouse) %>%
-  bop(on = head)
-```
-
-This is my favourite form. The downside is that you need to understand what the pipe does, but once you've mastered that idea task, you can read this series of function compositions like it's a set of imperative actions. Foo foo, hops, then scoops, then bops.
-
-Behind the scenes magrittr converts this to:
-
-```{r, eval = FALSE}
-. <- hop(foo_foo, through = forest)
-. <- scoop(., up = field_mice)
-bop(., on = head)
-```
-
-It's useful to know this because if an error is thrown in the middle of the pipe, you'll need to be able to interpret the `traceback()`.
-
-### Other tools from magrittr
-
-The pipe is provided by the magrittr package, by Stefan Milton Bache. Most of packages you work in this book automatically provide `%>%` for you. You might want to load magrittr yourself if you're using another package, or you want to access some of the other pipe variants that magrittr provides.
-
-```{r}
-library(magrittr)
-```
-
-*   When working with more complex pipes, it's some times useful to call a 
-    function for its side-effects. Maybe you want to print out the current 
-    object, or plot it, or save it to disk. Many times, such functions don't 
-    return anything, effectively terminating the pipe.
-    
-    To work around this problem, you can use the "tee" pipe. `%T>%` works like 
-    `%>%` except instead it returns the LHS instead of the RHS. It's called 
-    "tee" because it's like a literal T-shaped pipe.
-
-    ```{r}
-    rnorm(100) %>%
-      matrix(ncol = 2) %>%
-      plot() %>%
-      str()
-    
-    rnorm(100) %>%
-      matrix(ncol = 2) %T>%
-      plot() %>%
-      str()
-    ```
-
-*   If you're working with functions that don't have a dataframe based API  
-    (i.e. you pass them individual vectors, not a data frame and expressions 
-    to be evaluated in the context of that data frame), you might find `%$%` 
-    useful. It "explodes" out the variables in a data frame so that you can 
-    refer to them explicitly. This is useful when working with many functions 
-    in base R:
-    
-    ```{r}
-    mtcars %$%
-      cor(disp, mpg)
-    ```
-
-*   For assignment magrittr provides the `%<>%` operator which allows you to
-    replace code like:
-  
-    ```R
-    mtcars <- mtcars %>% transform(cyl = cyl * 2)
-    ```
-    
-    with
-     
-    ```R
-    mtcars %<>% transform(cyl = cyl * 2)
-    ```
-    
-    I'm not a fan of this operator because I think assignment is such a 
-    special operation that it should always be clear when it's occurring.
-    In my opinion, a little bit of duplication (i.e. repeating the 
-    name of the object twice), is fine in return for making assignment
-    more explicit.
-
-### When not to use the pipe
-
-I also made a slight simplifiation when I said that the `x %>% f(y)` is exactly the same as `f(x, y)`. That's not quite true, which you'll see particularly for two classes of functions:
-
-1.  Functions that use the current environment. For example, `assign()`
-    will create a new variable with the given name in the current environment:
-     
-    ```{r}
-    assign("x", 10)
-    x
-    
-    "x" %>% assign(100)
-    x
-    ```
-    
-    The use of assign with the pipe does not work because it assigns it to 
-    a temporary environment used by `%>%`. If you do want to use assign with the
-    pipe, you can be explicit about the environment:
-    
-    ```{r}
-    env <- environment()
-    "x" %>% assign(100, envir = env)
-    x
-    ```
-    
-    Other functions with this problem are `get()`, and `load()`
-
-1.  Functions that use effect how their arguments are computed. In R, arguments
-    are lazy which means they are only computed when the function uses them,
-    not prior to calling the function. This means that the function can affect
-    the global environment in various ways. The pipe forces computation of 
-    each element in series so you can't rely on this behaviour.
-    
-    ```{r, error = TRUE}
-    tryCatch(stop("!"), error = function(e) "An error")
-    
-    stop("!") %>% 
-      tryCatch(error = function(e) "An error")
-    ```
-    
-    There are a relatively wide class of functions with this behaviour including
-    `try()`, `supressMessages()`, `suppressWarnings()`, any function from the
-    withr package, ...
-
-The pipe is a powerful tool, but it's not the only tool at your disposal, and it doesn't solve every problem! Pipes are most useful for rewriting a fairly short linear sequence of operations. I think you should reach for another tool when:
-
-* Your pipes get longer than five or six lines. In that case, create 
-  intermediate objects with meaningful names. That will make debugging easier,
-  because you can more easily check the intermediate results. It also helps
-  when reading the code, because the variable names can help describe the
-  intent of the code.
-  
-* You have multiple inputs or outputs. If there is not one primary object
-  being transformed, write code the regular ways.
-
-* You are starting to think about a directed graph with a complex
-  dependency structure. Pipes are fundamentally linear and expressing 
-  complex relationships with them typically does not yield clear code.
-
-
-### Pipes in production
-
-When you run a pipe interactively, it's easy to see if something goes wrong. When you start writing pipes that are used in production, i.e. they're run automatically and a human doesn't immediately look at the output it's a really good idea to include some assertions that verify the data looks like expected. One great way to do this is the ensurer package, written by Stefan Milton Bache (the author of magrittr). 
-  
-<http://www.r-statistics.com/2014/11/the-ensurer-package-validation-inside-pipes/>
-
-## Functions
+# Functions
 
 One of the best ways to grow in your skills as a data scientist in R is to write functions. Functions allow you to automate common tasks, instead of using copy-and-paste. Writing good functions is a lifetime journey: you won't learn everything but you'll hopefully get to start walking in the right direction.
+
+## When should you write a function?
 
 Whenever you've copied and pasted code more than twice, you need to take a look at it and see if you can extract out the common components and make a function. For example, take a look at this code. What does it do?
 
@@ -375,7 +95,7 @@ This makes it more clear what we're doing, and avoids one class of copy-and-past
    five return "buzz". If it's divisible by three and five, return "fizzbuzz".
    Otherwise, return the number.
 
-### Function components
+## Function components
 
 There are three attributes that define what a function does:
 
@@ -394,7 +114,7 @@ There are three attributes that define what a function does:
     (i.e. how it goes from the name `x`, to its value, `10`). The set of
     rules that governs this behaviour is called scoping.
 
-#### Arguments
+### Arguments
 
 You can choose to supply default values to your arguments for common options. This is useful so that you don't need to repeat yourself all the time.
 
@@ -437,7 +157,7 @@ g(1, 2, stop("Not used!"))
 
 You can read more about lazy evaluation at <http://adv-r.had.co.nz/Functions.html#lazy-evaluation>
 
-#### Body
+### Body
 
 The body of the function does the actual work. The value returned by the function is the last statement it evaluates. Unlike other languages all statements in R return a value. An `if` statement returns the value from the branch that was chosen:
 
@@ -535,7 +255,7 @@ mtcars %>%
   write_tsv("mtcars.tsv")
 ```
 
-#### Environment
+### Environment
 
 The environment of a function controls how R finds the value associated with a name. For example, take this function:
 
@@ -580,7 +300,7 @@ This is a common phenomenon in R. R gives you a lot of control. You can do many 
 1.  What happens if you try to override the method in `geom_lm()` created
     above (e.g. `geom_lm(method = "glm")`? Why?
 
-### Making functions with magrittr
+## Making functions with magrittr
 
 Another way to write functions is using magrittr. You've already seen how to execute a pipeline on a specific dataset:
 
@@ -606,7 +326,7 @@ my_fun(mtcars)
 
 The key is to use `.` as the initial input in to the pipe. This is a great way to create a quick and dirty function if you've already made one pipe and now want to re-apply it in many places.
 
-### Non-standard evaluation
+## Non-standard evaluation
 
 One challenge with writing functions is that many of the functions you've used in this book use non-standard evaluation to minimise typing. This makes these functions great for interactive use, but it does make it more challenging to program with them, because you need to use more advanced techniques. For example, imagine you'd written the following duplicated code across a handful of data analysis projects:
 
@@ -666,131 +386,3 @@ This fails because it tells dplyr to group by `group_var` and compute the mean o
     to "Little Bunny Foo". There's a lot of duplication in this song. 
     Extend the initial piping example to recreate the complete song, using 
     functions to reduce duplication.
-
-## For loops
-
-Before we tackle the problem of rescaling each column, lets start with a simpler case. Imagine we want to summarise each column with its median. One way to do that is to use a for loop. Every for loop has three main components:
-
-```{r}
-results <- vector("numeric", ncol(df))
-for (i in seq_along(df)) {
-  results[[i]] <- median(df[[i]])
-}
-results
-```
-
-There are three parts to a for loop:
-
-1.  The __results__: `results <- vector("integer", length(x))`. 
-    This creates an integer vector the same length as the input. It's important
-    to enough space for all the results up front, otherwise you have to grow the 
-    results vector at each iteration, which is very slow for large loops.
-
-1.  The __sequence__: `i in seq_along(df)`. This determines what to loop over:
-    each run of the for loop will assign `i` to a different value from 
-    `seq_along(df)`, shorthand for `1:length(df)`. It's useful to think of `i`
-    as a pronoun.
-    
-1.  The __body__: `results[i] <- median(df[[i]])`. This code is run repeatedly, 
-    each time with a different value in `i`. The first iteration will run 
-    `results[1] <- median(df[[2]])`, the second `results[2] <- median(df[[2]])`, 
-    and so on.
-
-This loop used a function you might not be familiar with: `seq_along()`. This is a safe version of the more familiar `1:length(l)`. There's one important difference in behaviour. If you have a zero-length vector, `seq_along()` does the right thing:
-
-```{r}
-y <- numeric(0)
-seq_along(y)
-1:length(y)
-```
-
-Lets go back to our original motivation:
-
-```{r}
-df$a <- rescale01(df$a)
-df$b <- rescale01(df$b)
-df$c <- rescale01(df$c)
-df$d <- rescale01(df$d)
-```
-
-In this case the output is already present: we're modifying an existing object. 
-
-Think about a data frame as a list of columns (we'll make this definition precise later on). The length of a data frame is the number of columns. To extract a single column, you use `[[`.
-
-That makes our for loop quite simple:
-
-```{r, eval = FALSE}
-for (i in seq_along(df)) {
-  df[[i]] <- rescale01(df[[i]])
-}
-```
-
-For loops are not as important in R as they are in other languages as rather than writing your own for loops, you'll typically use prewritten functions that wrap up common for-loop patterns. You'll learn about those in the next chapter.  These functions are important because they wrap up the book-keeping code related to the for loop, focussing purely on what's happening. For example the two for-loops we wrote above can be rewritten as:
-
-```{r, eval = FALSE}
-library(purrr)
-
-map_dbl(df, median)
-df[] <- map(df, rescale01)
-```
-
-The focus is now on the function doing the modification, rather than the apparatus of the for-loop.
-
-### Looping patterns
-
-There are three basic ways to loop over a vector:
-
-1.  Loop over the elements: `for (x in xs)`. Most useful for side-effects,
-    but it's difficult to save the output efficiently.
-
-1.  Loop over the numeric indices: `for (i in seq_along(xs))`. Most common
-    form if you want to know the element (`xs[[i]]`) and its position.
-
-1.  Loop over the names: `for (nm in names(xs))`. Gives you both the name
-    and the position. This is useful if you want to use the name in a
-    plot title or a file name.
-
-The most general form uses `seq_along(xs)`, because from the position you can access both the name and the value:
-
-```{r, eval = FALSE}
-for (i in seq_along(x)) {
-  name <- names(x)[[i]]
-  value <- x[[i]]
-}
-```
-
-### Exercises    
-
-1.  Convert the song "99 bottles of beer on the wall" to a function. Generalise
-    to any number of any vessel containing any liquid on any surface.
-
-1.  Convert the nursey rhyme "ten in the bed" to a function. Generalise it 
-    to any number of people in any sleeping structure.
-
-1.  It's common to see for loops that don't preallocate the output and instead
-    increase the length of a vector at each step:
-    
-    ```{r}
-    results <- vector("integer", 0)
-    for (i in seq_along(x)) {
-      results <- c(results, lengths(x[[i]]))
-    }
-    results
-    ```
-    
-    How does this affect performance? 
-
-## Learning more
-
-As you become a better R programmer, you'll learn more techniques for reducing various types of duplication. This allows you to do more with less, and allows you to express yourself more clearly by taking advantage of powerful programming constructs.
-
-To learn more you need to study R as a programming language, not just an interactive environment for data science. We have written two books that will help you do so:
-
-* [Hands on programming with R](http://shop.oreilly.com/product/0636920028574.do),
-  by Garrett Grolemund. This is an introduction to R as a programming language 
-  and is a great place to start if R is your first programming language.
-  
-* [Advanced R](http://adv-r.had.co.nz) by Hadley Wickham. This dives into the
-  details of R the programming language. This is a great place to start if
-  you've programmed in other languages and you want to learn what makes R 
-  special, different, and particularly well suited to data analysis.
