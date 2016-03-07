@@ -88,6 +88,15 @@ There are three key steps to creating a new function:
 
 Note the overall process: I only made the function after I'd figured out how to make it work with a simple input. It's easier to start with working code and turn it into a function; it's harder to create a function and then try to make it work.
 
+At this point it's a good idea to check your function with a few different inputs:
+
+```{r}
+rescale01(c(-10, 0, 10))
+rescale01(c(1, 2, 3, NA, 5))
+```
+
+As you write more and more functions you'll eventually want to convert these informal, interactive tests into formal, automated tests. That process is called unit testing. Unfortunately, it's beyond the scope of this book, but you can learn about it in <http://r-pkgs.had.co.nz/tests.html>.
+
 Now that we have `rescale01()` we can use that to simplify the original example:
 
 ```{r}
@@ -400,15 +409,16 @@ The arguments to a function typically fall into two broad sets: one set supplies
 Generally, data arguments should come first. Detail arguments should go on the end, and usually should have default values. You specify a default value in the same way you call a function with a named argument:
 
 ```{r}
-# Compute standard error of a mean using normal approximation
-mean_se <- function(x, conf = 0.95) {
+# Compute confidence interval around mean using normal approximation
+mean_ci <- function(x, conf = 0.95) {
   se <- sd(x) / sqrt(length(x))
-  mean(x) + se * qnorm(c(1 - conf, conf))
+  alpha <- 1 - conf
+  mean(x) + se * qnorm(c(alpha / 2, 1 - alpha / 2))
 }
 
 x <- runif(100)
-mean_se(x)
-mean_se(x, 0.99)
+mean_ci(x)
+mean_ci(x, 0.99)
 ```
 
 The default value should almost always be the most common value. There are a few exceptions to do with safety. For example, it makes sense for `na.rm` to default to `FALSE` because missing values are important. Even though `na.rm = TRUE` is what you usually put in your code, it's a bad idea to silently ignore missing values by default.
@@ -435,6 +445,16 @@ average <- mean(feet / 12 + inches, na.rm = TRUE)
 # Bad
 average<-mean(feet/12+inches,na.rm=TRUE)
 ```
+
+### Choosing names
+
+### Checking values
+
+As you start to write more complicated functions, it's a good idea to check that the inputs are the type that you expect.
+
+Another place where it's useful to throw errors is when the inputs to the function are the wrong type.  It's a good idea to throw an error early.
+
+`stopifnot()`.
 
 ### Dot dot dot
 
@@ -524,36 +544,34 @@ f <- function() {
 
 This tends to make the code easier to understand, because you don't need quite so much context to understand it.
 
-### Invisible values
+### Writing pipeable functions
 
-Some functions return "invisible" values. These are not printed by default but can be saved to a variable:
+There are two key techniques for writing your own functions that work will in pipes.
+
+1.  Identify the key object: this should be the first argument of the function
+    and the value returned by the function. This is generally straightforward.
+    For example, the key objects for dplyr and tidyr are data frames.
+    
+1.  If your function is called primarily for its side-effects (i.e. performs
+    an action like drawing a plot or saving a file), it should "invisibly"
+    return the first argument. An invisible return is not printed by default,
+    but you can still save it to a variable or refer to it in a pipeline.
+
+## Errors
 
 ```{r}
-f <- function() {
-  invisible(42)
+try_require <- function(package, fun) {
+  if (requireNamespace(package, quietly = TRUE)) {
+    library(package, character.only = TRUE)
+    return(invisible())
+  }
+
+  stop("Package `", package, "` required for `", fun , "`.\n",
+    "Please install and try again.", call. = FALSE)
 }
-
-f()
-
-x <- f()
-x
 ```
 
-You can also force printing by surrounding the call in parentheses:
-
-```{r}
-(f())
-```
-
-Invisible values are mostly used when your function is called primarily for its side-effects (e.g. printing, plotting, or saving a file). It's nice to be able pipe such functions together, so it's good practice to invisibly return the first argument. This allows you to do things like:
-
-```{r, eval = FALSE}
-library(readr)
-
-mtcars %>% 
-  write_csv("mtcars.csv") %>% 
-  write_tsv("mtcars.tsv")
-```
+To specially handle errors, use `tryCatch()`.   (`try()` is a little simpler but I think it's a bit ugly, and you'll learn an alternative in the lists chapter.)
 
 ## Environment
 
@@ -592,74 +610,3 @@ rm(`+`)
 ```
 
 This is a common phenomenon in R. R gives you a lot of control. You can do many things that are not possible in other programming languages. You can things that 99% of the time extremely ill-advised (like overriding how addition works!), but this power and flexibility is what makes tools like ggplot2 and dplyr possible. Learning how to make good use of this flexibility is beyond the scope of this book, but you can read about in "Advanced R".
-
-## Errors
-
-```{r}
-try_require <- function(package, fun) {
-  if (requireNamespace(package, quietly = TRUE)) {
-    library(package, character.only = TRUE)
-    return(invisible())
-  }
-
-  stop("Package `", package, "` required for `", fun , "`.\n",
-    "Please install and try again.", call. = FALSE)
-}
-```
-
-Another place where it's useful to throw errors is when the inputs to the function are the wrong type.  It's a good idea to throw an error early.
-
-`stopifnot()`.
-
-## Non-standard evaluation
-
-One challenge with writing functions is that many of the functions you've used in this book use non-standard evaluation to minimise typing. This makes these functions great for interactive use, but it does make it more challenging to program with them, because you need to use more advanced techniques. For example, imagine you'd written the following duplicated code across a handful of data analysis projects:
-
-```{r, eval = FALSE}
-mtcars %>% 
-  group_by(cyl) %>% 
-  summarise(mean = mean(mpg, na.rm = TRUE), n = n()) %>% 
-  filter(n > 10) %>% 
-  arrange(desc(mean))
-
-ggplot2::diamonds %>% 
-  group_by(cut) %>% 
-  summarise(mean = mean(price, na.rm = TRUE), n = n()) %>% 
-  filter(n > 10) %>% 
-  arrange(desc(mean))
-
-nycflights13::planes %>% 
-  group_by(model) %>% 
-  summarise(mean = mean(year, na.rm = TRUE), n = n()) %>% 
-  filter(n > 100) %>% 
-  arrange(desc(mean))
-```
-
-You'd like to be able to write a function with arguments data frame, group and variable so you could rewrite the above code as:
-
-```{r, eval = FALSE}
-mtcars %>% 
-  mean_by(cyl, mpg, n = 10)
-
-ggplot2::diamonds %>% 
-  mean_by(cut, price, n = 10)
-
-nycflights13::planes %>% 
-  mean_by(model, year, n = 100)
-```
-
-Unfortunately the obvious approach doesn't work:
-
-```{r}
-mean_by <- function(data, group_var, mean_var, n = 10) {
-  data %>% 
-    group_by(group_var) %>% 
-    summarise(mean = mean(mean_var, na.rm = TRUE), n = n()) %>% 
-    filter(n > 100) %>% 
-    arrange(desc(mean))
-}
-```
-
-This fails because it tells dplyr to group by `group_var` and compute the mean of `mean_var` neither of which exist in the data frame. 
-
-Writing reusable functions for ggplot2 poses a similar problem because `aes(group_var, mean_var)` would look for variables called `group_var` and `mean_var`. It's really only been in the last couple of months that I fully understood this problem, so there aren't currently any great (or general) solutions. However, now that I've understood the problem I think there will be some systematic solutions in the near future.
