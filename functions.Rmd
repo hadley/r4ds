@@ -50,7 +50,7 @@ To write a function you need to first analyse the code. How many inputs does it 
   (max(df$a, na.rm = TRUE) - min(df$a, na.rm = TRUE))
 ```
 
-This code only has one input: `df$a`. (You might wonder if that `TRUE` is also an input: you can explore why it's not in the exercise below). To make the single input more clear, it's a good idea to rewrite the code using temporary variables with a general name. Here this function only takes one vector of input, so I'll call it `x`:
+This code only has one input: `df$a`. (It's a little suprisingly that `TRUE` is not an input: you can explore why in the exercise below). To make the single input more clear, it's a good idea to rewrite the code using temporary variables with a general name. Here this function only takes one vector of input, so I'll call it `x`:
 
 ```{r}
 x <- 1:10
@@ -97,7 +97,7 @@ rescale01(c(1, 2, 3, NA, 5))
 
 As you write more and more functions you'll eventually want to convert these informal, interactive tests into formal, automated tests. That process is called unit testing. Unfortunately, it's beyond the scope of this book, but you can learn about it in <http://r-pkgs.had.co.nz/tests.html>.
 
-Now that we have `rescale01()` we can use that to simplify the original example:
+We can simplify the original example now that we have a function:
 
 ```{r}
 df$a <- rescale01(df$a)
@@ -106,12 +106,12 @@ df$c <- rescale01(df$c)
 df$d <- rescale01(df$d)
 ```
 
-Compared to the original, this code is easier to understand. We've also eliminated one class of copy-and-paste errors. There is, however, still quite a bit of duplication since we're doing the same thing to multiple columns. You'll learn how to eliminate that duplication in the next chapter.
+Compared to the original, this code is easier to understand and we've eliminated one class of copy-and-paste errors. There is still quite a bit of duplication since we're doing the same thing to multiple columns. We'll learn how to eliminate that duplication in the next chapter.
 
 ### Practice
 
 1.  Why is `TRUE` not a parameter to `rescale01()`? What would happen if
-    `x` contained a missing value, and `na.rm` was `FALSE`?
+    `x` contained a single missing value, and `na.rm` was `FALSE`?
 
 1.  Practice turning the following code snippets into functions. Think about 
     what each function does. What would you call it? How many arguments does it
@@ -154,17 +154,29 @@ Compared to the original, this code is easier to understand. We've also eliminat
 
 It's important to remember that functions are not just for the computer, but are also for humans. R doesn't care what your function is called, or what comments it contains, but these are important for human readers. This section discusses some things that you should bear in mind when writing functions that humans can understand.
 
-The name of a function is important. Ideally the name of your function will be short, but clearly evoke what the function does. However, it's hard to come up with concise names, and autocomplete makes it easy to type long names, so it's better to err on the side of clear descriptions, rather than short names. There are a few exceptions to this rule: the handful of very common, very short names. It's worth memorising these:
+The name of a function is important. Ideally the name of your function will be short, but clearly evoke what the function does. However, it's hard to come up with concise names, and autocomplete makes it easy to type long names, so it's better to err on the side of clear descriptions, rather than short names. 
 
-* `x`, `y`, `z`: vectors.
-* `df`: a data frame.
-* `i`, `j`: numeric indices (typically rows and columns).
-* `n`: length, or number of rows.
-* `p`: number of columns.
+Generally, function names should be verbs, and arguments should be nouns. There are some exceptions: nouns are ok if the function computes a very well known noun (i.e. `mean()` is better than `compute_mean()`), or accessing some property of an object (i.e. `coef()` is better than `get_coefficients()`). A good sign that a noun might be a better choice is if you're using a very broad verb like "get", "compute", "calculate", or determine. Use your best judgement and don't be afraid to rename a function if you later figure out a better name.
 
-Generally, function names should be verbs, and arguments should be nouns. There are some exceptions: nouns are ok if the function computes a very well known noun (i.e. `mean()` is better than `compute_mean()`), or accessing some property of an object (i.e. `coef()` is better than `get_coefficients()`). A good sign that a noun might be a better choice is if you're using a very broad verb like get, or compute, or calculate, or determine. Use your best judgement and don't be afraid to rename a function if you later figure out a better name.
+```{r, eval = FALSE}
+# Too short
+f()
+
+# Not a verb, or descriptive
+my_awesome_function()
+
+# Long, but clear
+impute_missing()
+collapse_years()
+```
 
 If your function name is composed of multiple words, I recommend using "snake\_case", where each word is lower case and separated by an underscore. camelCase is a popular alternative alternative, but be consistent: pick one or the other and stick with it. R itself is not very consistent, but there's nothing you can do about that. Make sure you don't fall into the same trap by making your code as consistent as possible.
+
+```{r, eval = FALSE}
+# Never do this!
+col_mins()
+rowMaxes()
+```
 
 If you have a family of functions that do similar things, make sure they have consistent names and arguments. Use a common prefix to indicate that they are connected. That's better than a common suffix because autocomplete allows you to type the prefix and see all the members of the family.
 
@@ -180,7 +192,7 @@ checkbox_input
 text_input
 ```
 
-Where possible, avoid using names of common existing functions and variables. It's impossible to do in general because so many good names are already taken by other packages, but avoiding the most common names from base R will avoid confusion:
+Where possible, avoid overriding existing functions and variables. It's impossible to do in general because so many good names are already taken by other packages, but avoiding the most common names from base R will avoid confusion.
 
 ```{r, eval = FALSE}
 # Don't do this!
@@ -253,29 +265,55 @@ has_name <- function(x) {
 }
 ```
 
-This takes advantage of the standard rules of function return values: a function returns the last value that was computed. Here it will be one of the two if branches.
+This function takes advantage of the standard return rule: a function returns the last value that it computed. Here that is either one of the two branches of the `if` statement.
 
 ### Conditions
 
-The `condition` should be either a single `TRUE` or a single `FALSE`. If it's a vector you'll get a warning message, if it's an `NA`, you'll get an error. Watch out for these messages in your own code:
+The `condition` should be either a single `TRUE` or a single `FALSE`. If it's a vector, you'll get a warning message; if it's an `NA`, you'll get an error. Watch out for these messages in your own code:
 
 ```{r, error = TRUE}
-if (c(TRUE, FALSE)) {
+if (c(TRUE, FALSE)) {}
 
-}
+if (NA) {}
+```
 
-if (NA) {
-  
+You can use `||` (or) and `&&` (and) to combine multiple logical expressions. These operators are "short-circuiting": as soon as `||` sees the first `TRUE` it returns `TRUE` without computing anything else. As soon as `&&` sees the first `FALSE` it returns `FALSE`. You should never use `|` or `&` in an `if` statement: these are vectorised operations that apply to multiple values. If you do have a logical vector, you can use `any()` or `all()` to collapse it to a single value.
+
+### Multiple conditions
+
+You can chain multiple if statements together:
+
+```{r, eval = FALSE}
+if (this) {
+  # do that
+} else if (that) {
+  # do something else
+} else {
+  # 
 }
 ```
 
-You can use `||` (or) and `&&` (and) to combine multiple logical expressions. These operators are "short-circuiting": as soon as `||` sees the first `TRUE` it returns `TRUE` without computing anything else. As soon as `&&` sees the first `FALSE` it returns `FALSE`. 
+But note that if you end up with a very long series of chained `if` statements, you should consider rewriting. One useful technique is the `switch()` function. It allows you to evaluate selected code based on position or name. Note that neither `if` nor `switch()` is vectorised: they work with a single value at a time. 
 
-You should never use `|` or `&` in an `if` statement: these are vectorised operations that apply to multiple values. If you do have a logical vector, you can use `any()` or `all()` to collapse it to a single value.
+```{r}
+function(x, y, op) {
+  switch(op,
+    plus = x + y,
+    minus = x - y,
+    times = x * y,
+    divide = x / y,
+    stop("Unknown op!")
+  )
+}
+```
+
+Another useful function that can often eliminate long chains of `if` statements is `cut()`. It's used to discretise continuous variables.
 
 ### If styles
 
-Squiggly brackets are always optional (for both `if` and `function`), but I recommend using them because it makes it easier to see the hierarchy in your code. An opening curly brace should never go on its own line and should always be followed by a new line. A closing curly brace should always go on its own line, unless it's followed by `else`. Always indent the code inside curly braces.
+Squiggly brackets are optional (for both `if` and `function`), but highly recommended. When coupled with good style (described below), this makes it easier to see the hierarchy in your code. You can easily see how the code is nested by skimming the left-hand margin.
+
+An opening curly brace should never go on its own line and should always be followed by a new line. A closing curly brace should always go on its own line, unless it's followed by `else`. Always indent the code inside curly braces.
 
 ```{r, eval = FALSE}
 # Good
@@ -318,38 +356,6 @@ if (y < 20) {
 }
 ```
 
-### Multiple conditions
-
-You can chain multiple if statements together:
-
-```{r, eval = FALSE}
-if (this) {
-  # do that
-} else if (that) {
-  # do something else
-} else {
-  # 
-}
-```
-
-If you find that you have a very long series of chained `if` statements, you should consider rewriting. One useful technique is the `switch()` function. It allows you to evaluate selected code based on position or name.
-
-```{r}
-function(x, y, op) {
-  switch(op,
-    plus = x + y,
-    minus = x - y,
-    times = x * y,
-    divide = x / y,
-    stop("Unknown op!")
-  )
-}
-```
-
-Another useful function that can often eliminate long chains of `if` statements is `cut()`. It's used to discretise continuous variables.
-
-Note that neither `if` nor `switch()` is vectorised: they work with a single value at a time. 
-
 ### Exercises
 
 1.  What's the difference between `if` and `ifelse()`? Carefully read the help
@@ -377,6 +383,7 @@ Note that neither `if` nor `switch()` is vectorised: they work with a single val
     ```
     
     How would you change the call to `cut()` if I'd used `<` instead of `<=`?
+    What are the advantages of `cut()` for this type of problem?
 
 1.  What happens if you use `switch()` with numeric values?
 
@@ -448,13 +455,77 @@ average<-mean(feet/12+inches,na.rm=TRUE)
 
 ### Choosing names
 
+The names of the arguments are also important. R doesn't care, but the readers of your code (including future you!) will find your code easier to understand. Generally you should prefer longer, more descriptive names, but there are a handful of very common, very short names. It's worth memorising these:
+
+* `x`, `y`, `z`: vectors.
+* `w`: a vector of weights.
+* `df`: a data frame.
+* `i`, `j`: numeric indices (typically rows and columns).
+* `n`: length, or number of rows.
+* `p`: number of columns.
+
+Otherwise, consider matching names of arguments in existing R functions. For example, always use `na.rm` to determine if missing values should be removed.
+
 ### Checking values
 
-As you start to write more complicated functions, it's a good idea to check that the inputs are the type that you expect.
+As you start to write more functions, you'll eventually get to the point where you don't remember exactly how your function works. At this point it's easier to call your function with invalid inputs. To avoid this problem, it's often useful to make constraints explicit. For example, imagine you've written some functions for computing weighted summary statistics:
 
-Another place where it's useful to throw errors is when the inputs to the function are the wrong type.  It's a good idea to throw an error early.
+```{r}
+wt_mean <- function(x, w) {
+  sum(x * w) / sum(x)
+}
+wt_var <- function(x, w) {
+  mu <- wt_mean(x, w)
+  sum(w * (x - mu) ^ 2) / sum(w)
+}
+wt_sd <- function(x, w) {
+  sqrt(wt_var(x, w))
+}
+```
 
-`stopifnot()`.
+What happens if `x` and `w` are not the same length?
+
+```{r}
+wt_mean(1:6, 1:3)
+```
+
+In this case, because of R's recycling rules, we don't get an error. 
+
+It's good practice to check important preconditions, and throw an error (with `stop()`), if they are not true:
+
+```{r}
+wt_mean <- function(x, w) {
+  if (length(x) != length(w)) {
+    stop("`x` and `w` must be the same length", call. = FALSE)
+  }
+  sum(w * x) / sum(x)
+}
+```
+
+Be careful not to take this too far. There's a tradeoff between how much time you spend making your function robust, versus how long you spend writing it. For example, if you also added a `na.rm` argument, I probably wouldn't check it carefully:
+
+```{r}
+wt_mean <- function(x, w, na.rm = FALSE) {
+  if (!is.logical(na.rm)) {
+    stop("`na.rm` must be logical")
+  }
+  if (length(na.rm) != 1) {
+    stop("`na.rm` must be length 1")
+  }
+  if (length(x) != length(w)) {
+    stop("`x` and `w` must be the same length", call. = FALSE)
+  }
+  
+  if (na.rm) {
+    miss <- is.na(x) | is.na(w)
+    x <- x[!miss]
+    w <- w[!miss]
+  }
+  sum(w * x) / sum(x)
+}
+```
+
+This is a lot of extra work for little additional gain.
 
 ### Dot dot dot
 
@@ -503,7 +574,11 @@ Arguments in R are lazily evaluated: they're not computed until they're needed. 
 
 ## Return values
 
-The value returned by the function is the last statement it evaluates. You can explicitly return early from a function with `return()`. I think it's best to save the use of `return()` to signal that you can return early with a simpler solution. For example, you might write an if statement like this:
+The value returned by the function is the last statement it evaluates. 
+
+### Explicit return statements
+
+You can explicitly return early from a function with `return()`. I think it's best to save the use of `return()` to signal that you can return early with a simpler solution. For example, you might write an if statement like this:
 
 ```{r, eval = FALSE}
 f <- function() {
@@ -546,32 +621,41 @@ This tends to make the code easier to understand, because you don't need quite s
 
 ### Writing pipeable functions
 
-There are two key techniques for writing your own functions that work will in pipes.
+If you want to write your own functions that work will pipes, the return value is key. There are two key pipes of pipeable functions.
 
-1.  Identify the key object: this should be the first argument of the function
-    and the value returned by the function. This is generally straightforward.
-    For example, the key objects for dplyr and tidyr are data frames.
-    
-1.  If your function is called primarily for its side-effects (i.e. performs
-    an action like drawing a plot or saving a file), it should "invisibly"
-    return the first argument. An invisible return is not printed by default,
-    but you can still save it to a variable or refer to it in a pipeline.
+In __transformation__ functions, there's a clear "key" object that is passed in as the first argument, and a modified version is returned by the function. For example, the key objects for dplyr and tidyr are data frames.
 
-## Errors
+__Side-effect__ functions, however, are primarily called to perform an (an action like drawing a plot or saving a file), not transforming an object. These functions should "invisibly" return the first argument, so they're not printed by default, but can still be used in a pipeline.
+
+For example, here is a simple function that simply prints out the number of missing values in a data frame.
 
 ```{r}
-try_require <- function(package, fun) {
-  if (requireNamespace(package, quietly = TRUE)) {
-    library(package, character.only = TRUE)
-    return(invisible())
-  }
-
-  stop("Package `", package, "` required for `", fun , "`.\n",
-    "Please install and try again.", call. = FALSE)
+show_missings <- function(df) {
+  n <- sum(is.na(df))
+  cat("Missing values: ", n, "\n", sep = "")
+  
+  invisible(df)
 }
 ```
 
-To specially handle errors, use `tryCatch()`.   (`try()` is a little simpler but I think it's a bit ugly, and you'll learn an alternative in the lists chapter.)
+If we call it interactively, the `invisible()` means that the input `df` doesn't get printed out:
+
+```{r}
+show_missings(mtcars)
+```
+
+But we can still use it in a pipeline:
+
+```{r, include = FALSE}
+library(dplyr)
+```
+
+```{r}
+mtcars %>% 
+  show_missings() %>% 
+  mutate(mpg = ifelse(mpg < 20, NA, mpg)) %>% 
+  show_missings() 
+```
 
 ## Environment
 
@@ -610,3 +694,5 @@ rm(`+`)
 ```
 
 This is a common phenomenon in R. R gives you a lot of control. You can do many things that are not possible in other programming languages. You can things that 99% of the time extremely ill-advised (like overriding how addition works!), but this power and flexibility is what makes tools like ggplot2 and dplyr possible. Learning how to make good use of this flexibility is beyond the scope of this book, but you can read about in "Advanced R".
+
+Another advantage of these rules is you can embed functions inside other functions.
