@@ -574,11 +574,24 @@ Arguments in R are lazily evaluated: they're not computed until they're needed. 
 
 ## Return values
 
-The value returned by the function is the last statement it evaluates. 
+Figuring out what your function should return is usually straightforward: it's why you created the function in the first place! There are two things you should consider when returning a value: Does returning early make your function easier to read? And can you make your function pipeable?
 
 ### Explicit return statements
 
-You can explicitly return early from a function with `return()`. I think it's best to save the use of `return()` to signal that you can return early with a simpler solution. For example, you might write an if statement like this:
+The value returned by the function is the usually the last statement it evaluates, but you choose to return early by using `return()`. I think it's best to save the use of `return()` to signal that you can return early with a simpler solution. A common reason to do this is because the inputs are empty:
+
+```{r}
+complicated_function <- function(x, y, z) {
+  if (length(x) == 0 || length(y) == 0) {
+    return(0)
+  }
+    
+  # Complicated code here
+}
+
+```
+
+Another reason is becuase you have a `if` statement with one complex block and one simple block. For example, you might write an if statement like this:
 
 ```{r, eval = FALSE}
 f <- function() {
@@ -621,13 +634,11 @@ This tends to make the code easier to understand, because you don't need quite s
 
 ### Writing pipeable functions
 
-If you want to write your own functions that work will pipes, the return value is key. There are two key pipes of pipeable functions.
+If you want to write your own pipeable functions, thinking the return value is key. There are two key pipes of pipeable functions.
 
-In __transformation__ functions, there's a clear "key" object that is passed in as the first argument, and a modified version is returned by the function. For example, the key objects for dplyr and tidyr are data frames.
+In __transformation__ functions, there's a clear "key" object that is passed in as the first argument, and a modified version is returned by the function. For example, the key objects for dplyr and tidyr are data frames. If you can identify what the object type is for your domain, you'll find that your functions just work in a pipe.
 
-__Side-effect__ functions, however, are primarily called to perform an (an action like drawing a plot or saving a file), not transforming an object. These functions should "invisibly" return the first argument, so they're not printed by default, but can still be used in a pipeline.
-
-For example, here is a simple function that simply prints out the number of missing values in a data frame.
+__Side-effect__ functions, however, are primarily called to perform an action, like drawing a plot or saving a file, not transforming an object. These functions should "invisibly" return the first argument, so they're not printed by default, but can still be used in a pipeline. For example, this simple function that prints out the number of missing values in a data frame:
 
 ```{r}
 show_missings <- function(df) {
@@ -642,6 +653,14 @@ If we call it interactively, the `invisible()` means that the input `df` doesn't
 
 ```{r}
 show_missings(mtcars)
+```
+
+But it's still there, it's just not printed by default:
+
+```{r}
+x <- show_missings(mtcars) 
+class(x)
+dim(x)
 ```
 
 But we can still use it in a pipeline:
@@ -659,7 +678,7 @@ mtcars %>%
 
 ## Environment
 
-The environment of a function controls how R finds the value associated with a name. For example, take this function:
+The last component of a function is it's environment. This is not something you need to understand deeply when you first start writing functions. However, it's important to know a little bit about environments because they are crucial to how functions work. The environment of a function controls how R finds the value associated with a name. For example, take this function:
 
 ```{r}
 f <- function(x) {
@@ -667,7 +686,7 @@ f <- function(x) {
 } 
 ```
 
-In many programming languages, this would be an error, because `y` is not defined inside the function. In R, this is valid code because R uses rules called lexical scoping to determine the value associated with a name. Since `y` is not defined inside the function, R will look where the function was defined:
+In many programming languages, this would be an error, because `y` is not defined inside the function. In R, this is valid code because R uses rules called _lexical scoping_ to find the value associated with a name. Since `y` is not defined inside the function, R will look in the _environment_ where the function was defined:
 
 ```{r}
 y <- 100
@@ -677,9 +696,9 @@ y <- 1000
 f(10)
 ```
 
-This behaviour seems like a recipe for bugs, and indeed you should avoid creating functions like this deliberately, but by and large it doesn't cause too many problems (especially if you regularly restart R to get to a clean slate). The advantage of this behaviour is that from a language standpoint it allows R to be very consistent. Every name is looked up using the same set of rules. For `f()` that includes the behaviour of two things that you might not expect: `{` and `+`.
+This behaviour seems like a recipe for bugs, and indeed you should avoid creating functions like this deliberately, but by and large it doesn't cause too many problems (especially if you regularly restart R to get to a clean slate). 
 
-This allows you to do devious things like:
+The advantage of this behaviour is that from a language standpoint it allows R to be very consistent. Every name is looked up using the same set of rules. For `f()` that includes the behaviour of two things that you might not expect: `{` and `+`. This allows you to do devious things like:
 
 ```{r}
 `+` <- function(x, y) {
@@ -693,6 +712,4 @@ table(replicate(1000, 1 + 2))
 rm(`+`)
 ```
 
-This is a common phenomenon in R. R gives you a lot of control. You can do many things that are not possible in other programming languages. You can things that 99% of the time extremely ill-advised (like overriding how addition works!), but this power and flexibility is what makes tools like ggplot2 and dplyr possible. Learning how to make good use of this flexibility is beyond the scope of this book, but you can read about in "Advanced R".
-
-Another advantage of these rules is you can embed functions inside other functions.
+This is a common phenomenon in R. R gives you a lot of control. You can do many things that are not possible in other programming languages. You can things that 99% of the time extremely ill-advised (like overriding how addition works!), but this power and flexibility is what makes tools like ggplot2 and dplyr possible. Learning how to make good use of this flexibility is beyond the scope of this book, but you can read about in "[Advanced R](http://adv-r.had.co.nz)".
