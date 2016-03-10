@@ -5,11 +5,15 @@ library(dplyr)
 diamonds <- ggplot2::diamonds
 ```
 
-Pipes let you transform the way you call deeply nested functions. Using a pipe doesn't affect at all what the code does; behind the scenes it is run in (almost) exactly the same way. What the pipe does is change how the code is written and hence how it is read. It tends to transform to a more imperative form (do this, do that, do that other thing, ...) so that it's easier to read.
+Pipes let you transform the way you call deeply nested functions. Using a pipe doesn't affect what the code does; behind the scenes it is run in (almost) exactly the same way. What the pipe does is change how you write, and read, code. 
 
-### Piping alternatives
+You've been using the pipe for a while now, so you already understand the basics. The point of this chapter is to explore the pipe in more detail. You'll learn the alternatives that the pipe replaces, and the pros and cons of the pipe. Importantly, you'll also learn situations in which you should avoid the pipe. 
 
-To explore how you can write the same code in many different ways, let's use code to tell a story about a little bunny named foo foo:
+The pipe, `%>%`, comes from the magrittr package by Stefan Milton Bache. This package provides a handful of other helpful tools if you explicitly load it. We'll explore some of those tools to close out the chapter.
+
+## Piping alternatives
+
+The point of the pipe is to help you write code in a way that easier to read and understand. To see why the pipe is so useful, we're going to explore a number of ways of writing the same code. Let's use code to tell a story about a little bunny named Foo Foo:
 
 > Little bunny Foo Foo  
 > Went hopping through the forest  
@@ -22,18 +26,18 @@ We'll start by defining an object to represent little bunny Foo Foo:
 foo_foo <- little_bunny()
 ```
 
-And then we'll use a function for each key verb `hop()`, `scoop()`, and `bop()`. Using this object and these verbs, there are a number of ways we could retell the story in code:
+And we'll use a function for each key verb: `hop()`, `scoop()`, and `bop()`. Using this object and these verbs, there are (at least) four ways we could retell the story in code:
 
-* Save each intermediate step as a new object
-* Rewrite the original object multiple times
-* Compose functions
-* Use the pipe
+1. Save each intermediate step as a new object.
+1. Overwrite the original object many times.
+1. Compose functions.
+1. Use the pipe.
 
-Below we work through each approach, showing you the code and talking about the advantages and disadvantages.
+We'll work through each approach, showing you the code and talking about the advantages and disadvantages.
 
-#### Intermediate steps
+### Intermediate steps
 
-The simplest and most robust approach to sequencing multiple function calls is to save each intermediary as a new object:
+The simplest approach is to save each step as a new object:
 
 ```{r, eval = FALSE}
 foo_foo_1 <- hop(foo_foo, through = forest)
@@ -41,9 +45,9 @@ foo_foo_2 <- scoop(foo_foo_1, up = field_mice)
 foo_foo_3 <- bop(foo_foo_2, on = head)
 ```
 
-The main downside of this form is that it forces you to name each intermediate element. If there are natural names, this form feels natural, and you should use it. But if you're giving then arbitrary unique names, like this example, I don't think it's that useful. Whenever I write code like this, I invariably write the wrong number somewhere and then spend 10 minutes scratching my head and trying to figure out what went wrong with my code.
+The main downside of this form is that it forces you to name each intermediate element. If there are natural names, this form feels natural, and you should use it. But in this example, there aren't natural names, and we're adding numeric suffixes just to make the names unique. That leads to two problems: the code is cluttered with unimportant names, and you have to be carefully increment the suffix on each line. Whenever I write code like this, I invariably use the wrong number on one line and then spend 10 minutes scratching my head and trying to figure out what went wrong with my code.
 
-You may worry that this form creates many intermediate copies of your data and takes up a lot of memory. First, in R, worrying about memory is not a useful way to spend your time: worry about it when it becomes a problem (i.e. you run out of memory), not before. Second, R isn't stupid: it will reuse the shared columns in a pipeline of data frame transformations. Let's take a look at an actual data manipulation pipeline where we add a new column to the `diamonds` dataset from ggplot2:
+You may worry that this form creates many intermediate copies of your data and takes up a lot of memory. First, worrying about memory is not a useful way to spend your time: worry about it when it becomes a problem (i.e. you run out of memory), not before. Second, R isn't stupid: if you're working with data frames, R will share columns where possible. Let's take a look at an actual data manipulation pipeline where we add a new column to the `diamonds` dataset from ggplot2:
 
 ```{r}
 diamonds2 <- mutate(diamonds, price_per_carat = price / carat)
@@ -60,7 +64,9 @@ object_size(diamonds, diamonds2)
 * `diamonds2` takes up 3.89 MB,
 * `diamonds` and `diamonds2` together take up 3.89 MB!
 
-How can that work? Well, `diamonds2` has 10 columns in common with `diamonds`: there's no need to duplicate all that data so both data frames share the vectors. R will only create a copy of a vector if you modify it. Modifying a single value will mean that the data frames can no longer share as much memory. The individual sizes will be unchanged, but the collective size will increase:
+How can that work? Well, `diamonds2` has 10 columns in common with `diamonds`: there's no need to duplicate all that data, so the two data frames have variables in common. These variables will only get copied if you modify one of them. 
+
+In the following example, we modify a single value in `diamonds$carat`. That means the `carat` variable can no longer be shared between the two data frames, and a copy must be made. The individual size of each data frame will be unchanged, but the collective size increases:
 
 ```{r}
 diamonds$carat[1] <- NA
@@ -69,11 +75,11 @@ object_size(diamonds2)
 object_size(diamonds, diamonds2)
 ```
 
-(Note that we use `pryr::object_size()` here, not the built-in `object.size()`, because it doesn't have quite enough smarts.)
+(Note that we use `pryr::object_size()` here, not the built-in `object.size()`. `object.size()` isn't quite smart enough to recognise that the columns are shared across multiple data frames.)
 
-#### Overwrite the original
+### Overwrite the original
 
-One way to eliminate the intermediate objects is to just overwrite the same object again and again:
+Instead of creating intermediate objects at each step, we could overwrite the original object:
 
 ```{r, eval = FALSE}
 foo_foo <- hop(foo_foo, through = forest)
@@ -83,15 +89,15 @@ foo_foo <- bop(foo_foo, on = head)
 
 This is less typing (and less thinking), so you're less likely to make mistakes. However, there are two problems:
 
-1.  It will make debugging painful: if you make a mistake you'll need to start 
-    again from scratch. 
+1.  Debugging is painful: if you make a mistake you'll need to re-run the 
+    complete pipeline from the beginning.
     
 1.  The repetition of the object being transformed (we've written `foo_foo` six 
     times!) obscures what's changing on each line. 
-    
-#### Function composition
 
-Another approach is to abandon assignment altogether and just string the function calls together:
+### Function composition
+
+Another approach is to abandon assignment and just string the function calls together:
 
 ```{r, eval = FALSE}
 bop(
@@ -103,10 +109,10 @@ bop(
 )
 ```
 
-Here the disadvantage is that you have to read from inside-out, from right-to-left, and that the arguments end up spread far apart (sometimes called the 
+Here the disadvantage is that you have to read from inside-out, from right-to-left, and that the arguments end up spread far apart (evocatively called the 
 [dagwood sandwhich](https://en.wikipedia.org/wiki/Dagwood_sandwich) problem).
 
-#### Use the pipe 
+### Use the pipe 
 
 Finally, we can use the pipe:
 
@@ -117,19 +123,83 @@ foo_foo %>%
   bop(on = head)
 ```
 
-This is my favourite form. The downside is that you need to understand what the pipe does, but once you've mastered that idea task, you can read this series of function compositions like it's a set of imperative actions. Foo foo, hops, then scoops, then bops.
+This is my favourite form, because it focusses on verbs, not nouns. You can read this series of function compositions like it's a set of imperative actions. Foo foo hops, then scoops, then bops. The downside, of course, is that you need to be familiar with the pipe. If you've never seen `%>%` before, you'll have no idea what this code does. Fortunately, however, most people pick up the idea very quickly, so when you share you code with others who aren't familiar with the pipe, you can easily teach them.
 
-Behind the scenes magrittr converts this to:
+The pipe works by doing "lexical transformation". Behind the scenes, magrittr reassemble the code in the pipe to a form that works by overwriting an intermediate object. When you run a pipe like the one above, magrittr does something like this:
 
 ```{r, eval = FALSE}
-. <- hop(foo_foo, through = forest)
-. <- scoop(., up = field_mice)
-bop(., on = head)
+my_pipe <- function(.) {
+  . <- hop(., through = forest)
+  . <- scoop(., up = field_mice)
+  bop(., on = head)
+}
+my_pipe(foo_foo)
 ```
 
-It's useful to know this because if an error is thrown in the middle of the pipe, you'll need to be able to interpret the `traceback()`.
+This means that the pipe won't work for two classes of functions:
 
-### Other tools from magrittr
+1.  Functions that use the current environment. For example, `assign()`
+    will create a new variable with the given name in the current environment:
+     
+    ```{r}
+    assign("x", 10)
+    x
+    
+    "x" %>% assign(100)
+    x
+    ```
+    
+    The use of assign with the pipe does not work because it assigns it to 
+    a temporary environment used by `%>%`. If you do want to use assign with the
+    pipe, you must be explicit about the environment:
+    
+    ```{r}
+    env <- environment()
+    "x" %>% assign(100, envir = env)
+    x
+    ```
+    
+    Other functions with this problem include `get()` and `load()`
+
+1.  Functions that make use lazy evaluation. In R, function arguments
+    are only computed when the function uses them, not prior to calling the 
+    function. This means that the function can affect the global environment in 
+    various ways. The pipe computed each element in turn, so you can't 
+    rely on this behaviour.
+    
+    One place that this is a problem is `tryCatch()`, which lets you capture
+    and handle errors:
+    
+    ```{r, error = TRUE}
+    tryCatch(stop("!"), error = function(e) "An error")
+    
+    stop("!") %>% 
+      tryCatch(error = function(e) "An error")
+    ```
+    
+    There are a relatively wide class of functions with this behaviour.
+    This includes `try()`, `supressMessages()`, and `suppressWarnings()`
+    in base R.
+  
+## When not to use the pipe
+
+The pipe is a powerful tool, but it's not the only tool at your disposal, and it doesn't solve every problem! Pipes are most useful for rewriting a fairly short linear sequence of operations. I think you should reach for another tool when:
+
+* Your pipes get longer than five or six lines. In that case, create 
+  intermediate objects with meaningful names. That will make debugging easier,
+  because you can more easily check the intermediate results, and it makes
+  it easier to understand your code, because the variable names can help 
+  communicate intent.
+  
+* You have multiple inputs or outputs. If there isn't one primary object
+  being transformed, but two or more objects being combined together,
+  don't use the pipe.
+
+* You are starting to think about a directed graph with a complex
+  dependency structure. Pipes are fundamentally linear and expressing 
+  complex relationships with them will typically yield confusing code.
+
+## Other tools from magrittr
 
 The pipe is provided by the magrittr package, by Stefan Milton Bache. Most of packages you work in this book automatically provide `%>%` for you. You might want to load magrittr yourself if you're using another package, or you want to access some of the other pipe variants that magrittr provides.
 
@@ -143,7 +213,7 @@ library(magrittr)
     return anything, effectively terminating the pipe.
     
     To work around this problem, you can use the "tee" pipe. `%T>%` works like 
-    `%>%` except instead it returns the LHS instead of the RHS. It's called 
+    `%>%` except that it returns the LHS instead of the RHS. It's called 
     "tee" because it's like a literal T-shaped pipe.
 
     ```{r}
@@ -158,7 +228,7 @@ library(magrittr)
       str()
     ```
 
-*   If you're working with functions that don't have a dataframe based API  
+*   If you're working with functions that don't have a data frame based API  
     (i.e. you pass them individual vectors, not a data frame and expressions 
     to be evaluated in the context of that data frame), you might find `%$%` 
     useful. It "explodes" out the variables in a data frame so that you can 
@@ -188,69 +258,3 @@ library(magrittr)
     In my opinion, a little bit of duplication (i.e. repeating the 
     name of the object twice), is fine in return for making assignment
     more explicit.
-
-### When not to use the pipe
-
-I also made a slight simplifiation when I said that the `x %>% f(y)` is exactly the same as `f(x, y)`. That's not quite true, which you'll see particularly for two classes of functions:
-
-1.  Functions that use the current environment. For example, `assign()`
-    will create a new variable with the given name in the current environment:
-     
-    ```{r}
-    assign("x", 10)
-    x
-    
-    "x" %>% assign(100)
-    x
-    ```
-    
-    The use of assign with the pipe does not work because it assigns it to 
-    a temporary environment used by `%>%`. If you do want to use assign with the
-    pipe, you can be explicit about the environment:
-    
-    ```{r}
-    env <- environment()
-    "x" %>% assign(100, envir = env)
-    x
-    ```
-    
-    Other functions with this problem are `get()`, and `load()`
-
-1.  Functions that use effect how their arguments are computed. In R, arguments
-    are lazy which means they are only computed when the function uses them,
-    not prior to calling the function. This means that the function can affect
-    the global environment in various ways. The pipe forces computation of 
-    each element in series so you can't rely on this behaviour.
-    
-    ```{r, error = TRUE}
-    tryCatch(stop("!"), error = function(e) "An error")
-    
-    stop("!") %>% 
-      tryCatch(error = function(e) "An error")
-    ```
-    
-    There are a relatively wide class of functions with this behaviour including
-    `try()`, `supressMessages()`, `suppressWarnings()`, any function from the
-    withr package, ...
-
-The pipe is a powerful tool, but it's not the only tool at your disposal, and it doesn't solve every problem! Pipes are most useful for rewriting a fairly short linear sequence of operations. I think you should reach for another tool when:
-
-* Your pipes get longer than five or six lines. In that case, create 
-  intermediate objects with meaningful names. That will make debugging easier,
-  because you can more easily check the intermediate results. It also helps
-  when reading the code, because the variable names can help describe the
-  intent of the code.
-  
-* You have multiple inputs or outputs. If there is not one primary object
-  being transformed, write code the regular ways.
-
-* You are starting to think about a directed graph with a complex
-  dependency structure. Pipes are fundamentally linear and expressing 
-  complex relationships with them typically does not yield clear code.
-
-
-### Pipes in production
-
-When you run a pipe interactively, it's easy to see if something goes wrong. When you start writing pipes that are used in production, i.e. they're run automatically and a human doesn't immediately look at the output it's a really good idea to include some assertions that verify the data looks like expected. One great way to do this is the ensurer package, written by Stefan Milton Bache (the author of magrittr). 
-  
-<http://www.r-statistics.com/2014/11/the-ensurer-package-validation-inside-pipes/>
