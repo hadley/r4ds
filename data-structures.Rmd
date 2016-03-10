@@ -1,5 +1,9 @@
 # Data structures
 
+```{r, include = FALSE}
+library(purrr)
+```
+
 Might be quite brief.
 
 Atomic vectors and lists + data frames.
@@ -15,6 +19,8 @@ Most important data types:
 
 <http://adv-r.had.co.nz/OO-essentials.html>
 
+## Vectors
+
 Every vector has three key properties:
 
 1. Type: e.g. integer, double, list.  Retrieve with `typeof()`.
@@ -23,9 +29,51 @@ Every vector has three key properties:
    attribute used to build more complex data structure (like factors and 
    dates) up from simpler components. Get with `attributes()`.
 
+(Need function to show these? `vector_str()`?)
+
+### Predicates
+
+|                  | lgl | int | dbl | chr | list | null |
+|------------------|-----|-----|-----|-----|------|------|
+| `is_logical()`   |  x  |     |     |     |      |      |
+| `is_integer()`   |     |  x  |     |     |      |      |
+| `is_double()`    |     |     |  x  |     |      |      |
+| `is_numeric()`   |     |  x  |  x  |     |      |      |
+| `is_character()` |     |     |     |  x  |      |      |
+| `is_atomic()`    |  x  |  x  |  x  |  x  |      |      |
+| `is_list()`      |     |     |     |     |  x   |      |
+| `is_vector()`    |  x  |  x  |  x  |  x  |  x   |      |
+| `is_null()`      |     |     |     |     |      | x    |
+
+Compared to the base R functions, they only inspect the type of the object, not its attributes. This means they tend to be less surprising: 
+
+```{r}
+is.atomic(NULL)
+is_atomic(NULL)
+
+is.vector(factor("a"))
+is_vector(factor("a"))
+```
+
+I recommend using these instead of the base functions.
+
+Each predicate also comes with "scalar" and "bare" versions. The scalar version checks that the length is 1 and the bare version checks that the object is a bare vector with no S3 class.
+
+```{r}
+y <- factor(c("a", "b", "c"))
+is_integer(y)
+is_scalar_integer(y)
+is_bare_integer(y)
+```
+
+
+### Exercises
+1.  Carefully read the documentation of `is.vector()`. What does it actually
+    test for?
+
 ## Atomic vectors
 
-### Doubles
+### Numbers
 
 ```{r}
 sqrt(2) ^ 2 - 2
@@ -37,7 +85,9 @@ sqrt(2) ^ 2 - 2
 mean(numeric())
 ```
 
-## Non-atomic vectors
+## Elemental vectors
+
+All built on top of atomic vectors.
 
 `class()`
 
@@ -49,10 +99,142 @@ mean(numeric())
 
 ### Date times
 
-## Lists
+## Recursive vectors (lists)
+
+Lists are the data structure R uses for hierarchical objects. You're already familiar with vectors, R's data structure for 1d objects. Lists extend these ideas to model objects that are like trees. You can create a hierarchical structure with a list because unlike vectors, a list can contain other lists.
+
+You create a list with `list()`:
+
+```{r}
+x <- list(1, 2, 3)
+str(x)
+
+x_named <- list(a = 1, b = 2, c = 3)
+str(x_named)
+```
+
+Unlike atomic vectors, `lists()` can contain a mix of objects:
+
+```{r}
+y <- list("a", 1L, 1.5, TRUE)
+str(y)
+```
+
+Lists can even contain other lists!
+
+```{r}
+z <- list(list(1, 2), list(3, 4))
+str(z)
+```
+
+`str()` is very helpful when looking at lists because it focusses on the structure, not the contents.
+
+### Visualising lists
+
+To explain more complicated list manipulation functions, it's helpful to have a visual representation of lists. For example, take these three lists:
+
+```{r}
+x1 <- list(c(1, 2), c(3, 4))
+x2 <- list(list(1, 2), list(3, 4))
+x3 <- list(1, list(2, list(3)))
+```
+
+I draw them as follows:
+
+```{r, echo = FALSE, out.width = "75%"}
+knitr::include_graphics("diagrams/lists-structure.png")
+```
+
+* Lists are rounded rectangles that contain their children.
+  
+* I draw each child a little darker than its parent to make it easier to see 
+  the hierarchy.
+  
+* The orientation of the children (i.e. rows or columns) isn't important, 
+  so I'll pick a row or column orientation to either save space or illustrate 
+  an important property in the example.
+
+### Subsetting
+
+There are three ways to subset a list, which I'll illustrate with `a`:
+
+```{r}
+a <- list(a = 1:3, b = "a string", c = pi, d = list(-1, -5))
+```
+
+*   `[` extracts a sub-list. The result will always be a list.
+
+    ```{r}
+    str(a[1:2])
+    str(a[4])
+    ```
+    
+    Like subsetting vectors, you can use an integer vector to select by 
+    position, or a character vector to select by name.
+    
+*   `[[` extracts a single component from a list. It removes a level of 
+    hierarchy from the list.
+
+    ```{r}
+    str(y[[1]])
+    str(y[[4]])
+    ```
+
+*   `$` is a shorthand for extracting named elements of a list. It works
+    similarly to `[[` except that you don't need to use quotes.
+    
+    ```{r}
+    a$a
+    a[["b"]]
+    ```
+
+Or visually:
+
+```{r, echo = FALSE, out.width = "75%"}
+knitr::include_graphics("diagrams/lists-subsetting.png")
+```
+
+### Lists of condiments
+
+It's easy to get confused between `[` and `[[`, but it's important to understand the difference. A few months ago I stayed at a hotel with a pretty interesting pepper shaker that I hope will help you remember these differences:
+
+```{r, echo = FALSE, out.width = "25%"} 
+knitr::include_graphics("images/pepper.jpg")
+```
+
+If this pepper shaker is your list `x`, then, `x[1]` is a pepper shaker containing a single pepper packet:
+
+```{r, echo = FALSE, out.width = "25%"} 
+knitr::include_graphics("images/pepper-1.jpg")
+```
+
+`x[2]` would look the same, but would contain the second packet. `x[1:2]` would be a pepper shaker containing two pepper packets. 
+
+`x[[1]]` is:
+
+```{r, echo = FALSE, out.width = "25%"} 
+knitr::include_graphics("images/pepper-2.jpg")
+```
+
+If you wanted to get the content of the pepper package, you'd need `x[[1]][[1]]`:
+
+```{r, echo = FALSE, out.width = "25%"} 
+knitr::include_graphics("images/pepper-3.jpg")
+```
+
+### Exercises
+
+1.  Draw the following lists as nested sets.
+
+1.  Generate the lists corresponding to these nested set diagrams.
+
+1.  What happens if you subset a data frame as if you're subsetting a list?
+    What are the key differences between a list and a data frame?
+
 
 ## Data frames
 
 ## Subsetting
 
 Not sure where else this should be covered.
+

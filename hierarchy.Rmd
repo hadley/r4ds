@@ -1,0 +1,124 @@
+# Handling hierarchy {#hierarchy}
+
+```{r setup, include=FALSE}
+library(purrr)
+```
+
+<!--
+## Warm ups
+
+* What does this for loop do?
+* How is a data frame like a list?
+* What does `mean()` mean? What does `mean` mean?
+* How do you get help about the $ function? How do you normally write
+`[[`(mtcars, 1) ?
+* Argument order
+-->
+
+The map functions apply a function to every element in a list. They are the most commonly used part of purrr, but not the only part. Since lists are often used to represent complex hierarchies, purrr also provides tools to work with hierarchy:
+
+* You can extract deeply nested elements in a single call by supplying
+  a character vector to the map functions.
+
+* You can remove a level of the hierarchy with the flatten functions.
+
+* You can flip levels of the hierarchy with the transpose function.
+
+## Extracting deeply nested elements
+
+Some times you get data structures that are very deeply nested. A common source of such data is JSON from a web API. I've previously downloaded a list of GitHub issues related to this book and saved it as `issues.json`. Now I'm going to load it into a list with jsonlite. By default `fromJSON()` tries to be helpful and simplifies the structure a little for you. Here I'm going to show you how to do it with purrr, so I set `simplifyVector = FALSE`:
+
+```{r}
+# From https://api.github.com/repos/hadley/r4ds/issues
+issues <- jsonlite::fromJSON("issues.json", simplifyVector = FALSE)
+```
+
+There are eight issues, and each issue is a nested list:
+
+```{r}
+length(issues)
+str(issues[[1]])
+```
+
+To work with this sort of data, you typically want to turn it into a data frame by extracting the related vectors that you're most interested in:
+
+```{r}
+issues %>% map_int("id")
+issues %>% map_lgl("locked")
+issues %>% map_chr("state")
+```
+
+You can use the same technique to extract more deeply nested structure. For example, imagine you want to extract the name and id of the user. You could do that in two steps:
+
+```{r}
+users <- issues %>% map("user")
+users %>% map_chr("login")
+users %>% map_int("id")
+```
+
+But by supplying a character _vector_ to `map_*`, you can do it in one:
+
+```{r}
+issues %>% map_chr(c("user", "login"))
+issues %>% map_int(c("user", "id"))
+```
+
+## Removing a level of hierarchy
+
+As well as indexing deeply into hierarchy, it's sometimes useful to flatten it. That's the job of the flatten family of functions: `flatten()`, `flatten_lgl()`, `flatten_int()`, `flatten_dbl()`, and `flatten_chr()`. In the code below we take a list of lists of double vectors, then flatten it to a list of double vectors, then to a double vector.
+
+```{r}
+x <- list(list(a = 1, b = 2), list(c = 3, d = 4))
+str(x)
+
+y <- flatten(x) 
+str(y)
+flatten_dbl(y)
+```
+
+Graphically, that sequence of operations looks like:
+
+```{r, echo = FALSE}
+knitr::include_graphics("diagrams/lists-flatten.png")
+```
+
+Whenever I get confused about a sequence of flattening operations, I'll often draw a diagram like this to help me understand what's going on.
+
+Base R has `unlist()`, but I recommend avoiding it for the same reason I recommend avoiding `sapply()`: it always succeeds. Even if your data structure accidentally changes, `unlist()` will continue to work silently the wrong type of output. This tends to create problems that are frustrating to debug.
+
+## Switching levels in the hierarchy
+
+Other times the hierarchy feels "inside out". You can use `transpose()` to flip the first and second levels of a list: 
+
+```{r}
+x <- list(
+  x = list(a = 1, b = 3, c = 5),
+  y = list(a = 2, b = 4, c = 6)
+)
+x %>% str()
+x %>% transpose() %>% str()
+```
+
+Graphically, this looks like:
+
+```{r, echo = FALSE, out.width = "75%"}
+knitr::include_graphics("diagrams/lists-transpose.png")
+```
+
+You'll see an example of this in the next section, as `transpose()` is particularly useful in conjunction with adverbs like `safely()` and `quietly()`.
+
+It's called transpose by analogy to matrices. When you subset a transposed matrix, you switch indices: `x[i, j]` is the same as `t(x)[j, i]`. It's the same idea when transposing a list, but the subsetting looks a little different: `x[[i]][[j]]` is equivalent to `transpose(x)[[j]][[i]]`. Similarly, a transpose is its own inverse so `transpose(transpose(x))` is equal to `x`.
+
+Transpose is also useful when working with JSON APIs. Many JSON APIs represent data frames in a row-based format, rather than R's column-based format. `transpose()` makes it easy to switch between the two:
+
+```{r}
+df <- dplyr::data_frame(x = 1:3, y = c("a", "b", "c"))
+df %>% transpose() %>% str()
+```
+
+## Turning lists into data frames
+
+* Have a deeply nested list with missing pieces
+* Need a tidy data frame so you can visualise, transform, model etc.
+* What do you do?
+* By hand with purrr, talk about `fromJSON` and `tidyJSON`
