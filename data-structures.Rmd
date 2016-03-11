@@ -4,100 +4,165 @@
 library(purrr)
 ```
 
-Might be quite brief.
+As you start to write more functions, and as you want your functions to work with more types of inputs, it's useful to have some grounding in the underlying data structures that R is built on.  This chapter will dive deeper into the objects that you've already used, helping you better understand how things work.
 
-Atomic vectors and lists + data frames.
+The most important class of objects in R is the __vector__. Every vector has two key properties:
 
-Most important data types:
+1. Its type, whether it's logical, numeric, character, and so on. You 
+   can determine the type of any R object with `typeof()`.
 
-* logical
-* integer & double
-* character
-* date
-* date time
-* factor
+2. Its length, which you can retrieve with `length()`.
 
-<http://adv-r.had.co.nz/OO-essentials.html>
+Vectors are broken down into __atomic__ vectors, and __lists__. I call factors, dates, and date times __molecular vectors__ because they're built on top of atomic vectors. Data frames are similar, they're built on top of lists.
 
-## Vectors
-
-Every vector has three key properties:
-
-1. Type: e.g. integer, double, list.  Retrieve with `typeof()`.
-2. Length. Retrieve with `length()`
-3. Attributes. A named of list of additional metadata. With the `class` 
-   attribute used to build more complex data structure (like factors and 
-   dates) up from simpler components. Get with `attributes()`.
-
-(Need function to show these? `vector_str()`?)
-
-### Predicates
-
-|                  | lgl | int | dbl | chr | list | null |
-|------------------|-----|-----|-----|-----|------|------|
-| `is_logical()`   |  x  |     |     |     |      |      |
-| `is_integer()`   |     |  x  |     |     |      |      |
-| `is_double()`    |     |     |  x  |     |      |      |
-| `is_numeric()`   |     |  x  |  x  |     |      |      |
-| `is_character()` |     |     |     |  x  |      |      |
-| `is_atomic()`    |  x  |  x  |  x  |  x  |      |      |
-| `is_list()`      |     |     |     |     |  x   |      |
-| `is_vector()`    |  x  |  x  |  x  |  x  |  x   |      |
-| `is_null()`      |     |     |     |     |      | x    |
-
-Compared to the base R functions, they only inspect the type of the object, not its attributes. This means they tend to be less surprising: 
-
-```{r}
-is.atomic(NULL)
-is_atomic(NULL)
-
-is.vector(factor("a"))
-is_vector(factor("a"))
-```
-
-I recommend using these instead of the base functions.
-
-Each predicate also comes with "scalar" and "bare" versions. The scalar version checks that the length is 1 and the bare version checks that the object is a bare vector with no S3 class.
-
-```{r}
-y <- factor(c("a", "b", "c"))
-is_integer(y)
-is_scalar_integer(y)
-is_bare_integer(y)
-```
-
-
-### Exercises
-1.  Carefully read the documentation of `is.vector()`. What does it actually
-    test for?
+Note that R does not have "scalars". In R, a single number is a vector of length 1. The impacts of this are mostly on how functions work. Because there are no scalars, most built-in functions are vectorised, meaning that they will operate on a vector of numbers. That's why, for example, you can write `1:10 + 10:1`.
 
 ## Atomic vectors
 
-### Numbers
+There are four important types of atomic vector:
+
+* logical
+* integer
+* double
+* character
+
+Collectively, integer and double vectors are known as numeric vectors. Most of the time the distinction between integers and doubles is not important in R, so we'll discuss them together.
+
+(There are also two rarer atomic vectors: raw and complex. They're beyond the scope of this book because they are rarely needed to do data analysis)
+
+### Logical
+
+Logical vectors are simplest type of atomic vector because they can take only three possible values: `FALSE`, `TRUE`, and `NA`. Logical vectors are usually constructed with comparison operators, as described in [comparisons].
+
+In numeric contexts, `TRUE` is converted to `1`, `FALSE` converted to 0. That means the sum of a logical vector is the number of trues, and the mean of a logical vector is the proportion of trues.
 
 ```{r}
-sqrt(2) ^ 2 - 2
-
-0/0
-1/0
--1/0
-
-mean(numeric())
+x <- sample(20, 100, replace = TRUE)
+y <- x > 10
+sum(y)
+mean(y)
 ```
 
-## Elemental vectors
+### Numeric
 
-All built on top of atomic vectors.
+Numeric vectors encompasses both integers and doubles (real numbers). For large data, there is some small advantage to using the integer data type if you really have integers, but in most cases the differences are immaterial. In R, numbers are doubles by default. To make an integer, use a `L` after the number:
 
-`class()`
+```{r}
+typeof(1)
+typeof(1L)
+```
+
+There are two cases where you need to be aware of the differences between doubles and integers. Firstly, never test for equality on a double. There can be very small differences that don't print out by default. These differences arise because a double is represented using a fixed number of (binary) digits. For example, what should you get if you square the square-root of two?
+
+```{r}
+x <- sqrt(2) ^ 2
+x
+```
+
+It certainly looks like we get what we expect: `2`. But things are not exactly as they seem:
+
+```{r}
+x == 2
+x - 2
+```
+
+The number we've computed is actually slightly different to 2.  To avoid this sort of comparison difficulty, you can use the `near()` function from dplyr (available in 0.5).
+
+```{r, eval = packageVersion("dplyr") >= "0.4.3.9000"}
+dplyr::near(x, 2)
+```
+
+The other important thing to know about doubles is that they have three special values in addition to `NA`:
+
+```{r}
+c(-1, 0, 1) / 0
+```
+
+Like with missing values, you should avoid using `==` to check for these other special values. Instead use `is.finite()`, `is.infinite()`, and `is.nan()`: 
+
+|                  |  0  | Inf | NA  | NaN |
+|------------------|-----|-----|-----|-----|
+| `is.finite()`    |  x  |     |     |     |
+| `is.infinite()`  |     |  x  |     |     |
+| `is.na()`        |     |     |  x  |  x  |
+| `is.nan()`       |     |     |     |  x  |
+
+### Character
+
+Each element of a character vector is a string. 
+
+```{r}
+x <- c("abc", "def", "ghijklmnopqrs")
+typeof(x)
+```
+
+You learned how to manipulate these vectors in [strings].
+
+## Molecular vectors
+
+There are three important types of vector that are built on top of atomic vectors: factors, dates, and date times. I call these molecular vectors, to torture the chemistry metaphor a little further. The chief difference between atomic and molecular vectors is that molecular vectors also have __attributes__.
+
+Attributes are a way of adding arbitrary additional metadata to a vector. Each attribute is a named vector.  You can get and set individual attribute values with `attr()` or see them all at once with `attributes()`.
+
+```{r}
+x <- 1:10
+attr(x, "greeting")
+attr(x, "greeting") <- "Hi!"
+attr(x, "farewell") <- "Bye!"
+attributes(x)
+```
+
+The most important use of attributes in R is implement the S3 object oriented system. S3 objects have a "class" attribute, and which work with __generic functions__ to implement behaviour that differs based on the class of the object. A detailed discussion of S3 is beyond the scope of this book, but you can read more about it at <http://adv-r.had.co.nz/OO-essentials.html#s3>.
 
 ### Factors
 
-(Since won't get a chapter of their own)
+Factors are designed to represent categorical data that can take a fixed set of possible values. Factors are built on top of integers, and have a levels attribute:
+
+```{r}
+x <- factor(c("ab", "cd", "ab"), levels = c("ab", "cd", "ef"))
+typeof(x)
+attributes(x)
+```
+
+Historically, factors were much easier to work with than characters so many functions in base R automatically convert characters to factors (controlled by the dread `stringsAsFactors` argument). To get more historical context, you might want to read [stringsAsFactors: An unauthorized biography](http://simplystatistics.org/2015/07/24/stringsasfactors-an-unauthorized-biography/) by Roger Peng or [stringsAsFactors = \<sigh\>](http://notstatschat.tumblr.com/post/124987394001/stringsasfactors-sigh) by Thomas Lumley.  The motivation for factors is the modelling context. If you're going to fit a model to categorical data, you need to know in advance all the possible values. There's no way to make a prediction for "green" if all you've ever seen is "red", "blue", and "yellow"
+
+The packages in this book keep characters as is, but you will need to deal with them if you are working with base R or many other packages. When you encounter a factor, you should first check to see if you can eliminate it. Often there will be `stringsAsFactors` argument that you can set to `FALSE`. Otherwise, you can use `as.character()` to explicitly turn back into a factor.
 
 ### Dates
 
+Dates in R are numeric vectors (sometimes integers, sometimes doubles) that represent the number of days since 1 January 1970.
+
+```{r}
+x <- as.Date("1971-01-01")
+unclass(x)
+
+typeof(x)
+attributes(x)
+```
+
 ### Date times
+
+Date times are numeric vectors (sometimes integers, sometimes doubles) that represent the number of seconds since 1 January 1970:
+
+```{r}
+x <- lubridate::ymd_hm("1970-01-01 01:00")
+unclass(x)
+
+typeof(x)
+attributes(x)
+```
+
+The `tzone` is optional, and only controls the display not the meaning.
+
+There is another type of datetimes called POSIXlt. These are built on top of lists.
+
+```{r}
+y <- as.POSIXlt(x)
+typeof(y)
+attributes(y)
+```
+
+As far as I know there is no case in which you need POSIXlt. If you find you have a POSIXlt, convert it to a POSIXct with `as.POSIXct()`.
 
 ## Recursive vectors (lists)
 
@@ -234,7 +299,47 @@ knitr::include_graphics("images/pepper-3.jpg")
 
 ## Data frames
 
+## Matrices
+
 ## Subsetting
 
 Not sure where else this should be covered.
 
+### Predicates
+|                  | lgl | int | dbl | chr | list | null |
+|------------------|-----|-----|-----|-----|------|------|
+| `is_logical()`   |  x  |     |     |     |      |      |
+| `is_integer()`   |     |  x  |     |     |      |      |
+| `is_double()`    |     |     |  x  |     |      |      |
+| `is_numeric()`   |     |  x  |  x  |     |      |      |
+| `is_character()` |     |     |     |  x  |      |      |
+| `is_atomic()`    |  x  |  x  |  x  |  x  |      |      |
+| `is_list()`      |     |     |     |     |  x   |      |
+| `is_vector()`    |  x  |  x  |  x  |  x  |  x   |      |
+| `is_null()`      |     |     |     |     |      | x    |
+
+Compared to the base R functions, they only inspect the type of the object, not its attributes. This means they tend to be less surprising: 
+
+```{r}
+is.atomic(NULL)
+is_atomic(NULL)
+
+is.vector(factor("a"))
+is_vector(factor("a"))
+```
+
+I recommend using these instead of the base functions.
+
+Each predicate also comes with "scalar" and "bare" versions. The scalar version checks that the length is 1 and the bare version checks that the object is a bare vector with no S3 class.
+
+```{r}
+y <- factor(c("a", "b", "c"))
+is_integer(y)
+is_scalar_integer(y)
+is_bare_integer(y)
+```
+
+### Exercises
+
+1.  Carefully read the documentation of `is.vector()`. What does it actually
+    test for?
