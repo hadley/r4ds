@@ -1,6 +1,6 @@
----
-knit: bookdown::preview_chapter
----
+```{r, include = FALSE}
+library(stringr)
+```
 
 # Functions
 
@@ -108,6 +108,25 @@ df$d <- rescale01(df$d)
 
 Compared to the original, this code is easier to understand and we've eliminated one class of copy-and-paste errors. There is still quite a bit of duplication since we're doing the same thing to multiple columns. We'll learn how to eliminate that duplication in the next chapter.
 
+Another advantage of functions is that if our requirements change, we only need to make the change in one place. For example, we might discover that some of our variables include infinite values, and `rescale01()` fails:
+
+```{r}
+x <- c(1:10, Inf)
+rescale01(x)
+```
+
+Because we've extract the code into a function, we only need to make the fix in one place:
+
+```{r}
+rescale01 <- function(x) {
+  rng <- range(x, na.rm = TRUE, finite = TRUE)
+  (x - rng[1]) / (rng[2] - rng[1])
+}
+rescale01(x)
+```
+
+This is an important part of the "do no repeat yourself" (or DRY) principle. The more repitition you have in your code, the more places you need to remember to update when things change (and they always code!), and the more likely you are to create bugs over time.
+
 ### Practice
 
 1.  Why is `TRUE` not a parameter to `rescale01()`? What would happen if
@@ -178,19 +197,21 @@ col_mins()
 rowMaxes()
 ```
 
-If you have a family of functions that do similar things, make sure they have consistent names and arguments. Use a common prefix to indicate that they are connected. That's better than a common suffix because autocomplete allows you to type the prefix and see all the members of the family.
+If you have a family of functions that do similar things, make sure they have consistent names and arguments. Use a common prefix to indicate that they are connected. That's better than a common suffix because autocomplete allows you to type the prefix and see all the members of the family. 
 
 ```{r, eval = FALSE}
 # Good
-input_select
-input_checkbox
-input_text
+input_select()
+input_checkbox()
+input_text()
 
 # Not so good
-select_input
-checkbox_input
-text_input
+select_input()
+checkbox_input()
+text_input()
 ```
+
+A good example of this design is the stringr package: if you don't remember exactly which function you need, you can type `str_` and jog your memory.
 
 Where possible, avoid overriding existing functions and variables. It's impossible to do in general because so many good names are already taken by other packages, but avoiding the most common names from base R will avoid confusion.
 
@@ -202,6 +223,11 @@ mean <- function(x) sum(x)
 ```
 
 Use comments, lines starting with `#`, to explain the "why" of your code. You generally should avoid comments that explain the "what" or the "how". If you can't understand what the code does from reading it, you should think about how to rewrite it to be more clear. Do you need to add some intermediate variables with useful names? Do you need to break out a subcomponent of a large function so you can name it? However, your code can never capture the reasoning behind your decisions: why did you choose this approach instead of an alternative? What else did you try that didn't work? It's a great idea to capture that sort of thinking in a comment.
+
+```{r, eval = FALSE}
+# NEED EXAMPLE!
+```
+
 
 Another important use of comments is to break up your file into easily readable chunks. Use long lines of `-` and `=` to make it easy to spot the breaks. RStudio even provides a keyboard shortcut for this: Cmd/Ctrl + Shift + R. 
 
@@ -269,7 +295,7 @@ This function takes advantage of the standard return rule: a function returns th
 
 ### Conditions
 
-The `condition` should be either a single `TRUE` or a single `FALSE`. If it's a vector, you'll get a warning message; if it's an `NA`, you'll get an error. Watch out for these messages in your own code:
+The `condition` must evaluate to either `TRUE` or `FALSE`. If it's a vector, you'll get a warning message; if it's an `NA`, you'll get an error. Watch out for these messages in your own code:
 
 ```{r, error = TRUE}
 if (c(TRUE, FALSE)) {}
@@ -277,7 +303,7 @@ if (c(TRUE, FALSE)) {}
 if (NA) {}
 ```
 
-You can use `||` (or) and `&&` (and) to combine multiple logical expressions. These operators are "short-circuiting": as soon as `||` sees the first `TRUE` it returns `TRUE` without computing anything else. As soon as `&&` sees the first `FALSE` it returns `FALSE`. You should never use `|` or `&` in an `if` statement: these are vectorised operations that apply to multiple values. If you do have a logical vector, you can use `any()` or `all()` to collapse it to a single value.
+You can use `||` (or) and `&&` (and) to combine multiple logical expressions. These operators are "short-circuiting": as soon as `||` sees the first `TRUE` it returns `TRUE` without computing anything else. As soon as `&&` sees the first `FALSE` it returns `FALSE`. You should never use `|` or `&` in an `if` statement: these are vectorised operations that apply to multiple values (that's why you use them in `filter()`). If you do have a logical vector, you can use `any()` or `all()` to collapse it to a single value.
 
 Be careful when testing for equality. `==` is vectorised, which means that it's easy to get more than one output.  Either check the the length is already 1, collapsed with `all()` or `any()`, or use the non-vectorised `identical()`. `identical()` is very strict: it always returns either a single `TRUE` or a single `FALSE`, and doesn't coerce types. This means that you need to be careful when comparing integers and doubles:
 
@@ -546,18 +572,25 @@ This is a lot of extra work for little additional gain.
 
 ### Dot dot dot
 
-There's one special argument you need to know about: `...`, pronounced dot-dot-dot. This captures any other arguments not otherwise matched. It's useful because you can then send those `...` on to another function. This is a useful catch-all if your function primarily wraps another function.
-
-For example, I commonly create these helper functions that wrap around `paste()`:
+Many functions in R take an arbitrary number of inputs:
 
 ```{r}
-commas <- function(...) paste0(..., collapse = ", ")
+sum(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+str_c("a", "b", "c", "d", "e", "f")
+```
+
+How do these functions work?  They rely on a special argument: `...` (pronounced dot-dot-dot). This special argument captures any number of arguments that aren't otherwise matched. 
+
+It's useful because you can then send those `...` on to another function. This is a useful catch-all if your function primarily wraps another function. For example, I commonly create these helper functions that wrap around `paste()`:
+
+```{r}
+commas <- function(...) str_c(..., collapse = ", ")
 commas(letters[1:10])
 
 rule <- function(..., pad = "-") {
   title <- paste0(...)
   width <- getOption("width") - nchar(title) - 5
-  cat(title, " ", paste(rep(pad, width, collapse = "")), "\n", sep = "")
+  cat(title, " ", str_dup(pad, width), "\n", sep = "")
 }
 rule("Important output")
 ```
