@@ -2,6 +2,7 @@
 
 ```{r, include = FALSE}
 library(purrr)
+library(dplyr)
 ```
 
 As you start to write more functions, and as you want your functions to work with more types of inputs, it's useful to have some grounding in the underlying data structures that R is built on.  This chapter will dive deeper into the objects that you've already used, helping you better understand how things work.
@@ -13,7 +14,7 @@ The most important class of objects in R is the __vector__. Every vector has two
 
 2. Its length, which you can retrieve with `length()`.
 
-Vectors are broken down into __atomic__ vectors, and __lists__. I call factors, dates, and date times __molecular vectors__ because they're built on top of atomic vectors. Data frames are similar, they're built on top of lists.
+Vectors are broken down into __atomic__ vectors, and __lists__. I call factors, dates, and date times __augmented vectors__ because they're built on top of atomic vectors. Data frames are also augmented vectors as they built on top of lists.
 
 Note that R does not have "scalars". In R, a single number is a vector of length 1. The impacts of this are mostly on how functions work. Because there are no scalars, most built-in functions are vectorised, meaning that they will operate on a vector of numbers. That's why, for example, you can write `1:10 + 10:1`.
 
@@ -32,7 +33,7 @@ Collectively, integer and double vectors are known as numeric vectors. Most of t
 
 ### Logical
 
-Logical vectors are simplest type of atomic vector because they can take only three possible values: `FALSE`, `TRUE`, and `NA`. Logical vectors are usually constructed with comparison operators, as described in [comparisons].
+Logical vectors are the simplest type of atomic vector because they can take only three possible values: `FALSE`, `TRUE`, and `NA`. Logical vectors are usually constructed with comparison operators, as described in [comparisons].
 
 In numeric contexts, `TRUE` is converted to `1`, `FALSE` converted to 0. That means the sum of a logical vector is the number of trues, and the mean of a logical vector is the proportion of trues.
 
@@ -87,6 +88,8 @@ Like with missing values, you should avoid using `==` to check for these other s
 | `is.na()`        |     |     |  x  |  x  |
 | `is.nan()`       |     |     |     |  x  |
 
+Note that `is.finite(x)` is not the same as `!is.infinite(x)`.
+
 ### Character
 
 Each element of a character vector is a string. 
@@ -97,6 +100,31 @@ typeof(x)
 ```
 
 You learned how to manipulate these vectors in [strings].
+
+R uses a global string pool. This reduces the amount of memory strings take up because
+
+```{r}
+x <- "This is a reasonably long string."
+pryr::object_size(x)
+
+y <- rep(x, 1000)
+pryr::object_size(y)
+```
+
+`y` doesn't take up 1,000x as much memory as `x`, because each element of `y` is just a pointer to that same string. A pointer is 8 bytes, so 1000 pointers to a 136 B string is about 8.13 kB.
+
+### Missing values
+
+There are four types of missing value, one for each type of atomic vector:
+
+```{r}
+NA            # logical
+NA_integer_   # integer
+NA_real_      # double
+NA_character_ # character
+```
+
+It is not usually necessary to know about these different types because in most cases `NA` is automatically converted to the type that you need. However, there are some functions that are strict about their inputs, and you'll need to give them an missing value of the correct type.
 
 ## Subsetting
 
@@ -139,7 +167,7 @@ getS3method("as.Date", "default")
 getS3method("as.Date", "numeric")
 ```
 
-The most important S3 generic is print: it controls how the object is printed when you type its name on the console.
+The most important S3 generic is `print()`: it controls how the object is printed when you type its name on the console. Other important generics are the subsetting functions `[`, `[[`, and `$`. 
 
 A detailed discussion of S3 is beyond the scope of this book, but you can read more about it at <http://adv-r.had.co.nz/OO-essentials.html#s3>.
 
@@ -163,7 +191,7 @@ is.factor(x)
 as.factor(letters[1:5])
 ```
 
-### Dates
+### Dates and date times
 
 Dates in R are numeric vectors (sometimes integers, sometimes doubles) that represent the number of days since 1 January 1970.
 
@@ -175,8 +203,6 @@ typeof(x)
 attributes(x)
 ```
 
-### Date times
-
 Date times are numeric vectors (sometimes integers, sometimes doubles) that represent the number of seconds since 1 January 1970:
 
 ```{r}
@@ -187,9 +213,9 @@ typeof(x)
 attributes(x)
 ```
 
-The `tzone` is optional, and only controls the display not the meaning.
+The `tzone` is optional, and only controls the way the date is printed not what it means.
 
-There is another type of datetimes called POSIXlt. These are built on top of lists.
+There is another type of datetimes called POSIXlt. These are built on top of named lists.
 
 ```{r}
 y <- as.POSIXlt(x)
@@ -197,11 +223,11 @@ typeof(y)
 attributes(y)
 ```
 
-As far as I know there is no case in which you need POSIXlt. If you find you have a POSIXlt, convert it to a POSIXct with `as.POSIXct()`.
+If you use the packages outlined in this book, you should never encounter a POSIXlt. They do crop up in base R, because they are used extract specific components of a date (like the year or month). However, lubridate provides helpers for you to do this instead. Otherwise POSIXct's are always easier to work with, so if you find you have a POSIXlt, you should always convert it to a POSIXct with `as.POSIXct()`.
 
 ## Recursive vectors (lists)
 
-Lists are the data structure R uses for hierarchical objects. Lists extend atomic vectors to model objects that are like trees. You can create a hierarchical structure with a list because unlike vectors, a list can contain other lists.
+Lists are the data structure R uses for hierarchical objects. You can create a hierarchical structure with a list because unlike vectors, a list can contain other lists.
 
 You create a list with `list()`:
 
@@ -333,27 +359,69 @@ knitr::include_graphics("images/pepper-3.jpg")
 
 ## Data frames
 
-Data frames are augmented lists. 
+Data frames are augmented lists: they have class "data.frame", and `names` (column) and `row.names` attributes:
 
 ```{r}
-df <- data.frame(x = 1:5, y = 5:1)
-typeof(df)
-attributes(df)
+df1 <- data.frame(x = 1:5, y = 5:1)
+typeof(df1)
+attributes(df1)
 ```
 
-Generally, I prefer using `dplyr::data_frame()` instead of `data.frame`. It creates an object that is verty similar:
+The difference between a data frame and a list is that all the elements of a data frame must be the same length. All functions that work with data frames enforce this constraint.
+
+Generally, I recommend using `dplyr::data_frame()` instead of `data.frame`. It creates an object that "extends" the data frame. That means it has all the existing behaviour of a data frame:
 
 ```{r}
-df <- dplyr::data_frame(x = 1:5, y = 5:1)
-typeof(df)
-attributes(df)
+df2 <- dplyr::data_frame(x = 1:5, y = 5:1)
+typeof(df2)
+attributes(df2)
 ```
 
-* Doesn't convert variable types or variable names. It never uses character
-  row names.
+The additional `tbl_df` class makes the print method more informative (and only prints the first 10 rows, not the first 10,000), and makes the subsetting methods more strict:
 
-* It adds additional classes `tbl_df` to give better printing and subsetting
-  behaviour.
+```{r, error = TRUE}
+df1
+df2
+
+df1$z
+df2$z
+```
+
+There are a few other ways in `data_frame()` behaves differently to `data.frame()`
+
+  * `data.frame()` does a number of transformations to its inputs. For example,
+    unless you `stringsAsFactors = FALSE` it always converts character vectors
+    to factors. `data_frame()` does not conversion:
+    
+    ```{r}
+    data.frame(x = letters) %>% sapply(class)
+    data_frame(x = letters) %>% sapply(class)
+    ```
+    
+  * `data.frame()` automatically transforms names, `data_frame()` does not.
+  
+    ```{r}
+    data.frame(`crazy name` = 1) %>% names()
+    data_frame(`crazy name` = 1) %>% names()
+    ```
+
+  * In `data_frame()` you can refer to variables that you just created:
+  
+    ```{r}
+    data_frame(x = 1:5, y = x ^ 2)
+    ```
+
+  * It never uses row names. The whole point of tidy data is to store variables 
+    in a consistent way. Row names are a variable stored in a unique way,
+    so I don't recommend using them.
+
+  * It only recycles vectors of length 1. Recycling vectors of greater lengths 
+    is a frequent source of silent mistakes.
+    
+    ```{r, error = TRUE}
+    data.frame(x = 1:2, y = 1:4)
+    data_frame(x = 1:2, y = 1:4)
+    ```
 
 ## Predicates
 
