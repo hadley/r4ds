@@ -1,12 +1,72 @@
 # Iteration
 
-```{r setup, include=FALSE}
+```{r, include=FALSE}
 library(purrr)
 ```
 
+One part of reducing duplication is writing functions. Functions allow you to identify repeated patterns of code and extract them out in to indepdent pieces that you can reuse and easily update as code changes. Iteration helps you when you need to do the same thing to multiple inputs: repeating the same operation on different columns, or on different datasets. (Generally, you shouldn't need to use explicit iteration to deal with different subsets of your data: in most cases the implicit iteration in dplyr will take care of that problem for you.)
+
+In this chapter you'll learn about two important iteration tools: for loops and functional programming. For loops are a great place to start because they make iteration very explicit, so that it's obvious what's happening. However, that explicitness is also the downside of for loops: they are quite verbose, and include quite a bit of book-keeping code. The one of the goals of functional programming is to extract out common patterns of for loops into their own functions. Once you master the vocabulary this allows you to solve many common iteration problems with less code, more ease, and less chance of errors.
+
 ## For loops
 
-Before we tackle the problem of rescaling each column, lets start with a simpler case. Imagine we want to summarise each column with its median. One way to do that is to use a for loop. Every for loop has three main components:
+Imagine we have this simple data frame:
+
+```{r}
+df <- data.frame(
+  a = rnorm(10),
+  b = rnorm(10),
+  c = rnorm(10),
+  d = rnorm(10)
+)
+```
+
+And we want to compute the median of every column. One way to do that is to use a for loop:
+```{r}
+results <- vector("double", ncol(df))  # 1. results
+for (i in seq_along(df)) {             # 2. sequence
+  results[[i]] <- median(df[[i]])      # 3. body
+}
+results
+```
+
+Every for loop has three main components:
+
+1.  The __results__: `results <- vector("integer", length(x))`. 
+    Before you perform an for loop, you must always allocate sufficient space 
+    for the output. This is very important for efficient for-loops: if you grow
+    the for loop at each iteration using `c()`, or `rbind()`, or similar,
+    your for loop will be very slow.
+    
+    A general way of creating an empty vector of given length is the `vector()`
+    function. It has two arguments: the type of the vector, like "logical", 
+    "integer", "double", or "character", and the length of the vector. 
+
+1.  The __sequence__: `i in seq_along(df)`. This determines what to loop over:
+    each run of the for loop will assign `i` to a different value from 
+    `seq_along(df)`. It's useful to think of `i` as a pronoun.
+    
+    You might not have seen `seq_along()` before. It's a safe version of the 
+    familiar `1:length(l)`. There's one important difference in behaviour. If 
+    you have a zero-length vector, `seq_along()` does the right thing:
+
+    ```{r}
+    y <- vector("double", 0)
+    seq_along(y)
+    1:length(y)
+    ```
+    
+    It's unlikely that you've deliberately created a zero-length vector, but
+    they're easy to create accidentally.
+    
+1.  The __body__: `results[i] <- median(df[[i]])`. This is the code that does
+    the work. It's run repeatedly, each time with a different value for `i`.
+    The first iteration will run `results[[1]] <- median(df[[1]])`, 
+    the second will run `results[[2]] <- median(df[[2]])`, and so on.
+
+### Modifying input
+
+We now have the tools to go back our challenge from [functions]:
 
 ```{r}
 df <- data.frame(
@@ -20,70 +80,67 @@ rescale01 <- function(x) {
   (x - rng[1]) / (rng[2] - rng[1])
 }
 
-
-results <- vector("numeric", ncol(df))
-for (i in seq_along(df)) {
-  results[[i]] <- median(df[[i]])
-}
-results
-```
-
-There are three parts to a for loop:
-
-1.  The __results__: `results <- vector("integer", length(x))`. 
-    This creates an integer vector the same length as the input. It's important
-    to enough space for all the results up front, otherwise you have to grow the 
-    results vector at each iteration, which is very slow for large loops.
-
-1.  The __sequence__: `i in seq_along(df)`. This determines what to loop over:
-    each run of the for loop will assign `i` to a different value from 
-    `seq_along(df)`, shorthand for `1:length(df)`. It's useful to think of `i`
-    as a pronoun.
-    
-1.  The __body__: `results[i] <- median(df[[i]])`. This code is run repeatedly, 
-    each time with a different value in `i`. The first iteration will run 
-    `results[1] <- median(df[[2]])`, the second `results[2] <- median(df[[2]])`, 
-    and so on.
-
-This loop used a function you might not be familiar with: `seq_along()`. This is a safe version of the more familiar `1:length(l)`. There's one important difference in behaviour. If you have a zero-length vector, `seq_along()` does the right thing:
-
-```{r}
-y <- numeric(0)
-seq_along(y)
-1:length(y)
-```
-
-Lets go back to our original motivation:
-
-```{r}
 df$a <- rescale01(df$a)
 df$b <- rescale01(df$b)
 df$c <- rescale01(df$c)
 df$d <- rescale01(df$d)
 ```
 
-In this case the output is already present: we're modifying an existing object. 
+To solve this with a for loop we need to identify the three pieces:
 
-Think about a data frame as a list of columns (we'll make this definition precise later on). The length of a data frame is the number of columns. To extract a single column, you use `[[`.
+1.  Results: override the columns in the input. We don't need to create a new
+    object but can instead reuse an existing object.
 
-That makes our for loop quite simple:
+1.  Sequence: remember that we can think about a data frame as a list of 
+    columns, so to iterate over each column we can use `seq_along(df)`.
 
-```{r, eval = FALSE}
+1.  Body: apply `rescale01()`.
+
+This gives us:
+
+```{r}
 for (i in seq_along(df)) {
   df[[i]] <- rescale01(df[[i]])
 }
 ```
 
-For loops are not as important in R as they are in other languages as rather than writing your own for loops, you'll typically use prewritten functions that wrap up common for-loop patterns. You'll learn about those in the next chapter.  These functions are important because they wrap up the book-keeping code related to the for loop, focussing purely on what's happening. For example the two for-loops we wrote above can be rewritten as:
+### Unknown output length
 
-```{r, eval = FALSE}
-library(purrr)
+Sometimes you might know now how long the output will be. There is one common pattern that has a relatively simple work around. For example, imagine you want to simulate some random numbers:
 
-map_dbl(df, median)
-df[] <- map(df, rescale01)
+```{r}
+means <- c(0, 1, 2)
+
+results <- double()
+for (i in seq_along(means)) {
+  n <- sample(100, 1)
+  results <- c(results, rnorm(n, means[[i]]))
+}
+str(results)
 ```
 
-The focus is now on the function doing the modification, rather than the apparatus of the for-loop.
+In general this loop isn't going to be very efficient because in each iteration, R has to copy all the data from the previous iterations. In technical terms you get "quadratic" behaviour which means that a loop with three times as many elements would take nine times ($3^2$) as long to run.
+
+```{r}
+out <- vector("list", length(means))
+for (i in seq_along(means)) {
+  n <- sample(100, 1)
+  out[[i]] <- rnorm(n, means[[i]])
+}
+str(out)
+```
+
+Then you can use a function list `unlist()`, or `purrr::flatten_dbl()` to collapse this to a simple vector. This pattern occurs in other places too:
+
+1.  You might be generating a long string. Instead of `paste()`ing together each
+    iteration, save the results in a character vector and then run 
+    `paste(results, collapse = "")` to combine the individual results into
+    a single string.
+   
+1.  You might generating a big data frame. Instead of `rbind()` the results
+    together on each run, save the results in list and then use 
+    `dplyr::bind_rows(results)` to combine the results into a single
+    data frame.
 
 ### Looping patterns
 
@@ -129,25 +186,12 @@ for (i in seq_along(x)) {
     
     How does this affect performance? 
 
+## While loops
+
 
 ## For loops vs functionals
 
-If you've worked with list-like objects before, you're probably familiar with the for loop. I'll talk a little bit about for loops here, but the focus will be functions from the __purrr__ package. purrr makes it easier to work with lists by eliminating common for loop boilerplate so you can focus on the specifics. The apply family of functions in base R (`apply()`, `lapply()`, `tapply()`, etc) solve a similar problem, but purrr is more consistent and easier to learn.
-
-The goal of using purrr functions instead of for loops is to allow you break common list manipulation challenges into independent pieces: 
-
-1. How can you solve the problem for a single element of the list? Once
-   you've solved that problem, purrr takes care of generalising your
-   solution to every element in the list.
-
-1. If you're solving a complex problem, how can you break it down into
-   bite sized pieces that allow you to advance one small step towards a 
-   solution? With purrr, you get lots of small pieces that you can
-   compose together with the pipe.
-
-This structure makes it easier to solve new problems. It also makes it easier to understand your solutions to old problems when you re-read your old code.
-
-In later chapters you'll learn how to apply these ideas when modelling. You can often use multiple simple models to help understand a complex dataset, or you might have multiple models because you're bootstrapping or cross-validating. The techniques you'll learn in this chapter will be invaluable.
+For loops are not as important in R as they are in other languages as rather than writing your own for loops, you'll typically use prewritten functions that wrap up common for-loop patterns. These functions are important because they wrap up the book-keeping code related to the for loop, focussing purely on what's happening. 
 
 Imagine you have a data frame and you want to compute the mean of each column. You might write code like this:
 
@@ -229,7 +273,22 @@ col_summary(df, median)
 col_summary(df, min)
 ```
 
-The idea of using a function as an argument to another function is extremely powerful. It might take you a while to wrap your head around it, but it's worth the investment. In the rest of the chapter, you'll learn about and use the purrr package which provides a set of functions that eliminate the need for for-loops for many common scenarios.
+The idea of using a function as an argument to another function is extremely powerful. It might take you a while to wrap your head around it, but it's worth the investment. In the rest of the chapter, you'll learn about and use the __purrr__ package which provides a set of functions that eliminate the need for for-loops for many common scenarios. The apply family of functions in base R (`apply()`, `lapply()`, `tapply()`, etc) solve a similar problem, but purrr is more consistent and thus is easier to learn.
+
+The goal of using purrr functions instead of for loops is to allow you break common list manipulation challenges into independent pieces: 
+
+1. How can you solve the problem for a single element of the list? Once
+   you've solved that problem, purrr takes care of generalising your
+   solution to every element in the list.
+
+1. If you're solving a complex problem, how can you break it down into
+   bite sized pieces that allow you to advance one small step towards a 
+   solution? With purrr, you get lots of small pieces that you can
+   compose together with the pipe.
+
+This structure makes it easier to solve new problems. It also makes it easier to understand your solutions to old problems when you re-read your old code.
+
+In later chapters you'll learn how to apply these ideas when modelling. You can often use multiple simple models to help understand a complex dataset, or you might have multiple models because you're bootstrapping or cross-validating. The techniques you'll learn in this chapter will be invaluable.
 
 ### Exercises
 
@@ -242,7 +301,7 @@ The idea of using a function as an argument to another function is extremely pow
 
 ## The map functions
 
-This pattern of looping over a list and doing something to each element is so common that the purrr package provides a family of functions to do it for you. Each function always returns the same type of output so there are six variations based on what sort of result you want:
+The pattern of looping over a list and doing something to each element is so common that the purrr package provides a family of functions to do it for you. Each function always returns the same type of output so there are six variations based on what sort of result you want:
 
 * `map()`     returns a list.
 * `map_lgl()` returns a logical vector.
@@ -259,17 +318,17 @@ Each function takes a list as input, applies a function to each piece, and then 
 We can use these functions to perform the same computations as the previous for loops:
 
 ```{r}
-map_int(df, length)
 map_dbl(df, mean)
 map_dbl(df, median)
+map_dbl(df, sd)
 ```
 
-Compared to using a for loop, focus is on the operation being performed (i.e. `length()`, `mean()`, or `median()`), not the book-keeping required to loop over every element and store the results.
+Compared to using a for loop, focus is on the operation being performed (i.e. `mean()`, `median()`, `sd()`), not the book-keeping required to loop over every element and store the results.
 
 There are a few differences between `map_*()` and `compute_summary()`:
 
-*   All purrr functions are implemented in C. This means you can't easily 
-    understand their code, but it makes them a little faster.
+*   All purrr functions are implemented in C. This makes them a little faster
+    at the expense of readability.
     
 *   The second argument, `.f`, the function to apply, can be a formula, a 
     character vector, or an integer vector. You'll learn about those handy 
@@ -375,7 +434,7 @@ If you're familiar with the apply family of functions in base R, you might have 
 ### Exercises
 
 1.  How can you determine which columns in a data frame are factors? 
-    (Hint: data frames are lists.)
+    (Hint: remember that data frames are lists.)
 
 1.  What happens when you use the map functions on vectors that aren't lists?
     What does `map(1:5, runif)` do? Why?
@@ -384,7 +443,6 @@ If you're familiar with the apply family of functions in base R, you might have 
 
 1.  Rewrite `map(x, function(df) lm(mpg ~ wt, data = df))` to eliminate the 
     anonymous function. 
-
 
 ## Dealing with failure
 
