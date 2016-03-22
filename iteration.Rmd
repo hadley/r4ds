@@ -4,9 +4,22 @@
 library(purrr)
 ```
 
-One part of reducing duplication is writing functions. Functions allow you to identify repeated patterns of code and extract them out in to indepdent pieces that you can reuse and easily update as code changes. Iteration helps you when you need to do the same thing to multiple inputs: repeating the same operation on different columns, or on different datasets. (Generally, you shouldn't need to use explicit iteration to deal with different subsets of your data: in most cases the implicit iteration in dplyr will take care of that problem for you.)
+In [functions], we talked about how important it is to reduce duplication in your code. Reducing code duplication has three main benefits:
 
-In this chapter you'll learn about two important iteration tools: for loops and functional programming. For loops are a great place to start because they make iteration very explicit, so that it's obvious what's happening. However, that explicitness is also the downside of for loops: they are quite verbose, and include quite a bit of book-keeping code. The one of the goals of functional programming is to extract out common patterns of for loops into their own functions. Once you master the vocabulary this allows you to solve many common iteration problems with less code, more ease, and less chance of errors.
+1.  It's easier to see the intent of your code, because your eyes are
+    drawn to what is different, not what is the same.
+    
+1.  It's easier to respond to changes in requirements. As your needs 
+    change, you only need to make changes in one place, rather than
+    remembering to change every place that you copied-and-pasted the 
+    code.
+    
+1.  You're likely to have fewer bugs because each line of code is 
+    used in more places.
+
+One part of reducing duplication is writing functions. Functions allow you to identify repeated patterns of code and extract them out in to indepdent pieces that you can reuse and easily update as code changes. Iteration helps you when you need to do the same thing to multiple inputs: repeating the same operation on different columns, or on different datasets. (Generally, you won't need to use explicit iteration to deal with different subsets of your data: in most cases the implicit iteration in dplyr will take care of that problem for you.)
+
+In this chapter you'll learn about two important iteration tools: for loops and functional programming. For loops are a great place to start because they make iteration very explicit, so it's obvious what's happening. However, for loops are quite verbose, and include quite a bit of book-keeping code, that is duplicated for every for loop. Functional programming (FP) offers tools to extract out this duplicated code, so each common for loop pattern gets its own function. Once you master the vocabulary of FP, you can solve many common iteration problems with less code, more ease, and fewer errors.
 
 ## For loops
 
@@ -21,34 +34,44 @@ df <- data.frame(
 )
 ```
 
-And we want to compute the median of every column. One way to do that is to use a for loop:
+We want to compute the median of each column. You _could_ do with copy-and-paste:
+
 ```{r}
-results <- vector("double", ncol(df))  # 1. results
-for (i in seq_along(df)) {             # 2. sequence
-  results[[i]] <- median(df[[i]])      # 3. body
-}
-results
+median(df$a)
+median(df$b)
+median(df$c)
+median(df$d)
 ```
 
-Every for loop has three main components:
+But that breaks our rule of thumb: never copy and paste more than twice. Instead, we could use a for loop:
 
-1.  The __results__: `results <- vector("integer", length(x))`. 
-    Before you perform an for loop, you must always allocate sufficient space 
-    for the output. This is very important for efficient for-loops: if you grow
-    the for loop at each iteration using `c()`, or `rbind()`, or similar,
-    your for loop will be very slow.
+```{r}
+output <- vector("double", ncol(df))  # 1. output
+for (i in seq_along(df)) {            # 2. sequence
+  output[[i]] <- median(df[[i]])      # 3. body
+}
+output
+```
+
+Every for loop has three components:
+
+1.  The __output__: `output <- vector("integer", length(x))`. 
+    Before you start the loop, you must always allocate sufficient space 
+    for the output. This is very important for efficiency: if you grow
+    the for loop at each iteration using `c()` (for example), your for loop 
+    will be very slow. 
     
     A general way of creating an empty vector of given length is the `vector()`
-    function. It has two arguments: the type of the vector, like "logical", 
-    "integer", "double", or "character", and the length of the vector. 
+    function. It has two arguments: the type of the vector ("logical", 
+    "integer", "double", "character", etc) and the length of the vector. 
 
 1.  The __sequence__: `i in seq_along(df)`. This determines what to loop over:
     each run of the for loop will assign `i` to a different value from 
-    `seq_along(df)`. It's useful to think of `i` as a pronoun.
+    `seq_along(df)`. It's useful to think of `i` as a pronoun, like "it".
     
     You might not have seen `seq_along()` before. It's a safe version of the 
-    familiar `1:length(l)`. There's one important difference in behaviour. If 
-    you have a zero-length vector, `seq_along()` does the right thing:
+    familiar `1:length(l)`, with an important difference: if you have a
+    zero-length vector, `seq_along()` does the right thing:
 
     ```{r}
     y <- vector("double", 0)
@@ -56,17 +79,89 @@ Every for loop has three main components:
     1:length(y)
     ```
     
-    It's unlikely that you've deliberately created a zero-length vector, but
-    they're easy to create accidentally.
+    You probably won't create a zero-length vector deliberately, but
+    it's easy to create them accidentally. If you use `1:length(x)` instead
+    of `seq_along(x)`, you're likely to get a confusing error message.
     
-1.  The __body__: `results[i] <- median(df[[i]])`. This is the code that does
+1.  The __body__: `output[i] <- median(df[[i]])`. This is the code that does
     the work. It's run repeatedly, each time with a different value for `i`.
-    The first iteration will run `results[[1]] <- median(df[[1]])`, 
-    the second will run `results[[2]] <- median(df[[2]])`, and so on.
+    The first iteration will run `output[[1]] <- median(df[[1]])`, 
+    the second will run `output[[2]] <- median(df[[2]])`, and so on.
 
-### Modifying input
+That's all there is to the for loop! Now is a good time to practice creating some basic (and not so basic) for loops using the exercises below. Then we'll move on some variations of the for loop that help you solve other problems that will crop up in practice. 
 
-We now have the tools to go back our challenge from [functions]:
+### Exercises
+
+1.  Write for loops to:
+
+    1. Compute the mean of every column in the `mtcars`.
+    1. Determine the type of each column in `nycflights13::flights`.
+    1. Compute the number of unique values in each column of `iris`.
+    1. Generate 10 random normals for each of $mu = -10$, $0$, $10$, and $100$.
+    
+    Think about output, sequence, and body, __before__ you start writing
+    the loop.
+
+1.  Eliminate the for loop in each of the following examples by taking 
+    advantage of a built-in function that works with vectors:
+    
+    ```{r}
+    out <- ""
+    for (x in letters) {
+      out <- paste0(out, x)
+    }
+    
+    x <- sample(100)
+    sd <- 0
+    for (i in seq_along(out)) {
+      sd <- sd + (x[i] - mean(x)) ^ 2
+    }
+    sd <- sqrt(sd) / (length(x) - 1)
+    
+    x <- runif(100)
+    out <- vector("numeric", length(x))
+    out[1] <- x[1]
+    for (i in 2:length(x)) {
+      out[i] <- out[i - 1] + x[i]
+    }
+    ```
+
+1.  Combine your function writing and for loop skills.
+
+    1. Convert the song "99 bottles of beer on the wall" to a function.
+       Generalise to any number of any vessel containing any liquid on 
+       any surface.
+
+    1. Convert the nursery rhyme "ten in the bed" to a function. Generalise 
+       it to any number of people in any sleeping structure.
+
+1.  It's common to see for loops that don't preallocate the output and instead
+    increase the length of a vector at each step:
+    
+    ```{r, eval = FALSE}
+    output <- vector("integer", 0)
+    for (i in seq_along(x)) {
+      output <- c(output, lengths(x[[i]]))
+    }
+    output
+    ```
+    
+    How does this affect performance? 
+
+## For loop variations
+
+Once you have the basic for loop under your belt, there are some variations on a theme that you should be aware of. These variations are important regardless of how you do iteration, so don't forget about them once you've master the FP techniques you'll learn about in the next section.
+
+There are four variations on the basic theme:
+
+1.  Modifying an existing object, instead of creating a new object.
+1.  Looping over names or values, instead of indices.
+1.  Handling outputs of unknown length.
+1.  Handling sequences of unknown length.
+
+### Modifying an existing object
+
+Sometimes you want to use a for loop to modify an existing object. For example, remember our challenge from [functions]. We wanted to rescale every column in a data frame:
 
 ```{r}
 df <- data.frame(
@@ -86,13 +181,12 @@ df$c <- rescale01(df$c)
 df$d <- rescale01(df$d)
 ```
 
-To solve this with a for loop we need to identify the three pieces:
+To solve this with a for loop we use the same three tools:
 
-1.  Results: override the columns in the input. We don't need to create a new
-    object but can instead reuse an existing object.
+1.  Output: we already have the output - it's the same as the input!
 
-1.  Sequence: remember that we can think about a data frame as a list of 
-    columns, so to iterate over each column we can use `seq_along(df)`.
+1.  Sequence: we can think about a data frame as a list of columns, so 
+    we can iterate over each column with `seq_along(df)`.
 
 1.  Body: apply `rescale01()`.
 
@@ -104,59 +198,21 @@ for (i in seq_along(df)) {
 }
 ```
 
-### Unknown output length
-
-Sometimes you might know now how long the output will be. There is one common pattern that has a relatively simple work around. For example, imagine you want to simulate some random numbers:
-
-```{r}
-means <- c(0, 1, 2)
-
-results <- double()
-for (i in seq_along(means)) {
-  n <- sample(100, 1)
-  results <- c(results, rnorm(n, means[[i]]))
-}
-str(results)
-```
-
-In general this loop isn't going to be very efficient because in each iteration, R has to copy all the data from the previous iterations. In technical terms you get "quadratic" behaviour which means that a loop with three times as many elements would take nine times ($3^2$) as long to run.
-
-```{r}
-out <- vector("list", length(means))
-for (i in seq_along(means)) {
-  n <- sample(100, 1)
-  out[[i]] <- rnorm(n, means[[i]])
-}
-str(out)
-```
-
-Then you can use a function list `unlist()`, or `purrr::flatten_dbl()` to collapse this to a simple vector. This pattern occurs in other places too:
-
-1.  You might be generating a long string. Instead of `paste()`ing together each
-    iteration, save the results in a character vector and then run 
-    `paste(results, collapse = "")` to combine the individual results into
-    a single string.
-   
-1.  You might generating a big data frame. Instead of `rbind()` the results
-    together on each run, save the results in list and then use 
-    `dplyr::bind_rows(results)` to combine the results into a single
-    data frame.
+Typically you'll be modifying a list or data frame with this sort of loop, so remember to use `[[`, not `[`. You might have noticed that I've used `[[` in all my for loops: I think it's safer to use the subsetting operator that will work in all circumstances (and it makes it clear than I'm working with a single value each time).
 
 ### Looping patterns
 
-There are three basic ways to loop over a vector:
+There are three basic ways to loop over a vector. So far I've shown you the most general: looping over the numeric indices with `for (i in seq_along(xs))`, and extracting the value with `x[[i]]`. There are two other forms:
 
-1.  Loop over the elements: `for (x in xs)`. Most useful for side-effects,
-    but it's difficult to save the output efficiently.
-
-1.  Loop over the numeric indices: `for (i in seq_along(xs))`. Most common
-    form if you want to know the element (`xs[[i]]`) and its position.
+1.  Loop over the elements: `for (x in xs)`. This is most useful if you only
+    care about side-effects, liking plotting or saving a file, because it's
+    difficult to save the output efficiently.
 
 1.  Loop over the names: `for (nm in names(xs))`. Gives you both the name
     and the position. This is useful if you want to use the name in a
     plot title or a file name.
 
-The most general form uses `seq_along(xs)`, because from the position you can access both the name and the value:
+Using numeric indices is the most general form, because given the position you can extract both the name and the value:
 
 ```{r, eval = FALSE}
 for (i in seq_along(x)) {
@@ -165,29 +221,129 @@ for (i in seq_along(x)) {
 }
 ```
 
-### Exercises    
+### Unknown output length
 
-1.  Convert the song "99 bottles of beer on the wall" to a function. Generalise
-    to any number of any vessel containing any liquid on any surface.
+Sometimes you might know now how long the output will be. For example, imagine you want to simulate some random numbers:
 
-1.  Convert the nursey rhyme "ten in the bed" to a function. Generalise it 
-    to any number of people in any sleeping structure.
+```{r}
+means <- c(0, 1, 2)
 
-1.  It's common to see for loops that don't preallocate the output and instead
-    increase the length of a vector at each step:
+output <- double()
+for (i in seq_along(means)) {
+  n <- sample(100, 1)
+  output <- c(output, rnorm(n, means[[i]]))
+}
+str(output)
+```
+
+In general this loop isn't going to be very efficient because in each iteration, R has to copy all the data from the previous iterations. In technical terms you get "quadratic" behaviour which means that a loop with three times as many elements would take nine times ($3^2$) as long to run.
+
+The solution is to save the results in a list, and then combine into a single vector after the loop is done:
+
+```{r}
+out <- vector("list", length(means))
+for (i in seq_along(means)) {
+  n <- sample(100, 1)
+  out[[i]] <- rnorm(n, means[[i]])
+}
+str(out)
+str(unlist(out))
+```
+
+Then you can use a function list `unlist()`, or `purrr::flatten_dbl()` to collapse this to a simple vector. 
+
+This pattern occurs in other places too:
+
+1.  You might be generating a long string. Instead of `paste()`ing together each
+    iteration, save the output in a character vector and then run 
+    `paste(output, collapse = "")` to combine the individual output into
+    a single string.
+   
+1.  You might generating a big data frame. Instead of sequentially
+    `rbind()`ing each output together, save results in a list, then use 
+    `dplyr::bind_rows(output)` to combine the output into a single
+    data frame.
+
+### Unknown sequence length
+
+Sometimes you don't even know how long the input sequence should run for. This is common when doing simulations. For example, you might want to loop until you get three heads in a row. You can't do that sort of iteration with the for loop. Instead, you can use a while loop. 
+
+A while loop is simple than for loop because it only has two components, a condition and a body:
+
+```{r, eval = FALSE}
+while (condition) {
+  # body
+}
+```
+
+A while loop is more general than a for loop, because you can rewrite any for loop as a while loop, but you can't rewrite every while loop as a for loop:
+
+```{r, eval = FALSE}
+for (i in seq_along(x)) {
+  # body
+}
+
+# Equivalent to
+i <- 1
+while (i < length(x)) {
+  # body
+  i <- i + 1 
+}
+```
+
+Here's how we could use a while loop to find how many tries it takes to get three heads in a row:
+
+```{r}
+flip <- function() sample(c("T", "H"), 1)
+
+flips <- 1
+nheads <- 0
+
+while (nheads < 3) {
+  if (flip() == "H") {
+    nheads <- nheads + 1
+  } else {
+    nheads <- 0
+  }
+  flips <- flips + 1
+}
+flips
+```
+
+I'm not going to spend much time on while loops, becuase their most common application is in simulation, which I'm not covering in depth in this book. Personally, I hardly ever write a while loop, but it is good to know that they exist.
+
+### Exercises
+
+1.  Imagine you have a directory full of csv files that you want to read in.
+    You have their paths in a vector, 
+    `files <- dir("data/", pattern = "\\.csv$", full.paths = TRUE)`, and now
+    want to read each one with `read_csv()`. Write the for loop that will 
+    load them in. 
+
+1.  Write a function that prints the mean of each numeric column in a data 
+    frame, along with its name. For example, `show_mean(iris)` would print:
     
     ```{r, eval = FALSE}
-    results <- vector("integer", 0)
-    for (i in seq_along(x)) {
-      results <- c(results, lengths(x[[i]]))
-    }
-    results
+    show_mean(iris)
+    #> Sepal.Length: 5.84
+    #> Sepal.Width:  3.06
+    #> Petal.Length: 3.76
+    #> Petal.Width:  1.20
     ```
-    
-    How does this affect performance? 
 
-## While loops
+1.  What does this code do? How does it work?
 
+    ```{r, eval = FALSE}
+    trans <- list(
+      disp = function(x) x * 0.0163871,
+      am = function(x) {
+        factor(x, levels = c("auto", "manual"))
+      }
+    )
+    for (var in names(trans)) {
+      mtcars[[var]] <- trans[[var]](mtcars[[var]])
+    }
+    ```
 
 ## For loops vs functionals
 
@@ -203,11 +359,11 @@ df <- data.frame(
   d = rnorm(10)
 )
 
-results <- numeric(length(df))
+output <- numeric(length(df))
 for (i in seq_along(df)) {
-  results[i] <- mean(df[[i]])
+  output[i] <- mean(df[[i]])
 }
-results
+output
 ```
 
 (Here we're taking advantage of the fact that a data frame is a list of the individual columns, so `length()` and `seq_along()` are useful.)
@@ -216,11 +372,11 @@ You realise that you're going to want to compute the means of every column prett
 
 ```{r}
 col_mean <- function(df) {
-  results <- numeric(length(df))
+  output <- numeric(length(df))
   for (i in seq_along(df)) {
-    results[i] <- mean(df[[i]])
+    output[i] <- mean(df[[i]])
   }
-  results
+  output
 }
 ```
 
@@ -228,18 +384,18 @@ But then you think it'd also be helpful to be able to compute the median or the 
 
 ```{r}
 col_median <- function(df) {
-  results <- numeric(length(df))
+  output <- numeric(length(df))
   for (i in seq_along(df)) {
-    results[i] <- median(df[[i]])
+    output[i] <- median(df[[i]])
   }
-  results
+  output
 }
 col_sd <- function(df) {
-  results <- numeric(length(df))
+  output <- numeric(length(df))
   for (i in seq_along(df)) {
-    results[i] <- sd(df[[i]])
+    output[i] <- sd(df[[i]])
   }
-  results
+  output
 }
 ```
 
@@ -288,6 +444,8 @@ The goal of using purrr functions instead of for loops is to allow you break com
 
 This structure makes it easier to solve new problems. It also makes it easier to understand your solutions to old problems when you re-read your old code.
 
+Some people will tell you to avoid for loops because they are slow. They're wrong! (Well at least they're rather out of date, for loops haven't been slow for many years).
+
 In later chapters you'll learn how to apply these ideas when modelling. You can often use multiple simple models to help understand a complex dataset, or you might have multiple models because you're bootstrapping or cross-validating. The techniques you'll learn in this chapter will be invaluable.
 
 ### Exercises
@@ -323,7 +481,7 @@ map_dbl(df, median)
 map_dbl(df, sd)
 ```
 
-Compared to using a for loop, focus is on the operation being performed (i.e. `mean()`, `median()`, `sd()`), not the book-keeping required to loop over every element and store the results.
+Compared to using a for loop, focus is on the operation being performed (i.e. `mean()`, `median()`, `sd()`), not the book-keeping required to loop over every element and store the output.
 
 There are a few differences between `map_*()` and `compute_summary()`:
 
@@ -346,6 +504,8 @@ There are a few differences between `map_*()` and `compute_summary()`:
     z <- list(x = 1:3, y = 4:5)
     map_int(z, length)
     ```
+
+Never feel bad about using a for loop instead of a function. The map functions are a step up a tower of abstraction, and it can take a long time to get your head around how they work. The important thing is that you solve the problem that you're working on, not write the most concise and elegant code.
 
 ### Shortcuts
 
@@ -399,7 +559,7 @@ If you're familiar with the apply family of functions in base R, you might have 
     functions in purrr.
 
 *   The base `sapply()` is a wrapper around `lapply()` that automatically tries 
-    to simplify the results. This is useful for interactive work but is 
+    to simplify the output. This is useful for interactive work but is 
     problematic in a function because you never know what sort of output
     you'll get:
     
@@ -475,7 +635,7 @@ y <- x %>% map(safely(log))
 str(y)
 ```
 
-This would be easier to work with if we had two lists: one of all the errors and one of all the results. That's easy to get with `transpose()`.
+This would be easier to work with if we had two lists: one of all the errors and one of all the output. That's easy to get with `transpose()`.
 
 ```{r}
 y <- y %>% transpose()
