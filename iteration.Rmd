@@ -1,6 +1,6 @@
 # Iteration
 
-```{r, include=FALSE}
+```{r setup, include=FALSE}
 library(purrr)
 ```
 
@@ -461,7 +461,7 @@ col_summary(df, median)
 col_summary(df, mean)
 ```
 
-The idea of passing a function to another function is extremely powerful idea, and it's one of the reasons that R is called a functional programming language. It might take you a while to wrap your head around it, but it's worth the investment. In the rest of the chapter, you'll learn about and use the __purrr__ package which provides a general set of functions that eliminate the need for many common for loops. The apply family of functions in base R (`apply()`, `lapply()`, `tapply()`, etc) solve a similar problem, but purrr is more consistent and thus is easier to learn.
+The idea of passing a function to another function is extremely powerful idea, and it's one of the reasons that R is called a functional programming language. It might take you a while to wrap your head around the idea, but it's worth the investment. In the rest of the chapter, you'll learn about and use the __purrr__ package, which provides functions that eliminate the need for many common for loops. The apply family of functions in base R (`apply()`, `lapply()`, `tapply()`, etc) solve a similar problem, but purrr is more consistent and thus is easier to learn.
 
 ### Exercises
 
@@ -474,21 +474,17 @@ The idea of passing a function to another function is extremely powerful idea, a
 
 ## The map functions
 
-The pattern of looping over a vector and doing something to each element is so common that the purrr package provides a family of functions to do it for you. Each function always returns the same type of output so there are six variations based on what sort of result you want:
+The pattern of looping over a vector, doing something to each element and saving the results is so common that the purrr package provides a family of functions to do it for you. There is one function for each type of vector:
 
 * `map()`     returns a list.
 * `map_lgl()` returns a logical vector.
 * `map_int()` returns a integer vector.
 * `map_dbl()` returns a double vector.
 * `map_chr()` returns a character vector.
-* `map_df()`  returns a data frame.
-* `walk()`    returns nothing. Walk is a little different to the others because 
-  it's called exclusively for its side effects, so it's described in more 
-  detail later in [walk](#walk).
 
-Each function takes a vector as input, applies a function to each piece, and then returns a new vector that's the same length (and has the same names) as the input. The type of the vector is determined by the suffix to the map function. Usually you want to use the most specific available, using `map()` only as a fallback when there is no specialised equivalent available.
+Each function takes a vector as input, applies a function to each piece, and then returns a new vector that's the same length (and has the same names) as the input. The type of the vector is determined by the suffix to the map function. 
 
-Once you master these functions, you'll find it takes much less time to solve iteration problems. But never feel bad about using a for loop instead of a function. The map functions are a step up a tower of abstraction, and it can take a long time to get your head around how they work. The important thing is that you solve the problem that you're working on, not write the most concise and elegant code.
+Once you master these functions, you'll find it takes much less time to solve iteration problems. But you should never feel bad about using a for loop instead of a map function. The map functions are a step up a tower of abstraction, and it can take a long time to get your head around how they work. The important thing is that you solve the problem that you're working on, not write the most concise and elegant code (although that's definitely something you want to strive towards!).
 
 We can use these functions to perform the same computations as the last for loop. Those summary functions returned doubles, so we need to use `map_dbl()`:
 
@@ -516,7 +512,7 @@ There are a few differences between `map_*()` and `col_summary()`:
     shortcuts in the next section.
     
 *   `map_*()` uses ... ([dot dot dot]) to pass along additional arguments 
-    to `.f` will be passed on to it each time it's called:
+    to `.f` each time it's called:
 
     ```{r}
     map_dbl(df, mean, trim = 0.5)
@@ -610,13 +606,12 @@ If you're familiar with the apply family of functions in base R, you might have 
     functions is that it can also produce matrices - the map functions only 
     ever produce vectors.
 
-*   `map_df(x, f)` is effectively the same as `do.call("rbind", lapply(x, f))` 
-    but under the hood is much more efficient.
+I focus on purrr functions here because they have more consistent names and arguments, helpful shortcuts, and in a future release will provide easy parallelism and progress bars.
 
 ### Exercises
 
-1.  How can you create a single vector that shows which columns in a data 
-    frame are factors? (Hint: remember that data frames are lists.)
+1.  How can you create a single vector that for each column in a data frame
+    indicates whether or not it's a factor?
 
 1.  What happens when you use the map functions on vectors that aren't lists?
     What does `map(1:5, runif)` do? Why?
@@ -629,7 +624,7 @@ If you're familiar with the apply family of functions in base R, you might have 
 
 ## Dealing with failure
 
-When you do many operations on a list, sometimes one will fail. When this happens, you'll get an error message, and no output. This is annoying: why does one failure prevent you from accessing all the other successes? How do you ensure that one bad apple doesn't ruin the whole barrel?
+When you use the map functions to repeat many operations, the chances are much higher that one of those operations will fail. When this happens, you'll get an error message, and no output. This is annoying: why does one failure prevent you from accessing all the other successes? How do you ensure that one bad apple doesn't ruin the whole barrel?
 
 In this section you'll learn how to deal this situation with a new function: `safely()`. `safely()` is an adverb: it takes a function (a verb) and returns a modified version. In this case, the modified function will never throw an error. Instead, it always returns a list with two elements:
 
@@ -658,14 +653,14 @@ y <- x %>% map(safely(log))
 str(y)
 ```
 
-This would be easier to work with if we had two lists: one of all the errors and one of all the output. That's easy to get with `transpose()`.
+This would be easier to work with if we had two lists: one of all the errors and one of all the output. That's easy to get with `purrr::transpose()` (you'll learn more about `transpose()` in [transpose])
 
 ```{r}
 y <- y %>% transpose()
 str(y)
 ```
 
-It's up to you how to deal with the errors, but typically you'll either look at the values of `x` where `y` is an error or work with the values of y that are ok:
+It's up to you how to deal with the errors, but typically you'll either look at the values of `x` where `y` is an error, or work with the values of `y` that are ok:
 
 ```{r}
 is_ok <- y$error %>% map_lgl(is_null)
@@ -693,31 +688,39 @@ Purrr provides two other useful adverbs:
 
 ### Exercises
 
-1.  Challenge: read all the csv files in this directory. Which ones failed
-    and why? 
-
-    ```{r, eval = FALSE}
-    files <- dir("data", pattern = "\\.csv$")
-    files %>%
-      set_names(., basename(.)) %>%
-      map_df(safely(readr::read_csv), .id = "filename") %>%
+1.  Given the following list, extract all the error messages with the smallest
+    amount of code possible:
+    
+    ```{r}
+    x <- list(1, 10, "a")
+    y <- x %>% map(safely(log))
     ```
 
+1.  
 
-## Parallel maps
+## Mapping over multiple arguments
 
-So far we've mapped along a single list. But often you have multiple related lists that you need iterate along in parallel. That's the job of the `map2()` and `pmap()` functions. For example, imagine you want to simulate some random normals with different means. You know how to do that with `map()`:
+So far we've mapped along a single list. But often you have multiple related lists that you need iterate along in parallel. That's the job of the `map2()` and `pmap()` functions. 
+
+For example, imagine you want to simulate some random normals with different means. You know how to do that with `map()`:
 
 ```{r}
 mu <- list(5, 10, -3)
-mu %>% map(rnorm, n = 10)
+mu %>% map(rnorm, n = 5) %>% str()
 ```
 
-What if you also want to vary the standard deviation? You need to iterate along a vector of means and a vector of standard deviations in parallel. That's a job for `map2()` which works with two parallel sets of inputs:
+What if you also want to vary the standard deviation? One way to do that would be to iterate over the indices and index into vectors of means and sds:
+
 
 ```{r}
 sigma <- list(1, 5, 10)
-map2(mu, sigma, rnorm, n = 10)
+seq_along(mu) %>% map(~ rnorm(5, mu[[.]], sigma[[.]])) %>% str()
+```
+
+However, that someone obfuscates the intent of the code. Instead we could use `map2()` which works with iterates over two vectors in parallel:
+
+```{r}
+map2(mu, sigma, rnorm, n = 5) %>% str()
 ```
 
 `map2()` generates this series of function calls:
@@ -726,7 +729,7 @@ map2(mu, sigma, rnorm, n = 10)
 knitr::include_graphics("diagrams/lists-map2.png")
 ```
 
-The arguments that vary for each call come before the function name, and arguments that are the same for every function call come afterwards.
+Note that the arguments that vary for each call come before the function name, and arguments that are the same for every function call come afterwards.
 
 Like `map()`, `map2()` is just a wrapper around a for loop:
 
@@ -754,9 +757,9 @@ That looks like:
 knitr::include_graphics("diagrams/lists-pmap-unnamed.png")
 ```
 
-However, instead of relying on position matching, it's better to name the arguments. This is more verbose, but it makes the code clearer.
+If you don't name the elements of list, `pmap()` will use positional matching when calling the function. That's a little fragile, and makes the code harder to read, so it's better to name the arguments:
 
-```{r}
+```{r, eval = FALSE}
 args2 <- list(mean = mu, sd = sigma, n = n)
 args2 %>% pmap(rnorm) %>% str()
 ```
@@ -775,7 +778,8 @@ params$result <- params %>% pmap(rnorm)
 params
 ```
 
-As soon as your code gets complicated, I think a data frame is a good approach because it ensures that each column has a name and is the same length as all the other columns. We'll come back to this idea when we explore the intersection of dplyr, purrr, and model fitting.
+As soon as your code gets complicated, I think a data frame is a good approach because it ensures that each column has a name and is the same length as all the other columns.
+We'll come back to this idea in [hierarchy], and again when we explore the intersection of dplyr, purrr, and model fitting.
 
 ### Invoking different functions
 
@@ -802,20 +806,22 @@ knitr::include_graphics("diagrams/lists-invoke.png")
 
 The first argument is a list of functions or character vector of function names. The second argument is a list of lists giving the arguments that vary for each function. The subsequent arguments are passed on to every function.
 
-You can use `dplyr::frame_data()` to make creating these matching pairs a little easier:
+You can use `tibble::frame_data()` to make creating these matching pairs a little easier:
 
 ```{r, eval = FALSE}
 # Needs dev version of dplyr
-sim <- dplyr::frame_data(
+sim <- tibble::frame_data(
   ~f,      ~params,
   "runif", list(min = -1, max = -1),
   "rnorm", list(sd = 5),
   "rpois", list(lambda = 10)
 )
-sim %>% dplyr::mutate(
-  samples = invoke_map(f, params, n = 10)
-)
+sim$f %>% invoke_map(sim$params, n = 10) %>% str()
 ```
+
+### Exercises
+
+1.  
 
 ## Walk {#walk}
 
@@ -830,7 +836,7 @@ x %>%
 
 `walk()` is generally not that useful compared to `walk2()` or `pwalk()`. For example, if you had a list of plots and a vector of file names, you could use `pwalk()` to save each file to the corresponding location on disk:
 
-```{r}
+```{r, eval = FALSE}
 library(ggplot2)
 plots <- mtcars %>% 
   split(.$cyl) %>% 
@@ -840,52 +846,80 @@ paths <- paste0(names(plots), ".pdf")
 pwalk(list(paths, plots), ggsave, path = tempdir())
 ```
 
-`walk()`, `walk2()` and `pwalk()` all invisibly return the `.x`, the first argument. This makes them suitable for use in the middle of pipelines. 
+`walk()`, `walk2()` and `pwalk()` all invisibly return `.x`, the first argument. This makes them suitable for use in the middle of pipelines. 
 
+## Other patterns of for loops
 
-## Predicates
+Purrr provides a number of other functions that abstract over other types of for loops. You'll use them less frequently than the map functions, but they're useful to have in your back pocket. The goal here is to briefly illustrate each function so hopefully it will come to mind if you see a similar problem in the future. Then you can go look up the documentation for more details.
 
-Imagine we want to summarise each numeric column of a data frame. We could do it in two steps:
+### Predicate functions
 
-1. Find all numeric columns.
-1. Summarise each column.
+A number of functions work with __predicates__ functions that return either a single `TRUE` or `FALSE`.
 
-In code, that would look like:
-
-```{r}
-col_sum <- function(df, f) {
-  is_num <- df %>% map_lgl(is_numeric)
-  df[is_num] %>% map_dbl(f)
-}
-```
-
-`is_numeric()` is a __predicate__: a function that returns either `TRUE` or `FALSE`. There are a number of of purrr functions designed to work specifically with predicates:
-
-* `keep()` and `discard()` keeps/discards list elements where the predicate is 
-  true.
-  
-* `head_while()` and `tail_while()` keep the first/last elements of a list until
-  you get the first element where the predicate is true.
-  
-* `some()` and `every()` determine if the predicate is true for any or all of
-  the elements.
-
-* `detect()` and `detect_index()`
-
-We could use `keep()` to simplify the summary function to:
+`keep()` and `discard()` keep elements of the input where the predicate is `TRUE` or `FALSE` respectively:
 
 ```{r}
-col_sum <- function(df, f) {
-  df %>%
-    keep(is.numeric) %>%
-    map_dbl(f)
-}
+iris %>% keep(is.factor) %>% str()
+iris %>% discard(is.factor) %>% str()
 ```
 
-I like this formulation because you can easily read the sequence of steps.
+`some()` and `every()` determine if the predicate is true for any or for all of
+the elements.
 
+```{r}
+x <- list(1:5, letters, list(10))
+x %>% some(is_character)
+x %>% every(is_vector)
+```
+
+`detect()` finds the first element where the predicate is true; `detect_index()` returns its position.
+
+```{r}
+x <- sample(10)
+x
+
+x %>% detect(~ . > 5)
+x %>% detect_index(~ . > 5)
+```
+
+`head_while()` and `tail_while()` take elements from the start or end of a vector while a predicate is true:
+
+```{r}
+head_while(x, ~ . > 5)
+tail_while(x, ~ . > 5)
+```
+
+### Reduce and accumulate
+
+Sometimes you have a complex list that you want to reduce to a simple list by repeatedly applying a function that reduces two inputs to a single input. This useful if you want to apply a two-table dplyr verb to multiple tables. For example, you might have a list of data frames, and you want to reduce to a single data frame by joining the elements together
+
+```{r}
+dfs <- list(
+  age = tibble::data_frame(name = "John", age = 30),
+  sex = tibble::data_frame(name = c("John", "Mary"), sex = c("M", "F")),
+  trt = tibble::data_frame(name = "Mary", treatment = "A")
+)
+
+dfs %>% reduce(dplyr::full_join)
+```
+
+The reduce function takes a "binary" function (i.e. a function with two primary inputs), and applies it repeatedly to a list until there is only a single element left.
+
+Accumulate is similar but it keeps all the interim results. You could use it to implement a cumulative sum:
+
+```{r}
+x <- sample(10)
+x
+x %>% accumulate(`+`)
+```
 
 ### Exercises
+
+1.  Implement your own version of `every()` using a for loop. Compare it with
+    `purrr::every()`. What does purrr's version do that your version doesn't?
+
+1.  Create an enhanced `col_sum()` that applies a summary function to every
+    numeric column in a data frame.
 
 1.  A possible base R equivalent of `col_sum()` is:
 
