@@ -3,7 +3,7 @@ layout: default
 title: Model
 ---
 
-A model is a function that summarizes how the values of one variable vary in response to the values of other variables. Models play a large role in hypothesis testing and prediction, but for the moment you should think of models just like you think of statistics. A statistic summarizes a *distribution* in a way that is easy to understand; and a model summarizes *covariation* in a way that is easy to understand. In other words, a model is just another way to describe data.
+A model is a function that summarizes how the values of one variable vary in relation to the values of other variables. Models play a large role in hypothesis testing and prediction, but for the moment you should think of models just like you think of statistics. A statistic summarizes a *distribution* in a way that is easy to understand; and a model summarizes *covariation* in a way that is easy to understand. In other words, a model is just another way to describe data.
 
 This chapter will explain how to build useful models with R.
  
@@ -23,7 +23,7 @@ This chapter will explain how to build useful models with R.
 
 To access the functions and data sets that we will use in the chapter, load the `ggplot2`, `dplyr`, `mgcv`, `splines`, and `broom` packages:
 
-```{r}
+```{r messages = FALSE}
 # install.packages("")
 library(ggplot2)
 library(dplyr)
@@ -34,9 +34,9 @@ library(broom)
 
 ## Linear models
 
-Have you heard that a relationship exists between your height and your income? It sounds far-fetched---and maybe it is---but many people believe that taller people will be promoted faster and valued more for their work, an effect that directly inflates the income of the vertically gifted. Do you think this is true? 
+Have you heard that a relationship exists between your height and your income? It sounds far-fetched---and maybe it is---but many people believe that taller people will be promoted faster and valued more for their work, an effect that increases their income. Could this be true? 
 
-Luckily, it is easy to measure someone's height, as well as their income (and a swath of other variables besides), which means that we can collect data relevant to the question. In fact, the Bureau of Labor Statistics has been doing this in a controlled way for over 50 years. The BLS [National Longitudinal Surveys (NLS)](https://www.nlsinfo.org/) track the income, education, and life circumstances of a large cohort of Americans across several decades. In case you are wondering, the point of the NLS is not to study the relationhip between height and income, that's just a lucky accident.
+Luckily, it is easy to measure a person's height, as well as their income (and a swath of other related variables), which means that we can collect data relevant to the question. In fact, the Bureau of Labor Statistics has been doing this in a controlled way for over 50 years. The BLS [National Longitudinal Surveys (NLS)](https://www.nlsinfo.org/) track the income, education, and life circumstances of a large cohort of Americans across several decades. In case you are wondering, the point of the NLS is not to study the relationship between height and income, that's just a lucky accident.
 
 You can load the latest cross-section of NLS data, collected in 2013 with the code below. 
 
@@ -57,7 +57,6 @@ I've narrowed the data down to 10 variables:
 * `sat_math` - Each subject's score on the math portion of the Scholastic Aptitude Test (SAT), out of 800.
 * `bdate` - Month of birth with 1 = January.
   
-
 ```{r}
 head(heights)
 ```
@@ -69,11 +68,39 @@ ggplot(data = heights, mapping = aes(x = height, y = income)) +
   geom_point()
 ```
 
-First, let's address a distraction: the data is censored in an odd way. The y variable is income, which means that there are no y values less than zero. That's not odd. However, there are also no y values above $180,331. In fact, there are a line of unusual values at exactly $180,331. This is because the Burea of Labor Statistics removed the top 2% of income values and replaced them with the mean value of the top 2% of values, an action that was not designed to enhance the usefulness of the data for data science.
+First, let's address a distraction: the data is censored in an odd way. The y variable is income, which means that there are no y values less than zero. That's not odd. However, there are also no y values above $180,331. In fact, there are a line of unusual values at exactly $180,331. This is because the Burea of Labor Statistics removed the top 2% of income values and replaced them with the mean value of the top 2% of values, an action that was not designed to enhance the usefulness of the data.
 
 Also, you can see that heights have been rounded to the nearest inch.
 
-Second, the relationship is not very strong.
+Setting those concerns aside, we can measure the correlation between height and income with R's `cor()` function. Correlation, $r$ from statistics, measures how strongly the values of two variables are related. The sign of the correlation describes whether the variables have a positive or negative relationship. The magnitude of the correlation describes how strongly the values of one variable determine the values of the second. A correlation of 1 or -1 implies that the value of one variable completely determines the value of the second variable.
+
+```{r echo = FALSE, cache=TRUE}
+x1 <- rnorm(100)
+y1 <- .5 * x1 + rnorm(100, sd = .5)
+y2 <- -.5 * x1 + rnorm(100, sd = .5)
+
+cordat <- data.frame(x = rep(x1, 5), 
+                     y = c(-x1, y2, rnorm(100), y1, x1),
+                     cor = rep(1:5, each = 100))
+
+cordat$cor <- factor(cordat$cor, levels = 1:5, 
+                     labels = c("Correlation = -1.0",
+                                "Correlation = -0.5",
+                                "Correlation = 0",
+                                "Correlation = 0.5",
+                                "Correlation = 1.0"))
+
+ggplot(cordat, aes(x = x, y = y)) +
+  geom_point() +
+  facet_grid(. ~ cor) +
+  coord_fixed()
+```
+
+
+
+the strength of the relationship between two variables. If the values of the variables fall on a straight line with positive slope (e.g. the value of one variable completely determines the value of another variable)
+
+The correlation suggests that heights may have a small effect on income.
 
 ```{r}
 cor(heights$height, heights$income, use = "na")
