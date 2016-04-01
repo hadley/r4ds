@@ -7,53 +7,82 @@ library(dplyr)
 
 As you start to write more functions, and as you want your functions to work with more types of inputs, it's useful to have some grounding in the underlying data structures that R is built on.  This chapter will dive deeper into the objects that you've already used, helping you better understand how things work.
 
-The most important class of objects in R is the __vector__. Every vector has two key properties:
+The most important family of objects in R are __vectors__. Vectors are broken down into __atomic__ vectors, and __lists__.  There are six types of atomic vector, but only four are in common use: logical, integer, double, and character. The chief difference between atomic vectors and lists is that atomic atomic vectors are homogeneous (every element is the same type) and lists are heterogeneous (each element can be a different type).
 
-1. Its type, whether it's logical, numeric, character, and so on. You 
-   can determine the type of any R object with `typeof()`.
+```{r, echo = FALSE}
+knitr::include_graphics("diagrams/data-structures-overview.png")
+```
 
-2. Its length, which you can retrieve with `length()`.
+The two key properties of a vector are its type, which you can determine with `typeof()`, and its length, `length()`.
 
-Vectors are broken down into __atomic__ vectors, and __lists__. I call factors, dates, and date times __augmented vectors__ because they're built on top of atomic vectors. Data frames are also augmented vectors as they built on top of lists.
+```{r}
+typeof(letters)
+typeof(1:10)
+x <- list("a", "b", 1:10)
+length(x)
+```
 
-Note that R does not have "scalars". In R, a single number is a vector of length 1. The impacts of this are mostly on how functions work. Because there are no scalars, most built-in functions are vectorised, meaning that they will operate on a vector of numbers. That's why, for example, you can write `1:10 + 10:1`.
+There are four common data types build on top of these foundations:
+
+* Factors and dates are built on top of integers.
+* Date times (POSIXct) are built on of doubles.
+* Data frames and tibbles are built on top of lists.
+
+I these __augmented vectors__ because each is a vector augmented with some special behaviour through R's S3 objected oriented system.
 
 ## Atomic vectors
 
-There are four important types of atomic vector:
+There are four important types of atomic vector: logical, integer, double, and character. Collectively, integer and double vectors are known as __numeric vectors__, and most of the time the distinction is not important, so we'll discuss them together. There are two rarer types of atomic vectors: raw and complex. They're beyond the scope of this book because they are rarely needed to do data analysis. The following sections describe each type in turn.
 
-* logical
-* integer
-* double
-* character
+Note that R does not have "scalars". In R, a single number is a vector of length 1. The impacts of this are mostly on how functions work. Because there are no scalars, most built-in functions are __vectorised__, meaning that they will operate on a vector of numbers. That's why, for example, this code works:
 
-Collectively, integer and double vectors are known as numeric vectors. Most of the time the distinction between integers and doubles is not important in R, so we'll discuss them together.
+```{r}
+1:10 + 2:11
+```
+In R, basic mathematical operations work with vectors, not scalars like in most programming languages.
 
-(There are also two rarer atomic vectors: raw and complex. They're beyond the scope of this book because they are rarely needed to do data analysis)
+There are four types of missing value, one for each type of atomic vector:
+
+```{r}
+NA            # logical
+NA_integer_   # integer
+NA_real_      # double
+NA_character_ # character
+```
+
+It is not usually necessary to know about these different types because in most cases `NA` is automatically converted to the type that you need. However, there are some functions that are strict about their inputs, and you'll need to give them an missing value of the correct type.
 
 ### Logical
 
-Logical vectors are the simplest type of atomic vector because they can take only three possible values: `FALSE`, `TRUE`, and `NA`. Logical vectors are usually constructed with comparison operators, as described in [comparisons].
+Logical vectors are the simplest type of atomic vector because they can take only three possible values: `FALSE`, `TRUE`, and `NA`. Logical vectors are usually constructed with comparison operators, as described in [comparisons]. You can also create them by hand using `c()`:
 
-In numeric contexts, `TRUE` is converted to `1`, `FALSE` converted to 0. That means the sum of a logical vector is the number of trues, and the mean of a logical vector is the proportion of trues.
+```{r}
+c(TRUE, TRUE, FALSE, NA)
+```
+
+You can convert another type of atomic vector to logiacl using `as.logical()`. However, before doing so, you should carefully consider whether you can make the fix upstream, so that the vector never had the wrong type in the first place.
+
+One of the most useful properties of logical vectors is how they behave in numeric contexts: `TRUE` is converted to `1`, `FALSE` converted to 0. That means the sum of a logical vector is the number of trues, and the mean of a logical vector is the proportion of trues.
 
 ```{r}
 x <- sample(20, 100, replace = TRUE)
 y <- x > 10
-sum(y)
-mean(y)
+sum(y)  # how many are greater than 10?
+mean(y) # what proportion are greater than 10?
 ```
 
 ### Numeric
 
-Numeric vectors encompasses both integers and doubles (real numbers). For large data, there is some small advantage to using the integer data type if you really have integers, but in most cases the differences are immaterial. In R, numbers are doubles by default. To make an integer, use a `L` after the number:
+Numeric vectors include both integers vectors and doubles vectors (real numbers). In R, numbers are doubles by default. To make an integer, use a `L` after the number:
 
 ```{r}
 typeof(1)
 typeof(1L)
 ```
 
-There are two cases where you need to be aware of the differences between doubles and integers. Firstly, never test for equality on a double. There can be very small differences that don't print out by default. These differences arise because a double is represented using a fixed number of (binary) digits. For example, what should you get if you square the square-root of two?
+There are two important differences between integers and doubles: doubles are approximations, and they have three extra special values.
+
+Never test for equality on a double. There can be very small differences that don't print out by default. These differences arise because a double is represented using a fixed number of (binary) digits. For example, what should you get if you square the square-root of two?
 
 ```{r}
 x <- sqrt(2) ^ 2
@@ -67,19 +96,19 @@ x == 2
 x - 2
 ```
 
-The number we've computed is actually slightly different to 2.  To avoid this sort of comparison difficulty, you can use the `near()` function from dplyr (available in 0.5).
+The number we've computed is actually slightly different to 2 because computers only store a finite number of numbers after the decimal point. This means that most calculations include some approximation error: never compare a double to a fixed value using `==`. Instead, use the `near()` function from dplyr (available in 0.5) which includes some numerical tolerance.
 
 ```{r, eval = packageVersion("dplyr") >= "0.4.3.9000"}
 dplyr::near(x, 2)
 ```
 
-The other important thing to know about doubles is that they have three special values in addition to `NA`:
+Doubles also have three special values in addition to `NA`:
 
 ```{r}
 c(-1, 0, 1) / 0
 ```
 
-Like with missing values, you should avoid using `==` to check for these other special values. Instead use `is.finite()`, `is.infinite()`, and `is.nan()`: 
+Avoid using `==` to check for these other special values. Instead use the helper functions `is.finite()`, `is.infinite()`, and `is.nan()`: 
 
 |                  |  0  | Inf | NA  | NaN |
 |------------------|-----|-----|-----|-----|
@@ -92,16 +121,11 @@ Note that `is.finite(x)` is not the same as `!is.infinite(x)`.
 
 ### Character
 
-Each element of a character vector is a string. 
+Character vectors are the most complex of atomic vectors, because each element of a character vector is a string, and a string can contain an arbitrary amount of data. Strings are such an important data type, they have their own chapter: [strings].
 
-```{r}
-x <- c("abc", "def", "ghijklmnopqrs")
-typeof(x)
-```
+Here I wanted to mention one important feature of the underlying string implementation: it uses a global string pool. This means that each unique string is only stored in memory once, and every use of the string points to that representation. This reduces the amount of memory needed by duplicated strings.
 
-You learned how to manipulate these vectors in [strings].
-
-R uses a global string pool. This reduces the amount of memory strings take up because
+You can see this behaviour in practice by using `pryr::object_size()`:
 
 ```{r}
 x <- "This is a reasonably long string."
@@ -113,117 +137,10 @@ pryr::object_size(y)
 
 `y` doesn't take up 1,000x as much memory as `x`, because each element of `y` is just a pointer to that same string. A pointer is 8 bytes, so 1000 pointers to a 136 B string is about 8.13 kB.
 
-### Missing values
+### Exercises
 
-There are four types of missing value, one for each type of atomic vector:
+1.  Read the source code for `dplyr::near()`. How does it work?
 
-```{r}
-NA            # logical
-NA_integer_   # integer
-NA_real_      # double
-NA_character_ # character
-```
-
-It is not usually necessary to know about these different types because in most cases `NA` is automatically converted to the type that you need. However, there are some functions that are strict about their inputs, and you'll need to give them an missing value of the correct type.
-
-## Subsetting
-
-
-
-## Augmented vectors
-
-There are three important types of vector that are built on top of atomic vectors: factors, dates, and date times. I call these augmented vectors, because they are atomic vectors with additional __attributes__. Attributes are a way of adding arbitrary additional metadata to a vector. Each attribute is a named vector.  You can get and set individual attribute values with `attr()` or see them all at once with `attributes()`.
-
-```{r}
-x <- 1:10
-attr(x, "greeting")
-attr(x, "greeting") <- "Hi!"
-attr(x, "farewell") <- "Bye!"
-attributes(x)
-```
-
-There are three very important attributes that are used to implement fundamental parts of R:
-
-* "names" are used to name the elements of a vector.
-* "dims" make a vector behave like a matrix or array.
-* "class" is used to implemenet the S3 object oriented system.
-
-Class is particularly important because it changes what __generic functions__ do with the object.  Generic functions are key to OO in R. Here's what a typical generic function looks like:
-
-```{r}
-as.Date
-```
-
-The call to "UseMethod" means that this is a generic function, and it will call a specific __method__, based on the class of the first argument.  You can list all the methods for a generic with `methods()`:
-
-```{r}
-methods("as.Date")
-```
-
-And you can see the specific implementation of a method with `getS3method()`:
-
-```{r}
-getS3method("as.Date", "default")
-getS3method("as.Date", "numeric")
-```
-
-The most important S3 generic is `print()`: it controls how the object is printed when you type its name on the console. Other important generics are the subsetting functions `[`, `[[`, and `$`. 
-
-A detailed discussion of S3 is beyond the scope of this book, but you can read more about it at <http://adv-r.had.co.nz/OO-essentials.html#s3>.
-
-### Factors
-
-Factors are designed to represent categorical data that can take a fixed set of possible values. Factors are built on top of integers, and have a levels attribute:
-
-```{r}
-x <- factor(c("ab", "cd", "ab"), levels = c("ab", "cd", "ef"))
-typeof(x)
-attributes(x)
-```
-
-Historically, factors were much easier to work with than characters so many functions in base R automatically convert characters to factors (controlled by the dread `stringsAsFactors` argument). To get more historical context, you might want to read [stringsAsFactors: An unauthorized biography](http://simplystatistics.org/2015/07/24/stringsasfactors-an-unauthorized-biography/) by Roger Peng or [stringsAsFactors = \<sigh\>](http://notstatschat.tumblr.com/post/124987394001/stringsasfactors-sigh) by Thomas Lumley.  The motivation for factors is the modelling context. If you're going to fit a model to categorical data, you need to know in advance all the possible values. There's no way to make a prediction for "green" if all you've ever seen is "red", "blue", and "yellow"
-
-The packages in this book keep characters as is, but you will need to deal with them if you are working with base R or many other packages. When you encounter a factor, you should first check to see if you can avoid creating it in the first. Often there will be `stringsAsFactors` argument that you can set to `FALSE`. Otherwise, you can apply `as.character()` to the column to explicitly turn back into a factor.
-
-```{r}
-x <- factor(letters[1:5])
-is.factor(x)
-as.factor(letters[1:5])
-```
-
-### Dates and date times
-
-Dates in R are numeric vectors (sometimes integers, sometimes doubles) that represent the number of days since 1 January 1970.
-
-```{r}
-x <- as.Date("1971-01-01")
-unclass(x)
-
-typeof(x)
-attributes(x)
-```
-
-Date times are numeric vectors (sometimes integers, sometimes doubles) that represent the number of seconds since 1 January 1970:
-
-```{r}
-x <- lubridate::ymd_hm("1970-01-01 01:00")
-unclass(x)
-
-typeof(x)
-attributes(x)
-```
-
-The `tzone` is optional, and only controls the way the date is printed not what it means.
-
-There is another type of datetimes called POSIXlt. These are built on top of named lists.
-
-```{r}
-y <- as.POSIXlt(x)
-typeof(y)
-attributes(y)
-```
-
-If you use the packages outlined in this book, you should never encounter a POSIXlt. They do crop up in base R, because they are used extract specific components of a date (like the year or month). However, lubridate provides helpers for you to do this instead. Otherwise POSIXct's are always easier to work with, so if you find you have a POSIXlt, you should always convert it to a POSIXct with `as.POSIXct()`.
 
 ## Recursive vectors (lists)
 
@@ -357,7 +274,103 @@ knitr::include_graphics("images/pepper-3.jpg")
 1.  What happens if you subset a data frame as if you're subsetting a list?
     What are the key differences between a list and a data frame?
 
-## Data frames
+
+## Augmented vectors
+
+There are four important types of vector that are built on top of atomic vectors: factors, dates, date times, and data frames. I call these augmented vectors, because they are atomic vectors with additional __attributes__. Attributes are a way of adding arbitrary additional metadata to a vector. Each attribute is a named vector.  You can get and set individual attribute values with `attr()` or see them all at once with `attributes()`.
+
+```{r}
+x <- 1:10
+attr(x, "greeting")
+attr(x, "greeting") <- "Hi!"
+attr(x, "farewell") <- "Bye!"
+attributes(x)
+```
+
+There are three very important attributes that are used to implement fundamental parts of R:
+
+* "names" are used to name the elements of a vector.
+* "dims" make a vector behave like a matrix or array.
+* "class" is used to implemenet the S3 object oriented system.
+
+Class is particularly important because it changes what __generic functions__ do with the object.  Generic functions are key to OO in R. Here's what a typical generic function looks like:
+
+```{r}
+as.Date
+```
+
+The call to "UseMethod" means that this is a generic function, and it will call a specific __method__, based on the class of the first argument.  You can list all the methods for a generic with `methods()`:
+
+```{r}
+methods("as.Date")
+```
+
+And you can see the specific implementation of a method with `getS3method()`:
+
+```{r}
+getS3method("as.Date", "default")
+getS3method("as.Date", "numeric")
+```
+
+The most important S3 generic is `print()`: it controls how the object is printed when you type its name on the console. Other important generics are the subsetting functions `[`, `[[`, and `$`. 
+
+A detailed discussion of S3 is beyond the scope of this book, but you can read more about it at <http://adv-r.had.co.nz/OO-essentials.html#s3>.
+
+### Factors
+
+Factors are designed to represent categorical data that can take a fixed set of possible values. Factors are built on top of integers, and have a levels attribute:
+
+```{r}
+x <- factor(c("ab", "cd", "ab"), levels = c("ab", "cd", "ef"))
+typeof(x)
+attributes(x)
+```
+
+Historically, factors were much easier to work with than characters so many functions in base R automatically convert characters to factors (controlled by the dread `stringsAsFactors` argument). To get more historical context, you might want to read [stringsAsFactors: An unauthorized biography](http://simplystatistics.org/2015/07/24/stringsasfactors-an-unauthorized-biography/) by Roger Peng or [stringsAsFactors = \<sigh\>](http://notstatschat.tumblr.com/post/124987394001/stringsasfactors-sigh) by Thomas Lumley.  The motivation for factors is the modelling context. If you're going to fit a model to categorical data, you need to know in advance all the possible values. There's no way to make a prediction for "green" if all you've ever seen is "red", "blue", and "yellow"
+
+The packages in this book keep characters as is, but you will need to deal with them if you are working with base R or many other packages. When you encounter a factor, you should first check to see if you can avoid creating it in the first. Often there will be `stringsAsFactors` argument that you can set to `FALSE`. Otherwise, you can apply `as.character()` to the column to explicitly turn back into a factor.
+
+```{r}
+x <- factor(letters[1:5])
+is.factor(x)
+as.factor(letters[1:5])
+```
+
+### Dates and date times
+
+Dates in R are numeric vectors (sometimes integers, sometimes doubles) that represent the number of days since 1 January 1970.
+
+```{r}
+x <- as.Date("1971-01-01")
+unclass(x)
+
+typeof(x)
+attributes(x)
+```
+
+Date times are numeric vectors (sometimes integers, sometimes doubles) that represent the number of seconds since 1 January 1970:
+
+```{r}
+x <- lubridate::ymd_hm("1970-01-01 01:00")
+unclass(x)
+
+typeof(x)
+attributes(x)
+```
+
+The `tzone` is optional, and only controls the way the date is printed not what it means.
+
+There is another type of datetimes called POSIXlt. These are built on top of named lists.
+
+```{r}
+y <- as.POSIXlt(x)
+typeof(y)
+attributes(y)
+```
+
+If you use the packages outlined in this book, you should never encounter a POSIXlt. They do crop up in base R, because they are used extract specific components of a date (like the year or month). However, lubridate provides helpers for you to do this instead. Otherwise POSIXct's are always easier to work with, so if you find you have a POSIXlt, you should always convert it to a POSIXct with `as.POSIXct()`.
+
+### Data frames and tibbles
 
 Data frames are augmented lists: they have class "data.frame", and `names` (column) and `row.names` attributes:
 
@@ -369,7 +382,7 @@ attributes(df1)
 
 The difference between a data frame and a list is that all the elements of a data frame must be the same length. All functions that work with data frames enforce this constraint.
 
-Generally, I recommend using `dplyr::data_frame()` instead of `data.frame`. It creates an object that "extends" the data frame. That means it has all the existing behaviour of a data frame:
+In this book, we use tibbles, rather than data frames. Tibbles are identical to data frames, except that they have two additional components in the class:
 
 ```{r}
 df2 <- dplyr::data_frame(x = 1:5, y = 5:1)
@@ -377,51 +390,7 @@ typeof(df2)
 attributes(df2)
 ```
 
-The additional `tbl_df` class makes the print method more informative (and only prints the first 10 rows, not the first 10,000), and makes the subsetting methods more strict:
-
-```{r, error = TRUE}
-df1
-df2
-
-df1$z
-df2$z
-```
-
-There are a few other ways in `data_frame()` behaves differently to `data.frame()`
-
-  * `data.frame()` does a number of transformations to its inputs. For example,
-    unless you `stringsAsFactors = FALSE` it always converts character vectors
-    to factors. `data_frame()` does not conversion:
-    
-    ```{r}
-    data.frame(x = letters) %>% sapply(class)
-    data_frame(x = letters) %>% sapply(class)
-    ```
-    
-  * `data.frame()` automatically transforms names, `data_frame()` does not.
-  
-    ```{r}
-    data.frame(`crazy name` = 1) %>% names()
-    data_frame(`crazy name` = 1) %>% names()
-    ```
-
-  * In `data_frame()` you can refer to variables that you just created:
-  
-    ```{r}
-    data_frame(x = 1:5, y = x ^ 2)
-    ```
-
-  * It never uses row names. The whole point of tidy data is to store variables 
-    in a consistent way. Row names are a variable stored in a unique way,
-    so I don't recommend using them.
-
-  * It only recycles vectors of length 1. Recycling vectors of greater lengths 
-    is a frequent source of silent mistakes.
-    
-    ```{r, error = TRUE}
-    data.frame(x = 1:2, y = 1:4)
-    data_frame(x = 1:2, y = 1:4)
-    ```
+These extra components give tibbles the helpful behaviours defined in [tibbles].
 
 ## Predicates
 
