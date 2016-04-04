@@ -7,41 +7,62 @@ library(dplyr)
 
 As you start to write more functions, and as you want your functions to work with more types of inputs, it's useful to have some grounding in the underlying data structures that R is built on.  This chapter will dive deeper into the objects that you've already used, helping you better understand how things work.
 
-The most important family of objects in R are __vectors__. Vectors are broken down into __atomic__ vectors, and __lists__.  There are six types of atomic vector, but only four are in common use: logical, integer, double, and character. The chief difference between atomic vectors and lists is that atomic atomic vectors are homogeneous (every element is the same type) and lists are heterogeneous (each element can be a different type).
+This chapter focusses on __vectors__, the most important family of objects in R. They are the most important because you work with them most frequently in a data analysis. You will use other types of objects likes functions and environments, but by and large you don't need to understand the details of these data types. If you are interested in learning the precise details, you'll need to learn about R's underlying C API, which is beyond the scope of this book. <http://adv-r.had.co.nz/C-interface.html#c-data-structures> has some details if you're interested.
+
+There are two types of vectors:
+
+1. __Atomic__ vectors, which are further broken down into six types:
+  __logical__, __integer__, __double__,  __character__, __complex__, and 
+  __raw__. Complex are raw are rarely used and won't be discussed further.
+  Integer and double vectors are collectively known as __numeric__ vectors. 
+
+1. __Lists__, which sometimes called recursive vectors, because lists can 
+  contain other lists. This is the chief difference between atomic vectors
+  and lists.
+
+The structure of the vector types is summarised in the following diagram
 
 ```{r, echo = FALSE}
 knitr::include_graphics("diagrams/data-structures-overview.png")
 ```
 
-The two key properties of a vector are its type, which you can determine with `typeof()`, and its length, `length()`.
+Every vector has two key properties: 
 
-```{r}
-typeof(letters)
-typeof(1:10)
-x <- list("a", "b", 1:10)
-length(x)
-```
+1.  Its __type__, which you can determine with `typeof()`.
 
-There are four common data types build on top of these foundations:
+    ```{r}
+    typeof(letters)
+    typeof(1:10)
+    ```
 
-* Factors and dates are built on top of integers.
-* Date times (POSIXct) are built on of doubles.
-* Data frames and tibbles are built on top of lists.
+1. Its __length__, which you can determine with `length()`.
 
-I these __augmented vectors__ because each is a vector augmented with some special behaviour through R's S3 objected oriented system.
+    ```{r}
+    x <- list("a", "b", 1:10)
+    length(x)
+    ```
+
+Vectors can also contain arbitrary additional metadata in the form of attributes. These attributes are used to create __augmented vectors__ which build on additional behaviour. There are four important augmented vector types:
+
+* __Factors__ and __dates__ are built on top of integers.
+* __Date times__ (POSIXct) are built on of doubles.
+* Data frames and __tibbles__ are built on top of lists.
+
+This chapter will introduce you to these important vectors types from simplest to most complicated. You'll start with atomic vectors, then build up to lists, and finally learn about augmented vectors.
 
 ## Atomic vectors
 
-There are four important types of atomic vector: logical, integer, double, and character. Collectively, integer and double vectors are known as __numeric vectors__, and most of the time the distinction is not important, so we'll discuss them together. There are two rarer types of atomic vectors: raw and complex. They're beyond the scope of this book because they are rarely needed to do data analysis. The following sections describe each type in turn.
+The four most important types of atomic vector are logical, integer, double, and character. Integer and double are known collectively as numeric vectors and most of the time the distinction is not important, so we'll discuss them together. They're beyond the scope of this book because they are rarely needed to do data analysis. The following sections describe each type in turn.
 
 Note that R does not have "scalars". In R, a single number is a vector of length 1. The impacts of this are mostly on how functions work. Because there are no scalars, most built-in functions are __vectorised__, meaning that they will operate on a vector of numbers. That's why, for example, this code works:
 
 ```{r}
 1:10 + 2:11
 ```
-In R, basic mathematical operations work with vectors, not scalars like in most programming languages.
 
-There are four types of missing value, one for each type of atomic vector:
+In R, basic mathematical operations work with vectors, not scalars like in most programming languages. This means that you should never need to write an explicit for loop when performing simple computations on vectors.
+
+Each type of atomic vector has its own missing value:
 
 ```{r}
 NA            # logical
@@ -50,17 +71,17 @@ NA_real_      # double
 NA_character_ # character
 ```
 
-It is not usually necessary to know about these different types because in most cases `NA` is automatically converted to the type that you need. However, there are some functions that are strict about their inputs, and you'll need to give them an missing value of the correct type.
+Normally, you don't need to know about these different types because you can always use `NA` it will be converted to the correct type. However, there are some functions that are strict about their inputs, so it's useful to have this knowledge sitting in your back pocket so you can use a specific type of missing value when needed.
+
+You can convert another from one type of atomic vector to another with `as.logical()`, `as.integer()`, `as.double()`, and `as.character()`. However, before doing so, you should carefully consider whether you can make the fix upstream, so that the vector never had the wrong type in the first place. For example, you may need to tweak you readr `col_types` specification.
 
 ### Logical
 
-Logical vectors are the simplest type of atomic vector because they can take only three possible values: `FALSE`, `TRUE`, and `NA`. Logical vectors are usually constructed with comparison operators, as described in [comparisons]. You can also create them by hand using `c()`:
+Logical vectors are the simplest type of atomic vector because they can take only three possible values: `FALSE`, `TRUE`, and `NA`. Logical vectors are usually constructed with comparison operators, as described in [comparisons]. You can also create them by hand with `c()`:
 
 ```{r}
 c(TRUE, TRUE, FALSE, NA)
 ```
-
-You can convert another type of atomic vector to logiacl using `as.logical()`. However, before doing so, you should carefully consider whether you can make the fix upstream, so that the vector never had the wrong type in the first place.
 
 One of the most useful properties of logical vectors is how they behave in numeric contexts: `TRUE` is converted to `1`, `FALSE` converted to 0. That means the sum of a logical vector is the number of trues, and the mean of a logical vector is the proportion of trues.
 
@@ -70,19 +91,18 @@ y <- x > 10
 sum(y)  # how many are greater than 10?
 mean(y) # what proportion are greater than 10?
 ```
-
 ### Numeric
 
-Numeric vectors include both integers vectors and doubles vectors (real numbers). In R, numbers are doubles by default. To make an integer, use a `L` after the number:
+Numeric vectors include both integers and doubles (real numbers). In R, numbers are doubles by default. To make an integer, place a `L` after the number:
 
 ```{r}
 typeof(1)
 typeof(1L)
 ```
 
-There are two important differences between integers and doubles: doubles are approximations, and they have three extra special values.
+There are two important differences between integers and doubles: doubles are approximations, and they have three extra special values. 
 
-Never test for equality on a double. There can be very small differences that don't print out by default. These differences arise because a double is represented using a fixed number of (binary) digits. For example, what should you get if you square the square-root of two?
+Doubles represent floating point numbers that can not always be precisely represented with a fixed amount of memory. This means that you should consider all doubles to be approximations, and you should never test for equality. For example, what is square of the square root of two?
 
 ```{r}
 x <- sqrt(2) ^ 2
@@ -96,7 +116,7 @@ x == 2
 x - 2
 ```
 
-The number we've computed is actually slightly different to 2 because computers only store a finite number of numbers after the decimal point. This means that most calculations include some approximation error: never compare a double to a fixed value using `==`. Instead, use the `near()` function from dplyr (available in 0.5) which includes some numerical tolerance.
+This behaviour is common when working with floating point numbers: most calculations include some approximation error. Instead of comparing floating point numbers using `==`, you should use `dplyr::near()` which allows for some numerical tolerance.
 
 ```{r, eval = packageVersion("dplyr") >= "0.4.3.9000"}
 dplyr::near(x, 2)
@@ -108,7 +128,7 @@ Doubles also have three special values in addition to `NA`:
 c(-1, 0, 1) / 0
 ```
 
-Avoid using `==` to check for these other special values. Instead use the helper functions `is.finite()`, `is.infinite()`, and `is.nan()`: 
+Avoid using `==` to check for these other special values. Instead use the helper functions `is.finite()`, `is.infinite()`, and `is.nan()`:
 
 |                  |  0  | Inf | NA  | NaN |
 |------------------|-----|-----|-----|-----|
