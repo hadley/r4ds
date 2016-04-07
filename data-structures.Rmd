@@ -6,18 +6,18 @@ library(dplyr)
 ```
 Often, when you write a function it will work with a single vector (or a handful of vectors), rather than a data frame. So far we've focussed on tools, like dplyr, that work with data frames, and have talked little about vector. Now it's time to dive deep and learn how you can work with vectors to build your own functions to automate common problems.
 
-This chapter focusses on __vectors__, the most important family of objects in R. They are the most important because you work with them most frequently in a data analysis. You will use other types of objects likes functions and environments, but by and large you don't need to understand the details of these data types. If you are interested in learning the precise details, you'll need to learn about R's underlying C API, which is beyond the scope of this book. <http://adv-r.had.co.nz/C-interface.html#c-data-structures> has some details if you're interested.
-
 There are two types of vectors:
 
 1. __Atomic__ vectors, which are further broken down into six types:
   __logical__, __integer__, __double__,  __character__, __complex__, and 
-  __raw__. Complex are raw are rarely used and won't be discussed further.
-  Integer and double vectors are collectively known as __numeric__ vectors. 
+  __raw__. Integer and double vectors are collectively known as
+  __numeric__ vectors. 
 
 1. __Lists__, which sometimes called recursive vectors, because lists can 
   contain other lists. This is the chief difference between atomic vectors
   and lists.
+
+There's a somewhat related object: `NULL`. It's often used to represent the absence of a vector (as opposed to `NA` which is used to represent the absence of a value in a vector). `NULL` typically behaves like a vector of length 0.
 
 The structure of the vector types is summarised in the following diagram:
 
@@ -41,17 +41,36 @@ Every vector has two key properties:
     length(x)
     ```
 
-Vectors can also contain arbitrary additional metadata in the form of attributes. These attributes are used to create __augmented vectors__ which build on additional behaviour. There are four important augmented vector types:
+Vectors can also contain arbitrary additional metadata in the form of attributes. These attributes are used to create __augmented vectors__ which build on additional behaviour. There are four important types of augmented vector:
 
 * __Factors__ and __dates__ are built on top of integers.
 * __Date times__ (POSIXct) are built on of doubles.
 * Data frames and __tibbles__ are built on top of lists.
 
-This chapter will introduce you to these important vectors types from simplest to most complicated. You'll start with atomic vectors, then build up to lists, and finally learn about augmented vectors.
+This chapter will introduce you to these important vectors from simplest to most complicated. You'll start with atomic vectors, then build up to lists, and finally learn about augmented vectors.
 
-## Atomic vector theory
+## Types of atomic vector
 
-The four most important types of atomic vector are logical, integer, double, and character. Integer and double are known collectively as numeric vectors and most of the time the distinction is not important, so we'll discuss them together. They're beyond the scope of this book because they are rarely needed to do data analysis. The following sections describe each type in turn.
+The four most important types of atomic vector are logical, integer, double, and character. Raw and complex are rarely used during a data analysis, so I don't discuss them here.
+
+Each type of atomic vector has its own missing value:
+
+```{r}
+NA            # logical
+NA_integer_   # integer
+NA_real_      # double
+NA_character_ # character
+```
+
+Normally, you don't need to know about these different types because you can always use `NA` it will be converted to the correct type. However, there are some functions that are strict about their inputs, so it's useful to have this knowledge sitting in your back pocket so you can use a specific type of missing value when needed.
+
+Note that R does not have "scalars". In R, a single number is a vector of length 1. The impacts of this are mostly on how functions work. Because there are no scalars, most built-in functions are __vectorised__, meaning that they will operate on a vector of numbers. That's why, for example, this code works:
+
+```{r}
+1:10 + 2:11
+```
+
+In R, basic mathematical operations work with vectors, not scalars like in most programming languages. This means that you should never need to write an explicit for loop when performing simple computations on vectors.
 
 ### Logical
 
@@ -61,18 +80,11 @@ Logical vectors are the simplest type of atomic vector because they can take onl
 c(TRUE, TRUE, FALSE, NA)
 ```
 
-One of the most useful properties of logical vectors is how they behave in numeric contexts: `TRUE` is converted to `1`, `FALSE` converted to 0. That means the sum of a logical vector is the number of trues, and the mean of a logical vector is the proportion of trues.
-
-```{r}
-x <- sample(20, 100, replace = TRUE)
-y <- x > 10
-sum(y)  # how many are greater than 10?
-mean(y) # what proportion are greater than 10?
-```
-
 ### Numeric
 
-Numeric vectors include both integers and doubles (real numbers). In R, numbers are doubles by default. To make an integer, place a `L` after the number:
+Integer and double vectors are known collectively as numeric vectors and most of the time the distinction is not important, so we'll discuss them together.  
+
+In R, numbers are doubles by default. To make an integer, place a `L` after the number:
 
 ```{r}
 typeof(1)
@@ -88,7 +100,7 @@ x <- sqrt(2) ^ 2
 x
 ```
 
-It certainly looks like we get what we expect: `2`. But things are not exactly as they seem:
+It certainly looks like we get what we expect: 2. But things are not exactly as they seem:
 
 ```{r}
 x == 2
@@ -134,40 +146,81 @@ y <- rep(x, 1000)
 pryr::object_size(y)
 ```
 
-`y` doesn't take up 1,000x as much memory as `x`, because each element of `y` is just a pointer to that same string. A pointer is 8 bytes, so 1000 pointers to a 136 B string is about 8.13 kB.
+`y` doesn't take up 1,000x as much memory as `x`, because each element of `y` is just a pointer to that same string. A pointer is 8 bytes, so 1000 pointers to a 136 B string is 8 * 1000 + 136 = 8.13 kB.
 
 ### Exercises
 
 1.  Read the source code for `dplyr::near()`. How does it work?
 
-## Atomic vector practice
+1.  A logical vector can take 3 possible values. How many possible
+    values can an integer vector take?
 
-### Scalars
+1.  List four functions that allow you to convert a double to an
+    integer. How do they differ?
+    
+1.  What functions from the readr package allow you to turn a string
+    into a logical, integer, or double vector?
 
-Note that R does not have "scalars". In R, a single number is a vector of length 1. The impacts of this are mostly on how functions work. Because there are no scalars, most built-in functions are __vectorised__, meaning that they will operate on a vector of numbers. That's why, for example, this code works:
+## Using atomic vectors
 
-```{r}
-1:10 + 2:11
-```
+Now that you understand the different types of atomic vector, it's useful to review some of the important tools for working with them:
 
-In R, basic mathematical operations work with vectors, not scalars like in most programming languages. This means that you should never need to write an explicit for loop when performing simple computations on vectors.
-
-Each type of atomic vector has its own missing value:
-
-```{r}
-NA            # logical
-NA_integer_   # integer
-NA_real_      # double
-NA_character_ # character
-```
-
-Normally, you don't need to know about these different types because you can always use `NA` it will be converted to the correct type. However, there are some functions that are strict about their inputs, so it's useful to have this knowledge sitting in your back pocket so you can use a specific type of missing value when needed.
+1.  The coercion rules
+1.  Testing if an input is of a given type
+1.  How to create named vectors.
+1.  Subsetting a vector to pull out elements of interest.
 
 ### Coercion
 
-You can convert another from one type of atomic vector to another with `as.logical()`, `as.integer()`, `as.double()`, and `as.character()`. However, before doing so, you should carefully consider whether you can make the fix upstream, so that the vector never had the wrong type in the first place. For example, you may need to tweak you readr `col_types` specification.
+There are two ways to convert, or coerce, one type of vector to another:
 
-### Named vectors
+1.  Implicit coercion happens when you use a vector in a specific context
+    that expects a certain type of vector. For example, when you use a logical
+    vector with a numeric summary function, or when you use a double vector
+    where an integer vector is expected.
+
+1.  Explicit coercion happesn when you call a function like `as.logical()`,
+    `as.integer()`, `as.double()`, and `as.character()`. Whenever you find
+    yourself using explicit coercion, you should always check whether you can
+    make the fix upstream, so that the vector never had the wrong type in 
+    the first place. For example, you may need to tweak you readr 
+    `col_types` specification.
+    
+Because explicit coercion is used relatively rarely, it's more important to understand implicit coercion.  The most important implicit coercion is logical to numeric. When used in a numeric context: `TRUE` is converted to `1`, `FALSE` converted to 0. That means the sum of a logical vector is the number of trues, and the mean of a logical vector is the proportion of trues.
+
+```{r}
+x <- sample(20, 100, replace = TRUE)
+y <- x > 10
+sum(y)  # how many are greater than 10?
+mean(y) # what proportion are greater than 10?
+```
+
+It's also important to understand what happens when you try and create a vector containing multiple types with `c()`: the most complex type always wins. The type is a property of the complete vector, not the individual elements, so there's no way to have an atomic vector which is a mix of different types. If you need to mix multiple types in the same vector, you should use a list, which you'll learn about shortly.
+
+```{r}
+str(c(TRUE, 1L))
+str(c(1L, 1.5))
+str(c(1.5, "a"))
+```
+
+### Test functions
+
+It's also useful to be able to test what type of thing you have in an unknown object. Base R provides many functions like `is.vector()` and `is.atomic()`, but they often don't do what you expect. Instead, it's safer to use the `is_*` functions provided by purrr, which are summarised in the table below.
+
+|                  | lgl | int | dbl | chr | list |
+|------------------|-----|-----|-----|-----|------|
+| `is_logical()`   |  x  |     |     |     |      |
+| `is_integer()`   |     |  x  |     |     |      |
+| `is_double()`    |     |     |  x  |     |      |
+| `is_numeric()`   |     |  x  |  x  |     |      |
+| `is_character()` |     |     |     |  x  |      |
+| `is_atomic()`    |  x  |  x  |  x  |  x  |      |
+| `is_list()`      |     |     |     |     |  x   |
+| `is_vector()`    |  x  |  x  |  x  |  x  |  x   |
+
+Each predicate also comes with a "scalar" version, which checks that the length is 1. This is useful if you want to check (for example) that the inputs to your function are as you expect.
+
+### Naming vectors
 
 All types of vectors can be named. You can either name them during creation with `c()`:
 
@@ -181,45 +234,7 @@ Or after the fact with `purrr::set_names()`:
 1:3 %>% set_names(c("a", "b", "c"))
 ```
 
-### Test functions
-
-|                  | lgl | int | dbl | chr | list | null |
-|------------------|-----|-----|-----|-----|------|------|
-| `is_logical()`   |  x  |     |     |     |      |      |
-| `is_integer()`   |     |  x  |     |     |      |      |
-| `is_double()`    |     |     |  x  |     |      |      |
-| `is_numeric()`   |     |  x  |  x  |     |      |      |
-| `is_character()` |     |     |     |  x  |      |      |
-| `is_atomic()`    |  x  |  x  |  x  |  x  |      |      |
-| `is_list()`      |     |     |     |     |  x   |      |
-| `is_vector()`    |  x  |  x  |  x  |  x  |  x   |      |
-| `is_null()`      |     |     |     |     |      | x    |
-
-Compared to the base R functions, they only inspect the type of the object, not its attributes. This means they tend to be less surprising: 
-
-```{r}
-is.atomic(NULL)
-is_atomic(NULL)
-
-is.vector(factor("a"))
-is_vector(factor("a"))
-```
-
-I recommend using these instead of the base functions.
-
-Each predicate also comes with "scalar" and "bare" versions. The scalar version checks that the length is 1 and the bare version checks that the object is a bare vector with no S3 class.
-
-```{r}
-y <- factor(c("a", "b", "c"))
-is_integer(y)
-is_scalar_integer(y)
-is_bare_integer(y)
-```
-
-### Exercises
-
-1.  Carefully read the documentation of `is.vector()`. What does it actually
-    test for?
+Named vectors are most useful for subsetting, described next.
 
 ### Subsetting
 
@@ -301,6 +316,9 @@ There is an important variation of `[` called `[[`. `[[` only ever extracts a si
 
 ### Exercises
 
+1.  Carefully read the documentation of `is.vector()`. What does it actually
+    test for?
+
 1.  Create functions that take a vector as input and returns:
     
     1. The last value.  Should you use `[` or `[[`?
@@ -314,12 +332,6 @@ There is an important variation of `[` called `[[`. `[[` only ever extracts a si
 1.  What happens when you subset with a positive integer that's bigger
     than the length of the vector? What happens when you subset with a 
     name that doesn't exist?
-
-## Null
-
-Null is a special object. Represents a "generic" vector of length 0. Often used to represent the absense of a vector (as opposed to `NA` which is used to represent the absence of a value in a vector). NULL is a singleton.
-
-Subsetting NULL always gives you a null.
 
 ## Recursive vectors (lists)
 
