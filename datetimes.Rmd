@@ -1,3 +1,425 @@
 # Dates and times
 
-If you have trouble remembering these abbreviations, check out the [strptimer package](https://cran.r-project.org/web/packages/strptimer/vignettes/strptimer.html).
+This chapter will show you how to work with dates and times in R. Dates and times follow their own rules, which can make working with them difficult. For example dates and times are ordered, like numbers; but the timeline is not as orderly as the numberline. The timeline repeats itself, and has noticeable gaps due to Daylight Savings Time, leap years, and leap seconds. Datetimes also rely on ambiguous units: How long is a month? How long is a year? Time zones give you another head ache when you work with dates and times. The same instant of time will have different "names" in different time zones.
+
+This chapter will focus on R's __lubridate__ package, which makes it much easier to work with dates and times in R. You'll learn the basic date time structures in R and the lubridate functions that make working with them easy. We will also rely on some of the packages that you already know how to use, so load this entire set of packages to begin:
+
+```{r messages = FALSE, warnings = FALSE}
+library(nycflights13)
+library(dplyr)
+library(stringr)
+library(ggplot2)
+library(lubridate)
+```
+
+## Parsing times 
+
+Time data normally comes as character strings, or numbers spread across columns, as in the `flights` data set from Chapter ?. 
+
+```{r}
+flights %>% 
+  select(year, month, day, hour, minute)
+```
+
+Getting R to agree that your data set contains the dates and times that you think it does can be tricky. Lubridate simplifies that. To combine separate numbers into datetimes, use `make_datetime()`.
+
+```{r}
+datetimes <- flights %>% 
+  mutate(departure = make_datetime(year = year, month = month, day = day, 
+                                   hour = hour, min = minute))
+```
+  
+With a little work, we can also create arrival times for each flight in flights. I'll then clean up the data a little.
+
+```{r}
+(datetimes <- datetimes %>% 
+  mutate(arrival = make_datetime(year = year, month = month, day = day, 
+                                 hour = str_sub(arr_time, end = -3), 
+                                 min = str_sub(arr_time, start = -2))) %>% 
+  filter(!is.na(departure), !is.na(arrival)) %>% 
+  select(departure, arrival, dep_delay, arr_delay, carrier, tailnum, 
+         flight, origin, dest, air_time, distance))
+```
+  
+To parse character strings as dates, identify the order in which the year, month, and day appears in your dates. Now arrange "y", "m", and "d" in the same order. This is the name of the function in lubridate that will parse your dates. For example,
+
+```{r}
+ymd("20170131")
+mdy("January 31st, 2017")
+dmy("31-1-2017")
+```
+
+If your date contains hours, minutes, or seconds, add an underscore and then one or more of "h", "m", and "s" to the name of the parsing function.
+
+```{r}
+ymd_hms("2017-01-31 20:11:59")
+mdy_hm("01/31/2017 08:01")
+```
+
+Lubridate's parsing functions handle a wide variety of formats and separators, which simplifies the parsing process. 
+
+For both `make_difftime()` and the y,m,d,h,m,s parsing functions, you can set the time zone of a date when you create it with a tz argument. As a general rule, I recommend that you do not use time zones unless you have to. I'll cover time zones and the idiosyncracies that come with them later in the chapter. If you do not set a time zone, lubridate will supply the Universal Coordinated Time zone, a very easy time zone to work in.
+
+```{r}
+ymd_hms("2017-01-31 20:11:59", tz = "America/New_York")
+```
+
+#### The structure of dates and times
+
+What have we accomplished by parsing our datetimes? R now recognizes that our departure and arrival variables contain datetime information, and it saves the variables in the POSIXct format, a common way of representing dates and times.
+
+```{r}
+class(datetimes$departure[1])
+```
+
+In POSIXct form, each datetime is saved as the number of seconds that passed between the datetime and midnight January 1st, 1970 in the Universal Coordinated Time zone. Under this system, the very first moment of January 1st, 1970 gets the number zero. Earlier moments get a negative number.
+
+```{r}
+unclass(datetimes$departure[1])
+unclass(ymd_hms("1970-01-01 00:00:00"))
+```
+
+The POSIXct format has many advantages. You can display the same date time in any time zone by changing its tzone attribute (more on that later), and R can recognize when two times displayed in two different time zones refer to the same moment.
+
+```{r warning = FALSE}
+(zero_hour <- ymd_hms("1970-01-01 00:00:00"))
+attr(zero_hour, "tzone") <- "America/Chicago"
+zero_hour
+ymd_hms("1970-01-01 00:00:00") == ymd_hms("1970-01-01 00:00:00", tz = "America/Denver")
+```
+
+Best of all, you can change a datetime by adding or subtracting seconds from it.
+
+```{r}
+ymd_hms("1970-01-01 00:00:00") + 1
+```
+
+This gives us a way to calculate the scheduled departure and arrival times of each flight in flights.
+
+```{r}
+datetimes %>% 
+  mutate(scheduled_departure = departure - dep_delay * 60,
+         scheduled_arrival = arrival - arr_delay * 60) %>% 
+  select(scheduled_departure, dep_delay, departure, 
+         scheduled_arrival, arr_delay, arrival)
+```
+
+If you work only with dates, and not times, you can also use R's Date class. R saves Dates as the number of days since January 1st, 1970. The easiest way to create a Date is to parse with lubridate's y, m, d functions. These will return a Date class object whenever you do not supply an hour, minutes, or seconds component.
+
+```{r}
+(zero_day <- mdy("January 1st, 1970"))
+class(zero_day)
+zero_day - 1
+```
+
+R can also save datetimes in the POSIXlt form, a list based date structure. Working with POSIXlt dates can be much slower than working with POSIXct dates, and I don't recommend it. Lubridate's parse functions will always return a POSIXct date when you supply an hour, minutes, or seconds component.
+
+
+## Arithmetic with dates
+
+Did you see how I calculated the scheduled departure and arrival times for our flights? I added the appropriate number of seconds to the actual departure and arrival times. You can take this approach even farther by adding hours, days, weeks, and more. 
+
+```{r eval = FALSE}
+datetimes %>% 
+  transmute(second_lag = departure + 1,
+            minute_lag = departure + 1 * 60,
+            hour_lag = departure + 1 * 60 * 60,
+            day_lag = departure + 1 * 60 * 60 * 24,
+            week_lag = departure + 1 * 60 * 60 * 24 * 7)
+```
+
+However, the conversion to seconds becomes tedious and introduces a chance for error. To simplify the process, use difftimes or durations. Each represents a span of time in R.
+
+### Difftimes
+
+A difftime class object records a span of time in one of seconds, minutes, hours, days, or weeks. R creates a difftime whenever you subtract two dates or two datetimes.
+
+```{r}
+(day1 <- ymd("2000-01-01") - ymd("1999-12-31"))
+```
+
+You can also create a difftime with `as.difftime()`. Pass it the length of the difftime as well as the units to use.
+
+```{r}
+(day2 <- as.difftime(24, units = "hours"))
+```
+
+Difftimes come with base R, but they have some rough edges. For example, the value of a difftime depends on the difftime's units attribute. If this attribute is dropped, as it is when you combine difftimes with `c()`, the value becomes uninterpretable. Consider what happens when I combine these two difftimes that have the same length.
+
+```{r}
+c(day1, day2)
+```
+
+You can avoid these rough edges by using lubridate's version of difftimes, known as durations.
+
+### Durations
+
+Durations behave like difftimes, but are a little more user friendly. To make a duration, choose a units of time, make it plural, and then place a "d" in front of it. This is the name of the funtion in lubridate that will make your duration, i.e.
+
+```{r}
+dseconds(1)
+dminutes(1)
+dhours(1)
+ddays(1)
+dweeks(1)
+dyears(1)
+```
+
+To make a duration that lasts multiple units, pass the number of units as the argument of the duration function. So for example, you can make a duration that lasts three minutes with 
+
+```{r}
+dminutes(3)
+```
+
+This syntax provides a very clean way to do arithmetic with datetimes. For example, we can recreate our scheduled departure and arrival times with 
+
+```{r}
+(datetimes <- datetimes %>% 
+  mutate(scheduled_departure = departure - dminutes(dep_delay),
+         scheduled_arrival = arrival - dminutes(arr_delay)) %>% 
+  select(scheduled_departure, dep_delay, departure, 
+         scheduled_arrival, arr_delay, arrival, 
+         carrier, tailnum, flight, origin, dest, air_time, distance))
+```
+
+Durations always contain a time span measured in seconds. Larger units are estimated by converting minutes, hours, days, weeks, and years to seconds at the standard rate. This makes durations very precise, but it can lead to unexpected results when the timeline progresses at a non-standard rate.
+
+For example, Daylight Savings Time can result in this sort of surprise.
+
+```{r}
+ymd_hms("2016-03-13 00:00:00", tz = "America/New_York") + ddays(1)
+```
+
+Luckily, the UTC time zone does not use Daylight Savings Time, so if you keep your datetimes in UTC you can avoid this type of complexity. But what if you do need to work with Daylight Savings Time (or leap years or months, two other places where the time line can misbehave [^1])?
+
+[^1]: Technically, the timeline also misbehaves during __leap seconds__, extra seconds that are added to the timeline to account for changes in the Earth's movement. In practice, most operating systems ignore leap seconds, and R follows the behavior of the operating system. If you are curious about when leap seconds occur, R lists them under `.leap.seconds`.
+
+### Periods
+
+You can use lubridate's period class to handle irregularities in the timeline. Periods are time spans that are generalized to work with clock times, the "name" of a datetime that you would see on a clock, like "2016-03-13 00:00:00." Periods have no fixed length, which lets them work in an intuitive, human friendly way. When you add a one day period to "2000-03-13 00:00:00" the result will be "2000-03-14 00:00:00" whether there were 86400 seconds in March 13, 2000 or 82800 seconds (due to Daylight Savings Time).
+
+To make a period object, call the name of the unit you wish to use, make it plural, and pass it the number of units to use as an argument. 
+
+```{r}
+seconds(1)
+minutes(1)
+hours(1)
+days(1)
+weeks(1)
+months(1)
+years(1)
+```
+
+You can add periods together to make larger periods.
+
+```{r}
+days(50) + hours(25) + minutes(2)
+```
+
+To see how periods work, compare the performance of durations and periods during Daylight Savings Time and a leap year.
+
+```{r}
+# Daylight Savings Time
+ymd_hms("2016-03-13 00:00:00", tz = "America/New_York") + days(1)
+ymd_hms("2016-03-13 00:00:00", tz = "America/New_York") + ddays(1)
+
+# A leap year
+ymd_hms("2016-01-01 00:00:00") + years(1)
+ymd_hms("2016-01-01 00:00:00") + dyears(1)
+```
+
+The period always returns the "expected" clock time, as if the irregularity had not happened. The duration always returns the time that is exactly 86,400 seconds (in the case of a day) or 31,536,000 seconds later (in the case of a year).
+
+When the timeline behaves normally, the results of a period and a duration will agree.
+
+```{r}
+# Not Daylight Savings Time
+ymd_hms("2016-03-14 00:00:00") + days(1)
+ymd_hms("2016-03-14 00:00:00") + ddays(1)
+```
+
+When should you use a period and when should you use a duration?
+
+* Use durations whenever you need to calculate physical properties or compare exact timespans, such as the life of two different batteries.
+
+* Use periods whenever you need to model human events, such as the opening of the stock market, or the close of the business day.
+
+Periods also let you model datetimes that reoccur on a monthly basis in a way that would be impossible with durations. Consider that some of the months below are 31 days, some have 30, and one has 29.
+
+```{r}
+mdy("January 1st, 2016") + months(0:11)
+```
+
+Let's use periods to fix an oddity related to our flight dates. Some planes appear to have arrived at their destination _before_ they departed from New York City.
+
+```{r}
+datetimes %>% 
+  filter(arrival < departure) 
+```
+
+These are overnight flights. We used the same date information for both the departure and the arrival times, but these flights arrived on the following day. We can fix this by adding `days(1)` to the arrival time of each overnight flight. Then we will recalculate each scheduled arrival time.
+
+```{r}
+overnight <- datetimes$arrival < datetimes$departure
+datetimes$arrival[overnight] <- datetimes$arrival[overnight] + days(1)
+(datetimes <- datetimes %>% 
+  mutate(scheduled_arrival = arrival - dminutes(arr_delay)))
+```
+
+Now all of our flights obey the laws of physics.
+
+```{r}
+datetimes %>% 
+  filter(arrival < departure) 
+```
+
+### Rolling back and rounding dates
+
+The length of months and years change so often that doing arithmetic with them can be unintuitive. Consider a simple operation, `January 31st + one month`. Should the answer be 
+
+1. `February 31st` (which doesn't exist)
+2. `March 4th` (31 days after January 31), or
+3. `February 28th` (assuming its not a leap year)
+
+A basic property of arithmetic is that `a + b - b = a`. Only solution 1 obeys this property, but it is an invalid date. Lubridate tries to make arithmetic as consistent as possible by invoking the following rule *if adding or subtracting a month or a year creates an invalid date, lubridate will return an NA*. 
+
+If you thought solution 2 or 3 was more useful, no problem. You can still get those results with clever arithmetic, or by using the special `%m+%` and `%m-%` operators. `%m+%` and `%m-%` automatically roll dates back to the last day of the month, should that be necessary.
+
+```{r}
+ymd("2016-01-31") + months(0:11)
+ymd("2016-01-31") %m+% months(0:11)
+```
+
+Notice that this will only affect arithmetic with months (and arithmetic with years if your start date is Feb 29).
+
+You can use lubridate's functions `floor_date()`, `round_date()`, and `ceiling_date()` to round (or move) a date to a nearby unit of time. Each function takes a vector of dates to adjust and then the name of the time unit to floor, ceiling, or round them to.
+
+```{r}
+floor_date(ymd_hms("2016-01-01 12:34:56"), unit = "hour")
+ceiling_date(ymd_hms("2016-01-01 12:34:56"), unit = "hour")
+round_date(ymd_hms("2016-01-01 12:34:56"), unit = "day")
+```
+
+`floor_date()` would help you calculate the days that occur exactly 31 days after the start of each month (Solution 2 above).
+
+```{r}
+floor_date(ymd("2016-01-31"), unit = "month") + months(0:11) + days(31)
+```
+
+
+
+
+```{r include = FALSE}
+# SETTORS
+# What time of day do flights leave?
+# What day of the week?
+
+datetimes %>% 
+  transmute(dep_dow = wday(scheduled_departure, label = TRUE)) %>% 
+  filter(!is.na(dep_dow)) %>% 
+  ggplot(aes(x = dep_dow)) +
+    geom_bar()
+
+datetimes %>% 
+  transmute(dep_hour = hour(scheduled_departure)) %>% 
+  filter(!is.na(dep_hour)) %>% 
+  ggplot(aes(x = dep_hour)) +
+    geom_bar()
+
+
+# When do the most delays occur?
+datetimes %>% 
+  mutate(dep_dow = wday(scheduled_departure, label = TRUE)) %>% 
+  group_by(dep_dow) %>% 
+  summarise(avg_delay = mean(dep_delay)) %>% 
+  ggplot(aes(dep_dow, avg_delay)) +
+    geom_bar(stat = "identity")
+
+# Very interesting
+datetimes %>% 
+  mutate(dep_hour = hour(scheduled_departure)) %>% 
+  group_by(dep_hour) %>% 
+  summarise(avg_delay = mean(dep_delay, na.rm = TRUE)) %>% 
+  ggplot(aes(dep_hour, avg_delay)) +
+    geom_bar(stat = "identity")
+
+# even more striking when you look at arrival delays
+datetimes %>% 
+  mutate(dep_hour = hour(scheduled_departure)) %>% 
+  group_by(dep_hour) %>% 
+  summarise(avg_delay = mean(arr_delay, na.rm = TRUE)) %>% 
+  ggplot(aes(dep_hour, avg_delay)) +
+    geom_bar(stat = "identity")
+
+datetimes %>% 
+  mutate(arr_hour = hour(scheduled_arrival)) %>% 
+  group_by(arr_hour) %>% 
+  summarise(avg_delay = mean(arr_delay, na.rm = TRUE)) %>% 
+  ggplot(aes(arr_hour, avg_delay)) +
+    geom_bar(stat = "identity")
+
+
+# TIME ZONES and DAYLIGHT SAVINGS
+# How long was each flight scheduled to be?
+# First convert scheduled times to NYC timezone
+datetimes2 <- airports %>% 
+  select(faa, name, tz, dst) %>% 
+  right_join(datetimes, by = c("faa" = "dest")) %>% 
+  mutate(NYC_scheduled_arrival = scheduled_arrival - hours(5 + tz),
+         NYC_arrival = arrival - hours(5 + tz))
+
+datetimes2 <- datetimes2 %>% 
+   mutate(scheduled_departure = force_tz(scheduled_departure, tz = "America/New_York"),
+          departure = force_tz(departure, tz = "America/New_York"),
+          NYC_scheduled_arrival = force_tz(NYC_scheduled_arrival, tz = "America/New_York"),
+          NYC_arrival = force_tz(NYC_arrival, tz = "America/New_York"))
+
+# Then adjust for places that do not use DST
+datetimes2 %>% 
+  filter(dst != "A") %>% 
+  select(faa, name, dst) %>% 
+  unique()
+
+adjust_for_dst <- datetimes2$faa %in% c("PHX", "HNL") & 
+                  dst(datetimes2$NYC_scheduled_arrival) &
+                  !is.na(dst(datetimes2$NYC_scheduled_arrival))
+  
+
+datetimes2$NYC_scheduled_arrival[adjust_for_dst] <- datetimes2$NYC_scheduled_arrival[adjust_for_dst] + hours(1)
+datetimes2$NYC_arrival[adjust_for_dst] <- datetimes2$NYC_arrival[adjust_for_dst] + hours(1)
+
+datetimes2 %>% 
+  select(scheduled_arrival, NYC_scheduled_arrival, tz)
+
+# Let's check that we did some correctly
+datetimes2 %>% 
+  filter(faa == "HNL") %>% 
+  transmute(HNL_scheduled_arrival = with_tz(NYC_scheduled_arrival, tz = "Pacific/Honolulu"),
+            scheduled_arrival = force_tz(scheduled_arrival, tz = "Pacific/Honolulu")) %>% 
+  filter(HNL_scheduled_arrival != scheduled_arrival)
+
+datetimes2 %>% 
+  filter(faa == "PHX") %>% 
+  transmute(PHX_scheduled_arrival = with_tz(NYC_scheduled_arrival, tz = "America/Phoenix"),
+            scheduled_arrival = force_tz(scheduled_arrival, tz = "America/Phoenix")) %>% 
+  filter(PHX_scheduled_arrival != scheduled_arrival)
+
+
+# Do some carriers schedule different times relative to distance?
+datetimes2 %>%
+  select(-name) %>% 
+  left_join(airlines, by = "carrier") %>% 
+  transmute(estimate = as.numeric(NYC_scheduled_arrival - scheduled_departure),
+            distance = distance, 
+            name = name) %>%
+  lm(estimate ~ distance + name, data = .) %>% 
+  broom::tidy() %>% 
+  arrange(estimate)
+
+
+
+# INTERVALS
+# Where there increased delays during spring break?
+
+```
+
