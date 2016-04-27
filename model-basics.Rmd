@@ -1,0 +1,373 @@
+# Model
+
+A model is a function that summarizes how the values of one variable vary in relation to the values of other variables. Models play a large role in hypothesis testing and prediction, but for the moment you should think of models just like you think of statistics. A statistic summarizes a *distribution* in a way that is easy to understand; and a model summarizes *covariation* in a way that is easy to understand. In other words, a model is just another way to describe data.
+
+This chapter will explain how to build useful models with R.
+ 
+### Outline
+
+*Section 1* will show you how to build linear models, the most commonly used type of model. Along the way, you will learn R's model syntax, a general syntax that you can reuse with most of R's modeling functions. 
+
+*Section 2* will show you the best ways to use R's model output, which often requires additional wrangling.
+
+*Section 3* will teach you to build and interpret multivariate linear models, models that use more than one explanatory variable to explain the values of a response variable.
+
+*Section 4* will explain how to use categorical variables in your models and how to interpret the results of models that use categorical variables. Here you will learn about interaction effects, as well as logistic models.
+
+*Section 5* will present a logical way to extend linear models to describe non-linear relationships.
+
+### Prerequisites
+
+To access the functions and data sets that we will use in the chapter, load the `ggplot2`, `dplyr`, `mgcv`, `splines`, and `broom` packages:
+
+```{r messages = FALSE}
+# install.packages("")
+library(ggplot2)
+library(dplyr)
+library(mgcv)
+library(splines)
+library(broom)
+```
+
+## Linear models
+
+Have you heard that a relationship exists between your height and your income? It sounds far-fetched---and maybe it is---but many people believe that taller people will be promoted faster and valued more for their work, an effect that increases their income. Could this be true? 
+
+
+Luckily, it is easy to measure someone's height, as well as their income, which means that we can collect data relevant to the question. In fact, the Bureau of Labor Statistics has been doing this in a controlled way for over 50 years. The BLS [National Longitudinal Surveys (NLS)](https://www.nlsinfo.org/) track the income, education, and life circumstances of a large cohort of Americans across several decades. In case you are wondering just how your tax dollars are being spent, the point of the NLS is not to study the relationship between height and income, that's just a lucky accident.
+
+You can load the latest cross-section of NLS data, collected in 2013 with the code below. 
+
+```{r echo = FALSE}
+heights <- readRDS("data/heights.RDS")
+```
+
+I've narrowed the data down to 10 variables:
+
+* `id` - A number to identify each subject
+* `income` - The self-reported income of each subject
+* `height` - The height of each subject in inches
+* `weight` - The weight of each subject in pounds
+* `sex` - The sex of each subject
+* `race` - The race of each subject
+* `education` - The number of years of education completed by each subject
+* `asvab` - Each subject's score on the Armed Services Vocational Aptitude Battery (ASVAB), an intelligence assessment, out of 100.
+* `sat_math` - Each subject's score on the math portion of the Scholastic Aptitude Test (SAT), out of 800.
+* `bdate` - Month of birth with 1 = January.
+  
+```{r}
+head(heights)
+```
+
+Now that you have the data, you can visualize the relationship between height and income. But what does the data say? How would you describe the relationship?
+
+```{r warnings = FALSE}
+ggplot(data = heights, mapping = aes(x = height, y = income)) +
+  geom_point()
+```
+
+First, let's address a distraction: the data is censored in an odd way. The y variable is income, which means that there are no y values less than zero. That's not odd. However, there are also no y values above $180,331. In fact, there are a line of unusual values at exactly $180,331. This is because the Bureau of Labor Statistics removed the top 2% of income values and replaced them with the mean value of the top 2% of values, an action that was not designed to enhance the usefulness of the data for data science.
+
+Also, you can see that heights have been rounded to the nearest inch.
+
+Setting those concerns aside, we can measure the correlation between height and income with R's `cor()` function. Correlation, $r$ from statistics, measures how strongly the values of two variables are related. The sign of the correlation describes whether the variables have a positive or negative relationship. The magnitude of the correlation describes how strongly the values of one variable determine the values of the second. A correlation of 1 or -1 implies that the value of one variable completely determines the value of the second variable.
+
+```{r echo = FALSE, cache=TRUE}
+x1 <- rnorm(100)
+y1 <- .5 * x1 + rnorm(100, sd = .5)
+y2 <- -.5 * x1 + rnorm(100, sd = .5)
+
+cordat <- data.frame(x = rep(x1, 5), 
+                     y = c(-x1, y2, rnorm(100), y1, x1),
+                     cor = rep(1:5, each = 100))
+
+cordat$cor <- factor(cordat$cor, levels = 1:5, 
+                     labels = c("Correlation = -1.0",
+                                "Correlation = -0.5",
+                                "Correlation = 0",
+                                "Correlation = 0.5",
+                                "Correlation = 1.0"))
+
+ggplot(cordat, aes(x = x, y = y)) +
+  geom_point() +
+  facet_grid(. ~ cor) +
+  coord_fixed()
+```
+
+
+
+the strength of the relationship between two variables. If the values of the variables fall on a straight line with positive slope (e.g. the value of one variable completely determines the value of another variable)
+
+The correlation suggests that heights may have a small effect on income.
+
+```{r}
+cor(heights$height, heights$income, use = "na")
+```
+
+A model describes the relationship between two or more variables. There are multiple ways to describe any relationship. Which is best? 
+
+A common choice: decide the form of the relationship, then minimize residuals.
+
+Use R's `lm()` function to fit a linear model to your data. The first argument of `lm()` should be a formula, two or more variables separated by a `~`. You've seen formulas before, we used them in Chapter 2 to facet graphs. 
+
+```{r}
+income ~ height
+h <- lm(income ~ height, data = heights)
+h
+```
+
+
+`lm()` fits a straight line that describes the relationship between the variables in your formula. You can picture the result visually like this.
+
+```{r echo = FALSE}
+ggplot(data = heights, mapping = aes(x = height, y = income)) +
+  geom_point() +
+  geom_smooth(method = lm)
+```
+
+`lm()` treats the variable(s) on the right-hand side of the formula as _explanatory variables_ that partially determine the value of the variable on the left-hand side of the formula, which is known as the _response variable_. In other words, it acts as if the _response variable_ is determined by a function of the _explanatory variables_. It then spots the linear function that best fits the data.
+
+Linear models are straightforward to interpret. Incomes have a baseline mean of $`r coef(h)[1]`$. Each one inch increase of height above zero is associated with an increase of $`r coef(h)[2]`$ in income.
+
+```{r}
+summary(h)
+```
+
+To create a model without an intercept, add 0 to the formula.
+
+```{r}
+lm(income ~ 0 + height, data = heights)
+```
+
+## Using model output
+
+R's model output is not very tidy. It is designed to provide a data store from which you can extract information with helper functions. You will learn more about tidy data in Tidy Data.
+
+```{r}
+coef(h)
+predict(h)[1:5]
+resid(h)[1:5]
+```
+
+The `broom` package provides the most useful helper functions for working with R models. `broom` functions return the most useful model information as data frames, which lets you quickly embed the information into your data science workflow.
+
+### tidy()
+
+```{r}
+tidy(h)
+```
+
+### glance()
+
+```{r}
+glance(h)
+```
+
+### augment()
+
+```{r}
+augment(h)[1:5, ]
+```
+
+```{r}
+heights2 <- augment(h, heights)
+ggplot(data = heights2, mapping = aes(x = education, y = .resid)) +
+  geom_point() +
+  geom_smooth()
+```
+
+
+## Multivariate models
+
+There appears to be a relationship between a person's education and how poorly the model predicts their income. When we graphed the model residuals against `education` above, we see that the more a person is educated, the worse the model underestimates their income. 
+
+Patterns in the residuals suggest that relationships exist between y and other variables, even when the effect of heights is accounted for.
+
+Add variables to a model by adding variables to the right-hand side of the model formula.
+
+```{r}
+income ~ height + education
+he <- lm(income ~ height + education, data = heights)
+tidy(he)
+```
+
+### Interpretation
+
+The coefficient of each variable represents the increase in income associated with a one unit increase in the variable _when all other variables are held constant_.
+
+
+### Interaction effects
+
+```{r}
+tidy(lm(income ~ height + education, data = heights))
+tidy(lm(income ~ height + education + height:education, data = heights))
+tidy(lm(income ~ height * education, data = heights))
+```
+    
+## Categorical variables
+
+What about sex? Many sources have observed that there is a difference in income between genders. Might this explain the height effect? We can find the effect of height independent of sex by adding sex to the model; however, sex is a categorical variable.
+
+### Factors
+
+R stores categorical data as factors. If you add a string to a model, R will convert it to a factor for the purposes of the model.
+
+A factor is an integer vector with a levels attribute. You can make a factor with `factor()`.
+
+```{r}
+fac <- factor(c("c", "a", "b"), 
+  levels = c("a", "b", "c"), 
+  labels = c("blond", "brunette", "red"))
+fac
+unclass(fac)
+```
+
+Each level of the factor (i.e. unique value) is encoded as an integer and displayed with the label that is associated with that integer.
+
+If you use factors outside of a model, you will notice some limiting behavior:
+
+* You cannot add values to a factor that do not appear in its levels.
+* Factors retain all of their levels when you subset them. To avoid this use `drop = TRUE`.
+    ```{r}
+    fac[1]
+    fac[1, drop = TRUE]
+    ```
+* If you coerce a factor to a number with `as.numeric()`, R will convert the integer vector that underlies the factor to a number, not the level labels that you see when you print the factor.
+    ```{r}
+    num_fac <- factor(1:3, levels = 1:3, labels = c("100", "200", "300"))
+    num_fac
+    as.numeric(num_fac)
+    ```
+To coerce the labels that you see to a new data type, first coerce the factor to a character string with `as.character()`
+```{r}
+as.numeric(as.character(num_fac))
+```
+
+### Interpretation
+
+Add categorical variables to a model in the same way that you would add continuous variables.
+
+```{r}
+s <- lm(income ~ sex, data = heights)
+tidy(s)
+```
+
+Every level of the factor except one receives its own coefficient. The missing level acts as a baseline.
+
+To change the baseline, create a new factor with a new levels attribute. R will use the first level in the levels attribute as the baseline.
+
+```{r}
+heights$sex <- factor(heights$sex, levels = c("male", "female"))
+```
+
+```{r}
+hes <- lm(income ~ height + education + sex, data = heights)
+tidy(hes)
+```
+
+```{r}
+heights %>% 
+  group_by(sex)  %>% 
+  do(glance(lm(income ~ height, data = .)))
+```
+
+```{r}
+hes2 <- lm(income ~ height + education * sex, data = heights)
+tidy(hes2)
+```
+
+### Logistic models
+
+So far the y variable of our models has been a continuous variable, `income`. You can use linear regression to model a categorical y variable by transforming y into a continuous variable with a _link function_. Then model fit a model to the results of the link function and use the link function to back transform and interpret the results.
+
+The most common link function is the logit function, which transforms a bivariate y variable into a continuous range.
+
+Use `glm()` to perform logistic regression in R.
+
+```{r}
+she <- glm(sex ~ height + education, family = binomial(link = "logit"), data = heights)
+tidy(she)
+```
+
+## Non-linear models
+
+But what if the relationship between variables is not linear? For example, the relationship between income and education does not seem to be linear. 
+
+```{r}
+ggplot(data = heights, mapping = aes(x = education, y = income)) + 
+  geom_boxplot(aes(group = education)) +
+  geom_smooth() + 
+  coord_cartesian(ylim = c(0, 125000))
+```
+
+You can still use linear regression to model non-linear relationships.
+
+### Transformations
+
+```{r}
+ggplot(diamonds, aes(x = carat, y = price)) +
+  geom_point()
+ggplot(diamonds, aes(x = log(carat), y = log(price))) +
+  geom_point()
+```
+
+```{r}
+lm(log(price) ~ log(carat), data = diamonds)
+# visualize model line
+```
+
+### Splines
+
+```{r eval = FALSE}
+bs(degree = 1) # linear splines
+bs()           # cubic splines
+ns()           # natural splines
+```
+
+```{r}
+library(splines)
+tidy(lm(income ~ ns(education, knots = c(10, 17)), data = heights))
+tidy(lm(income ~ ns(education, df = 4), data = heights))
+```    
+
+```{r}
+ggplot(data = heights, mapping = aes(x= education, y = income)) +
+  geom_point() +
+  geom_smooth(method = lm, formula = y ~ ns(x, df = 4)) +  
+  coord_cartesian(ylim = c(0, 125000))
+```
+    
+### Additive models    
+    
+```{r}
+gam(income ~ s(education), data = heights)
+
+ggplot(data = heights, mapping = aes(x = education, y = income)) +
+  geom_point() +
+  geom_smooth(method = gam, formula = y ~ s(x))
+```
+    
+```{r eval = FALSE}
+# Linear z
+gam(y ~ s(x) + z, data = df)
+
+# Smooth x and smooth z
+gam(y ~ s(x) + s(z), data = df)
+
+# Smooth surface of x and z 
+# (a smooth function that takes both x and z)
+gam(y ~ s(x, z), data = df)
+```
+
+## Summary
+
+We've avoided two things in this chapter that are usually conflated with models: hypothesis testing and predictive analysis.
+
+There are other types of modeling algorithms; each provides a valid description of the data. 
+
+Which description will be best? Does the relationship have a known form? Does the data have a known structure? Are you going to attempt hypothesis testing that imposes its own constraints?
+
+
+
+
+
