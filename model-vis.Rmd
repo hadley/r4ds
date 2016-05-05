@@ -1,3 +1,147 @@
+```{r setup, include = FALSE}
+library(broom)
+library(ggplot2)
+library(dplyr)
+```
+
 # Model visualisation
 
-Gap minder
+In this chapter we will explore model visualisation from two different sides:
+
+1. Use a model to make it easier to see important patterns in our data.
+
+1. Use visualisation to understand what a model is telling us about our data.
+
+We're going to give you a basic strategy, and point you to places to learn more. The key is to think about data generated from your model as regular data - you're going to want to manipulate it and visualise it in many different ways.
+
+In the next chapter, you'll also learn about how to visualisation the model-level summaries, and the model parameters.
+
+## Residuals
+
+To motivate the use of models we're going to start with an interesting pattern from the NYC flights dataset: the number of flights per day.
+
+```{r}
+library(nycflights13)
+library(lubridate)
+library(dplyr)
+
+daily <- flights %>% 
+  mutate(date = make_datetime(year, month, day)) %>% 
+  group_by(date) %>% 
+  summarise(n = n())
+
+ggplot(daily, aes(date, n)) + 
+  geom_line()
+```
+
+Understand this pattern is challenging because there's a very strong day-of-week effect that dominates the subtler patterns:
+
+```{r}
+daily <- daily %>% 
+  mutate(wday = wday(date, label = TRUE))
+
+ggplot(daily, aes(wday, n)) + 
+  geom_boxplot()
+```
+
+The explanation for the low number of flights on Saturdays is because this dataset only has departures: we're only seeing people leaving New York. The majority of air travellers are travelling for business, not pleasure, and  most people avoid leaving on the weekend. (The explanation for Sunday is that sometimes you need to be somewhere for a meeting on Monday morning and you have to leave the day before to get there.)
+
+One way to remove this strong pattern is to fit a model that "explains" the day of week effect, and then look at the residuals:
+
+```{r}
+mod <- lm(n ~ wday, data = daily)
+daily$n_resid <- resid(mod)
+
+ggplot(daily, aes(date, n_resid)) + 
+  geom_line()
+```
+
+Note the change in the y-axis: now we are seeing the deviation from the expected number of flights, given the day of week. This plot is interesting because now that we've removed the very day-of-week effect, we can see some of the subtler patterns that remain
+
+1.  There are some with very few flights. If you're familiar with American
+    public holidays, you might spot New Year's day, July 4th, Thanksgiving
+    and Christmas. There are some others that dont' seem to correspond to 
+    
+    
+    ```{r}
+    daily %>% filter(n_resid < -100)
+    ```
+
+1.  There seems to be some smoother long term trend over the course of a year:
+    there are fewer flights in January, and more in summer (May-Sep). We can't
+    do much more with this trend than note it because we only have a single
+    year of data.
+    
+1.  Our day of week adjustment seems to fail starting around June: you can
+    still see a strong regular pattern that our model hasn't removed.
+    
+We'll tackle the day of week effect first. Let's start by tweaking our plot drawing one line for each day of the week.
+
+```{r}
+ggplot(daily, aes(date, n_resid, colour = wday)) + 
+  geom_line()
+```
+
+This makes it clear that the problem with our model is Saturdays: it seems like during some there are more flights on Saturdays than we expect, and during Fall there are fewer. I suspect this is because of summer holidays: many people going on holiday in the summer, and people don't mind travelling on Saturdays for vacation.
+
+Let's zoom in on that pattern, this time looking at the raw numbers:
+
+```{r}
+daily %>% 
+  filter(wday == "Sat") %>% 
+  ggplot(aes(date, n)) + 
+  geom_line() +
+  scale_x_datetime(date_breaks = "1 month", date_labels = "%d-%b")
+```
+
+So it looks like summer holidays is from early June to late August. And  that seems to line up fairly well with the state's school holidays <http://schools.nyc.gov/Calendar/2013-2014+School+Year+Calendars.htm>: Jun 26 - Sep 9. So lets add a "school" variable to attemp to control for that.
+
+```{r}
+daily <- daily %>%
+  mutate(school = cut(date, 
+    breaks = as.POSIXct(ymd(20130101, 20130605, 20130825, 20140101)),
+    labels = c("spring", "summer", "fall") 
+  )) 
+
+daily %>% 
+  filter(wday == "Sat") %>% 
+  ggplot(aes(date, n, colour = school)) + 
+  geom_line() +
+  scale_x_datetime(date_breaks = "1 month", date_labels = "%d-%b")
+```
+
+There are many ways we could incorporate this term into our model, but I'm going to do something quick-and-dirty: I'll use it as an interaction with `wday`. This is overkill because we don't have any evidence to suggest that the other days vary in the same way as a Saturdays, but so we end up overspending our degrees of freedom.
+
+mean vs. median.
+
+```{r}
+mod2 <- MASS::rlm(n ~ wday * school, data = daily)
+daily$n_resid2 <- resid(mod2)
+
+ggplot(daily, aes(date, n_resid2)) + 
+  # geom_line(aes(y = n_resid), colour = "red") +
+  geom_line()
+```
+
+### Exercises
+
+
+1.  Use your google sleuthing skills to brainstorm why there were fewer than
+    expected flights on Jan 20, May 26, and Sep 9. (Hint: they all have the
+    same explanation.)
+
+1.  Above we made the hypothesis that people leaving on Sundays are more 
+    likely to be business travellers who need to be somewhere on Monday.
+    Explore that hypothesis by seeing how it breaks down based on distance:
+    if it's true, you'd expect to see more Sunday flights to places that
+    are far away.
+
+## Predictions
+
+Focus on predictions from a model because this works for any type of model. Visualising parameters can also be useful, but tends to be most useful when you have many similar models. Visualising predictions works regardless of the model family.
+
+```{r}
+
+```
+
+Visualising high-dimensional models is challenging. You'll need to partition off a useable slice at a time.
