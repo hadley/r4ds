@@ -14,7 +14,43 @@ In this chapter we will explore model visualisation from two different sides:
 
 We're going to give you a basic strategy, and point you to places to learn more. The key is to think about data generated from your model as regular data - you're going to want to manipulate it and visualise it in many different ways.
 
+Being good at modelling is a mixture of having some good general principles and having a big toolbox of techniques. Here we'll focus on general techniques to help you undertand what your model is telling you.
+
+Focus on constructing models that help you better understand the data. This will generally lead to models that predict better. But you have to beware of overfitting the data - in the next section we'll discuss some formal methods. But a healthy dose of scepticism is also a powerful: do you believe that a pattern you see in your sample is going to generalise to a wider population? 
+
+Transition from implicit knowledge in your head and in data to explicit knowledge in the model. In other words, you want to make explicit your knowledge of the data and capture it explicitly in a model. This makes it easier to apply to new domains, and easier for others to use. But you must always remember that your knowledge is incomplete.
+
+For very large and complex datasets this is going to be a lot of 
+
 In the next chapter, you'll also learn about how to visualisation the model-level summaries, and the model parameters.
+
+```{r}
+# Helper functions
+add_predictions <- function(data, ...) {
+  models <- list(...)
+  for (nm in names(models)) {
+    data[[nm]] <- predict(models[[nm]], data)
+  }
+  data
+}
+
+add_residuals <- function(data, ...) {
+  models <- list(...)
+  
+  for (nm in names(models)) {
+    y <- eval(predictor(models[[nm]]), data)
+    yhat <- predict(models[[nm]], data)
+    
+    data[[nm]] <- y - yhat
+  }
+  data
+}
+
+predictor <- function(model) {
+  terms(model)[[2]]
+}
+```
+
 
 ## Residuals
 
@@ -39,20 +75,22 @@ Understand this pattern is challenging because there's a very strong day-of-week
 ```{r}
 daily <- daily %>% 
   mutate(wday = wday(date, label = TRUE))
-
+library(lvplot)
 ggplot(daily, aes(wday, n)) + 
   geom_boxplot()
 ```
 
-The explanation for the low number of flights on Saturdays is because this dataset only has departures: we're only seeing people leaving New York. The majority of air travellers are travelling for business, not pleasure, and  most people avoid leaving on the weekend. (The explanation for Sunday is that sometimes you need to be somewhere for a meeting on Monday morning and you have to leave the day before to get there.)
+Why are there so few flights on Saturdays? My hypthosis is that most travel is for business, and you generally don't want to spend all of Sunday away from home. Sunday is in between Saturday and Monday because sometimes you have to leave Sunday night in order to arrive in time for a meeting on Monday morning.
 
 One way to remove this strong pattern is to fit a model that "explains" the day of week effect, and then look at the residuals:
 
 ```{r}
 mod <- lm(n ~ wday, data = daily)
-daily$n_resid <- resid(mod)
+daily <- daily %>% add_residuals(n_resid = mod)
 
-ggplot(daily, aes(date, n_resid)) + 
+daily %>% 
+  ggplot(aes(date, n_resid)) + 
+  geom_hline(yintercept = 0, size = 2, colour = "white") + 
   geom_line()
 ```
 
@@ -61,7 +99,6 @@ Note the change in the y-axis: now we are seeing the deviation from the expected
 1.  There are some with very few flights. If you're familiar with American
     public holidays, you might spot New Year's day, July 4th, Thanksgiving
     and Christmas. There are some others that dont' seem to correspond to 
-    
     
     ```{r}
     daily %>% filter(n_resid < -100)
@@ -79,10 +116,11 @@ We'll tackle the day of week effect first. Let's start by tweaking our plot draw
 
 ```{r}
 ggplot(daily, aes(date, n_resid, colour = wday)) + 
-  geom_line()
+    geom_hline(yintercept = 0, size = 2, colour = "white") + 
+    geom_line()
 ```
 
-This makes it clear that the problem with our model is Saturdays: it seems like during some there are more flights on Saturdays than we expect, and during Fall there are fewer. I suspect this is because of summer holidays: many people going on holiday in the summer, and people don't mind travelling on Saturdays for vacation.
+This makes it clear that the problem with our model is mostly Saturdays: it seems like during some there are more flights on Saturdays than we expect, and during Fall there are fewer. I suspect this is because of summer holidays: many people going on holiday in the summer, and people don't mind travelling on Saturdays for vacation.
 
 Let's zoom in on that pattern, this time looking at the raw numbers:
 
@@ -90,8 +128,8 @@ Let's zoom in on that pattern, this time looking at the raw numbers:
 daily %>% 
   filter(wday == "Sat") %>% 
   ggplot(aes(date, n)) + 
-  geom_line() +
-  scale_x_datetime(date_breaks = "1 month", date_labels = "%d-%b")
+    geom_line() +
+    scale_x_datetime(date_breaks = "1 month", date_labels = "%d-%b")
 ```
 
 So it looks like summer holidays is from early June to late August. And  that seems to line up fairly well with the state's school holidays <http://schools.nyc.gov/Calendar/2013-2014+School+Year+Calendars.htm>: Jun 26 - Sep 9. So lets add a "school" variable to attemp to control for that.
@@ -110,31 +148,73 @@ daily %>%
   scale_x_datetime(date_breaks = "1 month", date_labels = "%d-%b")
 ```
 
-There are many ways we could incorporate this term into our model, but I'm going to do something quick-and-dirty: I'll use it as an interaction with `wday`. This is overkill because we don't have any evidence to suggest that the other days vary in the same way as a Saturdays, but so we end up overspending our degrees of freedom.
+It's useful to see how this new variable affects the other days of the week:
 
-mean vs. median.
+```{r}
+daily %>% 
+  ggplot(aes(wday, n, colour = school)) +
+    geom_boxplot()
+```
+
+It looks like there is significant variation, so fitting a separate day of week effect for each term is reasonable. This improves our model, but not as much as we might hope:
+
+```{r}
+mod2 <- lm(n ~ wday * school, data = daily)
+daily$n_resid2 <- resid(mod2)
+
+ggplot(daily, aes(date, n_resid2)) + 
+  geom_line()
+```
+
+That's because this model is basically calculating an average for each combination of wday and school term. We have a lot of big outliers, so they tend to drag the mean far away from the typical value.
+
+```{r}
+mean <- daily %>% 
+  group_by(wday, school) %>% 
+  summarise(n = mean(n))
+
+
+daily %>% 
+  ggplot(aes(wday, n, colour = school)) +
+    geom_boxplot() +
+    geom_point(data = mean, size = 3, shape = 17, position = position_dodge(width = 0.75))
+
+```
+
+We can reduce this problem by switch to a robust model, fit by `MASS::rlm()`. A robust model is a variation of the linear which you can think of a fitting medians, instead of means. This greatly reduces the impact of the outliers on our estimates, and gives a result that does a good job of removing the day of week pattern:
 
 ```{r}
 mod2 <- MASS::rlm(n ~ wday * school, data = daily)
 daily$n_resid2 <- resid(mod2)
 
 ggplot(daily, aes(date, n_resid2)) + 
-  # geom_line(aes(y = n_resid), colour = "red") +
+  geom_hline(yintercept = 0, size = 2, colour = "white") + 
   geom_line()
 ```
 
-### Exercises
+It's now much easier to see the long term trend, and the positive and negative outliers.
 
+### Exercises
 
 1.  Use your google sleuthing skills to brainstorm why there were fewer than
     expected flights on Jan 20, May 26, and Sep 9. (Hint: they all have the
-    same explanation.)
+    same explanation.) How would these days generalise to another year?
+
+1.  What do the days with high positive residuals represent?
+
+1.  What happens if you fit a day of week effect that varies by month?
+    Why is this not very helpful? 
 
 1.  Above we made the hypothesis that people leaving on Sundays are more 
     likely to be business travellers who need to be somewhere on Monday.
     Explore that hypothesis by seeing how it breaks down based on distance:
     if it's true, you'd expect to see more Sunday flights to places that
     are far away.
+
+1.  It's a little frustrating that Sunday and Saturday are on separate ends
+    of the plot. Write a small function to set the levels of the factor so
+    that the week starts on Monday.
+
 
 ## Predictions
 
@@ -145,3 +225,57 @@ Focus on predictions from a model because this works for any type of model. Visu
 ```
 
 Visualising high-dimensional models is challenging. You'll need to partition off a useable slice at a time.
+
+
+```{r}
+library(tidyr)
+
+date_vars <- function(df) {
+  df %>% mutate(
+    school = cut(date, 
+      breaks = as.POSIXct(ymd(20130101, 20130605, 20130825, 20140101)),
+      labels = c("spring", "summer", "fall") 
+    ),
+    wday = wday(date, label = TRUE)
+  )
+}
+
+daily %>% 
+  expand(date) %>% 
+  date_vars() %>% 
+  add_predictions(pred = mod2) %>% 
+  ggplot(aes(date, pred)) +
+    geom_line()
+
+daily %>% 
+  expand(date, wday = "Sat", school = "spring") %>% 
+  add_predictions(pred = mod2) %>% 
+    ggplot(aes(date, pred)) +
+    geom_line()
+
+
+daily %>% 
+  expand(wday, school) %>% 
+  add_predictions(pred = mod2) %>% 
+  ggplot(aes(wday, pred, colour = school)) + 
+    geom_point() + 
+    geom_line(aes(group = school))
+
+```
+
+## Delays and weather
+
+```{r}
+hourly <- flights %>% 
+  group_by(origin, time_hour) %>% 
+  summarise(
+    delay = mean(dep_delay, na.rm = TRUE)
+  ) %>% 
+  inner_join(weather, by = c("origin", "time_hour"))
+
+ggplot(hourly, aes(time_hour, delay)) +
+  geom_point()
+
+ggplot(hourly, aes(hour(time_hour), delay)) +
+  geom_boxplot(aes(group = hour(time_hour)))
+```
