@@ -5,6 +5,7 @@ library(dplyr)
 library(lubridate)
 library(tidyr)
 library(nycflights13)
+library(modelr)
 ```
 
 # Model visualisation
@@ -151,7 +152,7 @@ daily %>%
     scale_x_datetime(NULL, date_breaks = "1 month", date_labels = "%b")
 ```
 
-So it looks like summer holidays are from early June to late August. That seems to line up fairly well with the [state's school terms](http://schools.nyc.gov/Calendar/2013-2014+School+Year+Calendars.htm): summer break is Jun 26 - Sep 9. So lets add a "term" variable to attemp to control for that. 
+So it looks like summer holidays are from early June to late August. That seems to line up fairly well with the [state's school terms](http://schools.nyc.gov/Calendar/2013-2014+School+Year+Calendars.htm): summer break is Jun 26 - Sep 9. Few families travel in the fall because of the big Thanksgiving and Christmas holidays. So lets add a "term" variable to attemp to control for that. 
 
 ```{r}
 term <- function(date) {
@@ -267,8 +268,6 @@ Focus on predictions from a model because this works for any type of model. Visu
 
 Visualising high-dimensional models is challenging. You'll need to partition off a useable slice at a time.
 
-### `rlm()` vs `lm()`
-
 Let's start by exploring the difference between the `lm()` and `rlm()` predictions for the day of week effects. We'll first re-fit the models, just so we have them handy:
 
 ```{r}
@@ -306,6 +305,82 @@ grid %>%
     facet_wrap(~ term)
 ```
 
+### Exercises
+
+1.  How does the model of model coefficients compare to the plot of means
+    and medians computed "by hand" in the previous chapter. Create a plot
+    the highlights the differences and similarities.
+
+## Generating prediction grids
+
+### Continuous variables
+
+When you have a continuous variable in the model, rather than using the unique values that you've seen, it's often more useful to generate an evenly spaced grid. One convenient way to do this is with `modelr::seq_range()` which takes a continuous variable, calculates its range, and then generates an evenly spaced points between the minimum and maximum.
+
+```{r}
+mod <- MASS::rlm(n ~ wday * date, data = daily)
+
+grid <- daily %>% 
+  tidyr::expand(wday, date = seq_range(date, n = 13)) %>% 
+  add_predictions(mod = mod)
+
+ggplot(grid, aes(date, mod, colour = wday)) + 
+  geom_line() +
+  geom_point()
+```
+
+We're going to be using this pattern for a few examples, so lets wrap it up into a function:
+
+```{r}
+vis_flights <- function(mod) {
+  daily %>% 
+    tidyr::expand(wday, date = seq_range(date, n = 13)) %>% 
+    add_predictions(mod = mod) %>% 
+    ggplot(aes(date, mod, colour = wday)) + 
+      geom_line() +
+      geom_point()
+}
+```
+
+This is more useful if you have a model that includes non-linear components. One way to get that is to include non-linear terms like `I(x ^ 2)`, `I(x ^ 3)` etc.  You can't just use `X ^ 2` because of the way the modelling algebra works. `x ^ 2` is equivalent to `x * x` which in the modelling algebra is equivalent to `x + x + x:x` which is the same as `x`. This is useful because `(x + y + z)^2` fit all all major terms and second order interactions of x, y, and z.
+
+But rather than using this laborious formulation, a better solution is to the use `poly(x, n)` which generates `n` polynomials.  (They are Legendre polynomials which means that each is uncorrelated with any of the previous which also makes model fitting a bit easier)
+
+```{r}
+MASS::rlm(n ~ wday * poly(date, 5), data = daily) %>% vis_flights()
+```
+
+One problem with polynomials is that they have bad tail behaviour - outside of the range of the data they will rapidly shoot towards either positive or negative infinity.  One solution to this is splines.
+
+I'm not going to explain them in any detail here, but they're useful whenever you want to fit irregular patterns.
+
+```{r}
+library(splines)
+MASS::rlm(n ~ wday * ns(date, 5), data = daily) %>% vis_flights()
+```
+
+Other useful arguments to `seq_range()`:
+
+*  `pretty = TRUE` will generate a "pretty" sequence, i.e. something that looks
+    nice to the human eye:
+    
+    ```{r}
+    seq_range(c(0.0123, 0.923423), n = 5)
+    seq_range(c(0.0123, 0.923423), n = 5, pretty = TRUE)
+    ```
+
+*   `trim = 0.1` will trim off 10% of the tail values. This is useful if the 
+    variables has an long tailed distribution and you want to focus on generating
+    values near the center:
+    
+    ```{r}
+    x <- rcauchy(100)
+    seq_range(x, n = 5)
+    seq_range(x, n = 5, trim = 0.10)
+    seq_range(x, n = 5, trim = 0.25)
+    seq_range(x, n = 5, trim = 0.50)
+    ```
+
 ### Computed variables
 
 ```{r}
@@ -331,14 +406,15 @@ term <- function(date) {
     labels = c("spring", "summer", "fall") 
   )
 }
+wday2 <- function(x) wday(x, label = TRUE)
 
-mod3 <- lm(n ~ wday(date, label = TRUE) * term(date), data = daily)
+mod3 <- lm(n ~ wday2(date) * term(date), data = daily)
 daily %>% 
   expand(date) %>% 
   add_predictions(pred = mod3)
 ```
 
-I think this is fine to do provided that you've carefully checked that the functions do what you think they do (i.e. with a visualisation).
+I think this is fine to do provided that you've carefully checked that the functions do what you think they do (i.e. with a visualisation). The main disadvantage is that if you're looking at the coefficients, their values are longer and harder to read. (But this is a general problem with the way that linear models report categorical coefficients in R, not a specific problem with this case.)
 
 ### Nested variables
 
@@ -362,30 +438,13 @@ The student id only makes sense in the context of the school: it doesn't make se
 students %>% expand(nesting(school_id, student_id))
 ```
 
-### Continuous variables
-
-```{r}
-grid <- nlme::Oxboys %>% 
-  as_data_frame() %>% 
-  tidyr::expand(Subject, age = seq_range(age, 2))
-
-mod <- nlme::lme(height ~ age, random = ~1 | Subject, data = nlme::Oxboys)
-
-grid %>% 
-  add_predictions(mod = mod) %>% 
-  ggplot(aes(age, mod)) + 
-    geom_line(aes(group = Subject))
-```
-
 ### Interpolation vs extrapolation
 
-Also want to show "nearby data"
+One danger with prediction plots is that it's easy to make predictions that are far away from the original data. This is dangerous because it's quite possible that the model (which is a simplification of reality) will no longer apply far away from observed values. 
 
-### Exercises
+To help avoid this problem, it's good practice to include "nearby" observed data points in any prediction plot. These help you see if you're interpolating, making prediction "in between" existing data points, or extrapolating, making predictions about preivously unobserved slices of the data.
 
-1.  How does the model of model coefficients compare to the plot of means
-    and medians computed "by hand" in the previous chapter. Create a plot
-    the highlights the differences and similarities.
+One way to do this is to use `condvis::visualweight()`.
 
 ## Case study: predicting flight delays
 
