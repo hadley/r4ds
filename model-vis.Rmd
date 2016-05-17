@@ -49,6 +49,11 @@ To do this we're going to use some helper functions from the modelr package. Thi
 
 ```{r}
 library(modelr)
+
+options(
+  contrasts = c("contr.treatment", "contr.treatment"),
+  na.option = na.exclude
+)
 ```
 
 In the course of modelling, you'll often discover data quality problems. Maybe a missing value is recorded as 999. Whenever you discover a problem like this, you'll need to review an update your import scripts. You'll often discover a problem with one variable, but you'll need to think about it for all variables. This is often frustrating, but it's typical.
@@ -318,7 +323,7 @@ grid %>%
 When you have a continuous variable in the model, rather than using the unique values that you've seen, it's often more useful to generate an evenly spaced grid. One convenient way to do this is with `modelr::seq_range()` which takes a continuous variable, calculates its range, and then generates an evenly spaced points between the minimum and maximum.
 
 ```{r}
-mod <- MASS::rlm(n ~ wday * date, data = daily)
+mod <- MASS::rlm(n ~ wday * yday(date), data = daily)
 
 grid <- daily %>% 
   tidyr::expand(wday, date = seq_range(date, n = 13)) %>% 
@@ -329,7 +334,9 @@ ggplot(grid, aes(date, mod, colour = wday)) +
   geom_point()
 ```
 
-We're going to be using this pattern for a few examples, so lets wrap it up into a function:
+(Why use `yday(date)` instead of `date`? That's saying we think that the pattern depends only the day of the year, so we might expect it to be the same in other years. Again, since we only have a single year of data we can't test that hypothesis.)
+
+We're going to be using this pattern for a few examples, so lets wrap it up into a function. This is a rather inflexible function, but it serves its purpose here. In my experience, it's challenging to write functions that apply to wide swathes of your modelling process because you tend to do a lot of experimentation and your models can differ quite radically in form, and hence in how you need to visualise them.
 
 ```{r}
 vis_flights <- function(mod) {
@@ -342,33 +349,86 @@ vis_flights <- function(mod) {
 }
 ```
 
-This is more useful if you have a model that includes non-linear components. One way to get that is to include non-linear terms like `I(x ^ 2)`, `I(x ^ 3)` etc.  You can't just use `X ^ 2` because of the way the modelling algebra works. `x ^ 2` is equivalent to `x * x` which in the modelling algebra is equivalent to `x + x + x:x` which is the same as `x`. This is useful because `(x + y + z)^2` fit all all major terms and second order interactions of x, y, and z.
+This is more useful if you have a model that includes non-linear components. You might wonder how you can use a linear model to handle non-linear patterns! But basically we're going to do something like a Taylor series expansion - we're going to approximate a non-linear pattern with a series of transformation. Technically, it's still "linear" in the linear model sense because each parameter multiplies an input variable. This is different from true non-linear models where the coefficients appear in other places like $\alpha_1 + (\alpha_2-\alpha_1) * exp(-exp(\alpha_3) * x)$, the asymptotic regression model.
 
-But rather than using this laborious formulation, a better solution is to the use `poly(x, n)` which generates `n` polynomials.  (They are Legendre polynomials which means that each is uncorrelated with any of the previous which also makes model fitting a bit easier)
+One way to get that is to include non-linear terms like `I(x ^ 2)`, `I(x ^ 3)` etc.  You can't just use `X ^ 2` because of the way the modelling algebra works. `x ^ 2` is equivalent to `x * x` which in the modelling algebra is equivalent to `x + x + x:x` which is the same as `x`. This is useful because `(x + y + z)^2` fit all all major terms and second order interactions of x, y, and z.
+
+But rather than using this laborious formulation (which also doesn't work here because our `x` is a date, and you can't raise a date to a power), a better solution is to the use `poly(x, n)` which generates `n` polynomials.  (They are Legendre polynomials which means that each is uncorrelated with any of the previous which also makes model fitting a bit easier)
 
 ```{r}
-MASS::rlm(n ~ wday * poly(date, 5), data = daily) %>% vis_flights()
+MASS::rlm(n ~ wday * poly(yday(date), 5), data = daily) %>% vis_flights()
 ```
 
-One problem with polynomials is that they have bad tail behaviour - outside of the range of the data they will rapidly shoot towards either positive or negative infinity.  One solution to this is splines.
+(Note the warning message that the model failed to converge - this typically suggests a model misspecification problem. We should be very cautious about interpreting this model. You'll explore the model more in the exercises.)
 
-I'm not going to explain them in any detail here, but they're useful whenever you want to fit irregular patterns.
+One problem with polynomials is that they have bad tail behaviour - outside of the range of the data they will rapidly shoot towards either positive or negative infinity. One solution to this is splines.  Let's look at this with a simpler example:
+
+```{r}
+df <- data_frame(
+  x = rep(1:10, each = 3),
+  y = 30 - (x - 5) ^ 2 + rnorm(30, sd = 6)
+)
+ggplot(df, aes(x, y)) + geom_point()
+```
+
+Then we fit the models and predict both to the data.
+
+```{r}
+library(splines)
+mod_poly <- lm(y ~ poly(x, 2), data = df)
+mod_ns <- lm(y ~ ns(x, 2), data = df)
+
+preds <- df %>% 
+  expand(x = seq_range(x, 20)) %>% 
+  add_predictions(poly = mod_poly, ns = mod_ns)
+```
+
+They look equally good in the range of the data:
+ 
+```{r}
+ggplot(df, aes(x, y)) + 
+  geom_point() +
+  geom_line(data = preds, aes(y = poly, colour = "poly")) +
+  geom_line(data = preds, aes(y = ns, colour = "ns"))
+```
+
+But when we extend past the existing range of the data, we see:
+
+```{r}
+preds <- df %>% 
+  expand(x = seq(-5, 15, length = 30)) %>% 
+  add_predictions(poly = mod_poly, ns = mod_ns)
+
+ggplot(df, aes(x, y)) + 
+  geom_point() +
+  geom_line(data = preds, aes(y = poly, colour = "poly")) +
+  geom_line(data = preds, aes(y = ns, colour = "ns"))
+```
+
+The natural splines are designed to only linearly interpolate outside the range of the data. In general, this leads to somewhat safer behaviour, but you in either case you should be cautious about extrapolating. These are not generative models - they're just pragmatic fits to patterns. We shouldn't expect them to do a good job outside the data we've observed.
+
+In general, splines are a useful tool when you have patterns that aren't linear, but you don't have a good explicit model for. Interestingly, using a natural spline instead of poly also fixes our convergence problem, while yielding much the same results:
 
 ```{r}
 library(splines)
 MASS::rlm(n ~ wday * ns(date, 5), data = daily) %>% vis_flights()
 ```
 
+Particularly, we see the strongly pattern in Saturdays that we identified when coming in the opposite direction. It's always a good sign when you see the same signal from multiple approaches. (But note our previous model was explanatory - this is just predictatory.)
+
+How many degrees of freedom to use? Either pick manually to extract the shape of the data, or you can use one of the model assessment techniques in the following chapter to pick algorithmically. Here we're most interested in explanation, so picking by hand (with a little though and plenty of scepticism) is typically fine.
+
 Other useful arguments to `seq_range()`:
 
 *  `pretty = TRUE` will generate a "pretty" sequence, i.e. something that looks
-    nice to the human eye:
+    nice to the human eye. This is useful if you want to produce tables of 
+    output:
     
     ```{r}
     seq_range(c(0.0123, 0.923423), n = 5)
     seq_range(c(0.0123, 0.923423), n = 5, pretty = TRUE)
     ```
-
+    
 *   `trim = 0.1` will trim off 10% of the tail values. This is useful if the 
     variables has an long tailed distribution and you want to focus on generating
     values near the center:
@@ -383,29 +443,20 @@ Other useful arguments to `seq_range()`:
 
 ### Computed variables
 
+If you're experimenting with many models and many visualisations, it's a good idea to bundle the creation of variables up into a function so there's no chance of accidentally applying a different transformation in different places.
+
 ```{r}
-daily %>% 
-  expand(date) %>% 
-  mutate(
+compute_vars <- function(data) {
+  data %>% mutate(
     term = term(date), 
     wday = wday(date, label = TRUE)
-  ) %>% 
-  add_predictions(pred = mod2) %>% 
-  ggplot(aes(date, pred)) +
-    geom_line()
+  )
+}
 ```
-
-If you're experimenting with many models and many visualisations, it's a good idea to bundle the creation of variables up into a function so there's no chance of accidentally applying a different transformation in different places.
 
 Another option is to wrap it ito the model formula:
 
 ```{r}
-term <- function(date) {
-  cut(date, 
-    breaks = as.POSIXct(ymd(20130101, 20130605, 20130825, 20140101)),
-    labels = c("spring", "summer", "fall") 
-  )
-}
 wday2 <- function(x) wday(x, label = TRUE)
 
 mod3 <- lm(n ~ wday2(date) * term(date), data = daily)
@@ -414,7 +465,14 @@ daily %>%
   add_predictions(pred = mod3)
 ```
 
-I think this is fine to do provided that you've carefully checked that the functions do what you think they do (i.e. with a visualisation). The main disadvantage is that if you're looking at the coefficients, their values are longer and harder to read. (But this is a general problem with the way that linear models report categorical coefficients in R, not a specific problem with this case.)
+I think this is fine to do provided that you've carefully checked that the functions do what you think they do (i.e. with a visualisation). There are two disadvantages:
+
+1.  You may need to add the variables back in anyway if you want to use
+    them in a visualsiation.
+    
+1.  When looking at the coefficients, their values are longer and harder to 
+    read. (But this is a general problem with the way that linear models report
+    categorical coefficients in R, not a specific problem with this case.)
 
 ### Nested variables
 
@@ -446,7 +504,17 @@ To help avoid this problem, it's good practice to include "nearby" observed data
 
 One way to do this is to use `condvis::visualweight()`.
 
+### Exercises
+
+1.  In the use of `rlm` with `poly()`, the model didn't converge. Carefully
+    read the documentation for `rlm` and figure out which parameter controls
+    the number of iterations. Can you increase the iterations so that the 
+    model converges? If so, how does the model differ from the model that
+    didn't converge?
+
 ## Case study: predicting flight delays
+
+Finish off with a somewhat more realistic case study where we combine the techniques of visualising predictions and residuals to attack the problem of predicting flight delays.
 
 Can't predict delays for next year. Why not?  Instead we'll focus on predicting the amount that your flight will be delayed if it's leaving soon.  
 
