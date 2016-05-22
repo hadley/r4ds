@@ -1,3 +1,7 @@
+---
+output: html_document
+---
+
 # Exploratory Data Analysis (EDA)
 
 ```{r include = FALSE}
@@ -358,7 +362,119 @@ This doesn't mean that you should ignore complex interactions in your data. You 
 
 ## Clusters
 
-A clustering algorithm computes the distances between data points in n-dimensional space. It then uses an algorithm to group points into clusters based on how near or far they are from each other.
+A clustering algorithm computes the distances between data points in n-dimensional space. It then uses an algorithm to group points into clusters based on how near or far they are from each other. Base R provides two easy to use clustering algrotihms: heirarchical clustering and k means clustering.
+
+### Heirarchical clustering
+
+The heirarchical clustering algorithm groups points together based on how near they are to each other in n-dimensional space. The algorithm proceeds in stages until every point has been grouped into a single cluster, the data set. You can visualize the results of the algorithm as a dendrogram, and you can use the dendrogram to divide your data into any number of clusters. 
+
+```{r, echo = FALSE}
+knitr::include_graphics("images/EDA-plotly.png")
+```
+
+You can only apply heirarchical clustering to numeric data, so begin by selecting the numeric columns from your data set. Then apply the `dist()` function to the data and pass the results to `hcust()`. `dist()` computes the distances between your points in the n dimensional space defined by your numeric vectors. `hclust()` performs the clustering algorithm.
+
+```{r}
+iris_hclust <- iris %>% 
+  select(Sepal.Length, Sepal.Width, Petal.Length, Petal.Width) %>% 
+  dist() %>% 
+  hclust(method = "complete")
+```
+
+Use `plot()` to visualize the results as a dendrogram. Each observation in the data set will appear at the bottom of the dendrogram labeled by its rowname. You can use the labels argument to set the labels to something more informative.
+
+```{r fig.height = 4}
+plot(iris_hclust, labels = iris$Species)
+```
+
+To see how near two data points are to each other, trace the paths of the data points up through the tree until they intersect. The y value of the intersection displays how far apart the points are in n-dimensional space. Points that are close to each other will intersect at a small y value, points that are far from each other will intersect at a large y value. Groups of points that are near each other will look like "leaves" that all grow on the same "branch."
+
+The ordering of the x axis in the dendrogram is somewhat arbitrary (think of the tree as a mobile, each horizontal branch can spin around meaninglessly). 
+
+Use the `identify()` function to easily see easily which group of points are downstream from a branch. `identify()` will plot the dendrogram in an interactive format. When you click on a branch, R will draw a red rectangle around the downstream points. Clikc escape when you are finished.
+
+```{r eval = FALSE}
+identify(iris_hclust)
+```
+
+You can split your data into any number of clusters by drawing a horizontal line across the tree. Each vertical branch that the line crosses will represent a cluster that contains all of the points downstream from the branch. Move the line up the y axis to intersect fewer branches (and create fewer clusters), move the line down the y axis to intersect more branches and (create more clusters).
+
+`cutree()` provides a useful way to split data points into clusters. Give cutree the output of `hclust()` as well as the number of clusters that you want to split the data into. `cutree()` will return a vector of cluster labels for your data set. To visualize the results, map the output of `cutree()` to an aesthetic.
+
+```{r}
+(clusters <- cutree(iris_hclust, 3))
+
+ggplot(iris, aes(x = Sepal.Width, y = Sepal.Length)) +
+  geom_point(aes(color = factor(clusters), shape = Species))
+```
+
+You can modify the heirarchical clustering algorithm by setting the method argument of hclust to one of "complete", "single", "average", or "centroid". The method determines how to measure the distance between two clusters or a lone point and a cluster, a measurement that effects the outcome of the algorithm.
+
+* *complete* - Measures the greatest distance between any two points. Tends to create distinct clusters and subclusters.
+
+* *single* - Measures the smallest distance between any two points in the clusters. Tends to add points one at a time to existing clusters, creating ambiguously defined clusters.
+
+* *average* - Measures the average distance between all combinations of points in the separate clusters. Tends to add points one at a time to existing clusters.
+
+* *centroid* - Measures the distance between the average location of the points in each cluster.
+
+
+```{r fig.height = 4}
+iris %>% 
+  select(Sepal.Length, Sepal.Width, Petal.Length, Petal.Width) %>% 
+  dist() %>% 
+  hclust(method = "single") %>% 
+  plot(labels = iris$Species)
+```
+
+
+### K means clustering
+
+K means clustering provides a simulation based alternative to heirarchical clustering. It identifies the "best" way to group your data into a predefined number of clusters. 
+
+```{r, echo = FALSE}
+knitr::include_graphics("images/EDA-plotly.png")
+```
+
+Use `kmeans()` to perform k means clustering with R. As with heirarchical clustering, you can only apply k means clustering to numerical data. Pass your numerical data to the `kmeans()` function, then set `center` to the number of clusters to search for ($k$) and `nstart` to the number of simulations to run. Since the results of k means clustering depend on the initial assignment of points to groups, which is random, R will run `nstart` k means simulations and then return the best results (as measured by the minimum sum of squared distances between each point and the centroid of the group it is assigned to).
+
+Finally, set the maximum number of iterations to let each simulation run in case the simulation cannot quickly find a stable grouping.
+
+```{r}
+iris_kmeans <- iris %>% 
+  select(Sepal.Length, Sepal.Width, Petal.Length, Petal.Width) %>% 
+  kmeans(centers = 3, nstart = 20, iter.max = 50)
+
+iris_kmeans$cluster
+```
+
+Unlike `hclust()` the k means algorithm does not porvide an intuitive visualize interface. Instead, `kmeans()` returns a kmeans class object. Subset the object with `$cluster` to access  list of cluster assignments for your data set, like `cutree()`, e.g. `iris_kmeans$cluster`. You can visualize the results by mapping them to an aesthetic, or you can apply the results by passing them to dplyr's `group_by()` function.
+
+```{r}
+ggplot(iris, aes(x = Sepal.Width, y = Sepal.Length)) +
+  geom_point(aes(color = factor(iris_kmeans$cluster), shape = Species))
+
+iris %>% 
+  group_by(iris_kmeans$cluster) %>% 
+  summarise(n_obs = n(), avg_width = mean(Sepal.Width), avg_length = mean(Sepal.Length))
+```
+
+
+### Asking questions about clustering
+
+Both algorithms _will always_ return a set of clusters, whether your data appears clustered or not. As a result, you should always be skeptical about clustering algorithms. Ask yourself:
+
+* Do the clusters seem to identify real differences between your points? How can you tell?
+
+* Are the points within each cluster similar in some way?
+
+* Are the points in separate clusters different in some way?
+
+* Might there be a mismatch between the number of clusters that you found and the number that exist in real life? Are only a couple of the clusters meaningful? Are there more clusters in the data than you found?
+
+* How stable are the clusters if you re-run the algorithm?
+
+Remember to use the results of clustering as a tool for exploration. They can be quite insightful, but there is no reason to treat them as a fact without doing further research. 
 
 ## Models
 
@@ -408,7 +524,7 @@ Every data set contains more information than it displays. You can use the value
 
 ### Making new variables
 
-Use dplyr's `mutate()` function to calculate mew variables from your existing variables.
+Use dplyr's `mutate()` function to calculate new variables from your existing variables.
 
 ```{r}
 diamonds %>% 
@@ -417,6 +533,9 @@ diamonds %>%
 ```
 
 The window functions from Chapter 3 are particularly useful for calculating new variables. To calculate a variable from two or more variables, use basic operators or the `map2()`, `map3()`, and `map_n()` functions from purr. You will learn more about purrr in Chapter ?.
+
+
+PCA and PFA
 
 ### Making new observations
 
