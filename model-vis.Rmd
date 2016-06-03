@@ -321,6 +321,546 @@ grid %>%
 
 ## Generating prediction grids
 
+Now that you're learned the basics of generating prediction grids with `expand()`, we need to go into a few more details to cover other types of data you might come across. In each of the following sections, I'll explore in more detail one type of data along with the expansion and visualisation techniques you'll need to understand it.
+
+### Continuous variables
+
+When you have a continuous variable in the model, rather than using the unique values that you've seen, it's often more useful to generate an evenly spaced grid. One convenient way to do this is with `modelr::seq_range()` which takes a continuous variable, calculates its range, and then generates an evenly spaced points between the minimum and maximum.
+
+```{r}
+mod <- MASS::rlm(n ~ wday * yday(date), data = daily)
+
+grid <- daily %>% 
+  tidyr::expand(wday, date = seq_range(date, n = 13)) %>% 
+  add_predictions(mod = mod)
+
+ggplot(grid, aes(date, mod, colour = wday)) + 
+  geom_line() +
+  geom_point()
+```
+
+(Why use `yday(date)` instead of `date`? That's saying we think that the pattern depends only the day of the year, so we might expect it to be the same in other years. Again, since we only have a single year of data we can't test that hypothesis.)
+
+We're going to be using this pattern for a few examples, so lets wrap it up into a function. This is a rather inflexible function, but it serves its purpose here. In my experience, it's challenging to write functions that apply to wide swathes of your modelling process because you tend to do a lot of experimentation and your models can differ quite radically in form, and hence in how you need to visualise them.
+
+```{r}
+vis_flights <- function(mod) {
+  daily %>% 
+    tidyr::expand(wday, date = seq_range(date, n = 13)) %>% 
+    add_predictions(mod = mod) %>% 
+    ggplot(aes(date, mod, colour = wday)) + 
+      geom_line() +
+      geom_point()
+}
+```
+
+This is more useful if you have a model that includes non-linear components. You might wonder how you can use a linear model to handle non-linear patterns! But basically we're going to do something like a Taylor series expansion - we're going to approximate a non-linear pattern with a series of transformation. Technically, it's still "linear" in the linear model sense because each parameter multiplies an input variable. This is different from true non-linear models where the coefficients appear in other places like $\alpha_1 + (\alpha_2-\alpha_1) * exp(-exp(\alpha_3) * x)$, the asymptotic regression model.
+
+One way to get that is to include non-linear terms like `I(x ^ 2)`, `I(x ^ 3)` etc.  You can't just use `X ^ 2` because of the way the modelling algebra works. `x ^ 2` is equivalent to `x * x` which in the modelling algebra is equivalent to `x + x + x:x` which is the same as `x`. This is useful because `(x + y + z)^2` fit all all major terms and second order interactions of x, y, and z.
+
+But rather than using this laborious formulation (which also doesn't work here because our `x` is a date, and you can't raise a date to a power), a better solution is to the use `poly(x, n)` which generates `n` polynomials.  (They are Legendre polynomials which means that each is uncorrelated with any of the previous which also makes model fitting a bit easier)
+
+```{r}
+MASS::rlm(n ~ wday * poly(yday(date), 5), data = daily) %>% vis_flights()
+```
+
+(Note the warning message that the model failed to converge - this typically suggests a model misspecification problem. We should be very cautious about interpreting this model. You'll explore the model more in the exercises.)
+
+One problem with polynomials is that they have bad tail behaviour - outside of the range of the data they will rapidly shoot towards either positive or negative infinity. One solution to this is splines.  Let's look at this with a simpler example:
+
+```{r}
+df <- data_frame(
+  x = rep(1:10, each = 3),
+  y = 30 - (x - 5) ^ 2 + rnorm(30, sd = 6)
+)
+ggplot(df, aes(x, y)) + geom_point()
+```
+
+Then we fit the models and predict both to the data.
+
+```{r}
+library(splines)
+mod_poly <- lm(y ~ poly(x, 2), data = df)
+mod_ns <- lm(y ~ ns(x, 2), data = df)
+
+preds <- df %>% 
+  expand(x = seq_range(x, 20)) %>% 
+  add_predictions(poly = mod_poly, ns = mod_ns)
+```
+
+They look equally good in the range of the data:
+ 
+```{r}
+ggplot(df, aes(x, y)) + 
+  geom_point() +
+  geom_line(data = preds, aes(y = poly, colour = "poly")) +
+  geom_line(data = preds, aes(y = ns, colour = "ns"))
+```
+
+But when we extend past the existing range of the data, we see:
+
+```{r}
+preds <- df %>% 
+  expand(x = seq(-5, 15, length = 30)) %>% 
+  add_predictions(poly = mod_poly, ns = mod_ns)
+
+ggplot(df, aes(x, y)) + 
+  geom_point() +
+  geom_line(data = preds, aes(y = poly, colour = "poly")) +
+  geom_line(data = preds, aes(y = ns, colour = "ns"))
+```
+
+The natural splines are designed to only linearly interpolate outside the range of the data. In general, this leads to somewhat safer behaviour, but you in either case you should be cautious about extrapolating. These are not generative models - they're just pragmatic fits to patterns. We shouldn't expect them to do a good job outside the data we've observed.
+
+In general, splines are a useful tool when you have patterns that aren't linear, but you don't have a good explicit model for. Interestingly, using a natural spline instead of poly also fixes our convergence problem, while yielding much the same results:
+
+```{r}
+library(splines)
+MASS::rlm(n ~ wday * ns(date, 5), data = daily) %>% vis_flights()
+```
+
+Particularly, we see the strongly pattern in Saturdays that we identified when coming in the opposite direction. It's always a good sign when you see the same signal from multiple approaches. (But note our previous model was explanatory - this is just predictatory.)
+
+How many degrees of freedom to use? Either pick manually to extract the shape of the data, or you can use one of the model assessment techniques in the following chapter to pick algorithmically. Here we're most interested in explanation, so picking by hand (with a little though and plenty of scepticism) is typically fine.
+
+Other useful arguments to `seq_range()`:
+
+*  `pretty = TRUE` will generate a "pretty" sequence, i.e. something that looks
+    nice to the human eye. This is useful if you want to produce tables of 
+    output:
+    
+    ```{r}
+    seq_range(c(0.0123, 0.923423), n = 5)
+    seq_range(c(0.0123, 0.923423), n = 5, pretty = TRUE)
+    ```
+    
+*   `trim = 0.1` will trim off 10% of the tail values. This is useful if the 
+    variables has an long tailed distribution and you want to focus on generating
+    values near the center:
+    
+    ```{r}
+    x <- rcauchy(100)
+    seq_range(x, n = 5)
+    seq_range(x, n = 5, trim = 0.10)
+    seq_range(x, n = 5, trim = 0.25)
+    seq_range(x, n = 5, trim = 0.50)
+    ```
+
+### Computed variables
+
+If you're experimenting with many models and many visualisations, it's a good idea to bundle the creation of variables up into a function so there's no chance of accidentally applying a different transformation in different places.
+
+```{r}
+compute_vars <- function(data) {
+  data %>% mutate(
+    term = term(date), 
+    wday = wday(date, label = TRUE)
+  )
+}
+```
+
+Another option is to wrap it ito the model formula:
+
+```{r}
+wday2 <- function(x) wday(x, label = TRUE)
+
+mod3 <- lm(n ~ wday2(date) * term(date), data = daily)
+daily %>% 
+  expand(date) %>% 
+  add_predictions(pred = mod3)
+```
+
+I think this is fine to do provided that you've carefully checked that the functions do what you think they do (i.e. with a visualisation). There are two disadvantages:
+
+1.  You may need to add the variables back in anyway if you want to use
+    them in a visualsiation.
+    
+1.  When looking at the coefficients, their values are longer and harder to 
+    read. (But this is a general problem with the way that linear models report
+    categorical coefficients in R, not a specific problem with this case.)
+
+### Nested variables
+
+Another case that occassionally crops up is nested variables: you have an identifier that is locally unique, not globally unique. For example you might have this data about students in schools:
+
+```{r}
+students <- tibble::frame_data(
+  ~student_id, ~school_id,
+  1, 1,
+  2, 1,
+  1, 2,
+  1, 3,
+  2, 3,
+  3, 3
+)
+```
+
+The student id only makes sense in the context of the school: it doesn't make sense to generate every combination of student and school. You can use `nesting()` for this case:
+
+```{r}
+students %>% expand(nesting(school_id, student_id))
+```
+
+### Interpolation vs extrapolation
+
+One danger with prediction plots is that it's easy to make predictions that are far away from the original data. This is dangerous because it's quite possible that the model (which is a simplification of reality) will no longer apply far away from observed values. 
+
+To help avoid this problem, it's good practice to include "nearby" observed data points in any prediction plot. These help you see if you're interpolating, making prediction "in between" existing data points, or extrapolating, making predictions about preivously unobserved slices of the data.
+
+One way to do this is to use `condvis::visualweight()`.
+
+<https://cran.rstudio.com/web/packages/condvis/>
+
+### Exercises
+
+1.  In the use of `rlm` with `poly()`, the model didn't converge. Carefully
+    read the documentation for `rlm` and figure out which parameter controls
+    the number of iterations. Can you increase the iterations so that the 
+    model converges? If so, how does the model differ from the model that
+    didn't converge?
+
+## Case study: predicting flight delays
+
+Finish off with a somewhat more realistic case study where we combine the techniques of visualising predictions and residuals to attack the problem of predicting flight delays.
+
+Can't predict delays for next year. Why not?  Instead we'll focus on predicting the amount that your flight will be delayed if it's leaving soon.  
+
+We'll start with some exploratory analysis, and then work on the model:
+
+* time of day
+* weather
+
+```{r}
+
+
+
+delays <- flights %>% 
+  mutate(date = make_datetime(year, month, day)) %>% 
+  group_by(date) %>% 
+  summarise(delay = mean(arr_delay, na.rm = TRUE), cancelled = mean(is.na(dep_time)), n = n())
+
+# delays %>% 
+#   ggplot(aes(wday(date, label = TRUE), delay)) + 
+#     geom_boxplot()
+
+delays %>% 
+  ggplot(aes(n, delay)) + 
+    geom_point() + 
+    geom_smooth(se = F)
+
+```
+
+In this chapter we will explore model visualisation from two different sides:
+
+1. Use a model to make it easier to see important patterns in our data.
+
+1. Use visualisation to understand what a model is telling us about our data.
+
+We're going to give you a basic strategy, and point you to places to learn more. The key is to think about data generated from your model as regular data - you're going to want to manipulate it and visualise it in many different ways. Being good at modelling is a mixture of having some good general principles and having a big toolbox of techniques. Here we'll focus on general techniques to help you undertand what your model is telling you.
+
+<!-- residuals vs. predictions -->
+
+Centered around looking at residuals and looking at predictions. You'll see those here applied to linear models (and some minor variations), but it's a flexible technique since every model can generate predictions and residuals.
+
+Attack the problem from two directions: building up from a simple model, and subtracting off the full dataset.
+
+Transition from implicit knowledge in your head and in data to explicit knowledge in the model. In other words, you want to make explicit your knowledge of the data and capture it explicitly in a model. This makes it easier to apply to new domains, and easier for others to use. But you must always remember that your knowledge is incomplete. Subtract patterns from the data, and add patterns to the model. 
+
+
+<!-- purpose of modelling -->
+
+What is a good model? We'll think about that more in the next chapter. For now, a good model captures the majority of the patterns that are generated by the underlying mechanism of interest, and captures few patterns that are not generated by that mechanism. Another way to frame that is that you want your model to be good at inference, not just description. Inference is one of the most important parts of a model - you want to not just make statements about the data you have observed, but data that you have not observed (like things that will happen in the future).
+
+Focus on constructing models that help you better understand the data. This will generally lead to models that predict better. But you have to beware of overfitting the data - in the next section we'll discuss some formal methods. But a healthy dose of scepticism is also a powerful: do you believe that a pattern you see in your sample is going to generalise to a wider population? 
+
+<!-- When do you stop? -->
+
+For very large and complex datasets this is going to be a lot of work. There are certainly alternative approaches - a more machine learning approach is simply to focus on improving the predictive ability of the model, being careful to fairly assess it (i.e. not assessing the model on the data that was used to train it). These approaches tend to produce black boxes - i.e. the model does a really good job, but you don't know why. This is fine, but the main problem is that you can't apply your real world knowledge to the model to think about whether or not it's likely to work in the long-term, as fundamentals change. For most real models, I'd expect you to use some combination of this approach and a ML model building approach. If prediction is important, get to a good point, and then use visulisation to understand the most important parts of the model.
+
+> A long time ago in art class, my teacher told me "An artist needs to know 
+> when a piece is done. You can't tweak something into perfection - wrap it up. 
+> If you don't like it, do it over again. Otherwise begin something new". Later
+> in life, I heard "A poor seamstress makes many mistake. A good seamstress 
+> works hard to correct those mistakes. A great seamstress isn't afraid to 
+> throw out the garment and start over."
+
+-- Reddit user Broseidon241, https://www.reddit.com/r/datascience/comments/4irajq/mistakes_made_by_beginningaspiring_data_scientists/
+
+In the next chapter, you'll also learn about how to visualise the model-level summaries, and the model parameters.
+
+To do this we're going to use some helper functions from the modelr package. This package provides some wrappers around the traditional base R modelling functions that make them easier to use in data manipulation pipelines. Currently at <https://github.com/hadley/modelr> but will need to be on CRAN before the book is published.
+
+```{r}
+library(modelr)
+
+options(
+  contrasts = c("contr.treatment", "contr.treatment"),
+  na.option = na.exclude
+)
+```
+
+In the course of modelling, you'll often discover data quality problems. Maybe a missing value is recorded as 999. Whenever you discover a problem like this, you'll need to review an update your import scripts. You'll often discover a problem with one variable, but you'll need to think about it for all variables. This is often frustrating, but it's typical.
+
+## Residuals
+
+To motivate the use of models we're going to start with an interesting pattern from the NYC flights dataset: the number of flights per day.
+
+```{r}
+library(nycflights13)
+library(lubridate)
+library(dplyr)
+
+daily <- flights %>% 
+  mutate(date = make_datetime(year, month, day)) %>% 
+  group_by(date) %>% 
+  summarise(n = n())
+
+ggplot(daily, aes(date, n)) + 
+  geom_line()
+```
+
+Understanding this pattern is challenging because there's a very strong day-of-week effect that dominates the subtler patterns:
+
+```{r}
+daily <- daily %>% 
+  mutate(wday = wday(date, label = TRUE))
+ggplot(daily, aes(wday, n)) + 
+  geom_boxplot()
+```
+
+There are fewer flights on weekends because a very large proportion of travel is for business. You might sometimes have to less on Sunday for an early flight, but it's very rare that you'd leave on Saturday: you'd much rather be home with your family.
+
+One way to remove this strong pattern is to fit a model that "explains" (i.e. attempts to predict) the day of week effect, and then look at the residuals:
+
+```{r}
+mod <- lm(n ~ wday, data = daily)
+daily <- daily %>% add_residuals(n_resid = mod)
+
+daily %>% 
+  ggplot(aes(date, n_resid)) + 
+  geom_hline(yintercept = 0, size = 2, colour = "white") + 
+  geom_line()
+```
+
+Note the change in the y-axis: now we are seeing the deviation from the expected number of flights, given the day of week. This plot is interesting because now that we've removed much of the large day-of-week effect, we can see some of the subtler patterns that remain:
+
+1.  Our day of week adjustment seems to fail starting around June: you can
+    still see a strong regular pattern that our model hasn't removed. Drawing
+    a plot with one line for each day of the week makes the cause easier
+    to see:
+
+    ```{r}
+    ggplot(daily, aes(date, n_resid, colour = wday)) + 
+      geom_hline(yintercept = 0, size = 2, colour = "white") + 
+      geom_line()
+    ```
+
+    The problem appears to be Saturdays: it seems like during summer there are 
+    more flights on Saturdays than we expect, and during Fall there are fewer. 
+    I suspect this is because of summer holidays: many people go on holiday 
+    in the summer, and people don't mind travelling on Saturdays for vacation.
+    (This doesn't, however, explain why there are more Satruday flights in 
+    spring than fall).
+
+1.  There are some day with much fewer flights than expected:
+
+
+    ```{r}
+    daily %>% filter(n_resid < -100)
+    ```
+
+    If you're familiar with American public holidays, you might spot New Year's 
+    day, July 4th, Thanksgiving and Christmas. There are some others that don't 
+    seem to correspond immediately to public holidays. You'll work on those 
+    in the exercise below.
+    
+1.  There seems to be some smoother long term trend over the course of a year.
+    We can highlight that trend with `geom_smooth()`:
+
+    ```{r}
+    daily %>% 
+      ggplot(aes(date, n_resid)) + 
+      geom_hline(yintercept = 0, size = 2, colour = "white") + 
+      geom_line(colour = "grey50") + 
+      geom_smooth(se = FALSE, span = 0.20)
+    ```
+
+    There are fewer flights in January (and December), and more in summer 
+    (May-Sep). We can't do much more with this trend than brainstorm possible 
+    explanations because we only have a single year's worth of data.
+    
+We'll tackle the day of week effect first. Let's zoom in on Saturdays, going back to raw numbers:
+
+```{r}
+daily %>% 
+  filter(wday == "Sat") %>% 
+  ggplot(aes(date, n)) + 
+    geom_line() +
+    geom_point(alpha = 1/3) + 
+    scale_x_datetime(NULL, date_breaks = "1 month", date_labels = "%b")
+```
+
+So it looks like summer holidays are from early June to late August. That seems to line up fairly well with the [state's school terms](http://schools.nyc.gov/Calendar/2013-2014+School+Year+Calendars.htm): summer break is Jun 26 - Sep 9. Few families travel in the fall because of the big Thanksgiving and Christmas holidays. So lets add a "term" variable to attemp to control for that. 
+
+```{r}
+term <- function(date) {
+  cut(date, 
+    breaks = as.POSIXct(ymd(20130101, 20130605, 20130825, 20140101)),
+    labels = c("spring", "summer", "fall") 
+  )
+}
+
+daily <- daily %>% mutate(term = term(date)) 
+
+daily %>% 
+  filter(wday == "Sat") %>% 
+  ggplot(aes(date, n, colour = term)) +
+  geom_point(alpha = 1/3) + 
+  geom_line() +
+  scale_x_datetime(NULL, date_breaks = "1 month", date_labels = "%b")
+```
+
+(I manually tweaked the dates to get nice breaks in the plot. Using a visualisation to help you understand what your function is doing is a really powerful and general technique.)
+
+It's useful to see how this new variable affects the other days of the week:
+
+```{r}
+daily %>% 
+  ggplot(aes(wday, n, colour = term)) +
+    geom_boxplot()
+```
+
+It looks like there is significant variation across the terms, so fitting a separate day of week effect for each term is reasonable. This improves our model, but not as much as we might hope:
+
+```{r}
+mod2 <- lm(n ~ wday * term, data = daily)
+daily$n_resid2 <- resid(mod2)
+
+ggplot(daily, aes(date)) + 
+  geom_line(aes(y = n_resid, colour = "mod1")) +
+  geom_line(aes(y = n_resid2, colour = "mod2")) +
+  scale_colour_manual(values = c(mod1 = "grey50", mod2 = "black"))
+```
+
+That's because this model is basically calculating an average for each combination of wday and school term. We have a lot of big outliers, so they tend to drag the mean far away from the typical value.
+
+```{r}
+middles <- daily %>% 
+  group_by(wday, term) %>% 
+  summarise(
+    mean = mean(n),
+    median = median(n)
+  )
+
+middles %>% 
+  ggplot(aes(wday)) +
+    geom_linerange(aes(ymin = mean, ymax = median), colour = "grey70") + 
+    geom_point(aes(y = mean, colour = "mean")) +
+    geom_point(aes(y = median, colour = "median")) + 
+    facet_wrap(~ term)
+```
+
+We can reduce this problem by switching to a robust model fitted by `MASS::rlm()`. A robust model is a variation of the linear model which you can think of a fitting medians, instead of means (it's a bit more complicated than that, but that's a reasonable intuition). This greatly reduces the impact of the outliers on our estimates, and gives a result that does a good job of removing the day of week pattern:
+
+```{r, warn=FALSE}
+mod3 <- MASS::rlm(n ~ wday * term, data = daily)
+daily <- daily %>% add_residuals(n_resid3 = mod3)
+
+ggplot(daily, aes(date, n_resid3)) + 
+  geom_hline(yintercept = 0, size = 2, colour = "white") + 
+  geom_line()
+```
+
+It's now much easier to see the long-term trend, and the positive and negative outliers.
+
+Very common to use residual plots when figuring out if a model is ok. But it's easy to get the impression that there's just one type of residual plot you should do, when in fact there are infinite.  
+
+### Exercises
+
+1.  Use your google sleuthing skills to brainstorm why there were fewer than
+    expected flights on Jan 20, May 26, and Sep 9. (Hint: they all have the
+    same explanation.) How would these days generalise to another year?
+
+1.  What do the three days with high positive residuals represent?
+    How would these days generalise to another year?
+
+    ```{r}
+    daily %>% filter(n_resid2 > 80)
+    ```
+
+1.  Create a new variable that splits the `wday` variable into terms, but only
+    for Saturdays, i.e. it should have `Thurs`, `Fri`, but `Sat-summer`, 
+    `Sat-spring`, `Sat-fall`. How does this model compare with the model with 
+    every combination of `wday` and `term`?
+    
+1.  Create a new wday variable that combines the day of week, term 
+    (for Saturdays), and public holidays. What do the residuals of 
+    that model look like?
+
+1.  What happens if you fit a day of week effect that varies by month?
+    Why is this not very helpful? 
+
+1.  Above we made the hypothesis that people leaving on Sundays are more 
+    likely to be business travellers who need to be somewhere on Monday.
+    Explore that hypothesis by seeing how it breaks down based on distance:
+    if it's true, you'd expect to see more Sunday flights to places that
+    are far away.
+
+1.  It's a little frustrating that Sunday and Saturday are on separate ends
+    of the plot. Write a small function to set the levels of the factor so
+    that the week starts on Monday.
+
+## Predictions
+
+Focus on predictions from a model because this works for any type of model. Visualising parameters can also be useful, but tends to be most useful when you have many similar models. Visualising predictions works regardless of the model family.
+
+Visualising high-dimensional models is challenging. You'll need to partition off a useable slice at a time.
+
+Let's start by exploring the difference between the `lm()` and `rlm()` predictions for the day of week effects. We'll first re-fit the models, just so we have them handy:
+
+```{r}
+mod1 <- lm(n ~ wday * term, data = daily)
+mod2 <- MASS::rlm(n ~ wday * term, data = daily)
+```
+
+Next, we need to generate a grid of values to compute predictions for. The easiest way to do that is to use `tidyr::expand()`. It's first argument is a data frame, and for each subsequent argument it finds the unique variables and then generates all combinations:
+
+```{r}
+grid <- 
+  daily %>% 
+  tidyr::expand(wday, term) 
+
+grid
+```
+
+Next we add predicitons. We'll use `modelr::add_predictions()` which works in exactly the same way as `add_residuals()`, but just compute predictions (so doesn't need a data frame that contains the response variable:)
+
+```{r}
+grid <- 
+  grid %>% 
+  add_predictions(linear = mod1, robust = mod2) 
+grid
+```
+
+And then we plot the predictions. Plotting predictions is usually the hardest bit and you'll need to try a few times before you get a plot that is most informative. Depending on your model it's quite possible that you'll need multiple plots to fully convey what the model is telling you about the data. Here's my attempt - it took me a few tries before I got something that I was happy with.
+
+```{r}
+grid %>% 
+  ggplot(aes(wday)) +
+    geom_linerange(aes(ymin = linear, ymax = robust), colour = "grey70") + 
+    geom_point(aes(y = linear, colour = "linear")) +
+    geom_point(aes(y = robust, colour = "robust")) + 
+    facet_wrap(~ term)
+```
+
+### Exercises
+
+1.  How does the model of model coefficients compare to the plot of means
+    and medians computed "by hand" in the previous chapter. Create a plot
+    the highlights the differences and similarities.
+
+## Generating prediction grids
+
 ### Continuous variables
 
 When you have a continuous variable in the model, rather than using the unique values that you've seen, it's often more useful to generate an evenly spaced grid. One convenient way to do this is with `modelr::seq_range()` which takes a continuous variable, calculates its range, and then generates an evenly spaced points between the minimum and maximum.
