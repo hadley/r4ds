@@ -4,7 +4,7 @@ A model is a function that summarizes how the values of one variable vary in rel
 
 This chapter will explain how to build useful models with R.
  
-### Outline
+## Outline
 
 *Section 1* will show you how to build linear models, the most commonly used type of model. Along the way, you will learn R's model syntax, a general syntax that you can reuse with most of R's modeling functions. 
 
@@ -20,8 +20,7 @@ This chapter will explain how to build useful models with R.
 
 To access the functions and data sets that we will use in the chapter, load the `ggplot2`, `dplyr`, `mgcv`, `splines`, and `broom` packages:
 
-```{r messages = FALSE}
-# install.packages("")
+```{r message = FALSE}
 library(ggplot2)
 library(dplyr)
 library(mgcv)
@@ -39,7 +38,8 @@ Luckily, it is easy to measure someone's height, as well as their income, which 
 You can load the latest cross-section of NLS data, collected in 2013 with the code below. 
 
 ```{r echo = FALSE}
-heights <- readRDS("data/heights.RDS")
+heights <- tibble::as_data_frame(readRDS("data/heights.RDS"))
+heights
 ```
 
 I've narrowed the data down to 10 variables:
@@ -54,55 +54,62 @@ I've narrowed the data down to 10 variables:
 * `asvab` - Each subject's score on the Armed Services Vocational Aptitude Battery (ASVAB), an intelligence assessment, out of 100.
 * `sat_math` - Each subject's score on the math portion of the Scholastic Aptitude Test (SAT), out of 800.
 * `bdate` - Month of birth with 1 = January.
-  
-```{r}
-head(heights)
-```
 
 Now that you have the data, you can visualize the relationship between height and income. But what does the data say? How would you describe the relationship?
 
 ```{r warnings = FALSE}
-ggplot(data = heights, mapping = aes(x = height, y = income)) +
+ggplot(heights, aes(height, income)) +
   geom_point()
 ```
 
 First, let's address a distraction: the data is censored in an odd way. The y variable is income, which means that there are no y values less than zero. That's not odd. However, there are also no y values above $180,331. In fact, there are a line of unusual values at exactly $180,331. This is because the Bureau of Labor Statistics removed the top 2% of income values and replaced them with the mean value of the top 2% of values, an action that was not designed to enhance the usefulness of the data for data science.
 
-Also, you can see that heights have been rounded to the nearest inch.
+```{r}
+heights <- heights %>% filter(income < 150000)
+```
 
-Setting those concerns aside, we can measure the correlation between height and income with R's `cor()` function. Correlation, $r$ from statistics, measures how strongly the values of two variables are related. The sign of the correlation describes whether the variables have a positive or negative relationship. The magnitude of the correlation describes how strongly the values of one variable determine the values of the second. A correlation of 1 or -1 implies that the value of one variable completely determines the value of the second variable.
+Also, you can see that heights have been rounded to the nearest inch so using boxplots will make it easier to see the pattern. We'll also remove the very tall and very short people so we can focus on the most typically heights: 
 
-```{r echo = FALSE, cache=TRUE}
+```{r}
+heights <- heights %>% filter(between(height, 59, 78))
+
+ggplot(heights, aes(height, income, group = height)) +
+  geom_boxplot()
+```
+
+You can see there seems to be a fairly weak relationship: as height increase the median wage also seems to increase.  But how could we summarise that more quantitiatively?
+
+One option is the __correlation__, $r$, from statistics, which measures how strongly the values of two variables are related. The sign of the correlation describes whether the variables have a positive or negative relationship. The magnitude of the correlation describes how strongly the values of one variable determine the values of the second. A correlation of 1 or -1 implies that the value of one variable completely determines the value of the second variable.
+
+```{r echo = FALSE, cache=TRUE, fig.height = 2}
 x1 <- rnorm(100)
 y1 <- .5 * x1 + rnorm(100, sd = .5)
 y2 <- -.5 * x1 + rnorm(100, sd = .5)
 
-cordat <- data.frame(x = rep(x1, 5), 
-                     y = c(-x1, y2, rnorm(100), y1, x1),
-                     cor = rep(1:5, each = 100))
+cordat <- data_frame(
+  x = rep(x1, 5), 
+  y = c(-x1, y2, rnorm(100), y1, x1),
+  cor = factor(
+    rep(1:5, each = 100),
+    labels = paste0("Correlation = ", c(-1, -0.5, 0, 0.5, 1))
+  )
+)
 
-cordat$cor <- factor(cordat$cor, levels = 1:5, 
-                     labels = c("Correlation = -1.0",
-                                "Correlation = -0.5",
-                                "Correlation = 0",
-                                "Correlation = 0.5",
-                                "Correlation = 1.0"))
-
-ggplot(cordat, aes(x = x, y = y)) +
+ggplot(cordat, aes(x, y)) +
   geom_point() +
   facet_grid(. ~ cor) +
-  coord_fixed()
+  coord_fixed() +
+  xlab(NULL) + 
+  ylab(NULL)
 ```
 
-
-
-the strength of the relationship between two variables. If the values of the variables fall on a straight line with positive slope (e.g. the value of one variable completely determines the value of another variable)
-
-The correlation suggests that heights may have a small effect on income.
+In R, we can compute the correlation with `cor()`: 
 
 ```{r}
-cor(heights$height, heights$income, use = "na")
+cor(heights$height, heights$income)
 ```
+
+The correlation suggests that heights may have a small effect on income.
 
 A model describes the relationship between two or more variables. There are multiple ways to describe any relationship. Which is best? 
 
@@ -116,13 +123,12 @@ h <- lm(income ~ height, data = heights)
 h
 ```
 
-
 `lm()` fits a straight line that describes the relationship between the variables in your formula. You can picture the result visually like this.
 
 ```{r echo = FALSE}
 ggplot(data = heights, mapping = aes(x = height, y = income)) +
   geom_point() +
-  geom_smooth(method = lm)
+  geom_smooth(method = lm, se = FALSE)
 ```
 
 `lm()` treats the variable(s) on the right-hand side of the formula as _explanatory variables_ that partially determine the value of the variable on the left-hand side of the formula, which is known as the _response variable_. In other words, it acts as if the _response variable_ is determined by a function of the _explanatory variables_. It then spots the linear function that best fits the data.
@@ -131,12 +137,6 @@ Linear models are straightforward to interpret. Incomes have a baseline mean of 
 
 ```{r}
 summary(h)
-```
-
-To create a model without an intercept, add 0 to the formula.
-
-```{r}
-lm(income ~ 0 + height, data = heights)
 ```
 
 ## Using model output
