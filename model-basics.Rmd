@@ -18,14 +18,25 @@ This chapter will explain how to build useful models with R.
 
 ### Prerequisites
 
-To access the functions and data sets that we will use in the chapter, load the `ggplot2`, `dplyr`, `mgcv`, `splines`, and `broom` packages:
+To access the functions and data sets that we will use in the chapter, load the following packages:
 
 ```{r message = FALSE}
-library(ggplot2)
-library(dplyr)
+# Modelling functions
+library(modelr)
 library(mgcv)
 library(splines)
 library(broom)
+
+# Modelling requires plently of visualisation and data manipulation
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+
+# Options that make your life easier
+options(
+  contrasts = c("contr.treatment", "contr.treatment"),
+  na.option = na.exclude
+)
 ```
 
 ## Linear models
@@ -125,9 +136,9 @@ h
 
 `lm()` fits a straight line that describes the relationship between the variables in your formula. You can picture the result visually like this.
 
-```{r echo = FALSE}
-ggplot(data = heights, mapping = aes(x = height, y = income)) +
-  geom_point() +
+```{r}
+ggplot(heights, aes(height, income)) +
+  geom_boxplot(aes(group = height)) +
   geom_smooth(method = lm, se = FALSE)
 ```
 
@@ -138,6 +149,116 @@ Linear models are straightforward to interpret. Incomes have a baseline mean of 
 ```{r}
 summary(h)
 ```
+
+## Understanding the model
+
+For simple models, like this one, you can figure out what the model says about the data by carefully studying the coefficients. If you ever take a formal statistics course on modelling, you'll spend a lot of time doing that. Here, however, we're going to take a different tack. In this book, we're going to focus on understanding a model by looking at its predictions.
+
+To do that, we first need to generate a grid of values to compute predictions for. The easiest way to do that is to use `tidyr::expand()`. It's first argument is a data frame, and for each subsequent argument it finds the unique variables and then generates all combinations:
+
+```{r}
+grid <- heights %>% expand(height) 
+
+grid
+```
+
+(This will get more interesting when we start to add more variables to our model.)
+
+Next we add predicitons. We'll use `modelr::add_predictions()` which works in exactly the same way as `add_residuals()`, but just compute predictions (so doesn't need a data frame that contains the response variable:)
+
+```{r}
+grid <- 
+  grid %>% 
+  add_predictions(income = h) 
+grid
+```
+
+And then we plot the predictions. Plotting predictions is usually the hardest bit and you'll often need to try a few alternatives before you get a plot that is most informative. Depending on your model it's quite possible that you'll need multiple plots to fully convey what the model is telling you about the data. It's pretty simple here because there are only two variables involved.
+
+```{r}
+ggplot(heights, aes(height, income)) +
+  geom_boxplot(aes(group = height)) +
+  geom_line(data = grid, colour = "red", size = 1)
+```
+
+Need a summary of model quality: I think the standard error of the residuals is probably a reasonable 
+
+## Multivariate models
+
+### Categorical
+
+Our model so far is extremely simple: it only uses one variable to try and predict income. We also know something else important: women tend to be shorter than men and tend to get paid less.
+
+```{r}
+ggplot(heights, aes(height, colour = sex)) + 
+  geom_freqpoly(binwidth = 1)
+ggplot(heights, aes(income, colour = sex)) + 
+  geom_freqpoly(binwidth = 5000)
+```
+
+What happens if we also include `sex` in the model?
+
+```{r}
+h2 <- lm(income ~ height * sex, data = heights)
+grid <- heights %>% 
+  expand(height, sex) %>% 
+  add_predictions(income = h2)
+
+ggplot(heights, aes(height, income)) + 
+  geom_point() + 
+  geom_line(data = grid) +
+  facet_wrap(~sex)
+```
+
+Need to commment about predictions for tall women and short men - there is not a lot of data there.  Need to be particularly sceptical.
+
+`*` vs `+`.
+
+```{r}
+h3 <- lm(income ~ height + sex, data = heights)
+grid <- heights %>% 
+  expand(height, sex) %>% 
+  add_predictions(h2 = h2, h3 = h3) %>% 
+  gather(model, prediction, h2:h3)
+
+ggplot(grid, aes(height, prediction, colour = sex)) + 
+  geom_line() +
+  facet_wrap(~model)
+```
+
+### Continuous
+
+There appears to be a relationship between a person's education and how poorly the model predicts their income. When we graphed the model residuals against `education` above, we see that the more a person is educated, the worse the model underestimates their income. 
+
+Patterns in the residuals suggest that relationships exist between y and other variables, even when the effect of heights is accounted for.
+
+Add variables to a model by adding variables to the right-hand side of the model formula.
+
+```{r}
+he1 <- lm(income ~ height + education, data = heights)
+he2 <- lm(income ~ height * education, data = heights)
+
+grid <- heights %>% 
+  expand(height, education) %>% 
+  add_predictions(he1 = he1, he2 = he2) %>% 
+  gather(model, prediction, he1:he2)
+
+ggplot(grid, aes(height, education, fill = prediction)) + 
+  geom_raster() +
+  facet_wrap(~model)
+```
+
+It's easier to see what's going on in a line plot:
+
+```{r}
+ggplot(grid, aes(height, prediction, group = education)) + 
+  geom_line() +
+  facet_wrap(~model)
+```
+
+The full interaction suggests that height matters less as education increases. But which model is "better"? We'll come back to that question later.
+
+What happens if we add the data back in to the plot? Do you get more or less sceptical about the results from this model?
 
 ## Using model output
 
@@ -177,33 +298,7 @@ ggplot(data = heights2, mapping = aes(x = education, y = .resid)) +
 ```
 
 
-## Multivariate models
 
-There appears to be a relationship between a person's education and how poorly the model predicts their income. When we graphed the model residuals against `education` above, we see that the more a person is educated, the worse the model underestimates their income. 
-
-Patterns in the residuals suggest that relationships exist between y and other variables, even when the effect of heights is accounted for.
-
-Add variables to a model by adding variables to the right-hand side of the model formula.
-
-```{r}
-income ~ height + education
-he <- lm(income ~ height + education, data = heights)
-tidy(he)
-```
-
-### Interpretation
-
-The coefficient of each variable represents the increase in income associated with a one unit increase in the variable _when all other variables are held constant_.
-
-
-### Interaction effects
-
-```{r}
-tidy(lm(income ~ height + education, data = heights))
-tidy(lm(income ~ height + education + height:education, data = heights))
-tidy(lm(income ~ height * education, data = heights))
-```
-    
 ## Categorical variables
 
 What about sex? Many sources have observed that there is a difference in income between genders. Might this explain the height effect? We can find the effect of height independent of sex by adding sex to the model; however, sex is a categorical variable.
