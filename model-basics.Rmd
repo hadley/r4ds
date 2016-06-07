@@ -23,8 +23,6 @@ To access the functions and data sets that we will use in the chapter, load the 
 ```{r message = FALSE}
 # Modelling functions
 library(modelr)
-library(mgcv)
-library(splines)
 library(broom)
 
 # Modelling requires plently of visualisation and data manipulation
@@ -43,7 +41,6 @@ options(
 
 Have you heard that a relationship exists between your height and your income? It sounds far-fetched---and maybe it is---but many people believe that taller people will be promoted faster and valued more for their work, an effect that increases their income. Could this be true? 
 
-
 Luckily, it is easy to measure someone's height, as well as their income, which means that we can collect data relevant to the question. In fact, the Bureau of Labor Statistics has been doing this in a controlled way for over 50 years. The BLS [National Longitudinal Surveys (NLS)](https://www.nlsinfo.org/) track the income, education, and life circumstances of a large cohort of Americans across several decades. In case you are wondering just how your tax dollars are being spent, the point of the NLS is not to study the relationship between height and income, that's just a lucky accident.
 
 You can load the latest cross-section of NLS data, collected in 2013 with the code below. 
@@ -51,6 +48,8 @@ You can load the latest cross-section of NLS data, collected in 2013 with the co
 ```{r echo = FALSE}
 heights <- tibble::as_data_frame(readRDS("data/heights.RDS"))
 heights
+n <- nrow(heights)
+n
 ```
 
 I've narrowed the data down to 10 variables:
@@ -77,16 +76,20 @@ First, let's address a distraction: the data is censored in an odd way. The y va
 
 ```{r}
 heights <- heights %>% filter(income < 150000)
+nrow(heights) / n
 ```
 
 Also, you can see that heights have been rounded to the nearest inch so using boxplots will make it easier to see the pattern. We'll also remove the very tall and very short people so we can focus on the most typically heights: 
 
 ```{r}
 heights <- heights %>% filter(between(height, 59, 78))
+nrow(heights) / n
 
 ggplot(heights, aes(height, income, group = height)) +
   geom_boxplot()
 ```
+
+(Throwing away data in the first pass at a model is perfectly acceptable: starting with a simple subset of a problem that you can easily solve is a good general strategy. But in a real analysis, once you've got the first simple model working, you really should come back and all look at the full dataset. Is removing the data still a good idea?)
 
 You can see there seems to be a fairly weak relationship: as height increase the median wage also seems to increase.  But how could we summarise that more quantitiatively?
 
@@ -122,9 +125,7 @@ cor(heights$height, heights$income)
 
 The correlation suggests that heights may have a small effect on income.
 
-A model describes the relationship between two or more variables. There are multiple ways to describe any relationship. Which is best? 
-
-A common choice: decide the form of the relationship, then minimize residuals.
+Another way to summarise the relationship is with a linear model.
 
 Use R's `lm()` function to fit a linear model to your data. The first argument of `lm()` should be a formula, two or more variables separated by a `~`. You've seen formulas before, we used them in Chapter 2 to facet graphs. 
 
@@ -142,13 +143,22 @@ ggplot(heights, aes(height, income)) +
   geom_smooth(method = lm, se = FALSE)
 ```
 
-`lm()` treats the variable(s) on the right-hand side of the formula as _explanatory variables_ that partially determine the value of the variable on the left-hand side of the formula, which is known as the _response variable_. In other words, it acts as if the _response variable_ is determined by a function of the _explanatory variables_. It then spots the linear function that best fits the data.
+`lm()` treats the variable(s) on the right-hand side of the formula as _explanatory variables_ that partially determine the value of the variable on the left-hand side of the formula, which is known as the _response variable_. In other words, it acts as if the _response variable_ is determined by a function of the _explanatory variables_. Linear regression is _linear_ because it finds the linear combination of the explanatory variables that best predict the response.
 
 Linear models are straightforward to interpret. Incomes have a baseline mean of $`r coef(h)[1]`$. Each one inch increase of height above zero is associated with an increase of $`r coef(h)[2]`$ in income.
 
 ```{r}
 summary(h)
 ```
+
+### Exercises
+
+1.  What variables in `heights` do you expect to be most highly correlated with
+    income?  Use `cor()` plus `purr::map_dbl()` to check your guesses.
+
+1.  Correlation only summarises the linear relationship between two continuous
+    variables. There are some famous drawbacks to the correlation. What
+    are they? Hint: google for Anscombe's quartet, read <https://xkcd.com/552/>.
 
 ## Understanding the model
 
@@ -181,9 +191,63 @@ ggplot(heights, aes(height, income)) +
   geom_line(data = grid, colour = "red", size = 1)
 ```
 
-Need a summary of model quality: I think the standard error of the residuals is probably a reasonable 
+The flip side of the model predictions and the model residuals. The predictions tell you what the model is doing; the residuals tell you what the model is missing.  We can compute residuals with `add_residuals()` applied to the original dataset - you can apply it to the grid because there is no response variable there.
 
-## Multivariate models
+```{r}
+heights <-
+  heights %>% 
+  add_residuals(resid_h = h)
+```
+
+One way to understand the residuals is to draw a histogram:
+
+```{r}
+ggplot(heights, aes(resid_h)) + 
+  geom_freqpoly(binwidth = 2000)
+```
+
+It often makes sense to look at just the magnitude of the residuals not the direction. 
+
+```{r}
+ggplot(heights, aes(abs(resid_h))) + 
+  geom_freqpoly(binwidth = 2000)
+```
+
+This allows us to compute some useful summary statistics. 25% of predictions are less than \$7,400 away, and 75% are less than \$25,800 away.
+
+```{r}
+quantile(abs(heights$resid_h), c(0.25, 0.75))
+range(heights$income)
+```
+
+You might be familiar with the $R^2$. That's a single number summary that rescales the variance of the residuals to between 0 (very bad) and 1 (very good):
+
+```{r}
+(var(heights$income) - var(heights$resid_h)) / var(heights$income)
+```
+
+This is why the $R^2$ is sometimes interpreted as the amount of variation in the data explained by the model. Here we're explaining 3% of the total variation - not a lot! But I don't think worrying about the relative amount of variation explained is that useful; instead I think you need to consider whether the absolute amount of variation explained is useful for your project.
+
+It's called the $R^2$ because for simple models like this, it's just the square of the correlation between the variables:
+
+```{r}
+cor(heights$income, heights$height) ^ 2
+```
+
+The $R^2$ is an ok single number summary, but I prefer to think about the unscaled residuals because it's easier to interpret in the context of the original data. As you'll also learn later, it's also a rather optimistic interpretation of the model. Because you're asssessing the model using the same data that was used to fit it, it really gives more of an upper bound on the quality of the model, not a fair assessment. 
+
+### Exercises
+
+1.  P-values are an important part of model interpretation, particularly in 
+    science, that we're not going to talk much about. <https://xkcd.com/882/>
+
+1.  It's often useful to recreate your initial EDA plots using residuals 
+    instead of the original missing values. How does visualising `resid_h`
+    instead of `height` change your understanding of the heights data?
+
+## Multiple predictors
+
+In most cases, like this one, a single variable is not enough to generate a useful model. Instead we need multiple variables in the model, which you can include with either `+` or `*` in the modelling formula.
 
 ### Categorical
 
@@ -226,84 +290,7 @@ ggplot(grid, aes(height, prediction, colour = sex)) +
   facet_wrap(~model)
 ```
 
-### Continuous
-
-There appears to be a relationship between a person's education and how poorly the model predicts their income. When we graphed the model residuals against `education` above, we see that the more a person is educated, the worse the model underestimates their income. 
-
-Patterns in the residuals suggest that relationships exist between y and other variables, even when the effect of heights is accounted for.
-
-Add variables to a model by adding variables to the right-hand side of the model formula.
-
-```{r}
-he1 <- lm(income ~ height + education, data = heights)
-he2 <- lm(income ~ height * education, data = heights)
-
-grid <- heights %>% 
-  expand(height, education) %>% 
-  add_predictions(he1 = he1, he2 = he2) %>% 
-  gather(model, prediction, he1:he2)
-
-ggplot(grid, aes(height, education, fill = prediction)) + 
-  geom_raster() +
-  facet_wrap(~model)
-```
-
-It's easier to see what's going on in a line plot:
-
-```{r}
-ggplot(grid, aes(height, prediction, group = education)) + 
-  geom_line() +
-  facet_wrap(~model)
-```
-
-The full interaction suggests that height matters less as education increases. But which model is "better"? We'll come back to that question later.
-
-What happens if we add the data back in to the plot? Do you get more or less sceptical about the results from this model?
-
-## Using model output
-
-R's model output is not very tidy. It is designed to provide a data store from which you can extract information with helper functions. You will learn more about tidy data in Tidy Data.
-
-```{r}
-coef(h)
-predict(h)[1:5]
-resid(h)[1:5]
-```
-
-The `broom` package provides the most useful helper functions for working with R models. `broom` functions return the most useful model information as data frames, which lets you quickly embed the information into your data science workflow.
-
-### tidy()
-
-```{r}
-tidy(h)
-```
-
-### glance()
-
-```{r}
-glance(h)
-```
-
-### augment()
-
-```{r}
-augment(h)[1:5, ]
-```
-
-```{r}
-heights2 <- augment(h, heights)
-ggplot(data = heights2, mapping = aes(x = education, y = .resid)) +
-  geom_point() +
-  geom_smooth()
-```
-
-
-
-## Categorical variables
-
-What about sex? Many sources have observed that there is a difference in income between genders. Might this explain the height effect? We can find the effect of height independent of sex by adding sex to the model; however, sex is a categorical variable.
-
-### Factors
+#### Factors
 
 R stores categorical data as factors. If you add a string to a model, R will convert it to a factor for the purposes of the model.
 
@@ -338,7 +325,7 @@ To coerce the labels that you see to a new data type, first coerce the factor to
 as.numeric(as.character(num_fac))
 ```
 
-### Interpretation
+#### Interpretation
 
 Add categorical variables to a model in the same way that you would add continuous variables.
 
@@ -371,31 +358,117 @@ hes2 <- lm(income ~ height + education * sex, data = heights)
 tidy(hes2)
 ```
 
-### Logistic models
+### Continuous
 
-So far the y variable of our models has been a continuous variable, `income`. You can use linear regression to model a categorical y variable by transforming y into a continuous variable with a _link function_. Then model fit a model to the results of the link function and use the link function to back transform and interpret the results.
+There appears to be a relationship between a person's education and how poorly the model predicts their income. When we graphed the model residuals against `education` above, we see that the more a person is educated, the worse the model underestimates their income. 
 
-The most common link function is the logit function, which transforms a bivariate y variable into a continuous range.
+Patterns in the residuals suggest that relationships exist between y and other variables, even when the effect of heights is accounted for.
 
-Use `glm()` to perform logistic regression in R.
+Add variables to a model by adding variables to the right-hand side of the model formula.
 
 ```{r}
-she <- glm(sex ~ height + education, family = binomial(link = "logit"), data = heights)
-tidy(she)
+he1 <- lm(income ~ height + education, data = heights)
+he2 <- lm(income ~ height * education, data = heights)
+
+grid <- heights %>% 
+  expand(height, education) %>% 
+  add_predictions(he1 = he1, he2 = he2) %>% 
+  gather(model, prediction, he1:he2)
+
+ggplot(grid, aes(height, education, fill = prediction)) + 
+  geom_raster() +
+  facet_wrap(~model)
 ```
 
-## Non-linear models
-
-But what if the relationship between variables is not linear? For example, the relationship between income and education does not seem to be linear. 
+It's easier to see what's going on in a line plot:
 
 ```{r}
-ggplot(data = heights, mapping = aes(x = education, y = income)) + 
+ggplot(grid, aes(height, prediction, group = education)) + 
+  geom_line() +
+  facet_wrap(~model)
+```
+
+The full interaction suggests that height matters less as education increases. But which model is "better"? We'll come back to that question later.
+
+What happens if we add the data back in to the plot? Do you get more or less sceptical about the results from this model?
+
+You can imagine that if you had a model with four continuous predictions all interacting, that it would be pretty complicated to understand what's going in the model! And certainly you don't have to - it's totally fine to use a model simply as a tool for predicting new values, and in the next chapters you'll learn some techniques to help evaluate such models without looking at them. However, I think the more you can connect your understand of the domain to the model, the more likely you are to detect potential problems before they occur.  The goal is not to undertand every last nuance of the model, but instead to understand more than what you did previously.
+
+### Splines
+
+But what if the relationship between variables is not linear? For example, the relationship between income and education does not seem to be linear:
+
+```{r}
+ggplot(heights, aes(education)) + geom_bar()
+heights_ed <- heights %>% filter(education >= 12)
+nrow(heights) / n
+```
+
+Something about missing values here.
+
+```{r}
+ggplot(heights_ed, aes(education, income)) + 
   geom_boxplot(aes(group = education)) +
-  geom_smooth() + 
-  coord_cartesian(ylim = c(0, 125000))
+  geom_smooth(se = FALSE)
 ```
 
-You can still use linear regression to model non-linear relationships.
+One way to introduce non-linearity into our model is to use transformed variants of the predictors.
+
+```{r}
+mod_e1 <- lm(income ~ education, data = heights_ed)
+mod_e2 <- lm(income ~ education + I(education ^ 2) + I(education ^ 3), data = heights_ed)
+
+heights_ed %>% 
+  expand(education) %>% 
+  add_predictions(mod_e1 = mod_e1, mod_e2 = mod_e2) %>% 
+  gather(model, pred, mod_e1:mod_e2) %>% 
+  ggplot(aes(education, pred, colour = model)) +
+    geom_point() + 
+    geom_line()
+```
+
+This is a bit clunky because we have to surround each transformation with `I()`. This is because the rules of model algebra are a little different to usual algebra. `x ^ 2` is equivalent to `x * x` which in the modelling algebra is equivalent to `x + x + x:x` which is the same as `x`. This is useful because `(x + y + z)^2` fit all all major terms and second order interactions of x, y, and z.
+
+```{r}
+mod_e1 <- lm(income ~ education, data = heights_ed)
+mod_e2 <- lm(income ~ poly(education, 2), data = heights_ed)
+mod_e3 <- lm(income ~ poly(education, 3), data = heights_ed)
+
+heights_ed %>% 
+  expand(education) %>% 
+  add_predictions(mod_e1 = mod_e1, mod_e2 = mod_e2, mod_e3 = mod_e3) %>% 
+  gather(model, pred, mod_e1:mod_e3) %>% 
+  ggplot(aes(education, pred, colour = model)) +
+    geom_point() + 
+    geom_line()
+```
+
+However: there's one major problem with using `poly()`: outside the range of the data, polynomials are going to rapidly shoot off to positive or negative infinity.
+
+```{r}
+data_frame(education = seq(5, 25)) %>% 
+  add_predictions(mod_e1 = mod_e1, mod_e2 = mod_e2, mod_e3 = mod_e3) %>% 
+  gather(model, pred, mod_e1:mod_e3) %>% 
+  ggplot(aes(education, pred, colour = model)) +
+    geom_line()
+```
+
+Splines avoid this problem by linearly interpolating outside the range of the data. This isn't great either, but it's a safer default when you don't know for sure what's going to happen.
+
+```{r}
+library(splines)
+mod_e1 <- lm(income ~ education, data = heights_ed)
+mod_e2 <- lm(income ~ ns(education, 2), data = heights_ed)
+mod_e3 <- lm(income ~ ns(education, 3), data = heights_ed)
+
+data_frame(education = seq(5, 25)) %>% 
+  add_predictions(mod_e1 = mod_e1, mod_e2 = mod_e2, mod_e3 = mod_e3) %>% 
+  gather(model, pred, mod_e1:mod_e3) %>% 
+  ggplot(aes(education, pred, colour = model)) +
+    geom_line()
+```
+
+## Response variations
 
 ### Transformations
 
@@ -411,30 +484,29 @@ lm(log(price) ~ log(carat), data = diamonds)
 # visualize model line
 ```
 
-### Splines
+### Genearlised linear models
 
-```{r eval = FALSE}
-bs(degree = 1) # linear splines
-bs()           # cubic splines
-ns()           # natural splines
-```
+So far the y variable of our models has been a continuous variable, `income`. You can use linear regression to model a categorical y variable by transforming y into a continuous variable with a _link function_. Then model fit a model to the results of the link function and use the link function to back transform and interpret the results.
 
-```{r}
-library(splines)
-tidy(lm(income ~ ns(education, knots = c(10, 17)), data = heights))
-tidy(lm(income ~ ns(education, df = 4), data = heights))
-```    
+The most common link function is the logit function, which transforms a bivariate y variable into a continuous range.
+
+Use `glm()` to perform logistic regression in R.
 
 ```{r}
-ggplot(data = heights, mapping = aes(x= education, y = income)) +
-  geom_point() +
-  geom_smooth(method = lm, formula = y ~ ns(x, df = 4)) +  
-  coord_cartesian(ylim = c(0, 125000))
+she <- glm(sex ~ height + education, family = binomial(link = "logit"), data = heights)
+tidy(she)
 ```
-    
+
+## Other model families
+
+### Robust models
+
+Iteratively re-fit the model down-weighting outlying points (points with high residuals).
+
 ### Additive models    
     
 ```{r}
+library(mgcv)
 gam(income ~ s(education), data = heights)
 
 ggplot(data = heights, mapping = aes(x = education, y = income)) +
