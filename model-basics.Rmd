@@ -2,6 +2,8 @@
 
 A model is a function that summarizes how the values of one variable vary in relation to the values of other variables. Models play a large role in hypothesis testing and prediction, but for the moment you should think of models just like you think of statistics. A statistic summarizes a *distribution* in a way that is easy to understand; and a model summarizes *covariation* in a way that is easy to understand. In other words, a model is just another way to describe data.
 
+In this book, we'll focus on deep tools for rather simple models. We want to give you tools to help you build your intuition for what models do. There's little mathematical formalism, and only a relatively small overlap with how modelling is normally presented in statistics. Modelling is a huge topic and we can only scratch the surface here. You'll definitely need to consult other resources as the complexity of your models grow.
+
 This chapter will explain how to build useful models with R.
  
 ## Outline
@@ -162,13 +164,14 @@ summary(h)
 
 ## Understanding the model
 
-For simple models, like this one, you can figure out what the model says about the data by carefully studying the coefficients. If you ever take a formal statistics course on modelling, you'll spend a lot of time doing that. Here, however, we're going to take a different tack. In this book, we're going to focus on understanding a model by looking at its predictions.
+For simple models, like this one, you can figure out what the model says about the data by carefully studying the coefficients. If you ever take a formal statistics course on modelling, you'll spend a lot of time doing that. Here, however, we're going to take a different tack. In this book, we're going to focus on understanding a model by looking at its predictions. This has a big advantage: every type of model makes predictions (otherwise what use would it be?) so we can use the same set of techniques to understand simple linear models or complex random forrests. We'll see that advantage later on when we explore some other families of models.
 
-To do that, we first need to generate a grid of values to compute predictions for. The easiest way to do that is to use `tidyr::expand()`. It's first argument is a data frame, and for each subsequent argument it finds the unique variables and then generates all combinations:
+### Predictions
+
+To visualise the predictions from a model, we start by generating an evenly spaced grid of values that covers the region where our data lies. The easiest way to do that is to use `tidyr::expand()`. It's first argument is a data frame, and for each subsequent argument it finds the unique variables and then generates all combinations:
 
 ```{r}
 grid <- heights %>% expand(height) 
-
 grid
 ```
 
@@ -183,7 +186,7 @@ grid <-
 grid
 ```
 
-And then we plot the predictions. Plotting predictions is usually the hardest bit and you'll often need to try a few alternatives before you get a plot that is most informative. Depending on your model it's quite possible that you'll need multiple plots to fully convey what the model is telling you about the data. It's pretty simple here because there are only two variables involved.
+And then we plot the predictions. Here the choice of plots is pretty obvious because we only havce two variables. In general, however, figuring out how to the visualise the predictions can be quite challenging, and you'll often need to try a few alternatives before you get the most useful plot. For more complex models, you're likely to need multiple plots, not just one.
 
 ```{r}
 ggplot(heights, aes(height, income)) +
@@ -191,7 +194,9 @@ ggplot(heights, aes(height, income)) +
   geom_line(data = grid, colour = "red", size = 1)
 ```
 
-The flip side of the model predictions and the model residuals. The predictions tell you what the model is doing; the residuals tell you what the model is missing.  We can compute residuals with `add_residuals()` applied to the original dataset - you can apply it to the grid because there is no response variable there.
+### Residuals
+
+The flip-side of predictions are residuals. The predictions tell you what the model is doing; the residuals tell you what the model is missing. We can compute residuals with `add_residuals()`. Note that we computing residuals, you'll use the original dataset, not a manufactured grid. Otherwise where would you get the value of the response?
 
 ```{r}
 heights <-
@@ -199,21 +204,37 @@ heights <-
   add_residuals(resid_h = h)
 ```
 
-One way to understand the residuals is to draw a histogram:
+There are a few different ways to understand what the residuals tell us about the model. One way is to simply draw a frequency polygon to help us understand the spread of the residuals:
 
 ```{r}
 ggplot(heights, aes(resid_h)) + 
   geom_freqpoly(binwidth = 2000)
 ```
 
-It often makes sense to look at just the magnitude of the residuals not the direction. 
+(I prefer the frequency polygon over the histogram here because it makes it easier to display other categorical variables on the same plot.)
+
+Here you can see that the range of the residuals is quite large.  (Note that by the formal definiton of the linear model, the mean of the residuals will always be zero).
+
+For many problems, the sign of the residual (i.e. whether the prediction is too high or too low) isn't important, and you might just want to focus on the magnitude of the residuals. You can do that by plotting the absolute value:
 
 ```{r}
 ggplot(heights, aes(abs(resid_h))) + 
-  geom_freqpoly(binwidth = 2000)
+  geom_freqpoly(binwidth = 2000, boundary = 0)
 ```
 
-This allows us to compute some useful summary statistics. 25% of predictions are less than \$7,400 away, and 75% are less than \$25,800 away.
+You can also explore how the residuals vary with other variables in the data:
+
+```{r}
+ggplot(heights, aes(height, income)) + geom_point()
+```
+
+Iterative plotting the residuals instead of the original response leads to a natual way of building up a complex model in simple steps, which we'll explore in detail in the next chapter.
+
+### Numeric summaries of model quality
+
+When you start dealing with many models, it's helpful to have some rough way of comparing them so you can spend your time looking at the models that do the best job of capturing important features in the data. 
+
+One way to capture the quality of the model is to summarise the distribution of the residuals. For example, you could look at the quantiles of the absolute residuals. For this dataset, 25% of predictions are less than \$7,400 away, and 75% are less than \$25,800 away. That seems like quite a bit of error when predicting someone's income!
 
 ```{r}
 quantile(abs(heights$resid_h), c(0.25, 0.75))
@@ -238,6 +259,13 @@ The $R^2$ is an ok single number summary, but I prefer to think about the unscal
 
 ### Exercises
 
+1.  In the plot of the absolute residuals, there's a bin smaller than 
+    zero. What does this bin represent, and why is it necessary?
+    
+1.  Explore how the distribution of residuals varies with the sex and
+    race. What makes understanding the residuals split up by race
+    particularly challenging?
+
 1.  P-values are an important part of model interpretation, particularly in 
     science, that we're not going to talk much about. <https://xkcd.com/882/>
 
@@ -247,7 +275,16 @@ The $R^2$ is an ok single number summary, but I prefer to think about the unscal
 
 ## Multiple predictors
 
-In most cases, like this one, a single variable is not enough to generate a useful model. Instead we need multiple variables in the model, which you can include with either `+` or `*` in the modelling formula.
+In most cases, like this one, a single variable is not enough to generate a useful model. Instead we need multiple variables in the model, which you can include with either `+` or `*` in the modelling formula. 
+
+The distinction between `+` and `*` is important:
+
+* `x + y` adds the variables independently: the model will estimate the
+  effect of `x` and the effect of `y` completely separately. 
+  
+* `x * y` will estimate the effect of the model together. 
+
+We'll explore what this means in the sections below, as we add more categorical and continuous variables to the dataset.
 
 ### Categorical
 
@@ -360,17 +397,27 @@ tidy(hes2)
 
 ### Continuous
 
-There appears to be a relationship between a person's education and how poorly the model predicts their income. When we graphed the model residuals against `education` above, we see that the more a person is educated, the worse the model underestimates their income. 
+There appears to be a relationship between a person's education and how poorly the model predicts their income.  If we graph the model residuals against `education` above, we see that the more a person is educated, the worse the model underestimates their income:
 
-Patterns in the residuals suggest that relationships exist between y and other variables, even when the effect of heights is accounted for.
-
-Add variables to a model by adding variables to the right-hand side of the model formula.
+But before we add a variable to our model, we need to do a little EDA + cleaning:
 
 ```{r}
-he1 <- lm(income ~ height + education, data = heights)
-he2 <- lm(income ~ height * education, data = heights)
+ggplot(heights, aes(education)) + geom_bar()
+heights_ed <- heights %>% filter(education >= 12)
+nrow(heights) / n
+```
 
-grid <- heights %>% 
+We could improve the model by adding education:
+
+```{r}
+he1 <- lm(income ~ height + education, data = heights_ed)
+he2 <- lm(income ~ height * education, data = heights_ed)
+```
+
+How can we visualise the results of this model? One way to think about it as a surface: we have a 2d grid of height and education, and point on that grid gets a predicted income.
+
+```{r}
+grid <- heights_ed %>% 
   expand(height, education) %>% 
   add_predictions(he1 = he1, he2 = he2) %>% 
   gather(model, prediction, he1:he2)
@@ -386,6 +433,31 @@ It's easier to see what's going on in a line plot:
 ggplot(grid, aes(height, prediction, group = education)) + 
   geom_line() +
   facet_wrap(~model)
+ggplot(grid, aes(education, prediction, group = height)) + 
+  geom_line() +
+  facet_wrap(~model)
+```
+
+One of the big advantages to `+` instead of `*` is that because the terms are independent we display them using two simple plots instead of one complex plot:
+
+```{r}
+heights_ed %>% 
+  expand(
+    height = seq_range(height, 10), 
+    education = mean(education, na.rm = TRUE)
+  ) %>% 
+  add_predictions(income = he1) %>% 
+  ggplot(aes(height, income)) + 
+    geom_line()
+
+heights_ed %>% 
+  expand(
+    height = mean(height, na.rm = TRUE), 
+    education = seq_range(education, 10)
+  ) %>% 
+  add_predictions(income = he1) %>% 
+  ggplot(aes(education, income)) + 
+    geom_line()
 ```
 
 The full interaction suggests that height matters less as education increases. But which model is "better"? We'll come back to that question later.
@@ -394,17 +466,11 @@ What happens if we add the data back in to the plot? Do you get more or less sce
 
 You can imagine that if you had a model with four continuous predictions all interacting, that it would be pretty complicated to understand what's going in the model! And certainly you don't have to - it's totally fine to use a model simply as a tool for predicting new values, and in the next chapters you'll learn some techniques to help evaluate such models without looking at them. However, I think the more you can connect your understand of the domain to the model, the more likely you are to detect potential problems before they occur.  The goal is not to undertand every last nuance of the model, but instead to understand more than what you did previously.
 
+condvis.
+
 ### Splines
 
 But what if the relationship between variables is not linear? For example, the relationship between income and education does not seem to be linear:
-
-```{r}
-ggplot(heights, aes(education)) + geom_bar()
-heights_ed <- heights %>% filter(education >= 12)
-nrow(heights) / n
-```
-
-Something about missing values here.
 
 ```{r}
 ggplot(heights_ed, aes(education, income)) + 
@@ -525,6 +591,8 @@ gam(y ~ s(x) + s(z), data = df)
 # (a smooth function that takes both x and z)
 gam(y ~ s(x, z), data = df)
 ```
+
+### Random forrests
 
 ## Summary
 
