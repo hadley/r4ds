@@ -2,9 +2,6 @@
 
 A model is a function that summarizes how the values of one variable vary in relation to the values of other variables. Models play a large role in hypothesis testing and prediction, but for the moment you should think of models just like you think of statistics. A statistic summarizes a *distribution* in a way that is easy to understand; and a model summarizes *covariation* in a way that is easy to understand. In other words, a model is just another way to describe data.
 
-In this book, we'll focus on deep tools for rather simple models. We want to give you tools to help you build your intuition for what models do. There's little mathematical formalism, and only a relatively small overlap with how modelling is normally presented in statistics. Modelling is a huge topic and we can only scratch the surface here. You'll definitely need to consult other resources as the complexity of your models grow.
-
-We're going to give you a basic strategy, and point you to places to learn more. The key is to think about data generated from your model as regular data - you're going to want to manipulate it and visualise it in many different ways. Being good at modelling is a mixture of having some good general principles and having a big toolbox of techniques. Here we'll focus on general techniques to help you undertand what your model is telling you.
 
 This chapter will explain how to build useful models with R.
  
@@ -406,6 +403,28 @@ hes2 <- lm(income ~ height + education * sex, data = heights)
 tidy(hes2)
 ```
 
+### Nested variables
+
+Another case that occassionally crops up is nested variables: you have an identifier that is locally unique, not globally unique. For example you might have this data about students in schools:
+
+```{r}
+students <- tibble::frame_data(
+  ~student_id, ~school_id,
+  1, 1,
+  2, 1,
+  1, 2,
+  1, 3,
+  2, 3,
+  3, 3
+)
+```
+
+The student id only makes sense in the context of the school: it doesn't make sense to generate every combination of student and school. You can use `nesting()` for this case:
+
+```{r}
+students %>% expand(nesting(school_id, student_id))
+```
+
 ### Continuous
 
 There appears to be a relationship between a person's education and how poorly the model predicts their income.  If we graph the model residuals against `education` above, we see that the more a person is educated, the worse the model underestimates their income:
@@ -544,6 +563,43 @@ data_frame(education = seq(5, 25)) %>%
   ggplot(aes(education, pred, colour = model)) +
     geom_line()
 ```
+
+
+Other useful arguments to `seq_range()`:
+
+*  `pretty = TRUE` will generate a "pretty" sequence, i.e. something that looks
+    nice to the human eye. This is useful if you want to produce tables of 
+    output:
+    
+    ```{r}
+    seq_range(c(0.0123, 0.923423), n = 5)
+    seq_range(c(0.0123, 0.923423), n = 5, pretty = TRUE)
+    ```
+    
+*   `trim = 0.1` will trim off 10% of the tail values. This is useful if the 
+    variables has an long tailed distribution and you want to focus on generating
+    values near the center:
+    
+    ```{r}
+    x <- rcauchy(100)
+    seq_range(x, n = 5)
+    seq_range(x, n = 5, trim = 0.10)
+    seq_range(x, n = 5, trim = 0.25)
+    seq_range(x, n = 5, trim = 0.50)
+    ```
+
+
+### Interpolation vs extrapolation
+
+One danger with prediction plots is that it's easy to make predictions that are far away from the original data. This is dangerous because it's quite possible that the model (which is a simplification of reality) will no longer apply far away from observed values. 
+
+As the number of variables in your model grows ...  "the curse of dimensionality": as the number of variables increases the average distance between points increases. That means most of the space is very sparse, and you have to rely on strong assumptions.
+
+To help avoid this problem, it's good practice to include "nearby" observed data points in any prediction plot. These help you see if you're interpolating, making prediction "in between" existing data points, or extrapolating, making predictions about preivously unobserved slices of the data.
+
+One way to do this is to use `condvis::visualweight()`.
+
+<https://cran.rstudio.com/web/packages/condvis/>
 
 ## Response variations
 
