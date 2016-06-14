@@ -6,72 +6,149 @@ set.seed(1014)
 options(digits = 3)
 ```
 
-* Some discussion of p-values.
-* Bootstrapping to understand uncertainty in parameters.
-* Cross-validation to understand predictive quality.
+In this chapter, you'll turn the tools of multiple models towards model assessment: generating a succinct numerical summary of a model. This must always be done with care, as a single number will never tell you as much as a good visualisation, but when you're considering large numbers of models, you need some way to quickly weed out the duds.
 
-## Multiple models
+We're going to use two main techniques in this chapter:
 
-A natural application of `map2()` is handling test-training pairs when doing model evaluation.  This is an important modelling technique: you should never evaluate a model on the same data it was fit to because it's going to make you overconfident. Instead, it's better to divide the data up and use one piece to fit the model and the other piece to evaluate it. A popular technique for this is called k-fold cross validation. You randomly hold out x% of the data and fit the model to the rest. You need to repeat this a few times because of random variation.
+* Cross-validation to assess model quality. In cross-validation, you randomly
+  split the data into test and training sets. You fit the data to the training
+  set, and evaluate it on the test set. This avoids intrinsic bias of using the
+  same data twice. 
+  
+* Boostrapping to assess model stability/variability. If you sample data from
+  the same population multiple times, how much does your model vary? It's hard
+  to go back and collect more data, so bootstrap uses a simple trick to 
+  approximate data re-collection.
 
-Why you should store related vectors (even if they're lists!) in a
-data frame. Need example that has some covariates so you can (e.g.)
-select all models for females, or under 30s, ...
+If you're competing in competitions, like Kaggle, that are predominantly about creating good predicitons, developing a good strategy for avoiding overfitting is very important. Otherwise you risk tricking yourself into thinking that you have a good model, when in reality you just have a model that does a good job of fitting your data.
 
-Let's start by writing a function that partitions a dataset into test and training:
+There is a closely related family that uses a similar idea: model ensembles. However, instead of trying to find the best models, ensembles make use of all the models, acknowledging that even models that don't fit all the data particularly well can still model some subsets well. In general, you can think of model ensemble techniques as functions that take a list of models, and a return a single model that attempts to take the best part of each.
 
-```{r}
-partition <- function(df, p) {
-  n <- nrow(df)
-  groups <- rep(c(TRUE, FALSE), n * c(p, 1 - p))
-  sample(groups)
-}
-partition(mtcars, 0.1)
-```
+### Prerequisites
 
-We'll generate 20 random test-training splits, and then create lists of test-training datasets:
-
-```{r}
-partitions <- rerun(20, partition(mtcars, 0.25))
-
-tst <- partitions %>% map(~mtcars[.x, , drop = FALSE])
-trn <- partitions %>% map(~mtcars[!.x, , drop = FALSE])
-```
-
-Then fit the models to each training dataset:
-
-```{r}
-mod <- trn %>% map(~lm(mpg ~ wt, data = .))
-```
-
-If we wanted, we could extract the coefficients using broom, and make a single data frame with `map_df()` and then visualise the distributions with ggplot2:
-
-```{r}
-coef <- mod %>% 
-  map_df(broom::tidy, .id = "i")
-coef
-
+```{r setup, message = FALSE}
+# Standard data manipulation and visulisation
+library(dplyr)
 library(ggplot2)
-ggplot(coef, aes(estimate)) + 
-  geom_histogram(bins = 10) + 
-  facet_wrap(~term, scales = "free_x")
+
+# Tools for working with models
+library(broom)
+library(modelr)
+
+# Tools for working with lots of models
+library(purrr)
+library(tidyr)
 ```
 
-But we're most interested in the quality of the models, so we make predictions for each test data set and compute the mean squared distance between predicted and actual:
+## Overfitting
+
+Both bootstrapping and cross-validation help us to spot and remedy the problem of __over fitting__, where the model fits the data we've seen so far extremely well, but does a bad job of generalising to new data.
+
+A classic example of over-fitting is to use a spline with too many degrees of freedom.
+
+Bias - variance tradeoff.  Simpler = more biased. Complex = more variable.  Occam's razor.
 
 ```{r}
-pred <- map2(mod, tst, predict)
-actl <- map(tst, "mpg")
+true_model <- function(x) {
+  1 + 2 * x + rnorm(length(x), sd = 0.25)
+}
 
-msd <- function(x, y) sqrt(mean((x - y) ^ 2))
-mse <- map2_dbl(pred, actl, msd)
-mean(mse)
+df <- data_frame(
+  x = seq(0, 1, length = 20),
+  y = true_model(x)
+)
 
-mod <- lm(mpg ~ wt, data = mtcars)
-base_mse <- msd(mtcars$mpg, predict(mod))
-base_mse
-
-ggplot(, aes(mse)) + 
-  geom_histogram(binwidth = 0.25) + 
-  geom_vline(xintercept = base_mse, colour = "red")
+df %>% 
+  ggplot(aes(x, y)) +
+  geom_point()
 ```
+
+We can create a model that fits this data incredibly well:
+
+```{r}
+library(splines)
+my_model <- function(df) {
+  lm(y ~ ns(x, 5), data = df)
+}
+
+mod <- my_model(df)
+rmse(mod, df)
+
+grid <- df %>% expand(x = seq_range(x, 50))
+preds <- grid %>% add_predictions(y = mod)
+
+df %>% 
+  ggplot(aes(x, y)) +
+  geom_line(data = preds) + 
+  geom_point()
+```
+
+But do you think this model will do well if we apply it to new data from the same population? 
+
+This case is a simulation, so we could just resimulate data from the same process and see how well it does:
+
+```{r}
+df2 <- df %>% mutate(y = true_model(x))
+rmse(mod, df2)
+```
+
+Obviously it does much worse.  But in real-life you can't easily go out and recollect your data. There are two approach to help you get around this problem. I'll introduce them briefly here, and then we'll go into more depth in the following sections.
+
+```{r}
+boots <- rerun(100, df %>% mutate(y = true_model(x)))
+mods <- map(boots, my_model)
+preds <- map2_df(list(grid), mods, ~ add_predictions(.x, y = .y), .id = "id")
+
+preds %>% 
+  ggplot(aes(x, y, group = id)) +
+  geom_line(alpha = 1/3)
+```
+
+```{r}
+boots <- rerun(100, bootstrap(df))
+mods <- boots %>% map(safely(my_model)) %>% transpose()
+
+ok <- mods$error %>% map_lgl(is.null)
+```
+
+```{r}
+preds <- map2_df(list(grid), mods$result[ok], ~ add_predictions(.x, y = .y), .id = "id")
+
+preds %>% 
+  ggplot(aes(x, y, group = id)) +
+  geom_line(alpha = 1/3)
+```
+
+(You might notice that while each individual model varies a lot, the average of all the models seems like it's pretty good. That gives rise to a model ensemble technique called model averaging.)
+
+We could instead use cross-validation to focus on a summary of model quality. It basically works like this:
+
+```{r}
+part <- partition(df, c(train = 0.9, test = 0.1))
+part
+
+mod <- my_model(part$train)
+rmse(mod, part$test)
+```
+
+And re-can repeat that many times:
+
+```{r}
+parts <- 100 %>% 
+  rerun(partition(df, c(train = 0.7, test = 0.3))) %>% 
+  transpose()
+
+mods <- map(parts$train, my_model)
+rmses <- map2_dbl(mods, parts$test, rmse)
+
+data_frame(x = rmses) %>% 
+  ggplot(aes(x)) +
+  geom_vline(xintercept = rmse(mod, df), colour = "white", size = 2) +
+  geom_freqpoly(binwidth = 0.05) +
+  geom_rug()
+```
+
+### Exercises
+
+1.  Why can we only fit a model with spline containing 8 degrees of freedom?
+    Why not 9 or 10?
