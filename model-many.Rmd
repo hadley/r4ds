@@ -286,16 +286,13 @@ data_frame(
 
 Generally, when creating list-columns, you should make sure they're homogeneous: each element should contain the same type of thing. There are no checks to make sure this is true, but if you use purrr and remember what you've learned about type-stable functions you should find it happens naturally.
 
-You've seen two importany way of generating list-columns in the previous case study: 
+## Creating list-columns
+
+Typically, you won't create list-columns by hand. There are three primary ways of creating list-colums: 
 
 1.  Using `tidyr::nest()` to convert a grouped data frame into a nested data 
     frame where you have list-column of data frames.
     
-1.  Using `mutate()` with `purrr::map()` to transform a (e.g.) a list of data 
-    frames into a list of models.
-
-There are two other useful ways to generate list-columns with dplyr: 
-
 1.  With `mutate()` and vectorised functions that return a list.
 
 1.  With `summarise()` and aggregate functions that return an arbitrary
@@ -303,7 +300,24 @@ There are two other useful ways to generate list-columns with dplyr:
 
 These are described below.
 
-### List-columns from vectorised functions
+### From nesting
+
+`nest()` creates a specific type of list-column: a list-column of data frames. There are two ways to use it.  So far you've seen how to use it with a grouped data frame. When applied to a grouped data frame, `nest()` keeps the grouping columns as is, and bundles everything else into the list-column:
+
+```{r}
+gapminder %>% 
+  group_by(country, continent) %>% 
+  nest()
+```
+
+You can also use it on an ungrouped data frame, specifying which columns you want to nest:
+
+```{r}
+gapminder %>% 
+  nest(year:gdpPercap)
+```
+
+### From vectorised functions
 
 Some useful fuctions take an atomic vector and return a list. For example, earlier you learned about `stringr::str_split()` which takes a character vector and returns a list of charcter vectors.
 
@@ -324,21 +338,25 @@ df %>%
 
 (If you find yourself using this pattern alot, make sure to check out `tidyr:separate_rows()` which is a wrapper around this common pattern).
 
-### List-columns with multivalued summaries
+### From multivalued summaries
 
-One restriction of `summarise()` is that it only works with aggregate functions that return a single value. That means that you can't use it with 
+One restriction of `summarise()` is that it only works with aggregate functions that return a single value. That means that you can't use it with functions like `quantile()` that return a vector of arbitrary length:
 
-This can be useful for summary functions like `quantile()` that return a vector of values:
+```{r, error = TRUE}
+mtcars %>% 
+  group_by(cyl) %>% 
+  summarise(q = quantile(mpg))
+```
+
+You can however, wrap the result in a list! This obeys the contract of `summarise()`, because each summary is now a vector (a list) of length 1.
 
 ```{r}
 mtcars %>% 
   group_by(cyl) %>% 
-  summarise(q = list(quantile(mpg))) %>% 
-  print() %>% 
-  unnest()
+  summarise(q = list(quantile(mpg)))
 ```
 
-Although you probably also want to keep track of which output corresponds to which input:
+To make useful results with unnest, you'll also need to capture the probabilities:
 
 ```{r}
 probs <- c(0.01, 0.25, 0.5, 0.75, 0.99)
@@ -348,16 +366,41 @@ mtcars %>%
   unnest()
 ```
 
-And even just `list()` can be a useful summary function (when?). It is a summary function because it takes a vector of length n, and returns a vector of length 1:
-
-```{r}
-mtcars %>% group_by(cyl) %>% summarise(list(mpg))
-```
-
-This an effective replacement to `split()` in base R (but instead of working with vectors it works with data frames).
-
 ### Exercises
 
-## Nesting and unnesting
+1.  List all the functions that you can think of that take a atomic vector and 
+    return a list.
+    
+1.  Brainstorm useful summary functions that, like `quantile()` return
+    multiple values.
+    
+1.  What's missing in the following data frame? How does `quantile()` return
+    that missing piece? Why isn't that helpful here?
 
-More details about `unnest()` options.
+    ```{r}
+    mtcars %>% 
+      group_by(cyl) %>% 
+      summarise(q = list(quantile(mpg))) %>% 
+      unnest()
+    ```
+
+1.  What does this code do? Why might might it be useful?
+
+    ```{r, eval = FALSE}
+    mtcars %>% 
+      group_by(cyl) %>% 
+      summarise_each(funs(list))
+    ```
+
+## Working with list-columns
+
+Typically, list-columns are a useful intermediate data structure - they're hard to work with directly. Typically you:
+
+1.  Use `mutate()` with  `map()`, `map2()`, or `pmap()` to create new 
+    list-columns that are transformations of existing list columns.
+    
+1.  Use `mutate()` with `map_lgl()`, `map_int()`, `map_dbl()`, and `map_chr()`
+    to simplify list-columns down to simpler atomic vectors.
+    
+1.  Use `unnest()` to convert list-columns of data frames back to regular
+    data frames.
