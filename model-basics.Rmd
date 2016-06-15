@@ -188,9 +188,7 @@ grid
 Next we add predicitons. We'll use `modelr::add_predictions()` which works in exactly the same way as `add_residuals()`, but just compute predictions (so doesn't need a data frame that contains the response variable:)
 
 ```{r}
-grid <- 
-  grid %>% 
-  add_predictions(income = h) 
+grid <- grid %>% add_predictions(h, "income") 
 grid
 ```
 
@@ -207,15 +205,13 @@ ggplot(heights, aes(height, income)) +
 The flip-side of predictions are residuals. The predictions tell you what the model is doing; the residuals tell you what the model is missing. We can compute residuals with `add_residuals()`. Note that we computing residuals, you'll use the original dataset, not a manufactured grid. Otherwise where would you get the value of the response?
 
 ```{r}
-heights <-
-  heights %>% 
-  add_residuals(resid_h = h)
+heights <- heights %>% add_residuals(h)
 ```
 
 There are a few different ways to understand what the residuals tell us about the model. One way is to simply draw a frequency polygon to help us understand the spread of the residuals:
 
 ```{r}
-ggplot(heights, aes(resid_h)) + 
+ggplot(heights, aes(resid)) + 
   geom_freqpoly(binwidth = 2000)
 ```
 
@@ -226,14 +222,14 @@ Here you can see that the range of the residuals is quite large.  (Note that by 
 For many problems, the sign of the residual (i.e. whether the prediction is too high or too low) isn't important, and you might just want to focus on the magnitude of the residuals. You can do that by plotting the absolute value:
 
 ```{r}
-ggplot(heights, aes(abs(resid_h))) + 
+ggplot(heights, aes(abs(resid))) + 
   geom_freqpoly(binwidth = 2000, boundary = 0)
 ```
 
 You can also explore how the residuals vary with other variables in the data:
 
 ```{r}
-ggplot(heights, aes(height, income)) + geom_point()
+ggplot(heights, aes(height, resid)) + geom_point()
 ```
 
 Iterative plotting the residuals instead of the original response leads to a natual way of building up a complex model in simple steps, which we'll explore in detail in the next chapter.
@@ -245,14 +241,14 @@ When you start dealing with many models, it's helpful to have some rough way of 
 One way to capture the quality of the model is to summarise the distribution of the residuals. For example, you could look at the quantiles of the absolute residuals. For this dataset, 25% of predictions are less than \$7,400 away, and 75% are less than \$25,800 away. That seems like quite a bit of error when predicting someone's income!
 
 ```{r}
-quantile(abs(heights$resid_h), c(0.25, 0.75))
+quantile(abs(heights$resid), c(0.25, 0.75))
 range(heights$income)
 ```
 
 You might be familiar with the $R^2$. That's a single number summary that rescales the variance of the residuals to between 0 (very bad) and 1 (very good):
 
 ```{r}
-(var(heights$income) - var(heights$resid_h)) / var(heights$income)
+(var(heights$income) - var(heights$resid)) / var(heights$income)
 ```
 
 This is why the $R^2$ is sometimes interpreted as the amount of variation in the data explained by the model. Here we're explaining 3% of the total variation - not a lot! But I don't think worrying about the relative amount of variation explained is that useful; instead I think you need to consider whether the absolute amount of variation explained is useful for your project.
@@ -278,7 +274,7 @@ The $R^2$ is an ok single number summary, but I prefer to think about the unscal
     science, that we're not going to talk much about. <https://xkcd.com/882/>
 
 1.  It's often useful to recreate your initial EDA plots using residuals 
-    instead of the original missing values. How does visualising `resid_h`
+    instead of the original missing values. How does visualising `resid`
     instead of `height` change your understanding of the heights data?
 
 ## Multiple predictors
@@ -311,7 +307,7 @@ What happens if we also include `sex` in the model?
 h2 <- lm(income ~ height * sex, data = heights)
 grid <- heights %>% 
   expand(height, sex) %>% 
-  add_predictions(income = h2)
+  add_predictions(h2, "income")
 
 ggplot(heights, aes(height, income)) + 
   geom_point() + 
@@ -327,10 +323,9 @@ Need to commment about predictions for tall women and short men - there is not a
 h3 <- lm(income ~ height + sex, data = heights)
 grid <- heights %>% 
   expand(height, sex) %>% 
-  add_predictions(h2 = h2, h3 = h3) %>% 
-  gather(model, prediction, h2:h3)
+  gather_predictions(h2, h3)
 
-ggplot(grid, aes(height, prediction, colour = sex)) + 
+ggplot(grid, aes(height, pred, colour = sex)) + 
   geom_line() +
   facet_wrap(~model)
 ```
@@ -449,10 +444,9 @@ How can we visualise the results of this model? One way to think about it as a s
 ```{r}
 grid <- heights_ed %>% 
   expand(height, education) %>% 
-  add_predictions(he1 = he1, he2 = he2) %>% 
-  gather(model, prediction, he1:he2)
+  gather_predictions(he1, he2)
 
-ggplot(grid, aes(height, education, fill = prediction)) + 
+ggplot(grid, aes(height, education, fill = pred)) + 
   geom_raster() +
   facet_wrap(~model)
 ```
@@ -460,10 +454,10 @@ ggplot(grid, aes(height, education, fill = prediction)) +
 It's easier to see what's going on in a line plot:
 
 ```{r}
-ggplot(grid, aes(height, prediction, group = education)) + 
+ggplot(grid, aes(height, pred, group = education)) + 
   geom_line() +
   facet_wrap(~model)
-ggplot(grid, aes(education, prediction, group = height)) + 
+ggplot(grid, aes(education, pred, group = height)) + 
   geom_line() +
   facet_wrap(~model)
 ```
@@ -476,7 +470,7 @@ heights_ed %>%
     height = seq_range(height, 10), 
     education = mean(education, na.rm = TRUE)
   ) %>% 
-  add_predictions(income = he1) %>% 
+  add_predictions(he1, "income") %>% 
   ggplot(aes(height, income)) + 
     geom_line()
 
@@ -485,7 +479,7 @@ heights_ed %>%
     height = mean(height, na.rm = TRUE), 
     education = seq_range(education, 10)
   ) %>% 
-  add_predictions(income = he1) %>% 
+  add_predictions(he1, "income") %>% 
   ggplot(aes(education, income)) + 
     geom_line()
 ```
@@ -516,8 +510,7 @@ mod_e2 <- lm(income ~ education + I(education ^ 2) + I(education ^ 3), data = he
 
 heights_ed %>% 
   expand(education) %>% 
-  add_predictions(mod_e1 = mod_e1, mod_e2 = mod_e2) %>% 
-  gather(model, pred, mod_e1:mod_e2) %>% 
+  gather_predictions(mod_e1, mod_e2) %>% 
   ggplot(aes(education, pred, colour = model)) +
     geom_point() + 
     geom_line()
@@ -532,8 +525,7 @@ mod_e3 <- lm(income ~ poly(education, 3), data = heights_ed)
 
 heights_ed %>% 
   expand(education) %>% 
-  add_predictions(mod_e1 = mod_e1, mod_e2 = mod_e2, mod_e3 = mod_e3) %>% 
-  gather(model, pred, mod_e1:mod_e3) %>% 
+  gather_predictions(mod_e1, mod_e2, mod_e3) %>% 
   ggplot(aes(education, pred, colour = model)) +
     geom_point() + 
     geom_line()
@@ -543,8 +535,7 @@ However: there's one major problem with using `poly()`: outside the range of the
 
 ```{r}
 data_frame(education = seq(5, 25)) %>% 
-  add_predictions(mod_e1 = mod_e1, mod_e2 = mod_e2, mod_e3 = mod_e3) %>% 
-  gather(model, pred, mod_e1:mod_e3) %>% 
+  gather_predictions(mod_e1, mod_e2, mod_e3) %>% 
   ggplot(aes(education, pred, colour = model)) +
     geom_line()
 ```
@@ -558,8 +549,7 @@ mod_e2 <- lm(income ~ ns(education, 2), data = heights_ed)
 mod_e3 <- lm(income ~ ns(education, 3), data = heights_ed)
 
 data_frame(education = seq(5, 25)) %>% 
-  add_predictions(mod_e1 = mod_e1, mod_e2 = mod_e2, mod_e3 = mod_e3) %>% 
-  gather(model, pred, mod_e1:mod_e3) %>% 
+  gather_predictions(mod_e1, mod_e2, mod_e3) %>% 
   ggplot(aes(education, pred, colour = model)) +
     geom_line()
 ```

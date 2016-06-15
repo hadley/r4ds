@@ -80,17 +80,17 @@ One way to remove this strong pattern is to fit a model that "explains" (i.e. at
 
 ```{r}
 mod <- lm(n ~ wday, data = daily)
-daily <- daily %>% add_residuals(n_resid = mod)
+daily <- daily %>% add_residuals(mod)
 
 daily %>% 
-  ggplot(aes(date, n_resid)) + 
+  ggplot(aes(date, resid)) + 
   geom_hline(yintercept = 0, size = 2, colour = "white") + 
   geom_line()
 
 daily %>% 
   expand(wday) %>% 
-  add_predictions(n_pred = mod) %>% 
-  ggplot(aes(wday, n_pred)) + 
+  add_predictions(mod) %>% 
+  ggplot(aes(wday, pred)) + 
     geom_point()
 ```
 
@@ -102,7 +102,7 @@ Note the change in the y-axis: now we are seeing the deviation from the expected
     to see:
 
     ```{r}
-    ggplot(daily, aes(date, n_resid, colour = wday)) + 
+    ggplot(daily, aes(date, resid, colour = wday)) + 
       geom_hline(yintercept = 0, size = 2, colour = "white") + 
       geom_line()
     ```
@@ -117,7 +117,7 @@ Note the change in the y-axis: now we are seeing the deviation from the expected
 1.  There are some days with far fewer flights than expected:
 
     ```{r}
-    daily %>% filter(n_resid < -100)
+    daily %>% filter(resid < -100)
     ```
 
     If you're familiar with American public holidays, you might spot New Year's 
@@ -130,7 +130,7 @@ Note the change in the y-axis: now we are seeing the deviation from the expected
 
     ```{r}
     daily %>% 
-      ggplot(aes(date, n_resid)) + 
+      ggplot(aes(date, resid)) + 
       geom_hline(yintercept = 0, size = 2, colour = "white") + 
       geom_line(colour = "grey50") + 
       geom_smooth(se = FALSE, span = 0.20)
@@ -186,12 +186,12 @@ daily %>%
 It looks like there is significant variation across the terms, so fitting a separate day of week effect for each term is reasonable. This improves our model, but not as much as we might hope:
 
 ```{r}
+mod1 <- lm(n ~ wday, data = daily)
 mod2 <- lm(n ~ wday * term, data = daily)
-daily$n_resid2 <- resid(mod2)
 
 daily %>% 
-  gather(model, prediction, n_resid, n_resid2) %>% 
-  ggplot(aes(date, prediction, colour = model)) +
+  gather_residuals(mod1, mod2) %>% 
+  ggplot(aes(date, resid, colour = model)) +
     geom_line(alpha = 0.75)
 ```
 
@@ -199,9 +199,10 @@ That's because this model is basically calculating an average for each combinati
 
 ```{r, warn = FALSE}
 mod3 <- MASS::rlm(n ~ wday * term, data = daily)
-daily <- daily %>% add_residuals(n_resid3 = mod3)
 
-ggplot(daily, aes(date, n_resid3)) + 
+daily %>% 
+  add_residuals(mod3, "resid") %>% 
+  ggplot(aes(date, resid)) + 
   geom_hline(yintercept = 0, size = 2, colour = "white") + 
   geom_line()
 ```
@@ -221,9 +222,9 @@ mod <- MASS::rlm(n ~ wday * yday(date), data = daily)
 
 grid <- daily %>% 
   tidyr::expand(wday, date = seq_range(date, n = 13)) %>% 
-  add_predictions(mod = mod)
+  add_predictions(mod)
 
-ggplot(grid, aes(date, mod, colour = wday)) + 
+ggplot(grid, aes(date, pred, colour = wday)) + 
   geom_line() +
   geom_point()
 ```
@@ -238,8 +239,8 @@ mod <- MASS::rlm(n ~ wday * ns(date, 5), data = daily)
 
 daily %>% 
   tidyr::expand(wday, date = seq_range(date, n = 13)) %>% 
-  add_predictions(mod = mod) %>% 
-  ggplot(aes(date, mod, colour = wday)) + 
+  add_predictions(mod) %>% 
+  ggplot(aes(date, pred, colour = wday)) + 
     geom_line() +
     geom_point()
 ```
@@ -272,7 +273,7 @@ wday2 <- function(x) wday(x, label = TRUE)
 mod3 <- lm(n ~ wday2(date) * term(date), data = daily)
 daily %>% 
   expand(date) %>% 
-  add_predictions(pred = mod3)
+  add_predictions(mod3)
 ```
 
 I think this is fine to do provided that you've carefully checked that the functions do what you think they do (i.e. with a visualisation). There are two disadvantages:

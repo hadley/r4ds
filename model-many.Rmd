@@ -68,13 +68,13 @@ nz %>%
 
 nz_mod <- lm(lifeExp ~ year, data = nz)
 nz %>% 
-  add_predictions(pred = nz_mod) %>%
+  add_predictions(nz_mod) %>%
   ggplot(aes(year, pred)) + 
   geom_line() + 
   ggtitle("Linear trend + ")
 
 nz %>% 
-  add_residuals(resid = nz_mod) %>% 
+  add_residuals(nz_mod) %>% 
   ggplot(aes(year, resid)) + 
   geom_hline(yintercept = 0, colour = "white", size = 3) + 
   geom_line() + 
@@ -144,7 +144,7 @@ Previously we computed the residuals of a single model with a single dataset. No
 
 ```{r}
 by_country <- by_country %>% mutate(
-  resids = map2(data, model, ~ add_residuals(.x, resid = .y))
+  resids = map2(data, model, add_residuals)
 )
 by_country
 ```
@@ -256,45 +256,77 @@ We see two main effects here: the tragedies of the HIV/AIDS epidemic, and the Rw
 
 ## List-columns
 
-The idea of a list column is powerful. The contract of a data frame is that it's a named list of vectors, where each vector has the same length. A list is a vector, and a list can contain anything, so you can put anything in a list-column of a data frame.
+Now that you've seen a basic workflow for managing many models, lets dive back into some of the details. In this section, we'll dive into the notional of the list-column in a little more detail, and then we'll give a few more details about `nest()`/`unnest()`.
 
-Generally, you should make sure that your list columns are homogeneous: each element should contain the same type of thing. There are no checks to make sure this is true, but if you use purrr and remember what you've learned about type-stable functions you should find it happens naturally.
+It's only in the last year that I've really appreciated the idea of the list-column. List-columns are implicit in the defintion of the data frame: a data frame is a named list of equal length vectors. A list is a vector, so it's always been legitimate to put use a list as a column of a data frame. 
 
-### Compared to base R
-
-List columns are possible in base R, but conventions in `data.frame()` make creating and printing them a bit of a headache:
-
-```{r, error = TRUE}
-# Doesn't work
-data.frame(x = list(1:2, 3:5))
-# Works, but doesn't print particularly well
-data.frame(x = I(list(1:2, 3:5)), y = c("1, 2", "3, 4, 5"))
-```
-
-The functions in tibble don't have this problem:
+However, base R doesn't make it easier to create list-columns, and `data.frame()` treats a list as a list of columns:.
 
 ```{r}
-data_frame(x = list(1:2, 3:5), y = c("1, 2", "3, 4, 5"))
+data.frame(x = list(1:3, 3:5))
 ```
 
-### With `mutate()` and `summarise()`
-
-You might find yourself creating list-columns with mutate and summarise. For example:
+You can prevent `data.frame()` from doing this with `I()`, but the result doesn't print particularly well:
 
 ```{r}
-data_frame(x = c("a,b,c", "d,e,f,g")) %>% 
-  mutate(x = stringr::str_split(x, ","))
+data.frame(
+  x = I(list(1:3, 3:5)), 
+  y = c("1, 2", "3, 4, 5")
+)
 ```
 
-`unnest()` knows how to handle these lists of vectors as well as lists of data frames.
+Tibble alleviates this problem by not messing with the inputs to `data_frame()`, and by providing a better print method:
 
 ```{r}
-data_frame(x = c("a,b,c", "d,e,f,g")) %>% 
-  mutate(x = stringr::str_split(x, ",")) %>% 
+data_frame(
+  x = list(1:3, 3:5), 
+  y = c("1, 2", "3, 4, 5")
+)
+```
+
+Generally, when creating list-columns, you should make sure they're homogeneous: each element should contain the same type of thing. There are no checks to make sure this is true, but if you use purrr and remember what you've learned about type-stable functions you should find it happens naturally.
+
+You've seen two importany way of generating list-columns in the previous case study: 
+
+1.  Using `tidyr::nest()` to convert a grouped data frame into a nested data 
+    frame where you have list-column of data frames.
+    
+1.  Using `mutate()` with `purrr::map()` to transform a (e.g.) a list of data 
+    frames into a list of models.
+
+There are two other useful ways to generate list-columns with dplyr: 
+
+1.  With `mutate()` and vectorised functions that return a list.
+
+1.  With `summarise()` and aggregate functions that return an arbitrary
+    number of results. 
+
+These are described below.
+
+### List-columns from vectorised functions
+
+Some useful fuctions take an atomic vector and return a list. For example, earlier you learned about `stringr::str_split()` which takes a character vector and returns a list of charcter vectors.
+
+```{r}
+df <- data_frame(x1 = c("a,b,c", "d,e,f,g")) 
+
+df %>% 
+  mutate(x2 = stringr::str_split(x1, ","))
+```
+
+`unnest()` knows how to handle these lists of vectors:
+
+```{r}
+df %>% 
+  mutate(x2 = stringr::str_split(x1, ",")) %>% 
   unnest()
 ```
 
-(If you find yourself using this pattern alot, make sure to check out `separate_rows()`)
+(If you find yourself using this pattern alot, make sure to check out `tidyr:separate_rows()` which is a wrapper around this common pattern).
+
+### List-columns with multivalued summaries
+
+One restriction of `summarise()` is that it only works with aggregate functions that return a single value. That means that you can't use it with 
 
 This can be useful for summary functions like `quantile()` that return a vector of values:
 
