@@ -34,6 +34,7 @@ library(ggplot2)
 # Tools for working with models
 library(broom)
 library(modelr)
+library(splines)
 
 # Tools for working with lots of models
 library(purrr)
@@ -105,8 +106,8 @@ preds %>%
 ```
 
 ```{r}
-boots <- rerun(100, bootstrap(df))
-mods <- boots %>% map(safely(my_model)) %>% transpose()
+boot <- bootstrap(df, 100)
+mods <- boot$strap %>% map(safely(my_model)) %>% transpose()
 
 ok <- mods$error %>% map_lgl(is.null)
 ```
@@ -124,22 +125,10 @@ preds %>%
 We could instead use cross-validation to focus on a summary of model quality. It basically works like this:
 
 ```{r}
-part <- partition(df, c(train = 0.9, test = 0.1))
-part
+cv <- crossv_mcmc(df, 100, test = 0.3)
 
-mod <- my_model(part$train)
-rmse(mod, part$test)
-```
-
-And re-can repeat that many times:
-
-```{r}
-parts <- 100 %>% 
-  rerun(partition(df, c(train = 0.7, test = 0.3))) %>% 
-  transpose()
-
-mods <- map(parts$train, my_model)
-rmses <- map2_dbl(mods, parts$test, rmse)
+mods <- map(cv$train, my_model)
+rmses <- map2_dbl(mods, cv$test, rmse)
 
 data_frame(x = rmses) %>% 
   ggplot(aes(x)) +
