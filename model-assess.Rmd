@@ -6,19 +6,58 @@ set.seed(1014)
 options(digits = 3)
 ```
 
-In this chapter, you'll turn the tools of multiple models towards model assessment: generating a succinct numerical summary of a model. This must always be done with care, as a single number will never tell you as much as a good visualisation, but when you're considering large numbers of models, you need some way to quickly weed out the duds.
+In this chapter, you'll turn the tools of multiple models towards model assessment: learning how the model performs when giving new data. So far we've focussed on models as tools for description, using models to help us understand the patterns in the data we have collected so far. But ideally a model will do more than just describe what we have seen so far - it will also help predict what will come next.  
 
-We're going to use two main techniques in this chapter:
+In other words, we want a model that doesn't just perform well on the sample, but also accurately summarises the underlying population.
 
-* Cross-validation to assess model quality. In cross-validation, you randomly
-  split the data into test and training sets. You fit the data to the training
-  set, and evaluate it on the test set. This avoids intrinsic bias of using the
-  same data twice. 
+In some industries this is primarily the use of models: you spend relatively little time fitting the model compared to how many times you use it.
+
+Models as pets vs. models as livestock.
+
+There are two basic ways that a model can fail with new data:
+
+* You can under- or over-fit the model.  Underfitting is where you fail
+  to model and important trend: you leave too much in the residuals, and not 
+  enough in the model. Overfitting is the opposite: you fit a trend to
+  what is actually random noise: you've too put much model and not left
+  enough in the residuals. Generally overfitting tends to be more of a 
+  problem than underfitting.
+
+* The process that generates the data might change. There's nothing the 
+  model can do about this. You can protect yourself against this to some
+  extent by creating models that you understand and applying your knowledge
+  to the problem. Are these fundamentals likely to change? If you have 
+  a model that you are going to use again and again for a long time, you
+  need to plan to maintain the model, regularly checking that it still 
+  makes sense. i.e. is the population the same?
   
-* Boostrapping to assess model stability/variability. If you sample data from
-  the same population multiple times, how much does your model vary? It's hard
-  to go back and collect more data, so bootstrap uses a simple trick to 
-  approximate data re-collection.
+    <http://research.google.com/pubs/pub43146.html>
+    <http://www.wired.com/2015/10/can-learn-epic-failure-google-flu-trends/>
+ 
+The most common problem with a model that causes it to do poorly with new data is overfitting. 
+
+
+Obviously, there's a bit of a problem here: we don't have new data with which to check the model, and even if we did, we'd presumably use it to make the model better in the first place. One powerful technique of approaches can help us get around this problem: resampling.
+
+There are two main resampling techniques that we're going to cover.
+
+* We will use __cross-validation__ to assess model quality. In 
+  cross-validation, you split the data into test and training sets. You fit 
+  the data to the training set, and evaluate it on the test set. This avoids
+  intrinsic bias of using the same data to both fit the model and assess it's
+  quality. However it introduces a new bias: you're not using all the data to
+  fit the model so it's going to be quite as good as it could be.
+  
+* We will use __boostrapping__ to understand how stable (or how variable)
+  the model is. If you sample data from the same population multiple times, 
+  how much does your model vary? Instead of going back to collect new data, 
+  you can use the best estimate of the population data: the data you've
+  collected so far. The amazing idea of the bootstrap is that you can resample
+  from the data you already have.
+
+There are lots of high-level helpers to do these resampling methods in R. We're going to use the tools provided by the modelr package because they are explicit - you'll see exactly what's going on at each step. 
+
+<http://topepo.github.io/caret>. [Applied Predictive Modeling](https://amzn.com/1461468485), by Max Kuhn and Kjell Johnson.
 
 If you're competing in competitions, like Kaggle, that are predominantly about creating good predicitons, developing a good strategy for avoiding overfitting is very important. Otherwise you risk tricking yourself into thinking that you have a good model, when in reality you just have a model that does a good job of fitting your data.
 
@@ -64,9 +103,9 @@ df %>%
   geom_point()
 ```
 
-We can create a model that fits this data incredibly well:
+We can create a model that fits this data very well:
 
-```{r}
+```{r, message = FALSE}
 library(splines)
 my_model <- function(df) {
   lm(y ~ ns(x, 5), data = df)
@@ -95,27 +134,19 @@ rmse(mod, df2)
 
 Obviously it does much worse.  But in real-life you can't easily go out and recollect your data. There are two approach to help you get around this problem. I'll introduce them briefly here, and then we'll go into more depth in the following sections.
 
-```{r}
-boots <- rerun(100, df %>% mutate(y = true_model(x)))
-mods <- map(boots, my_model)
-preds <- map2_df(list(grid), mods, add_predictions, .id = "id")
+## Bootstrapping
 
-preds %>% 
-  ggplot(aes(x, pred, group = id)) +
-  geom_line(alpha = 1/3)
-```
+## Cross-validation
+
 
 ```{r}
-boot <- modelr::bootstrap(df, 100)
-mods <- boot$strap %>% map(safely(my_model)) %>% transpose()
+boot <- bootstrap(df, 100) %>% mutate(
+  mod = map(strap, my_model),
+  pred = map2(list(grid), mod, add_predictions)
+)
 
-ok <- mods$error %>% map_lgl(is.null)
-```
-
-```{r}
-preds <- map2_df(list(grid), mods$result[ok], add_predictions, .id = "id")
-
-preds %>% 
+boot %>% 
+  unnest(pred, .id = "id") %>% 
   ggplot(aes(x, pred, group = id)) +
   geom_line(alpha = 1/3)
 ```
@@ -125,19 +156,17 @@ preds %>%
 We could instead use cross-validation to focus on a summary of model quality. It basically works like this:
 
 ```{r}
-cv <- crossv_mcmc(df, 100, test = 0.3)
+cv <- crossv_mcmc(df, 100, test = 0.3) %>% 
+  mutate(
+    mod = map(train, my_model),
+    rmse = map2_dbl(mod, test, rmse)
+  )
 
-mods <- map(cv$train, my_model)
-rmses <- map2_dbl(mods, cv$test, rmse)
-
-data_frame(x = rmses) %>% 
-  ggplot(aes(x)) +
-  geom_vline(xintercept = rmse(mod, df), colour = "white", size = 2) +
+cv %>% 
+  ggplot(aes(rmse)) +
+  geom_ref_line(v = rmse(mod, df)) +
   geom_freqpoly(binwidth = 0.05) +
   geom_rug()
+
+mean(cv$rmse)
 ```
-
-### Exercises
-
-1.  Why can we only fit a model with spline containing 8 degrees of freedom?
-    Why not 9 or 10?
