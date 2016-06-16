@@ -284,7 +284,20 @@ data_frame(
 )
 ```
 
-Generally, when creating list-columns, you should make sure they're homogeneous: each element should contain the same type of thing. There are no checks to make sure this is true, but if you use purrr and remember what you've learned about type-stable functions you should find it happens naturally.
+List-columns are often most useful as intermediate data structure. They're hard to work with directly, because most R functions work with atomic vectors or data frames, but the advantage of keeping related items together in a data frame is worth a little hassle.
+
+Generally there are three parts of an effective list-column pipeline:
+
+1.  You'll create the list column using one `nest()`, `summarise()` + `list()`
+    or `mutate()` + a map function, as described in [Creating list-columns].
+
+1.  You'll create other intermediate list-columns by transforming existing
+    list columns with `map()`, `map2()` or `pmap()`. For example, 
+    in the case study above, we created a list-column of models by transforming
+    a list column of data frames.
+    
+1.  You collapse the list-column back down to a data frame or atomic vector,
+    as described in [Collapsing list-columns].
 
 ## Creating list-columns
 
@@ -297,6 +310,8 @@ Typically, you won't create list-columns by hand. There are three primary ways o
 
 1.  With `summarise()` and aggregate functions that return an arbitrary
     number of results. 
+
+Generally, when creating list-columns, you should make sure they're homogeneous: each element should contain the same type of thing. There are no checks to make sure this is true, but if you use purrr and remember what you've learned about type-stable functions you should find it happens naturally.
 
 These are described below.
 
@@ -337,6 +352,24 @@ df %>%
 ```
 
 (If you find yourself using this pattern alot, make sure to check out `tidyr:separate_rows()` which is a wrapper around this common pattern).
+
+Another common pattern is to use the map family of from purrr. For example, we could take the final example from [Invoking different functions] and rewrite it to use summarise:
+
+```{r}
+sim <- tibble::frame_data(
+  ~f,      ~params,
+  "runif", list(min = -1, max = -1),
+  "rnorm", list(sd = 5),
+  "rpois", list(lambda = 10)
+)
+
+sim %>%
+  mutate(sims = invoke_map(f, params, n = 10))
+```
+
+Note that technically `sim` isn't homogenous because it contains some double vectors and some numeric vectors! However, this is unlikely to cause many problems since integers and doubles are both numeric vectors.
+
+It's also common to create list-columns by transforming existing list-columns. You'll learn about that in the next section.
 
 ### From multivalued summaries
 
@@ -392,15 +425,75 @@ mtcars %>%
       summarise_each(funs(list))
     ```
 
-## Working with list-columns
+## Collapsing list-columns
 
-Typically, list-columns are a useful intermediate data structure - they're hard to work with directly. Typically you:
+To apply the techniques of data manipulation and visualisation you've learned in this book, you'll need to collapse the list-column back to a regular column, or set of columns. The technique you'll use to collapse back down to a simpler structure depends on whether you want a single value per element, or multiple values:
 
-1.  Use `mutate()` with  `map()`, `map2()`, or `pmap()` to create new 
-    list-columns that are transformations of existing list columns.
+1.  If you want a single values, use `mutate()` with `map_lgl()`, 
+    `map_int()`, `map_dbl()`, and `map_chr()` to create an atomic vector.
     
-1.  Use `mutate()` with `map_lgl()`, `map_int()`, `map_dbl()`, and `map_chr()`
-    to simplify list-columns down to simpler atomic vectors.
-    
-1.  Use `unnest()` to convert list-columns of data frames back to regular
-    data frames.
+1.  If you want many values, use `unnest()` to convert list-columns back
+    to regular columns, repeating the rows as many times as necessary.
+
+These are described in more detail below.
+
+### List to vector
+
+If you can reduce you list column to an atomic vector, that will be a regular column. For example, you can always summarise an object with it's type and length, so this code will work regardless of what sort of list-column you have.
+
+```{r}
+df <- data_frame(
+  x = list(
+    letters,
+    1:4,
+    runif(10)
+  )
+)
+  
+df %>% mutate(
+  type = map_chr(x, typeof),
+  length = map_int(x, length)
+)
+```
+
+This is the same basic information that you get from the default tbl print method, but now you can use it for filtering.  This is a useful technique if you've somehow ended up with a heterogenous list, and want to filter out the parts that you don't need.
+
+Don't forget about the `map_*()` shortcuts - you can use `map_chr(x, "apple")` to extract the string stored in `apple` for each element of `x`.
+
+### Unnesting
+
+`unnest()` works by repeating the regular columns once for each element of the list-column. For example, in the following very simple example we repeat the first row 4 times (because there the first element of `y` has length four), and the second row once:
+
+```{r}
+data_frame(x = 1:2, y = list(1:4, 1)) %>% unnest(y)
+```
+
+This means that you can't simultaneously unnest two columns that contain different number of elements:
+
+```{r, error = TRUE}
+# Ok, because y and z have the same number of elements in
+# every row
+df1 <- data_frame(
+  x = 1:2, 
+  y = list(c("a", "b"), "c"), 
+  z = list(1:2, 3)
+)
+df1
+df1 %>% unnest(y, z)
+
+# Doesn't work because y and z have different number of elements
+df2 <- data_frame(
+  x = 1:2, 
+  y = list("a", c("b", "c")), 
+  z = list(1:2, 3)
+)
+df2
+df2 %>% unnest(y, z)
+```
+
+The same principle applies when unnesting list-columns of data frames. You can unnest multiple list-cols as long as all the data frames in each row have the same number of rows.
+
+### Exercises
+
+1.  Why might the `lengths()` function be useful for creating atomic
+    vector columns from list-columns?
