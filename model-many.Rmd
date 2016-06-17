@@ -97,6 +97,8 @@ by_country <- gapminder %>%
 by_country
 ```
 
+(I'm cheating a little by grouping by both `continent` and `country`. Given `country`, `continent` is fixed, so this doesn't add any more groups, but it's an easy way to carry an extra variable along for the ride.)
+
 This creates an data frame that has one row per group (per country), and a rather unusual column: `data`. `data` is a list of data frames.  This seems like crazy idea: we have a data frame with a column that is a list of other data frames! I'll explain shortly why I think this is a good idea.
 
 The `data` column is a little tricky to look at because it's a moderately complicated list (we're still working on better tools to explore these objects). But if you look at one of the elements of the `data` column you'll see that it contains all the data for that country (Afghanastan in this case).
@@ -105,7 +107,7 @@ The `data` column is a little tricky to look at because it's a moderately compli
 by_country$data[[1]]
 ```
 
-Note the difference between a standard grouped data frame and a nested data frame: in a grouped data frame, each row is an observation; in a nested data frame, each row is a group. Another way to think about this nested dataset is that an observation is now the complete time course for a country, rather than a single point in time.
+Note the difference between a standard grouped data frame and a nested data frame: in a grouped data frame, each row is an observation; in a nested data frame, each row is a group. Another way to think about this nested dataset is we now have a meta-observation: a row that represents the complete time course for a country, rather than a single point in time.
 
 ### List-columns
 
@@ -202,6 +204,8 @@ by_country %>%
   unnest(glance)
 ```
 
+(Pay attention to the variables that aren't printed: there's a lot of useful stuff there.)
+
 This isn't quite the output we want, because it still includes all the list columns. This is default behaviour when `unnest()` works on single row data frames. To suppress these columns we use `.drop = TRUE`:
 
 ```{r}
@@ -258,7 +262,7 @@ We see two main effects here: the tragedies of the HIV/AIDS epidemic, and the Rw
 
 Now that you've seen a basic workflow for managing many models, lets dive back into some of the details. In this section, we'll dive into the notional of the list-column in a little more detail, and then we'll give a few more details about `nest()`/`unnest()`.
 
-It's only in the last year that I've really appreciated the idea of the list-column. List-columns are implicit in the defintion of the data frame: a data frame is a named list of equal length vectors. A list is a vector, so it's always been legitimate to put use a list as a column of a data frame. 
+It's only recently that I've really appreciated the idea of the list-column. List-columns are implicit in the defintion of the data frame: a data frame is a named list of equal length vectors. A list is a vector, so it's always been legitimate to put use a list as a column of a data frame. 
 
 However, base R doesn't make it easier to create list-columns, and `data.frame()` treats a list as a list of columns:.
 
@@ -288,16 +292,16 @@ List-columns are often most useful as intermediate data structure. They're hard 
 
 Generally there are three parts of an effective list-column pipeline:
 
-1.  You'll create the list column using one `nest()`, `summarise()` + `list()`
+1.  You create the list-column using one of `nest()`, `summarise()` + `list()`
     or `mutate()` + a map function, as described in [Creating list-columns].
 
-1.  You'll create other intermediate list-columns by transforming existing
+1.  You create other intermediate list-columns by transforming existing
     list columns with `map()`, `map2()` or `pmap()`. For example, 
     in the case study above, we created a list-column of models by transforming
     a list column of data frames.
     
-1.  You collapse the list-column back down to a data frame or atomic vector,
-    as described in [Collapsing list-columns].
+1.  You simplify the list-column back down to a data frame or atomic vector,
+    as described in [Simplifying list-columns].
 
 ## Creating list-columns
 
@@ -311,11 +315,13 @@ Typically, you won't create list-columns by hand. There are three primary ways o
 1.  With `summarise()` and aggregate functions that return an arbitrary
     number of results. 
 
+1.  From a named-list.
+
 Generally, when creating list-columns, you should make sure they're homogeneous: each element should contain the same type of thing. There are no checks to make sure this is true, but if you use purrr and remember what you've learned about type-stable functions you should find it happens naturally.
 
 These are described below.
 
-### From nesting
+### With nesting
 
 `nest()` creates a specific type of list-column: a list-column of data frames. There are two ways to use it.  So far you've seen how to use it with a grouped data frame. When applied to a grouped data frame, `nest()` keeps the grouping columns as is, and bundles everything else into the list-column:
 
@@ -331,6 +337,8 @@ You can also use it on an ungrouped data frame, specifying which columns you wan
 gapminder %>% 
   nest(year:gdpPercap)
 ```
+
+To be precise, a nested data frame is a data frame with a list-column of data frames. In a nested data frame each row is a meta-observation: the other columns give variables that define the observation (like country and continent above), and the list-column of data frames gives the individual observations that make up the meta-observation.
 
 ### From vectorised functions
 
@@ -367,7 +375,7 @@ sim %>%
   mutate(sims = invoke_map(f, params, n = 10))
 ```
 
-Note that technically `sim` isn't homogenous because it contains some double vectors and some numeric vectors! However, this is unlikely to cause many problems since integers and doubles are both numeric vectors.
+Note that technically `sim` isn't homogenous because it contains both double vectors and some integer vectors! However, this is unlikely to cause many problems since integers and doubles are both numeric vectors.
 
 It's also common to create list-columns by transforming existing list-columns. You'll learn about that in the next section.
 
@@ -399,6 +407,10 @@ mtcars %>%
   unnest()
 ```
 
+### From a named list
+
+Data frames with list-columns provide a solution to a common problem: what do you do if you want to iterate over both the contents of a list and its elements? Instead of trying to jam everything into one object make a data frame: one column can contain the elements, and one column can contain the list.  An easy way to create such a data frame from a list is tibble::enframe().  The advantage of this structure is that it generalises in a straightforward way - names are useful if you have character vector of metadata, but don't help if you have other types of data, or multiple vectors.
+
 ### Exercises
 
 1.  List all the functions that you can think of that take a atomic vector and 
@@ -424,6 +436,8 @@ mtcars %>%
       group_by(cyl) %>% 
       summarise_each(funs(list))
     ```
+
+
 
 ## Collapsing list-columns
 
