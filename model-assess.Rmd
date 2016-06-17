@@ -12,8 +12,6 @@ In other words, we want a model that doesn't just perform well on the sample, bu
 
 In some industries this is primarily the use of models: you spend relatively little time fitting the model compared to how many times you use it.
 
-Models as pets vs. models as livestock.
-
 There are two basic ways that a model can fail with new data:
 
 * You can under- or over-fit the model.  Underfitting is where you fail
@@ -63,6 +61,24 @@ If you're competing in competitions, like Kaggle, that are predominantly about c
 
 There is a closely related family that uses a similar idea: model ensembles. However, instead of trying to find the best models, ensembles make use of all the models, acknowledging that even models that don't fit all the data particularly well can still model some subsets well. In general, you can think of model ensemble techniques as functions that take a list of models, and a return a single model that attempts to take the best part of each.
 
+### Confirmatory analysis
+
+Split between exploratory and confirmatory analysis. The focus of this book is on using data to generate hypotheses and explore them.
+
+Either is fine, but confirmatory is much much harder. If you want your confirmatory analysis to be correct, you need to take a stricter approach:
+
+1.  60% of your data goes into a __training__ set. You're allowed to do
+    anything you like with this data: visualise it, fit tons of models to it,
+    cross-validate it.
+  
+1.  20% of goes into a __query__ set. You can use this data
+    to compare models by hand, but you're not allowed to use it automatically.
+
+1.  20% goes into  amount back for a __test__ set. You can only use this
+    data ONCE, to test your final model. If you use this data more than
+    once you're no longer doing confirmatory analysis, you're doing exploratory
+    analysis.
+
 ### Prerequisites
 
 ```{r setup, message = FALSE}
@@ -84,7 +100,7 @@ library(tidyr)
 
 Both bootstrapping and cross-validation help us to spot and remedy the problem of __over fitting__, where the model fits the data we've seen so far extremely well, but does a bad job of generalising to new data.
 
-A classic example of over-fitting is to use a spline with too many degrees of freedom.
+A classic example of over-fitting is to using a polynomial with too many degrees of freedom.
 
 Bias - variance tradeoff.  Simpler = more biased. Complex = more variable.  Occam's razor.
 
@@ -108,7 +124,7 @@ We can create a model that fits this data very well:
 ```{r, message = FALSE}
 library(splines)
 my_model <- function(df) {
-  lm(y ~ ns(x, 5), data = df)
+  lm(y ~ poly(x, 7), data = df)
 }
 
 mod <- my_model(df)
@@ -123,21 +139,35 @@ df %>%
   geom_point()
 ```
 
-But do you think this model will do well if we apply it to new data from the same population? 
-
-This case is a simulation, so we could just resimulate data from the same process and see how well it does:
+As we fit progressively more and more complicated models, the model error decreases:
 
 ```{r}
-df2 <- df %>% mutate(y = true_model(x))
-rmse(mod, df2)
+fs <- list(
+  y ~ x,
+  y ~ poly(x, 2),
+  y ~ poly(x, 3),
+  y ~ poly(x, 4),
+  y ~ poly(x, 5),
+  y ~ poly(x, 6),
+  y ~ poly(x, 7)
+)
+
+models <- data_frame(
+  n = 1:7, 
+  f = fs,
+  mod = map(f, lm, data = df),
+  rmse = map2_dbl(mod, list(df), rmse)
+)
+
+models %>% 
+  ggplot(aes(n, rmse)) + 
+  geom_line(colour = "grey70") + 
+  geom_point(size = 3)
 ```
 
-Obviously it does much worse.  But in real-life you can't easily go out and recollect your data. There are two approach to help you get around this problem. I'll introduce them briefly here, and then we'll go into more depth in the following sections.
+But do you think this model will do well if we apply it to new data from the same population? 
 
-## Bootstrapping
-
-## Cross-validation
-
+In real-life you can't easily go out and recollect your data. There are two approach to help you get around this problem. I'll introduce them briefly here, and then we'll go into more depth in the following sections.
 
 ```{r}
 boot <- bootstrap(df, 100) %>% mutate(
@@ -146,27 +176,105 @@ boot <- bootstrap(df, 100) %>% mutate(
 )
 
 boot %>% 
-  unnest(pred, .id = "id") %>% 
-  ggplot(aes(x, pred, group = id)) +
+  unnest(pred) %>% 
+  ggplot(aes(x, pred, group = .id)) +
   geom_line(alpha = 1/3)
 ```
 
-(You might notice that while each individual model varies a lot, the average of all the models seems like it's pretty good. That gives rise to a model ensemble technique called model averaging.)
-
-We could instead use cross-validation to focus on a summary of model quality. It basically works like this:
+It's a little easier to see what's going on if we zoom on the y axis:
 
 ```{r}
-cv <- crossv_mcmc(df, 100, test = 0.3) %>% 
+last_plot() + 
+  coord_cartesian(ylim = c(0, 5))
+```
+
+(You might notice that while each individual model varies a lot, the average of all the models seems like it might not be that bad. That gives rise to a model ensemble technique called model averaging.)
+
+Bootstrapping is a useful tool to help us understand how the model might vary if we'd collected a different sample from the population. A related technique is cross-validation which allows us to explore the quality of the model. It works by repeatedly splitting the data into two pieces. One piece, the training set, is used to fit, and the other piece, the test set, is used to measure the model quality.
+
+The following code generates 100 test-training splits, holding out 20% of the data for testing each time. We then fit a model to the training set, and evalute the error on the test set:
+
+```{r}
+cv <- crossv_mc(df, 100) %>% 
   mutate(
     mod = map(train, my_model),
     rmse = map2_dbl(mod, test, rmse)
   )
+cv
+```
 
+Obviously, a plot is going to help us see distribution more easily. I've added our original estimate of the model error as a white vertical line (where the same dataset is used for both training and teseting), and you can see it's very optimistic.
+
+```{r}
 cv %>% 
   ggplot(aes(rmse)) +
   geom_ref_line(v = rmse(mod, df)) +
-  geom_freqpoly(binwidth = 0.05) +
+  geom_freqpoly(binwidth = 0.2) +
   geom_rug()
-
-mean(cv$rmse)
 ```
+
+The distribution of errors is highly skewed: there are a few cases which have very high errors. These respresent samples where we ended up with a few cases on all with low values or high values of x.  Let's take a look:
+
+```{r}
+filter(cv, rmse > 1.5) %>% 
+  unnest(map(train, as.data.frame)) %>% 
+  ggplot(aes(x, .id)) + 
+    geom_point() + 
+    xlim(0, 1)
+```
+
+All of the models that fit particularly poorly were fit to samples that either missed the first one or two or the last one or two observation. Because polynomials shoot off to positive and negative, they give very bad predictions for those values.
+
+Now that we've given you a quick overview and intuition for these techniques, lets dive in more more detail.
+
+## Resamples
+
+### Building blocks
+
+Both the boostrap and cross-validation are build on top of a "resample" object. In modelr, you can access these low-level tools directly with the `resample_*` functions. 
+
+These functions return an object of class "resample", which represents the resample in a memory efficient way. Instead of storing the resampled data set itself, it instead stores the integer indices, and a "pointer" to the original dataset. This makes resamples take up much less memory.
+
+```{r}
+x <- resample_bootstrap(as_data_frame(mtcars))
+class(x)
+
+x
+```
+
+Most modelling functions call `as.data.frame()` on the `data` argument. This generates a resampled data frame. Because it's called automatically you can just pass the object.
+
+```{r}
+lm(mpg ~ wt, data = x)
+```
+
+If you get a strange error, it's probably because the modelling function doesn't do this, and you need to do it yourself. You'll also need to do it yourself if you want to `unnest()` the data so you can visualise it.  If you want to just get the rows selected, you can use `as.integer()`.
+
+### Dataframe API
+
+`bootstrap()` and `crossv_mc()` are built on top of these simpler primitives. They are designed to work naturally in a model exploration environment by returning data frames. Each row of the data frame represents a single sample. They return slightly different columns:
+
+*   `boostrap()` returns a data frame with two columns:
+
+    ```{r}
+    bootstrap(df, 3)
+    ```
+    
+    `strap` gives the bootstrap sample dataset, and `.id` assigns a 
+    unique identifer to each model (this is often useful for plotting)
+    
+*   `crossv_mc()` return a data frame with three columns:
+
+    ```{r}
+    crossv_mc(df, 3)
+    ```
+    `train` contains the data that you should use to fit (train) the model,
+    and `test` contains the data you should use to validate the model. Together,
+    the test and train columns form an exclusive partition of the full dataset.
+
+## Bootstrapping
+
+
+## Cross-validation
+
+
