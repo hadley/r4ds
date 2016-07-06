@@ -2,33 +2,31 @@
 
 # Introduction
 
-With data, the relationships between values matter as much as the values themselves. Tidy data encodes those relationships.
+Throughout this book we work with "tibbles" instead of the traditional data frame. Tibbles _are_ data frames, but tweak some older behaviours to make life a littler easier. R is an old language, and some things that were true 10 or 20 years ago no longer apply. It's difficult to change base R without breaking existing code, so most innovation occurs in packages. Here we will describe the tibble package, which provides opinionated data frames that make working in the tidyverse a little easier. You can learn more about tibbles in the accompanying vignette: `vignette("tibble")`.
 
-Throughout this book we work with "tibbles" instead of the traditional data frame. Tibbles _are_ data frames but they encode some patterns that make modern usage of R better. Unfortunately R is an old language, and things that made sense 10 or 20 years ago are no longer as valid. It's difficult to change base R without breaking existing code, so most innovation occurs in packages, providing new functions that you should use instead of the old ones.
-
-```{r}
+```{r setup}
 library(tibble)
 ```
 
 ## Creating tibbles {#tibbles}
 
-The majority of the functions that you'll use in this book already produce tibbles. But if you're working with functions from other packages, you might need to coerce a regular data frame a tibble. You can do that with `as_data_frame()`:
+The majority of the functions that you'll use in this book already produce tibbles. If you're working with functions from other packages, you might need to coerce a regular data frame a tibble. You can do that with `as_tibble()`:
 
 ```{r}
-as_data_frame(iris)
+as_tibble(iris)
 ```
 
-`as_data_frame()` knows how to convert data frames, lists (provided the elements are equal length vectors), matrices, and tables. 
+`as_tibble()` knows how to convert data frames, lists (provided the elements are equal length vectors), matrices, and tables. 
 
-You can also create a new tibble from individual vectors with `data_frame()`:
+You can also create a new tibble from individual vectors with `tibble()`:
 
 ```{r}
-data_frame(x = 1:5, y = 1, z = x ^ 2 + y)
+tibble(x = 1:5, y = 1, z = x ^ 2 + y)
 ```
 
-`data_frame()` does much less than `data.frame()`: it never changes the type of the inputs (e.g. it never converts strings to factors!), it never changes the names of variables, and it never creates `row.names()`. You can read more about these features in the vignette, `vignette("tibble")`.
+Note that `tibble()` automatically recycles inputs of length 1, and you can refer to variables that you just created.  Compared to `data.frame()`, `tibble()` does much less: it never changes the type of the inputs (e.g. it never converts strings to factors!), it never changes the names of variables, and it never creates `row.names()`.
 
-You can define a tibble row-by-row with `frame_data()`:
+Another way to create a tibble is with `frame_data()`, which is customised for data entry in R code. Column headings are defined by formulas (`~`), and entries are separated by commas:
 
 ```{r}
 frame_data(
@@ -42,49 +40,65 @@ frame_data(
 
 There are two main differences in the usage of a data frame vs a tibble: printing, and subsetting.
 
+### Printing
+
 Tibbles have a refined print method that shows only the first 10 rows, and all the columns that fit on screen. This makes it much easier to work with large data. In addition to its name, each column reports its type, a nice feature borrowed from `str()`:
 
 ```{r}
-library(nycflights13)
-flights
+tibble(
+  a = lubridate::now() + runif(1e3) * 60,
+  b = lubridate::today() + runif(1e3),
+  c = 1:1e3,
+  d = runif(1e3),
+  e = sample(letters, 1e3, replace = TRUE)
+)
 ```
 
 You can control the default appearance with options:
 
 * `options(tibble.print_max = n, tibble.print_min = m)`: if more than `m`
-  rows print `m` rows. Use `options(dplyr.print_max = Inf)` to always
+  rows, print `n` rows. Use `options(dplyr.print_max = Inf)` to always
   show all rows.
 
 * `options(tibble.width = Inf)` will always print all columns, regardless
    of the width of the screen.
 
-Tibbles are strict about subsetting. If you try to access a variable that does not exist, you'll get an error:
+You can see a complete list of options by looking at the package help: `package?tibble`.
 
-```{r, error = TRUE}
-flights$yea
-```
+### Subsetting
 
-Tibbles also clearly delineate `[` and `[[`: `[` always returns another tibble, `[[` always returns a vector. No more `drop = FALSE`!
+Tibbles are stricter about subsetting. If you try to access a variable that does not exist, you'll get a warning. Unlike data frames, tibbles do not use partial matching on column names:
 
 ```{r}
-class(iris[ , 1])
-class(iris[ , 1, drop = FALSE])
-class(as_data_frame(iris)[ , 1])
+df <- data.frame(
+  abc = 1:10, 
+  def = runif(10), 
+  xyz = sample(letters, 10)
+)
+tb <- as_tibble(df)
+
+df$a
+tb$a
 ```
 
-Contrast this with a data frame: sometimes `[` returns a data frame and
-sometimes it just returns a single column:
+Tibbles clearly delineate `[` and `[[`: `[` always returns another tibble, `[[` always returns a vector.
 
 ```{r}
-df1 <- data.frame(x = 1:3, y = 3:1)
-class(df1[, 1:2])
-class(df1[, 1])
+# With data frames, [ sometimes returns a data frame, and sometimes returns 
+# a vector
+df[, 1]
+
+# With tibbles, [ always returns another tibble
+tb[, 1]
+
+# To extract a single element, you should always use [[
+tb[[1]]
 ```
 
 ## Interacting with legacy code
 
 Some older functions don't work with tibbles because they expect `df[, 1]` to return a vector, not a data frame. If you encounter one of these functions, use `as.data.frame()` to turn a tibble back to a data frame:
 
-```
-class(as.data.frame(tbl_df(iris)))
+```{r}
+class(as.data.frame(tb))
 ```
