@@ -40,7 +40,7 @@ heights <- read_csv("data/heights.csv")
 
 Readr can automatically decompress files ending in `.zip`, `.gz`, `.bz2`, and `.xz`. 
 
-This argument can also be a literal csv file, which is useful for experimenting and creating reproducible examples:
+You can also supply an inline csv file. This is useful for experimenting and creating reproducible examples:
 
 ```{r}
 read_csv("a,b,c
@@ -48,16 +48,17 @@ read_csv("a,b,c
 4,5,6")
 ```
 
-Notice that `read_csv()` uses the first line of the data for column headings. This is a very common convention. But there are two cases where you might want tweak this behaviour:
+Notice that `read_csv()` uses the first line of the data for column headings. This is a very common convention. There are two cases where you might want tweak this behaviour:
 
 1.  Sometimes there are a few lines of metadata at the top of the file. You can
     use `skip = n` to skip the first `n` lines; or use `comment = "#"` to drop
     all lines that start with a comment character.
     
     ```{r}
-    read_csv("Some data collected by the DEA
+    read_csv("The first line of metadata
+      The second line of metadata
       x,y,z
-      1,2,3", skip = 1)
+      1,2,3", skip = 2)
     
     read_csv("# A comment I want to skip
       x,y,z
@@ -79,49 +80,69 @@ Notice that `read_csv()` uses the first line of the data for column headings. Th
     read_csv("1,2,3\n4,5,6", col_names = c("x", "y", "z"))
     ```
 
-This is all you need to know to read ~50% of csv files that you'll encounter in practice. To read in the rest, you'll need to learn more about how readr turns the data it reads from these files as strings into the most appropriate column type.
+This is all you need to know to read ~50% of csv files that you'll encounter in practice. To read in the rest, you'll need to learn more about how readr parses each individual column, turning a character vector into the most appropriate type.
 
 ### Compared to base R
 
-If you've used R before, you might wonder why we're not using `read.csv()` here. There are a few good reasons to favour readr functions over the base equivalents:
+If you've used R before, you might wonder why we're not using `read.csv()`. There are a few good reasons to favour readr functions over the base equivalents:
 
-* These functions are typically much faster (~10x) than the base equivalents.
+* They are typically much faster (~10x) than their base equivalents.
   Long running jobs also have a progress bar, so you can see what's
-  happening. (If you're looking for raw speed, try `data.table::fread()`,
-  it doesn't fit into the tidyverse quite as nicely, but can be quite a bit 
-  faster.)
+  happening. If you're looking for raw speed, try `data.table::fread()`,
+  it doesn't fit so tidily into the tidyverse, but it can be quite a bit 
+  faster than readr.
 
-* readr is produces  which means that it doesn't convert 
-  character vectors to factors, produce row names, or munge the column headers.
+* They produce tibbles, and they don't convert character vectors to factors,
+  produce row names, or munge the column names.
 
-* readr functions have more flexible parsers: they can read in dates, times,
-  currencies, percentages, and more.
+* They are more reproducible. Base R functions inherit some behaviour from
+  your operation system, so code that works on your computer might not
+  work on another computer.
 
-* They're designed to be as reproducible as possible - this means that you
-  sometimes need to supply a few more arguments when using them the first
-  time, but they'll definitely work on other peoples computers. The base R
-  functions take a number of settings from system defaults, which means that
-  code that works on your computer might not work on someone else's.
+## Parsing a vector
 
-## Column types
-
-Before we get to how readr reads files from disk, we're going to take a little detour to talk about the `parse_*()` functions. These work with character vectors: they're useful in their own right, but are particularly important for experimentation. Once you've learned how the individual parsers work, we'll circle back and see how they fit together to parse an entire file.
-
-These each take a character vector and return a more specific type:
+Before we get to how readr reads files from disk, we're going to take a little detour to talk about the `parse_*()` functions. These functions all take a character vector and return something more specialised like logical, integer, or date:
 
 ```{r}
-str(parse_integer(c("1", "2", "3")))
 str(parse_logical(c("TRUE", "FALSE", "NA")))
-str(parse_number(c("$1000", "20", "3,000")))
+str(parse_integer(c("1", "2", "3")))
+str(parse_date(c("2010-01-01", "1979-10-14")))
 ```
 
-Parsing occurs after leading and trailing whitespace has been removed (if not overridden with `trim_ws = FALSE`) and missing values listed in `na` have been removed:
+These functions are useful in their own right, but are also an important building block for readr. Once you've learned how the individual parsers work in this section, we'll circle back and see how they fit together to parse a complete file in the next section.
+
+Like all functions in the tidyverse, the `parse_*()` functions are uniform: the first argument is a character vector to parse, and the `na` argument specifies which strings should be treated as missing.
 
 ```{r}
-parse_logical(c("F", "TRUE ", " ."), na = ".")
+parse_integer(c("1", "231", ".", "456"), na = ".")
 ```
 
-Parsing logicals and integers is straightforward. Parsing numbers and characters are slightly more complicated than you might expect. Dates and date times are quite a bit more complex. There's also a factor parser.
+If parsing fails, you'll get a warning, and can use the `problems()` function to get more details. `problems()` returns a tibble, so you can easily explore it using dplyr.
+
+```{r}
+x <- parse_integer(c("123", "345", "abc", "123.45"))
+problems(x)
+```
+
+There are eight particularly important parsers:
+
+1.  `parse_logical()` and `parse_integer()` parse logicals and integers
+    respectively. There's basically nothing that can go wrong with them
+    so I won't describe them here further.
+    
+1.  `parse_double()` is a strict numeric parser, and `parse_number()` 
+    is a flexible numeric parser. These are more complicated than you might
+    expect because different parts of the world write numbers in different
+    ways.
+    
+1.  `parse_character()` seems so simple that it shouldn't be necessary. But
+    one complication makes it important: character encodings.
+
+1.  `parse_datetime()`, `parse_date()`, and `parse_time()` allow you to
+    parse various date & time specifications. These are the most complicated
+    because there are so many different ways of writing dates.
+
+The following sections describe the parsers in more detail.
 
 ### Numbers
 
@@ -129,29 +150,30 @@ There are three tricky bits to numbers:
 
 1. People write numbers differently in different parts of the world.
    
-1. They often have prefixes, "$1000", or suffixes "10%".
+1. Numbers are often surrounded by other characters that provide some
+   context, like "$1000" or "10%".
 
-1. People often extra characters to make them easier to read, like
-   "1,000,000", and these characters are different in different places 
-   in the world.
-   
-To address problem 1 readr has the notion of a "locale", an object that bundles together all of various things that differ in different parts of the world. When parsing numbers the most important thing is what character you use for the decimal place:
+1. Numbers often contain "grouping" characters to make them easier to read, 
+   like "1,000,000", and the characters are differ around the world.
+
+To address the first problem, readr has the notion of a "locale", an object which specifies parsing options that differ around the world. For parsing numbers, the most important option is what character you use for the decimal place:
 
 ```{r}
 parse_double("1.23")
 parse_double("1,23", locale = locale(decimal_mark = ","))
 ```
 
-(The defaults are American-centric because R is. Trying to adapt automatically to your default is hard, and makes code fragile because it might work on your computer, but might not when you email it to a colleague in another country.)
+The default locale in readr is US-centric, because R generally is US-centric (i.e. the documentation of base R is written in American English). An alternative approach would be to try and guess the defaults from your operating system. This is hard to do well, but more importantly makes your code fragile: it might work on your computer, but might fail when you email it to a colleague in another country.
 
-`parse_number()` addresses problem two: it ignores prefixes and suffixes and extracts the value:
+`parse_number()` addresses problem two: it ignores non-numeric characters before and after the number. This is particularly useful for currencies and percentages, but also works to extract numbers embedded in text.
 
 ```{r}
 parse_number("$100")
 parse_number("20%")
+parse_number("It cost $123.45")
 ```
 
-`parse_number()` will also ignore the "grouping mark" used to separate numbers.
+The final problem is addressed with the combination of `parse_number()` the locale: `parse_number()` will also ignore the "grouping mark" used to separate numbers:
 
 ```{r}
 parse_number("$100,000,000")
@@ -160,32 +182,56 @@ parse_number("123.456,789", locale = locale(grouping_mark = "."))
 
 ### Character
 
-It seems like `parse_character()` should be really simple - it could just return it's input. Unfortunately there's one tricky bit: encoding. The encoding of a string determines how it is represented in binary. You can see the underlying representation of a string in R using `charToRaw()`:
+It seems like `parse_character()` should be really simple - it could just return its input. Unfortunately life isn't so simple, as there are multiple ways to represent the same string. To understand what's going on, we need to dive into the details of how computers represent strings. In R, we can get at the underlying binary representation of a string using `charToRaw()`:
 
 ```{r}
-charToRaw("abcZ")
+charToRaw("Hadley")
 ```
 
-Each hexadecimal number represents a byte of information.  All English characters can be encoded in a single byte basically because most early computer technology was developed in the US. 
+Each hexadecimal number represents a byte of information: `48` is H, `61` is a, and so on. This encoding, from hexadecimal number to character is called ASCII. ASCII does a great job of representing English characters. 
 
-Unfortunately you can only represent a maximum of 255 values with a single byte of information, and there are many more characters than that used across languages (and some language by themselves need more than 255 characters - Chinese, for example, uses over 20,000). That means to represent a character you need to use multiple bytes of information. The way multiple bytes are used to encode a character is called the "encoding".
+Unfortunately you can only represent a maximum of 255 values with a single byte of information, and there are many more characters when you look across languages. That means to represent a character in other languages you need to use multiple bytes of information. The way multiple bytes are used to encode a character is called the "encoding".
 
-In the early days of computing there were many different ways of representing non-English characters which caused a lot of confusion. Fortunately now days there is one standard that is supported almost everywhere: UTF-8. This is the default Encoding used on mac and linux:
+In the early days of computing there were many different ways of representing non-English characters which caused a lot of confusion. Fortunately, today there is one standard that is supported almost everywhere: UTF-8. UTF-8 can encode just about every character used by human's today, as well as many extra symbols (like emoji!).
+
+readr uses UTF-8 everywhere: it assumes your data is UTF-8 encoded when you read it, and always uses it when writing. This is a good default, but will fail for data produced by older systems that don't understand UTF-8.  Unfortunately handling 
+
+However, you may be attempting to read data that is produced by a system that doesn't understand UTF-8. You can tell you need to do this because when you print the data in R it looks weird. Sometimes you might get complete gibberish, or sometimes just one or two characters might be messed up.
 
 ```{r}
-locale(encoding = "Latin1")
+x1 <- "\x82\xb1\x82\xf1\x82\xc9\x82\xbf\x82\xcd"
+x2 <- "El Ni\xf1o was particularly bad this year"
+
+x1
+x2
 ```
 
-readr uses UTF-8 everywhere: it assumes it by default when you're reading, and always uses it when writing. However, you may be attempting to read data that is produced by a system that doesn't understand UTF-8. To read such data, you might need to specify your own encoding.  You can use `guess_encoding()` to attempt to figure it out - the more data you have the more likely it is to be correct. You may need to try a couple of different encodings before you get the right once.
+To fix the problem you need to specify the encoding in `parse_character()`:
+
+```{r}
+parse_character(x1, locale = locale(encoding = "Shift-JIS"))
+parse_character(x2, locale = locale(encoding = "Latin1"))
+```
+
+How do you find the correct encoding? If you're lucky, it'll be included somewhere in the data documentation. But that rarely happens so readr provides  `guess_encoding()` to help you figure it out. It's not foolproof, and it works better when you have lots of text, but it's a reasonable place to start. Even then you may need to try a couple of different encodings before you get the right once.
+
+```{r}
+guess_encoding(charToRaw(x1))
+guess_encoding(charToRaw(x2))
+```
+
+The first argument to `guess_encoding()` can either be a path to a file, or, as in this case, a raw vector (useful if the strings are already in R).
 
 ### Dates, date times, and times
 
-Readr provides three options depending on whether you want a date (the number of days since 1970-01-01), a date time (the number of seconds since midnight 1970-01-01), or a time (i.e. the number of seconds since midnight). The defaults read:
+There are three options depending on whether you want a date (the number of days since 1970-01-01), a date time (the number of seconds since midnight 1970-01-01), or a time (i.e. the number of seconds since midnight). The defaults read:
 
 * Date times: an [ISO8601](https://en.wikipedia.org/wiki/ISO_8601) date time.
 * Date: a year, optional separator, month, optional separator, day.
 * Time: an hour, optional colon, hour, optional colon, minute, optional colon,
   optional seconds, optional am/pm.
+  
+For example:
 
 ```{r}
 parse_datetime("2010-10-01T2010")
@@ -195,7 +241,8 @@ parse_time("20:10:01")
 
 If these defaults don't work for your data you can supply your own date time formats, built up of the following pieces:
 
-* Year: `%Y` (4 digits). `%y` (2 digits); 00-69 -> 2000-2069, 70-99 -> 1970-1999.
+* Year: `%Y` (4 digits). `%y` (2 digits); 00-69 -> 2000-2069, 
+  70-99 -> 1970-1999.
 
 * Month: `%m` (2 digits), `%b` (abbreviated name), `%B` (full name).
 
@@ -225,29 +272,37 @@ parse_date("01/02/15", "%d/%m/%y")
 parse_date("01/02/15", "%y/%m/%d")
 ```
 
-Then when you read in the data with `read_csv()` you can easily translate to the `col_date()` format.
-
-If you're using `%b` or `%p`, and you're in a non-English locale, you can set the values with `locale()`. readr comes bundled with a bunch: `date_names_langs()`, or create your own with `date_names()`. (Using month names seems to be relatively uncommon outside of Europe.)
+If you're using `%b` or `%p`, and you're in a non-English locale, you can set the values with the `lang` argument to `locale()`. readr comes bundled with a bunch: `date_names_langs()`, or create your own with `date_names()`. 
 
 ```{r}
 locale("fr")
 locale("fr", asciify = TRUE)
 ```
 
-## Parsing problems
+## Parsing a file
 
-You can also use `parse_guess()` to attempt to guess the type of the column from its values:
+Now that you've learned how to parse an individual vector, it's time to turn back and explore how readr parses a file. There are three new things that you'll learn about in this section:
+
+1. How readr guesses what type of vector a column is.
+1. What happens when things go wrong.
+1. How to override the default specification
+
+### Guesser
+
+Readr uses a heuristic to figure out the types of your columns: it reads the first 1000 rows and uses some (moderately conservative) heuristics to figure out the type of each column. This is fast, and fairly robust. You can emulate this process with a single vector using `parse_guess()`:
 
 ```{r}
-collector_guess("2001-10-10")
 str(parse_guess("2001-10-10"))
 ```
+
+* `parse_logical()` detects a column contaning only "F", "T", "FALSE", or
+  "TRUE"
 
 ### Problems object
 
 ### Heuristic
 
-Readr uses a heuristic to figure out the types of your columns: it reads the first 1000 rows and uses some (moderately conservative) heuristics to figure out the type of each column. This is fast, and fairly robust. If readr detects the wrong type of data, you'll get warning messages. Readr prints out the first five, and you can access them all with `problems()`:
+If readr detects the wrong type of data, you'll get warning messages. Readr prints out the first five, and you can access them all with `problems()`:
 
 EXAMPLE
 
