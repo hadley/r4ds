@@ -38,6 +38,8 @@ The first argument to `read_csv()` is the most important: it's the path to the f
 heights <- read_csv("data/heights.csv")
 ```
 
+You'll notice when you run `read_csv()` it prints how it has read each column. We'll come back to that in a little bit.
+
 Readr can automatically decompress files ending in `.zip`, `.gz`, `.bz2`, and `.xz`. 
 
 You can also supply an inline csv file. This is useful for experimenting and creating reproducible examples:
@@ -99,9 +101,28 @@ If you've used R before, you might wonder why we're not using `read.csv()`. Ther
   your operation system, so code that works on your computer might not
   work on another computer.
 
+### Exericses
+
+1.  What function would you use to read a function that where fields were
+    separated with with "|"?
+   
+1.  Apart from `file`, `skip`, and `comment`, what other arguments do
+    `read_csv()` and `read_tsv()` have in common?
+    
+1.  Some times strings in a csv file contain commas. To prevent them from
+    causing problems they need to be surrounded by a quoting character, like
+    `"` or `'`. By convention, `read_csv()` assumes that the quoting
+    character will be `"`, and if you want to change it you'll need to
+    use `read_delim()` instead. What arguments do you need to specify
+    to read the following text into a data frame?
+    
+    ```{r}
+    "x,y\n1,'a,b'"
+    ```
+
 ## Parsing a vector
 
-Before we get to how readr reads files from disk, we're going to take a little detour to talk about the `parse_*()` functions. These functions all take a character vector and return something more specialised like logical, integer, or date:
+Before we get into the details of how readr reads files from disk, we're going to take a little detour to talk about the `parse_*()` functions. These functions all take a character vector and return something more specialised like logical, integer, or date:
 
 ```{r}
 str(parse_logical(c("TRUE", "FALSE", "NA")))
@@ -117,14 +138,25 @@ Like all functions in the tidyverse, the `parse_*()` functions are uniform: the 
 parse_integer(c("1", "231", ".", "456"), na = ".")
 ```
 
-If parsing fails, you'll get a warning, and can use the `problems()` function to get more details. `problems()` returns a tibble, so you can easily explore it using dplyr.
+If parsing fails, you'll get a warning:
 
 ```{r}
 x <- parse_integer(c("123", "345", "abc", "123.45"))
+```
+
+And the failures will be missing in the output:
+
+```{r}
+x
+```
+
+To get more details about the problems, use `problems()`, which returns a tibble. That's useful if you have many parsing failures because you can use dplyr to figure out the common patterns.
+
+```{r}
 problems(x)
 ```
 
-There are eight particularly important parsers:
+Using parsers is mostly a matter of understanding what's avaialble and how they deal with different types of input. There are eight particularly important parsers:
 
 1.  `parse_logical()` and `parse_integer()` parse logicals and integers
     respectively. There's basically nothing that can go wrong with them
@@ -136,7 +168,7 @@ There are eight particularly important parsers:
     ways.
     
 1.  `parse_character()` seems so simple that it shouldn't be necessary. But
-    one complication makes it important: character encodings.
+    one complication makes it quite important: character encodings.
 
 1.  `parse_datetime()`, `parse_date()`, and `parse_time()` allow you to
     parse various date & time specifications. These are the most complicated
@@ -146,9 +178,11 @@ The following sections describe the parsers in more detail.
 
 ### Numbers
 
-There are three tricky bits to numbers: 
+It seems like it should be straightforward to parse a number, but three factors make it tricky:
 
 1. People write numbers differently in different parts of the world.
+   Some countries use `.` in between the integer and fractional parts of
+   a real number, while others uses `,`.
    
 1. Numbers are often surrounded by other characters that provide some
    context, like "$1000" or "10%".
@@ -156,7 +190,7 @@ There are three tricky bits to numbers:
 1. Numbers often contain "grouping" characters to make them easier to read, 
    like "1,000,000", and the characters are differ around the world.
 
-To address the first problem, readr has the notion of a "locale", an object which specifies parsing options that differ around the world. For parsing numbers, the most important option is what character you use for the decimal place:
+To address the first problem, readr has the notion of a "locale", an object that specifies parsing options that differ around the world. For parsing numbers, the most important option is what character you use for the decimal mark:
 
 ```{r}
 parse_double("1.23")
@@ -222,47 +256,73 @@ guess_encoding(charToRaw(x2))
 
 The first argument to `guess_encoding()` can either be a path to a file, or, as in this case, a raw vector (useful if the strings are already in R).
 
+If you'd like to learn more, I'd recommend <http://kunststube.net/encoding/>.
+
 ### Dates, date times, and times
 
-There are three options depending on whether you want a date (the number of days since 1970-01-01), a date time (the number of seconds since midnight 1970-01-01), or a time (i.e. the number of seconds since midnight). The defaults read:
+You pick between three parsers depending on whether you want a date (the number of days since 1970-01-01), a date time (the number of seconds since midnight 1970-01-01), or a time (i.e. the number of seconds since midnight). The defaults read:
 
-* Date times: an [ISO8601](https://en.wikipedia.org/wiki/ISO_8601) date time.
-* Date: a year, optional separator, month, optional separator, day.
-* Time: an hour, optional colon, hour, optional colon, minute, optional colon,
-  optional seconds, optional am/pm.
+*   `parse_datetime()`: an 
+    [ISO8601](https://en.wikipedia.org/wiki/ISO_8601) date time. This
+    is the most important date/time standard, and I recommend that you get
+    a little familiar with it.
+    
+    ```{r}
+    parse_datetime("2010-10-01T2010")
+    # If time is omitted, it will be set to midnight
+    parse_datetime("20101010")
+    ```
+    
+*   `parse_date()`: a year, optional separator, month, optional separator, 
+    day.
+    
+    ```{r}
+    parse_date("2010-10-01")
+    ```
+
+*   `parse_time()`: an hour, optional colon, hour, optional colon, minute,
+    optional colon, optional seconds, optional am/pm. Base R doesn't have
+    a great built in class for time data, so we use the one provided in the
+    hms package.
   
-For example:
-
-```{r}
-parse_datetime("2010-10-01T2010")
-parse_date("2010-10-01")
-parse_time("20:10:01")
-```
+    ```{r}
+    library(hms)
+    parse_time("20:10:01")
+    ```
 
 If these defaults don't work for your data you can supply your own date time formats, built up of the following pieces:
 
-* Year: `%Y` (4 digits). `%y` (2 digits); 00-69 -> 2000-2069, 
-  70-99 -> 1970-1999.
+Year
+:  `%Y` (4 digits). 
+: `%y` (2 digits); 00-69 -> 2000-2069,  70-99 -> 1970-1999.
 
-* Month: `%m` (2 digits), `%b` (abbreviated name), `%B` (full name).
+Month
+: `%m` (2 digits)
+: `%b` (abbreviated name, like "Jan")
+: `%B` (full name, "January").
 
-* Day: `%d` (2 digits), `%e` (optional leading space).
+Day
 
-* Hour: `%H`.
+: `%d` (2 digits)
+: `%e` (optional leading space)
 
-* Minutes: `%M`.
+Time
 
-* Seconds: `%S` (integer seconds), `%OS` (partial seconds).
+: `%H` 0-24 hour.
+: `%I` 1-12, must be used with `%p`.
+: `%p` AM/PM indicator.
+: `%M` minutes.
+: `%S` integer seconds.
+: `%OS` real seconds. 
+: `%Z` Time zone (as name, e.g. `America/Chicago`). Beware abbreviations:
+  if you're American, note that "EST" is a Canadian time zone that does not
+  have daylight savings time. It is \emph{not} Eastern StandardTime!
+: `%z` (as offset from UTC, e.g. `+0800`). 
 
-* Time zone: `%Z` (as name, e.g. `America/Chicago`), `%z` (as offset from UTC,
-  e.g. `+0800`). If you're American, note that "EST" is a Canadian time zone
-  that does not have daylight savings time. It is \emph{not} Eastern Standard
-  Time!
+Non-digits:
 
-* AM/PM indicator: `%p`.
-
-* Non-digits: `%.` skips one non-digit character, `%*` skips any number of
-  non-digits.
+: `%.` skips one non-digit character
+: `%*` skips any number of non-digits.
 
 The best way to figure out the correct string is to create a few examples in a character vector, and test with one of the parsing functions. For example:
 
@@ -272,12 +332,26 @@ parse_date("01/02/15", "%d/%m/%y")
 parse_date("01/02/15", "%y/%m/%d")
 ```
 
-If you're using `%b` or `%p`, and you're in a non-English locale, you can set the values with the `lang` argument to `locale()`. readr comes bundled with a bunch: `date_names_langs()`, or create your own with `date_names()`. 
+If you're using `%b` or `%B` with non-English month names, you'll need to set the  `lang` argument to `locale()`. See the list of built-in languages in `date_names_langs()`, or if your language is not already included, create your own with `date_names()`.
 
 ```{r}
 locale("fr")
-locale("fr", asciify = TRUE)
+
+parse_date("1 janvier 2015", "%d %B %Y", locale = locale("fr"))
 ```
+,
+### Exercises
+
+1.  What are the most important options to locale?  If you live outside the
+    US, create a new locale object that encapsulates the settings for the
+    data files you read most commonly.
+    
+1.  I didn't discuss the `date_format` and `time_format` options to
+    `locale()`. What do they do? Construct an example that shows when they
+    might be useful.
+    
+1.  What are the most common encodings used in Europe? What are the
+    most common encodings used in Asia?
 
 ## Parsing a file
 
@@ -375,7 +449,7 @@ These are useful if you have a plain text file with an unusual format. Often you
 `type_convert()` applies the same parsing heuristics to the character columns in a data frame. It's useful if you've loaded data "by hand", and now want to convert character columns to the appropriate type:
 
 ```{r}
-df <- tibble(x = c("1", "2", "3"), y = c("1.21", "2.32", "4.56"))
+df <- tibble::tibble(x = c("1", "2", "3"), y = c("1.21", "2.32", "4.56"))
 df
 # Note the column types
 type_convert(df)
