@@ -373,113 +373,213 @@ parse_date("1 janvier 2015", "%d %B %Y", locale = locale("fr"))
 
 ## Parsing a file
 
-Now that you've learned how to parse an individual vector, it's time to turn back and explore how readr parses a file. There are three new things that you'll learn about in this section:
+Now that you've learned how to parse an individual vector, it's time to turn back and explore how readr parses a file. There are two new things that you'll learn about in this section:
 
-1. How readr guesses what type of vector a column is.
-1. What happens when things go wrong.
+1. How readr automatically guesses the type of a column
 1. How to override the default specification
 
-### Guesser
+### Strategy
 
-Readr uses a heuristic to figure out the types of your columns: it reads the first 1000 rows and uses some (moderately conservative) heuristics to figure out the type of each column. This is fast, and fairly robust. You can emulate this process with a single vector using `parse_guess()`:
+Readr uses a heuristic to figure out the type of each columns: it reads the first 1000 rows and uses some (moderately conservative) heuristics to figure out the type of each column. 
 
-```{r}
-str(parse_guess("2001-10-10"))
-```
-
-* `parse_logical()` detects a column contaning only "F", "T", "FALSE", or
-  "TRUE"
-
-### Problems object
-
-### Heuristic
-
-If readr detects the wrong type of data, you'll get warning messages. Readr prints out the first five, and you can access them all with `problems()`:
-
-EXAMPLE
-
-Typically, you'll see a lot of warnings if readr has guessed the column type incorrectly. This most often occurs when the first 1000 rows are different to the rest of the data. Perhaps there are a lot of missing data there, or maybe your data is mostly numeric but a few rows have characters. Fortunately, it's easy to fix these problems using the `col_type` argument.
-
-(Note that if you have a very large file, you might want to set `n_max` to 10,000 or 100,000. That will speed up iterations while you're finding common problems)
-
-Specifying the `col_type` looks like this:
-
-```{r, eval = FALSE}
-read_csv("mypath.csv", col_types = col(
-  x = col_integer(),
-  treatment = col_character()
-))
-```
-
-You can use the following types of columns
-
-* `col_integer()` (i) and `col_double()` (d) specify integer and doubles.
-  `col_logical()` (l) parses TRUE, T, FALSE and F into a logical vector.
-  `col_character()` (c) leaves strings as is.
-
-* `col_number()` (n) is a more flexible parser for numbers embedded in other
-  strings. It will look for the first number in a string, ignoring non-numeric
-  prefixes and suffixes. It will also ignore the grouping mark specified by
-  the locale (see below for more details).
-
-* `col_factor()` (f) allows you to load data directly into a factor if you know
-  what the levels are.
-
-* `col_skip()` (_, -) completely ignores a column.
-
-* `col_date()` (D), `col_datetime()` (T) and `col_time()` (t) parse into dates,
-  date times, and times as described below.
-
-You might have noticed that each column parser has a one letter abbreviation, which you can use instead of the full function call (assuming you're happy with the default arguments):
-
-```{r, eval = FALSE}
-read_csv("mypath.csv", col_types = cols(
-  x = "i",
-  treatment = "c"
-))
-```
-
-(If you just have a few columns, you can supply a single string that gives the type for each column: `i__dc`. See the documentation for more details. It's not as easy to understand as the `cols()` specification, so I'm not going to describe it further here.)
-
-By default, any column not mentioned in `cols` will be guessed. If you'd rather those columns are simply not read in, use `cols_only()`. In that case, you can use `col_guess()` (?) if you want to guess the type of a column and include it to be read.
-
-Each `col_XYZ()` function also has a corresponding `parse_XYZ()` that you can use on a character vector. This makes it easier to explore what each of the parsers does interactively.
-
-### Spec object
-
-## Other functions
-
-### Reading
-
-readr also provides a number of functions for reading files off disk directly into character vectors:
-
-* `read_file()` reads an entire file into a character vector of length one.
-
-* `read_lines()` reads a file into a character vector with one element per 
-  line.
-
-These are useful if you have a plain text file with an unusual format. Often you can use `read_lines()` to read into a character vector, and then use the regular expression skills you'll learn in [[strings]] to pull out the pieces that you need.
-
-`read_file_raw()` and `read_lines_raw()` work similarly but return raw vectors, which are useful if you need to work with binary data.
-
-### Converting
-
-`type_convert()` applies the same parsing heuristics to the character columns in a data frame. It's useful if you've loaded data "by hand", and now want to convert character columns to the appropriate type:
+You can emulate this process with a character vector using `guess_parser()`, which returns readr's best guess, and `parse_guess()` which uses that guess to parse the column:
 
 ```{r}
-df <- tibble::tibble(x = c("1", "2", "3"), y = c("1.21", "2.32", "4.56"))
-df
-# Note the column types
-type_convert(df)
+guess_parser("2010-10-01")
+guess_parser("15:01")
+guess_parser(c("TRUE", "FALSE", "FALSE", "TRUE"))
+guess_parser(c("1", "5", "9"))
 ```
 
-Like the `read_*()` functions, you can override the default guesses using the `col_type` argument. 
+The basic rules try each of these in turn, working from strictest to most flexible:
 
-### Writing
+* logical: contains only "F", "T", "FALSE", or "TRUE"
+* integer: contains only numeric characters (and `-`)
+* double: contains only valid doubles (including numbers like `4.5e-5`)
+* number: contains valid doubles with the grouping mark inside
+* time: matches the default time format
+* date: matches the default date format
+* date time: any ISO8601 date
+* character: everything else
 
-readr also comes with two useful functions for writing data back to disk: `write_csv()` and `write_tsv()`. These are considerably faster than the base R equvalents, never write rownames, and automatically quote only when needed. 
+(Note that the details will change a little from version to version as we tweak the guesses to provide the best balance between false positives and false negatives)
 
-If you want to export a csv file to Excel, use `write_excel_csv()` - this writes a special character (a "byte order mark") at the start of the file which forces Excel to use UTF-8.
+### Problems
+
+These defaults don't always work for larger files. There are two basic problems:
+
+1.  The first thousand rows might be a special case, and readr guesses
+    a type that is too specific for the general case. For example, you
+    might have column of doubles that only contains integers in the first
+    1000 rows. 
+
+1.  The column might contain a lot of missing values. If the first 1000
+    rows contains on `NA`s, readr will guess that it's a character 
+    column, whereas you probably want to parse it as something more
+    specific.
+
+readr contains a challenging csv that illustrates both of these problems:
+
+```{r}
+challenge <- read_csv(readr_example("challenge.csv"))
+```
+
+Note the two outputs: you see the column specification that readr used, and you can see all the problems. It's always a good idea to explicitly pull out the `problems()` so you can explore them in more depth:
+
+```{r}
+problems(challenge)
+```
+
+A good strategy is to work column by column until there are no problems remaining. Here we can see that there are a lot of parsing problems with the `x` column - there are trailing characters after the integer value. That suggests we need to use a double vector instead.
+
+Start by copying and pasting the column specification into your original call:
+
+```{r, eval = FALSE}
+challenge <- read_csv(
+  readr_example("challenge.csv"), 
+  col_types = cols(
+    x = col_integer(),
+    y = col_character()
+  )
+)
+```
+
+Then you can tweak the type of the `x` column:
+
+```{r}
+challenge <- read_csv(
+  readr_example("challenge.csv"), 
+  col_types = cols(
+    x = col_double(),
+    y = col_character()
+  )
+)
+```
+
+That fixes the first problem, but if we look at the last few rows, you'll see that they're dates stored in a character vector:
+
+```{r}
+tail(challenge)
+```
+
+You can fix that by specifying that `y` is date column:
+
+```{r}
+challenge <- read_csv(
+  readr_example("challenge.csv"), 
+  col_types = cols(
+    x = col_double(),
+    y = col_date()
+  )
+)
+tail(challenge)
+```
+
+Every `parse_xyz()` function has a corresponding `col_xyz()` function. You use `parse_xyz()` when the data is in a character vector in R already; you use `col_xyz()` when you want to tell readr how to load the data.
+
+I highly recommend building up a complete column specification using the print out provided by readr. This ensures that you have a consistent reproducible way of reading the file - if you rely on the default guesses, if your data changes readr will continue to read it in. If you want to be really strict, use `stop_for_problems()`: that will throw an error if there are any parsing problems.
+
+### Other strategies:
+
+*   In this case we just got unlucky, and if we'd looked at just
+    a few more rows, we could have correctly parsed in one shot:
+   
+    ```{r}
+    challenge2 <- read_csv(readr_example("challenge.csv"), guess_max = 1001)
+    challenge2
+    ```
+
+*   Sometimes it's easier to diagnose problems if you just read in all
+    the columns as character vectors:
+   
+    ```{r}
+    challenge2 <- read_csv(readr_example("challenge.csv"), 
+      col_types = cols(.default = col_character())
+    )
+    ```
+    
+    This is particularly useful in conjunction with `type_convert()`,
+    which applies the parsing heuristics to the character columns in a data
+    frame. It's useful if you've loaded data "by hand", and now want to
+    convert character columns to the appropriate type:
+
+    ```{r}
+    df <- tibble::tibble(
+       x = c("1", "2", "3"), 
+       y = c("1.21", "2.32", "4.56")
+    )
+    df
+    # Note the column types
+    type_convert(df)
+    ```
+    
+*   If you're reading a very large file, you might want to set `n_max` to
+    10,000 or 100,000. That will speed up iterations while you're finding
+    common problems
+
+*   If you're having major parsing problems, sometimes it's easier
+    to just read into a character vector of lines with `read_lines()`,
+    or even a character vector of length 1 with `read_file()`. Then you
+    can use the string parsing skills you'll learn later to parse
+    more exotic formats.
+
+## Writing to a file
+
+readr also comes with two useful functions for writing data back to disk: `write_csv()` and `write_tsv()`. They:
+
+* Are faster than the base R equvalents.
+
+* Never write rownames, and quote only when needed. 
+
+* Always encode strings in UTF-8.  If you want to export a csv file to 
+  Excel, use `write_excel_csv()` - this writes a special character 
+  (a "byte order mark") at the start of the file which forces Excel 
+  to use UTF-8.
+  
+* Save dates and datetimes in ISO8601 format so they are easily
+  parsed elsewhere.
+
+The most important arguments are `x` (the data frame to save), and `path` (the location to save it). You can also specify how missing values are written with `na`, and if you want to `append` to an existing file.
+
+```{r, eval = FALSE}
+write_csv(challenge, "challenge.csv")
+```
+
+Note that the type information is lost when you save to csv:
+
+```{r, warning = FALSE}
+challenge
+write_csv(challenge, "challenge-2.csv")
+read_csv("challenge-2.csv")
+```
+
+This makes csvs a little unreliable for caching interim results - you need to recreate the column specification every time you load in.  There are two alternatives:
+
+1.  `write_rds()` and `read_rds()` are wrappers around the base functions
+    `readRDS()` and `saveRDS()`. These store data in R's custom binary
+    format:
+    
+    ```{r}
+    write_rds(challenge, "challenge.rds")
+    read_rds("challenge.rds")
+    ```
+  
+1.  The feather package implements a fast binary file format that can
+    be shared across programming languages:
+    
+    ```{r}
+    library(feather)
+    write_feather(challenge, "challenge.feather")
+    read_feather("challenge.feather")
+    ```
+
+feather tends to be faster than rds and is usable outside of R. `rds` supports list-columns (which you'll learn about in [[Many models]]), which feather does not yet.
+
+```{r, include = FALSE}
+file.remove("challenge-2.csv")
+file.remove("challenge.rds")
+file.remove("challenge.feather")
+```
 
 ## Other types of data
 
