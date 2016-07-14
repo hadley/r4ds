@@ -231,10 +231,14 @@ filter(df, is.na(x) | x > 1)
     1. That were delayed by more two hours.
     1. That flew to Houston (`IAH` or `HOU`).
     1. There were operated by United, American, or Delta.
-    1. Departed in summer.
+    1. Departed in summer (July, August, and September).
     1. That arrived more than two hours late, but didn't leave late.
     1. Were delayed by at least an hour, but made up over 30 minutes in flight.
-    1. Departed between midnight and 6am.
+    1. Departed between midnight and 6am (inclusive).
+
+1.  Another useful dplyr filtering helper is `between()`. What does it do?
+    Can you use it to simplify the code needed to answer the previous 
+    challenges?
 
 1.  How many flights have a missing `dep_time`? What other variables are 
     missing? What might these rows represent?
@@ -314,7 +318,7 @@ There are a number of helper functions you can use within `select()`:
 
 * `matches("(.)\\1")`: selects variables that match a regular expression.  
    This one matches any variables that contain repeated characters. You'll 
-   learn more about regular expressions in Chapter XYZ.
+   learn more about regular expressions in [strings].
    
 *  `num_range("x", 1:3)` matches `x1`, `x2` and `x3`.
    
@@ -520,9 +524,8 @@ ggplot(flights, aes(air_time - airtime2)) + geom_histogram()
 1.  Compare `airtime` with `arr_time - dep_time`. What do you expect to see?
     What do you see? Why?
 
-1.  Find the 10 most delayed flights each day using a ranking function. 
-    How do you want to handle ties? Carefully read the documentation for
-    `min_rank()`.
+1.  Find the 10 most delayed flights using a ranking function. How do you want 
+    to handle ties? Carefully read the documentation for `min_rank()`.
 
 ## Grouped summaries with `summarise()`
 
@@ -558,7 +561,7 @@ delay <- filter(delay, count > 20, dest != "HNL")
 # Interesting it looks like delays increase with distance up to 
 # ~750 miles and then decrease. Maybe as flights get longer there's
 # more ability to make up delays in the air?
-ggplot(delay, aes(dist, delay)) +
+ggplot(data = delay, mapping = aes(x = dist, y = delay)) +
   geom_point(aes(size = count), alpha = 1/3) +
   geom_smooth(se = FALSE)
 ```
@@ -629,10 +632,10 @@ Whenever you do any aggregation, it's always a good idea to include either a cou
 delays <- not_cancelled %>% 
   group_by(tailnum) %>% 
   summarise(
-    delay = mean(arr_delay), n()
+    delay = mean(arr_delay)
   )
 
-ggplot(delays, aes(delay)) + 
+ggplot(data = delays, mapping = aes(x = delay)) + 
   geom_histogram(binwidth = 10)
 ```
 
@@ -648,7 +651,7 @@ delays <- not_cancelled %>%
     n = n()
   )
 
-ggplot(delays, aes(n, delay)) + 
+ggplot(data = delays, mapping = aes(x = n, y = delay)) + 
   geom_point()
 ```
 
@@ -659,7 +662,7 @@ When looking at this sort of plot, it's often useful to filter out the groups wi
 ```{r}
 delays %>% 
   filter(n > 25) %>% 
-  ggplot(aes(n, delay)) + 
+  ggplot(mapping = aes(x = n, y = delay)) + 
     geom_point()
 ```
 
@@ -678,18 +681,19 @@ There's another common variation of this type of pattern. Let's look at how the 
     control who gets to play, and obviously they'll pick their best players.
 
 ```{r}
-batting <- tbl_df(Lahman::Batting)
+# Convert to a tibble so it prints nicely
+batting <- tibble::as_tibble(Lahman::Batting)
 
 batters <- batting %>% 
   group_by(playerID) %>% 
   summarise(
-    ba = sum(H) / sum(AB),
-    ab = sum(AB)
+    ba = sum(H, na.rm = TRUE) / sum(AB, na.rm = TRUE),
+    ab = sum(AB, na.rm = TRUE)
   )
 
 batters %>% 
   filter(ab > 100) %>% 
-  ggplot(aes(ab, ba)) +
+  ggplot(mapping = aes(x = ab, y = ba)) +
     geom_point() + 
     geom_smooth(se = FALSE)
 ```
@@ -760,8 +764,8 @@ Just using means, counts, and sum can get you a long way, but R provides many ot
     ```{r}
     not_cancelled %>% 
       group_by(year, month, day) %>% 
-      mutate(r = rank(desc(dep_time))) %>% 
-      filter(r %in% c(1, n()))
+      mutate(r = min_rank(desc(dep_time))) %>% 
+      filter(r %in% range(r))
     
     not_cancelled %>% 
       group_by(year, month, day) %>% 
