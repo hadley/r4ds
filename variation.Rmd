@@ -19,6 +19,8 @@ EDA is not a formal process with a strict set of rules: you must be free to inve
 
 This chapter will point you towards many other interesting packages, more so than any other chapter in the book.
 
+Also recommend the ggplot2 book <https://amzn.com/331924275X>. The 2nd edition was recently published so it's up-to-date. Contains a lot more details on visualisation. Unfortunately it's not free, but if you're at a university you can get electronic version for free through SpringerLink. This book doesn't contain as much visualisation as it probably should because you can use ggplot2 book as a reference as well.
+
 ### Prerequisites
 
 In this chapter we'll combine what you've learned about dplyr and ggplot2 to iteratively ask questions, answer them with data, and then ask new questions.
@@ -66,6 +68,8 @@ The rest of this chapter will look at these two questions. I'll explain what var
     row. 
 
 For now, assume all the data you see in this book is be tidy. You'll encounter lots of other data in practice, so we'll come back to these ideas again in [tidy data] where you'll learn how to tidy messy data.
+
+
 
 ## Variation
 
@@ -246,14 +250,14 @@ If you've encountered unusual values in your dataset, and simply want to move on
       mutate(y = ifelse(y < 3 | y > 20, NA, y))
     ```
 
-ggplot2 subscribes to the philosophy that missing values should never silently go missing. However, it's not obvious where you should plot missing values, so ggplot2 doesn't display in the plot, but does warn that they're been removed. 
+ggplot2 subscribes to the philosophy that missing values should never silently go missing. It's not obvious where you should plot missing values, so ggplot2 doesn't include them in the plot, but does warn that they're been removed:
 
 ```{r}
 ggplot(data = diamonds2, mapping = aes(x = x, y = y)) + 
   geom_point()
 ```
 
-You can suppress that warning with `na.rm = TRUE`:
+To suppress that warning, set `na.rm = TRUE`:
 
 ```{r}
 ggplot(data = diamonds2, mapping = aes(x = x, y = y)) + 
@@ -363,15 +367,12 @@ ggplot(data = mpg) +
   coord_flip()
 ```
 
-If you wish to add more information to your boxplots, use `geom_violin()`. In a violin plot, the width of the "box" displays a kernel density estimate of the shape of the distribution.
-
-```{r}
-ggplot(data = mpg) +
-  geom_violin(aes(x = reorder(class, hwy, FUN = median), y = hwy)) +
-  coord_flip()
-```
-
 #### Exercises
+
+1.  What variable in the diamonds dataset is most important for predicting
+    the price of a diamond? How is that variable correlated with cut?
+    Why does that combination lead to lower quality diamonds being more
+    expensive.
 
 1.  Install the ggstance pacakge, and create a horizontal boxplot.
 
@@ -386,6 +387,10 @@ ggplot(data = mpg) +
     or coloured `geom_freqpoly()`. What are the pros and cons of each 
     method?
 
+1.  If you have a small dataset, it's sometimes useful to use `geom_jitter()`
+    to see the relationship between a continuous and categorical variable.
+    The ggbeeswarm package provides a number of methods similar to 
+    `geom_jitter()`. List them and briefly describe what each one does.
 
 ### Visualizing two categorical variables
 
@@ -411,9 +416,9 @@ diamonds %>%
   geom_raster(aes(fill = n))
 ```
 
-If the categorical variables are unordered, you might want to use the seriation package to simultaneously reorder the rows and columns in order to more clearly reveal interesting patterns.
+If the categorical variables are unordered, you might want to use the seriation package to simultaneously reorder the rows and columns in order to more clearly reveal interesting patterns. For larger plots, you might want to try the d3heatmap or heatmaply packages which creative interactive plots.
 
-### Exercises
+#### Exercises
 
 1. How could you rescale the count dataset above to more clearly see
    the differences across colours or across cuts?
@@ -421,286 +426,112 @@ If the categorical variables are unordered, you might want to use the seriation 
 1. Use `geom_raster()` together with dplyr to explore how average flight
    delays vary by destination and month of year. 
 
-1. Use the `seriation` to reorder 
-
 ### Vizualizing two continuous variables
 
-Visualize covariation between two continuous variables with a scatterplot, i.e. `geom_point()`. Covariation will appear as a structure or pattern in the data points. For example, an exponential relationship seems to exist between the carat size and price of a diamond.
+You've already seen one great way to visualise the covariation between two continuous variables: a scatterplot, i.e. `geom_point()`. Covariation will appear as a structure or pattern in the data points. For example, an exponential relationship seems to exist between the carat size and price of a diamond.
 
 ```{r}
 ggplot(data = diamonds) +
   geom_point(aes(x = carat, y = price))
 ```
 
-Scatterplots become less useful as the size of your dataset grows, because points begin to pile up into areas of uniform black (as above). You can make patterns clear again with `geom_bin2d()`, `geom_hex()`, or  `geom_density2d()`.
+Scatterplots become less useful as the size of your dataset grows, because points begin to pile up into areas of uniform black (as above). You can make patterns clear by binning the data with `geom_bin2d()` or `geom_hex()`.
 
 `geom_bin2d()` and `geom_hex()` divide the coordinate plane into two dimensional bins and then use a fill color to display how many points fall into each bin. `geom_bin2d()` creates rectangular bins. `geom_hex()` creates hexagonal bins. You will need to install the hexbin package to use `geom_hex()`.
 
 ```{r fig.show='hold', fig.width=3}
-ggplot(data = diamonds) +
+ggplot(data = smaller) +
   geom_bin2d(aes(x = carat, y = price))
 
 # install.packages("hexbin")
-ggplot(data = diamonds) +
+ggplot(data = smaller) +
   geom_hex(aes(x = carat, y = price))
 ```
 
-`geom_density2d()` fits a 2D kernel density estimation to the data and then uses contour lines to highlight areas of high density. It is very useful for overlaying on raw data even when your dataset is not big.
-
-Splitting 
+Another option is to use grouping to discretize a continuous variable. Then you can use one of the techniques for visualising the combination of a discrete and a continuous variable.
 
 ```{r}
-ggplot(data = faithful, aes(x = eruptions, y = waiting)) +
-  geom_point() +
-  geom_density2d()
+ggplot(data = smaller, mapping = aes(x = carat, y = price)) + 
+  geom_boxplot(aes(group = cut_width(carat, 0.1)))
 ```
 
-### Asking questions about covariation
+By default, boxplots look roughly the same (apart from number of outliers) regardless of how many observations there are. If you want the width of the boxplot to be proportional to the number of points, set `varwidth = TRUE`.
+
+#### Exercises
+
+
+## Asking questions about covariation
 
 When you explore plots of covariation, look for the following sources of insight:
 
-* *Outliers* 
+### Outliers
 
-    Two dimensional plots reveal outliers that are not visible in one dimensional plots. For example, some points in the plot below have an unusual combination of $x$ and $y$ values, which makes the points outliers even though their $x$ and $y$ values appear normal when examined separately.
-    
-    ```{r echo = FALSE}
-    ggplot(data = diamonds) +
-      geom_point(aes(x = x, y = y)) +
-      coord_cartesian(xlim = c(3, 12), ylim = c(3, 12))
-    ```
-
-
-* *Clusters*
-
-    Two dimensional plots can also reveal clusters that may not be visible in one dimensional plots. For example, the two dimensional pattern in the plot below reveals two clusters, a separation that is not visible in the distribution of either variable by itself, as verified with a rug geom.
-
-    ```{r echo = FALSE, fig.height = 3}
-    ggplot(data = iris, aes(y = Sepal.Length, x = Sepal.Width)) +
-      geom_jitter() +
-      geom_density2d(h= c(1,1)) +
-      geom_rug(position = "jitter")
-    ```
-
-* *Patterns*
-
-    Patterns in your data provide clues about relationships. If a systematic relationship exists between two variables it will appear as a pattern in the data. If you spot a pattern, ask yourself:
-    
-    + Could this pattern be due to coincidence (i.e. random chance)?
-    
-    + How can you describe the relationship implied by the pattern?
-    
-    + How strong is the relationship implied by the pattern?
-    
-    + What other variables might affect the relationship?
-    
-    + Does the relationship change if you look at individual subgroups of the data?
-    
-    A scatterplot of Old Faithful eruption lengths versus the wait time between eruptions shows a pattern: longer wait times are associated with longer eruptions. The scatterplot also displays the two clusters that we noticed above.
-    
-    ```{r echo = FALSE, message = FALSE, fig.height = 2}
-    ggplot(faithful) + geom_point(aes(x = eruptions, y = waiting))
-    ``` 
-
-    Patterns provide one of the most useful tools for data scientists because they reveal covariation. If you think of variation as a phenomenon that creates uncertainty, covariation is a phenomenon that reduces it. If two variables covary, you can use the values of one variable to make better predictions about the values of the second. If the covariation is due to a causal relationship (a special case), then you can use the value of one variable to control the value 
-  of the second.
-
-### Visualizing three or more variables
-
-In general, outliers, clusters, and patterns become easier to spot as you look at the interaction of more and more variables. However, as you include more variables in your plot, data becomes harder to visualize.
-
-You can extend scatterplots into three dimensions with the plotly, rgl, rglwidget, and threejs packages (among others). Each creates a "three dimensional," graph that you can rotate with your mouse. Below is an example from plotly, displayed as a static image.
-
-```{r eval = FALSE}
-library(plotly)
-plot_ly(data = iris, x = Sepal.Length, y = Sepal.Width, z = Petal.Width, 
-        color = Species, type = "scatter3d", mode = "markers")
-```
-
-```{r, echo = FALSE}
-knitr::include_graphics("images/EDA-plotly.png")
-```
-
-You can extend this approach into n-dimensional hyperspace with the ggobi package, but you will soon notice a weakness of multidimensional graphs. You can only visualize multidimensional space by projecting it onto your two dimensional retinas. In the case of 3D graphics, you can combine 2D projections with rotation to create an intuitive illusion of 3D space, but the illusion ceases to be intuitive as soon as you add a fourth dimension.
-
-This doesn't mean that you should ignore complex interactions in your data. You can explore multivariate relationships in several ways. You can
-
-* visualize each combination of variables in a multivariate relationship, two at a time
-
-* use aesthetics and facetting to add additional variables to a 2D plot
-
-* use a clustering algorithm to spot clusters in multivariate space
-
-* use a modeling algorithm to spot patterns and outliers in multivariate space
-
-## Clusters
-
-Cluster algorithms are automated tools that seek out clusters in n-dimensional space for you. Base R provides two easy to use clustering algorithms: hierarchical clustering and k means clustering.
-
-### Hierarchical clustering
-
-Hierarchical clustering uses a simple algorithm to locate groups of points that are near each other in n-dimensional space:
-
-1. Identify the two points that are closest to each other
-2. Combine these points into a cluster
-3. Treat the new cluster as a point
-4. Repeat until all of the points are grouped into a single cluster
-
-You can visualize the results of the algorithm as a dendrogram, and you can use the dendrogram to divide your data into any number of clusters. The figure below demonstrates how the algorithm would proceed in a two dimensional dataset. 
-
-```{r, echo = FALSE}
-knitr::include_graphics("images/EDA-hclust.png")
-```
-
-To use hierarchical clustering in R, begin by selecting the numeric columns from your data; you can only apply hierarchical clustering to numeric data. Then apply the `dist()` function to the data and pass the results to `hclust()`. `dist()` computes the distances between your points in the n dimensional space defined by your numeric vectors. `hclust()` performs the clustering algorithm.
+Two dimensional plots reveal outliers that are not visible in one dimensional plots. For example, some points in the plot below have an unusual combination of $x$ and $y$ values, which makes the points outliers even though their $x$ and $y$ values appear normal when examined separately.
 
 ```{r}
-small_iris <- sample_n(iris, 50)
-  
-iris_hclust <- small_iris %>% 
-  select(Sepal.Length, Sepal.Width, Petal.Length, Petal.Width) %>% 
-  dist() %>% 
-  hclust(method = "complete")
+ggplot(data = diamonds) +
+  geom_point(aes(x = x, y = y)) +
+  coord_cartesian(xlim = c(4, 11), ylim = c(4, 11))
 ```
 
-Use `plot()` to visualize the results as a dendrogram. Each observation in the dataset will appear at the bottom of the dendrogram labeled by its rowname. You can use the labels argument to set the labels to something more informative.
+### Clusters
 
-```{r fig.height = 4}
-plot(iris_hclust, labels = small_iris$Species)
+Two dimensional plots can also reveal clusters that may not be visible in one dimensional plots. For example, the two dimensional pattern in the plot below reveals two clusters, a separation that is not visible in the distribution of either variable by itself, as verified with a rug geom.
+
+```{r fig.height = 3}
+ggplot(data = iris, aes(y = Sepal.Length, x = Sepal.Width)) +
+  geom_jitter() +
+  geom_rug(position = "jitter")
 ```
 
-To see how near two data points are to each other, trace the paths of the data points up through the tree until they intersect. The y value of the intersection displays how far apart the points are in n-dimensional space. Points that are close to each other will intersect at a small y value, points that are far from each other will intersect at a large y value. Groups of points that are near each other will look like "leaves" that all grow on the same "branch." The ordering of the x axis in the dendrogram is somewhat arbitrary (think of the tree as a mobile, each horizontal branch can spin around meaninglessly). 
+### Patterns
 
-You can split your data into any number of clusters by drawing a horizontal line across the tree. Each vertical branch that the line crosses will represent a cluster that contains all of the points downstream from the branch. Move the line up the y axis to intersect fewer branches (and create fewer clusters), move the line down the y axis to intersect more branches and (create more clusters).
+Patterns in your data provide clues about relationships. If a systematic relationship exists between two variables it will appear as a pattern in the data. If you spot a pattern, ask yourself:
 
-`cutree()` provides a useful way to split data points into clusters. Give cutree the output of `hclust()` as well as the number of clusters that you want to split the data into. `cutree()` will return a vector of cluster labels for your dataset. To visualize the results, map the output of `cutree()` to an aesthetic.
++ Could this pattern be due to coincidence (i.e. random chance)?
 
-```{r}
-(clusters <- cutree(iris_hclust, 3))
++ How can you describe the relationship implied by the pattern?
 
-ggplot(small_iris, aes(x = Sepal.Width, y = Sepal.Length)) +
-  geom_point(aes(color = factor(clusters)))
-```
++ How strong is the relationship implied by the pattern?
 
-You can modify the hierarchical clustering algorithm by setting the method argument of hclust to one of "complete", "single", "average", or "centroid". The method determines how to measure the distance between two clusters or a lone point and a cluster, a measurement that affects the outcome of the algorithm.
++ What other variables might affect the relationship?
 
-```{r, echo = FALSE}
-knitr::include_graphics("images/EDA-linkage.png")
-```
++ Does the relationship change if you look at individual subgroups of the data?
 
-* *complete* - Measures the greatest distance between any two points in the separate clusters. Tends to create distinct clusters and subclusters.
+A scatterplot of Old Faithful eruption lengths versus the wait time between eruptions shows a pattern: longer wait times are associated with longer eruptions. The scatterplot also displays the two clusters that we noticed above.
 
-* *single* - Measures the smallest distance between any two points in the separate clusters. Tends to add points one at a time to existing clusters, creating ambiguously defined clusters.
+```{r echo = FALSE, message = FALSE, fig.height = 2}
+ggplot(faithful) + geom_point(aes(x = eruptions, y = waiting))
+``` 
 
-* *average* - Measures the average distance between all combinations of points in the separate clusters. Tends to add points one at a time to existing clusters.
-
-* *centroid* - Measures the distance between the average location of the points in each cluster.
-
-
-```{r fig.height = 4}
-small_iris %>% 
-  select(Sepal.Length, Sepal.Width, Petal.Length, Petal.Width) %>% 
-  dist() %>% 
-  hclust(method = "single") %>% 
-  plot(labels = small_iris$Species)
-```
-
-
-### K means clustering
-
-K means clustering provides a simulation based alternative to hierarchical clustering. It identifies the "best" way to group your data into a predefined number of clusters. The figure below visualizes (in two dimensional space) the k means algorithm:
-
-1. Randomly assign each data point to one of $k$ groups
-2. Compute the centroid of each group
-3. Reassign each point to the group whose centroid it is nearest to
-4. Repeat steps 2 and 3 until group memberships cease to change
-
-```{r, echo = FALSE}
-knitr::include_graphics("images/EDA-kmeans.png")
-```
-
-Use `kmeans()` to perform k means clustering with R. As with hierarchical clustering, you can only apply k means clustering to numerical data. Pass your numerical data to the `kmeans()` function, then set `center` to the number of clusters to search for ($k$) and `nstart` to the number of simulations to run. Since the results of k means clustering depend on the initial assignment of points to groups, which is random, R will run `nstart` simulations and then return the best results (as measured by the minimum sum of squared distances between each point and the centroid of the group it is assigned to). Finally, set the maximum number of iterations to let each simulation run in case the simulation cannot quickly find a stable grouping.
-
-```{r}
-iris_kmeans <- small_iris %>% 
-  select(Sepal.Length, Sepal.Width, Petal.Length, Petal.Width) %>% 
-  kmeans(centers = 3, nstart = 20, iter.max = 50)
-
-iris_kmeans$cluster
-```
-
-Unlike `hclust()`, the k means algorithm does not provide an intuitive visual interface. Instead, `kmeans()` returns a kmeans class object. Subset the object with `$cluster` to access a list of cluster assignments for your dataset, e.g. `iris_kmeans$cluster`. You can visualize the results by mapping them to an aesthetic, or you can apply the results by passing them to dplyr's `group_by()` function.
-
-```{r}
-ggplot(small_iris, aes(x = Sepal.Width, y = Sepal.Length)) +
-  geom_point(aes(color = factor(iris_kmeans$cluster)))
-
-small_iris %>% 
-  group_by(iris_kmeans$cluster) %>% 
-  summarise(n_obs = n(), avg_width = mean(Sepal.Width), avg_length = mean(Sepal.Length))
-```
-
-
-### Asking questions about clustering
-
-Ask the same questions about clusters that you find with `hclust()` and `kmeans()` that you would ask about clusters that you find with a graph. Ask yourself:
-
-* Do the clusters seem to identify real differences between your points? How can you tell?
-
-* Are the points within each cluster similar in some way?
-
-* Are the points in separate clusters different in some way?
-
-* Might there be a mismatch between the number of clusters that you found and the number that exist in real life? Are only a couple of the clusters meaningful? Are there more clusters in the data than you found?
-
-* How stable are the clusters if you rerun the algorithm?
-
-Keep in mind that both algorithms _will always_ return a set of clusters, whether your data appears clustered or not. As a result, you should always be skeptical about the results. They can be quite insightful, but there is no reason to treat them as a fact without doing further research. 
+Patterns provide one of the most useful tools for data scientists because they reveal covariation. If you think of variation as a phenomenon that creates uncertainty, covariation is a phenomenon that reduces it. If two variables covary, you can use the values of one variable to make better predictions about the values of the second. If the covariation is due to a causal relationship (a special case), then you can use the value of one variable to control the value 
+of the second.
 
 ## Models
 
-A model is a type of summary that describes the relationships in your data. You can use a model to reveal patterns and outliers that only appear in n-dimensional space. To see how this works, consider the simple linear model below. I've fit it to a two dimensional pattern so we can visualize the results.
+Models are a rich tool for extracting patterns out of data. 
 
-```{r echo = FALSE}
-diamonds2 <- filter(diamonds, x > 3, y > 3, y < 12)
-diamond_mod <- lm(y ~ x, data = diamonds2)
-resids <- broom::augment(diamond_mod)
-diamonds3 <- bind_rows(filter(resids, abs(.resid) > 0.5),  
-                       sample_n(filter(resids, abs(.resid) <= 0.5), 1000)) %>% 
-  select(x, y)
+For example, consider the diamonds data. It's hard to understand the relationship between cut and price, because cut and carat, and carat and price are tightly related. It's possible to use a model to remove the very strong relationship between price and carat so we we can explore the subtleties that remain.
 
-ggplot(diamonds3, aes(x = x, y = y)) +
-  geom_point() +
-  geom_smooth(method = lm, se = FALSE)
+```{r}
+library(modelr)
+
+mod <- lm(log(price) ~ log(carat), data = diamonds)
+
+diamonds2 <- diamonds %>% 
+  add_residuals(mod) %>% 
+  mutate(resid = exp(resid))
+
+ggplot(data = diamonds2, mapping = aes(x = carat, y = resid)) + 
+  geom_point()
 ```
 
-The model describes the relationship between x and y as 
-
-$$\hat{y} = 0.13 + 0.98 x$$
-
-which is the equation of the blue model line in the graph above. Even if we did not have the graph, we could use the model coefficients in the equation above to determine that a positive relationship exists between $y$ and $x$ such that a one unit increase in $x$ is associated with an approximately one unit increase in $y$. We could use a model statistic, such as adjusted $r^{2}$ to determine that the relationship is very strong (here adjusted $r^{2} = 0.99$).
-
-Finally, we could spot outliers in our data by examining the residuals of the model, which are the distances between the actual $y$ values of our data points and the $y$ values that the model would predict for the data points. Observations that are outliers in n-dimensional space will have residuals that are outliers in one dimensional space. You can find these outliers by plotting a histogram of the residuals or by visualizing the residuals against any variable in a two dimensional plot. 
-
-```{r echo = FALSE, fig.width = 3, fig.show='hold'}
-diamond_mod <- lm(y ~ x, data = diamonds3)
-resids <- broom::augment(diamond_mod)
-
-ggplot(resids) +
-  geom_histogram(aes(x = .resid), binwidth = 0.1)
-
-ggplot(resids) +
-  geom_point(aes(x = x, y = .resid))
+```{r}
+ggplot(data = diamonds2, mapping = aes(x = cut, y = resid)) + 
+  geom_boxplot()
 ```
-
-You can easily use these techniques with n-dimensional relationships that cannot be visualized easily. When you spot a pattern or outlier, ask yourself the same questions that you would ask when you spot a pattern or outlier in a graph. Then visualize the residuals of your model in various ways. If a pattern exists in the residuals, it suggests that your model does not accurately describe the pattern in your data.
 
 I'll postpone teaching you how to fit and interpret models with R until Part 4. Although models are something simple, descriptions of patterns, they are tied into the logic of statistical inference: if a model describes your data accurately _and_ your data is similar to the world at large, then your model should describe the world at large accurately. This chain of reasoning provides a basis for using models to make inferences and predictions. As a result, there is more to learn about models than we can examine here.
-
-## Exploring further
-
-> Every dataset contains more variables and observations than it displays. 
-
-You now know how to explore the variables displayed in your dataset, but you should know that these are not the only variables in your data. Nor are the observations that are displayed in your data the only observations. You can use the values in your data to compute new variables or to measure new (group-level) observations. These new variables and observations provide a further source of insights that you can explore with visualizations, clustering algorithms, and models.
 
 ## A last word on variables, values, and observations
 
@@ -709,6 +540,8 @@ Variables, values, and observations provide a basis for EDA: _if a relationship 
 Within any particular observation, the exact form of the relationship between variables may be obscured by mediating factors, measurement error, or random noise; which means that the patterns in your data will appear as signals obscured by noise. 
 
 Due to a quirk of the human cognitive system, the easiest way to spot signal amidst noise is to visualize your data. The concepts of variables, values, and observations have a role to play here as well. To visualize your data, represent each observation with its own geometric object, such as a point. Then map each variable to an aesthetic property of the point, setting specific values of the variable to specific levels of the aesthetic. You could also compute group-level statistics from your data (i.e. new observations) and map them to geoms, something that `geom_bar()`, `geom_boxplot()` and other geoms do for you automatically.
+
+You now know how to explore the variables displayed in your dataset, but you should know that these are not the only variables in your data. Nor are the observations that are displayed in your data the only observations. You can use the values in your data to compute new variables or to measure new (group-level) observations. These new variables and observations provide a further source of insights that you can explore with visualizations, clustering algorithms, and models.
 
 ## EDA and Data Science
 
