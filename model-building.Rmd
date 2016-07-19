@@ -2,25 +2,19 @@
 
 In the previous chapter you learned how some basic models worked, and learned some basic tools for understanding what a model is telling you about your data. In this chapter, we're going talk more about the model building process: how you start from nothing, and end up with a good model. 
 
-* Regression modelling strategies.
-
 We are going to focus on predictive models, how you can use simple fitted models to help better understand your data. Many of the models will be motivated by plots: you'll use a model captures to strong signals in the data so you can focus on what remains. This is a different motivation from most introductions to modelling, but if you go on to more traditional coverage, you can apply these same ideas to help you understand what's going on.
 
 We're going to give you a basic strategy, and point you to places to learn more. The key is to think about data generated from your model as regular data - you're going to want to manipulate it and visualise it in many different ways. Being good at modelling is a mixture of having some good general principles and having a big toolbox of techniques. Here we'll focus on general techniques to help you undertand what your model is telling you.
 
-
 In the course of modelling, you'll often discover data quality problems. Maybe a missing value is recorded as 999. Whenever you discover a problem like this, you'll need to review an update your import scripts. You'll often discover a problem with one variable, but you'll need to think about it for all variables. This is often frustrating, but it's typical.
-
-
-
-
-
 
 The way we're going to work is to subtract patterns from the data, while adding them to the model. The goal is to transition from implicit knowledge in the data and your head to explicit knowledge in a quantitative model. This makes it easier to apply to new domains, and easier for others to use. 
 
 If you had a "perfect" model the residuals would be perfectly independent noise. But "perfect" is not always what you strive for: sometimes you actually want a model that leaves some signal on the table because you want a model that is simpler, faster, or easier to understand.
 
 For very large and complex datasets this is going to be a lot of work. There are certainly alternative approaches - a more machine learning approach is simply to focus on improving the predictive ability of the model, being careful to fairly assess it (i.e. not assessing the model on the data that was used to train it). These approaches tend to produce black boxes - i.e. the model does a really good job, but you don't know why. This is fine, but the main problem is that you can't apply your real world knowledge to the model to think about whether or not it's likely to work in the long-term, as fundamentals change. For most real models, I'd expect you to use some combination of this approach and a ML model building approach. If prediction is important, get to a good point, and then use visulisation to understand the most important parts of the model.
+
+As we proceed through this chapter we'll continue to 
 
 > A long time ago in art class, my teacher told me "An artist needs to know 
 > when a piece is done. You can't tweak something into perfection - wrap it up. 
@@ -337,36 +331,37 @@ I think this is fine to do provided that you've carefully checked that the funct
 1.  Compare the predictions for each `wday` combined with `term` for the 
     `lm` and `rlm`
 
-## Case study: predicting flight delays
+### Interpolation vs extrapolation
 
-Finish off with a somewhat more realistic case study where we combine the techniques of visualising predictions and residuals to attack the problem of predicting flight delays.
+One danger with prediction plots is that it's easy to make predictions that are far away from the original data. This is dangerous because it's quite possible that the model (which is a simplification of reality) will no longer apply far away from observed values. 
 
-Can't predict delays for next year. Why not?  Instead we'll focus on predicting the amount that your flight will be delayed if it's leaving soon.  
+As the number of variables in your model grows ...  "the curse of dimensionality": as the number of variables increases the average distance between points increases. That means most of the space is very sparse, and you have to rely on strong assumptions.
 
-To tackle a problem like this, it's worthwhile to start with some brainstorming. More ideas will come to you as you proceed but it's a good idea to start by seeding the pot
+To help avoid this problem, it's good practice to include "nearby" observed data points in any prediction plot. These help you see if you're interpolating, making prediction "in between" existing data points, or extrapolating, making predictions about preivously unobserved slices of the data.
 
-* time of day
-* weather
-* plane?
-* number of flights
+One way to do this is to use `condvis::visualweight()`.
 
+<https://cran.rstudio.com/web/packages/condvis/>
 
-We'll start with some exploratory analysis, and then work on the model:
+### Nested variables
+
+Another case that occassionally crops up is nested variables: you have an identifier that is locally unique, not globally unique. For example you might have this data about students in schools:
 
 ```{r}
-
-delays <- flights %>% 
-  mutate(date = make_datetime(year, month, day)) %>% 
-  group_by(date) %>% 
-  summarise(delay = mean(arr_delay, na.rm = TRUE), cancelled = mean(is.na(dep_time)), n = n())
-
-# delays %>% 
-#   ggplot(aes(wday(date, label = TRUE), delay)) + 
-#     geom_boxplot()
-
-delays %>% 
-  ggplot(aes(n, delay)) + 
-    geom_point() + 
-    geom_smooth(se = F)
-
+students <- tibble::frame_data(
+  ~student_id, ~school_id,
+  1, 1,
+  2, 1,
+  1, 2,
+  1, 3,
+  2, 3,
+  3, 3
+)
 ```
+
+The student id only makes sense in the context of the school: it doesn't make sense to generate every combination of student and school. You can use `nesting()` for this case:
+
+```{r}
+students %>% expand(nesting(school_id, student_id))
+```
+

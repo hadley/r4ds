@@ -63,39 +63,27 @@ options(
 )
 ```
 
-### Simulated datasets
+```{r, include = FALSE}
+# (to be moved into modelr)
 
-(to be moved into modelr)
-
-```{r}
 # 1 con
 sim1 <- tibble(
   x = rep(1:10, each = 3),
-  y = 5 + x * 2 + rnorm(length(x), sd = 2)
+  y = x * 2 + 5 + rnorm(length(x), sd = 2)
 )
-ggplot(sim1) + geom_point(aes(x, y))
 
 # 1 cat
-means <- c(a = 1, b = 3, c = 6, d = 2)
+means <- c(a = 1, b = 8, c = 6, d = 2)
 sim2 <- tibble( 
   x = rep(names(means), each = 10),
   y = means[x] + rnorm(length(x))
 )
-ggplot(sim2) + geom_point(aes(x, y))
-
-# 1 cat + 1 con
-ints <- c(a = 1, b = 3, c = 6, d = 2)
-sim3 <- 
-  tidyr::crossing(x1 = 1:10, x2 = names(ints), rep = 1:3) %>% 
-  mutate(y = ints[x2] + 0.5 * x1 + rnorm(length(x1)), sd = 2)
-ggplot(sim3) + geom_point(aes(x1, y, colour = x2))
 
 # 1 cat + 1 con with interaction
-slopes <-  c(a = -0.2, b = -0.4, c = -0.1, d = 0.2)
+slopes <- c(a = -0.1, b = -0.8, c = -0.1, d = 0.2)
 sim4 <- 
-  tidyr::crossing(x1 = 1:10, x2 = names(ints), rep = 1:3) %>% 
-  mutate(y = ints[x2] + slopes[x2] * x1 + rnorm(length(x1)), sd = 2)
-ggplot(sim3) + geom_point(aes(x1, y, colour = x2))
+  tidyr::crossing(x1 = 1:10, x2 = factor(names(means)), rep = 1:3) %>% 
+  mutate(y = means[x2] + slopes[x2] * x1 + rnorm(length(x1)), sd = 2)
 
 # 2 con
 sim5 <- 
@@ -103,90 +91,91 @@ sim5 <-
   mutate(
     y = 2 * x1 - 3 * x2 + rnorm(length(x1), sd = 3)
   )
-ggplot(sim3) + geom_raster(aes(x1, x2, fill = y))
 
 # splines
 ```
 
 ## A simple model
 
-Lets take a look at the simulated dataset `sim1`. It contains two continuous variables `x` and `y` which are related in a fairly straightforward way.
+Lets take a look at the simulated dataset `sim1`. It contains two continuous variables, `x` and `y`, which are related in a fairly straightforward way:
 
 ```{r}
 ggplot(sim1, aes(x, y)) + 
   geom_point()
 ```
 
-You can see a strong pattern in the data and we can use a model to capture it. This data looks like it comes from a linear famiy, i.e. `y = a * x + b`. Let's start by randomly generating a few models from that family and overlaying them on the data:
+You can see a strong pattern in the data. We can use a model to capture that pattern and make it explicit. It's our job to supply the basic form of the model. In this case, the relationship looks linear, i.e. `y = a * x + b`. To fit the model, we need to find the single model from the family that does the best job for this data.
+
+Let's start by getting a feel for that family of models by randomly generating a few and overlaying them on the data. For this simple case, we can use `geom_abline()` which takes a slope and intercept as paramaters. Later on we'll learn more general techniques that work with any model.
 
 ```{r}
 models <- tibble(
-  a = runif(250, -20, 80),
-  b = runif(250, -5, 5)
+  a = runif(250, -5, 5),
+  b = runif(250, -20, 80)
 )
 
 ggplot(sim1, aes(x, y)) + 
-  geom_abline(aes(intercept = a, slope = b), data = models, alpha = 1/4) +
+  geom_abline(aes(slope = a, intercept = b), data = models, alpha = 1/4) +
   geom_point() 
 ```
 
-There are an infinite number of possible models, but some are obviously better than others. Intuitively, it seems reasonable that a good model should generate a line that's close to the data. How can we make that intuition concrete? 
+Of the 250 random models some seem much better than others. Intuitively, a good model will be close to the data. So to fit the model, finding the best model from this family, we need to make our intution precise. We need some way to measure the distance between the data and a model.
 
-First, we need a way to generate the predicted y values given a model and some data:
+First, we need a way to generate the predicted y values given a model and some data. Here we represent the model as a numeric vector of length two.
 
 ```{r}
 make_prediction <- function(mod, data) {
-  data$x * mod$b + mod$a
+  data$x * mod[1] + mod[2]
 }
-make_prediction(list(a = 1, b = 3), sim1)
+make_prediction(c(2, 5), sim1)
 ```
 
-Next, we need some way to measure the distance between the prediction and the actual actual values. A reasonable place to start is Euclidean distance
+Next, we need some way to compute an overall distance between the predicted and actual y for each observation. One common way to do this in statistics is the to use the "root-mean-squared deviation". We compute the difference between actual and predicted, square them, average them, and the take the square root. This distance has lots of appealing mathematical properties, which we're not going to talk about here. You'll just have to take my word for it!
 
 ```{r}
 measure_distance <- function(mod, data) {
   diff <- data$y - make_prediction(mod, data)
   sqrt(mean(diff ^ 2))
 }
-measure_distance(list(a = 1, b = 3), sim1)
+measure_distance(c(2, 5), sim1)
 ```
 
-Now we can use purrrr to compure the distance for all the models defined above.
+Now we can use purrrr to compure the distance for all the models defined above. We need a helper function because our distance function expects the model as a numeric vector of length 2.
 
 ```{r}
 sim1_dist <- function(a, b) {
-  mod <- list(a = a, b = b)
-    measure_distance(mod, sim1) 
+  measure_distance(c(a, b), sim1)
 }
 
 models <- models %>% mutate(dist = purrr::map2_dbl(a, b, sim1_dist))
 models
 ```
 
-And then overlay only the 10 best models on to the data. I've coloured the points by `-dist`: this is an easy way to make sure that the best models (i.e. the ones with the smallest distance) are coloured brightly.
+Next, let's overlay the 10 best models on to the data. I've coloured the models by `-dist`: this is an easy way to make sure that the best models (i.e. the ones with the smallest distance) get the brighest colours.
 
 ```{r}
 ggplot(sim1, aes(x, y)) + 
   geom_point(size = 2, colour = "grey30") + 
   geom_abline(
-    aes(intercept = a, slope = b, colour = -dist), 
+    aes(slope = a, intercept = b, colour = -dist), 
     data = filter(models, rank(dist) <= 10)
   )
 ```
 
-Another way of looking at this is to look at the 2d grid formed by the values of `a` and `b` that we sampled:
+Another way of looking to think about these models is to draw a scatterplot of `a` a `b`, again coloured colour by `-dist`. We can no longer see how the model compares to the data, but we can see many models at once. Again, I've highlight the 10 best models, this time by drawing red circles underneath them.
 
 ```{r}
 ggplot(models, aes(a, b)) +
+  geom_point(data = filter(models, rank(dist) < 10), size = 4, colour = "red") +
   geom_point(aes(colour = -dist))
 ```
 
-Instead of trying lots of random models we could be more systematic and generate an evenly spaced grid of points, a so called grid search:
+Instead of trying lots of random models, we could be more systematic and generate an evenly spaced grid of points, a so called grid search. I picked the parameters of the grid rougly by looking at where the best models where in the plot above.
 
 ```{r}
 grid <- expand.grid(
-  a = 5 + seq(-5, 5, length = 25) * 1,
-  b = 2 + seq(-5, 5, length = 25) * 0.15
+  a = seq(1, 3, length = 25),
+  b = seq(-5, 20, length = 25)
   ) %>% 
   mutate(dist = purrr::map2_dbl(a, b, sim1_dist))
 
@@ -196,53 +185,76 @@ grid %>%
   geom_point(aes(colour = -dist)) 
 ```
 
-All those models look pretty good:
+When you overlay the best 10 models back on the original data, they all look pretty good:
 
 ```{r}
 ggplot(sim1, aes(x, y)) + 
   geom_point(size = 2, colour = "grey30") + 
   geom_abline(
-    aes(intercept = a, slope = b, colour = -dist), 
+    aes(slope = a, intercept = b, colour = -dist), 
     data = filter(grid, rank(dist) <= 10)
   )
 ```
 
-You could imagine iteratively making the grid finer and finer until you narrowed in on the best model. A more efficient approach is to use a numerical minimisation tool called a Newton-Rhapson search. The intuition of Newton-Rhapson is pretty simple: you pick a starting point and look around for the steepest slope. You then ski down that slope a little way, and then repeat.
+Now you could imagine iteratively making the grid finer and finer until you narrowed in on the best model. But there's a better way to tackle that problem: a numerical minimisation tool called Newton-Rhapson search. The intuition of Newton-Rhapson is pretty simple: you pick a starting point and look around for the steepest slope. You then ski down that slope a little way, and then repeat again and again, until you can't go any lower. In R, we can do that with `optim()`:
 
 ```{r}
-best <- optim(c(0, 0), function(x) sim1_dist(x[1], x[2]))
+best <- optim(c(0, 0), measure_distance, data = sim1)
 best$par
 
 ggplot(sim1, aes(x, y)) + 
   geom_point(size = 2, colour = "grey30") + 
-  geom_abline(intercept = best$par[1], slope = best$par[2])
+  geom_abline(slope = best$par[1], intercept = best$par[2])
 ```
 
-You can that basic approach for any family of model that you can write an equation for. However, the specfic model we fit is a part of a broader class called linear models. We can use the `lm()` function to solve this specific problem. `lm()` has a special way to specify the model family: a formula like `y ~ x` which `lm()` translates to `y = a * x + b`. We can fit the model and look at the output:
+Don't worry too much about the details - it's the intutition that's important here. If you have a function that defines the distance between a model and a dataset you can use existing mathematical tools to find the best model. The neat thing about this approach is that it will work for family of models that you can write an equation for. 
+
+However, this particular model is a special case of a broader family: linear models. A linear model has the general form `y = a_1 * x_1 + a_2 * x_2 + ... + a_n * x_n`. So this simple model is equivalent to a general linear model where n is n, `a_1` is `a`, `x_1` is `x`, `a_2` is `b` and `x_2` is a constant, 1. R has a tool specifically designed for linear models called `lm()`. `lm()` has a special way to specify the model family: a formula like `y ~ x` which `lm()` translates to `y = a * x + b`. We can fit the model and look at the output:
 
 ```{r}
 sim1_mod <- lm(y ~ x, data = sim1)
-summary(sim1_mod)
+coef(sim1_mod)
 ```
 
-Generally, model functions will do something more sophisticated than a gradient search: for linear models based on linear algebra. Using connection between geometry, calculus, and linear algebra: the closest linear model to the data can always be found by constructing and then inverting a matrix.
+These are exactly the same values we got with `optim()`! However, behind the scenes `lm()` doesn't use `optim()` but instead takes advantage of the mathematical structure of linear models. Using some connection between geometry, calculus, and  linear algebra, it actually finds the closest model by (effectively) inverting a matrix.
+
+### Exercises
+
+1.  One downside of the linear model is that it is sensitive to unusual values
+    because the distance incorporates a squared term. Fit a linear model to 
+    the simulated data below, and visualise the results. Rerun a few times to
+    generate different simulated datasets. What do you notice about the model? 
+    
+    ```{r}
+    sim1a <- tibble(
+      x = rep(1:10, each = 3),
+      y = x * 1.5 + 6 + rt(length(x), df = 2)
+    )
+    ```
+
+1.  One way to make linear models more robust is to use a different distance
+    measure. For example, instead of root-mean-squared distance, you could use
+    mean-absolute distance:
+    
+    ```{r}
+    measure_distance <- function(mod, data) {
+      diff <- data$y - make_prediction(mod, data)
+      mean(abs(diff))
+    }
+    ```
+    
+    Use `optim()` to fit this model to the simulated data above and compare it 
+    to the linear model.
 
 ## Linear models
 
-For simple models, like this one, you can figure out what the model says about the data by carefully studying the coefficients. If you ever take a formal statistics course on modelling, you'll spend a lot of time doing that. Here, however, we're going to take a different tack. In this book, we're going to focus on understanding a model by looking at its predictions. This has a big advantage: every type of model makes predictions (otherwise what use would it be?) so we can use the same set of techniques to understand simple linear models or complex random forrests. We'll see that advantage later on when we explore some other families of models.
+For simple models, like the one above, you can figure out what the model says about the data by carefully studying the coefficients. And if you ever take a statistics course on modelling, you're likely to spend a lot of time doing just that. Here, however, we're going to take a different tack. In this book, we're going to focus on understanding a model by looking at its predictions. This has a big advantage: every type of model makes predictions (otherwise what use would it be?) so we can use the same set of techniques to understand simple linear models or complex random forrests. We'll see that advantage later on when we explore some other families of models.
 
-1.  Make predictions across a uniform grid to understand the "shape" of 
-    the model.
-   
-1.  Subtract predictions from the actual values to look at the residuals
-    and to learn what the model misses.
-    
-1.  Create succinct numerical summaries when you need to compare 
-    many models.
+We are also going to take advantage of a powerful feature of linear models: they are additive. That means you can partition the data into pattern and residuals. This allows us to see what subtler patterns remain after we have removed the biggest trned.
 
 ### Predictions
 
-To visualise the predictions from a model, we start by generating an evenly spaced grid of values that covers the region where our data lies. The easiest way to do that is to use `tidyr::expand()`. It's first argument is a data frame, and for each subsequent argument it finds the unique variables and then generates all combinations:
+To visualise the predictions from a model, we start by generating an evenly spaced grid of values that covers the region where our data lies. The easiest way to do that is to use `tidyr::expand()`. Its first argument is a data frame, and for each subsequent argument it finds the unique variables and then generates all combinations:
 
 ```{r}
 grid <- sim1 %>% expand(x) 
@@ -251,28 +263,28 @@ grid
 
 (This will get more interesting when we start to add more variables to our model.)
 
-Next we add predicitons. We'll use `modelr::add_predictions()` which works in exactly the same way as `add_residuals()`, but just compute predictions (so doesn't need a data frame that contains the response variable:)
+Next we add predictions. We'll use `modelr::add_predictions()` which takes a data frame and a model. It adds the predictions from the model to the data frame:
 
 ```{r}
-grid <- grid %>% add_predictions(sim1_mod, "y") 
+grid <- grid %>% add_predictions(sim1_mod) 
 grid
 ```
 
-And then we plot the predictions. Here the choice of plots is pretty obvious because we only havee two variables. In general, however, figuring out how to the visualise the predictions can be quite challenging, and you'll often need to try a few alternatives before you get the most useful plot. For more complex models, you're likely to need multiple plots, not just one.
+Next, we plot the predictions. Here the choice of plot is easy because we only have two variables. In general, however, figuring out how to the visualise the predictions can be quite challenging, and you'll often need to try a few alternatives before you get the most useful plot. For more complex models, you're likely to need multiple plots, not just one.
 
 ```{r}
-ggplot(sim1, aes(x, y)) +
-  geom_point() +
-  geom_line(data = grid, colour = "red", size = 1)
+ggplot(sim1, aes(x)) +
+  geom_point(aes(y = y)) +
+  geom_line(aes(y = pred), data = grid, colour = "red", size = 1)
 ```
 
-This is exactly what `geom_smooth()` does for you behind the scenes!
+Note that this plot takes advantage of ggplot2's ability to plot different datasets with different aesthetics on different layers.
 
 ### Residuals
 
-The flip-side of predictions are residuals. The predictions tell you what the model is doing; the residuals tell you what the model is missing. The residuals are just the distances between the observed and predicted values that we computed above!
+The flip-side of predictions are __residuals__. The predictions tells you the pattern that the model has captured, and the residuals tell you what the model has missed. The residuals are just the distances between the observed and predicted values that we computed above!
 
-We can compute residuals with `add_residuals()`. Note that we computing residuals, you'll use the original dataset, not a manufactured grid. Otherwise where would you get the value of the response?
+We add residuals to the data with `add_residuals()`, which works much like `add_predictions()`. Note, however, that we use the original dataset, not a manufactured grid. Otherwise where would you get the value of the response?
 
 ```{r}
 sim1 <- sim1 %>% add_residuals(sim1_mod)
@@ -287,150 +299,152 @@ ggplot(sim1, aes(resid)) +
 
 (I prefer the frequency polygon over the histogram here because it makes it easier to display other categorical variables on the same plot.)
 
-For many problems, the sign of the residual (i.e. whether the prediction is too high or too low) isn't important, and you might just want to focus on the magnitude of the residuals. You can do that by plotting the absolute value:
+Another way is to plot the residuals against the other variables in the dataset:
 
 ```{r}
-ggplot(sim1, aes(abs(resid))) + 
-  geom_freqpoly(binwidth = 0.25, boundary = 0)
+ggplot(sim1, aes(x, resid)) + 
+  geom_point()
 ```
 
-For real data, you'll also explore explore how the residuals vary with other variables in the data. You'll see that in the next chapter.
+There doesn't seem to be any pattern remaining here.
 
 ### Exercises
 
-1.  In the plot of the absolute residuals, there's a bin smaller than 
-    zero. What does this bin represent, and why is it necessary?
-    
-1.  P-values are an important part of model interpretation, particularly in 
-    science, that we're not going to talk much about. <https://xkcd.com/882/>
+1.  Instead of using `lm()` to fit a straight line, you can use `loess()`
+    to fit a smooth curve. Repeat the process of model fitting, 
+    grid generation, predictions, and visualisation on `sim1` using 
+    `loess()` instead of `lm()`. How does the result compare to 
+    `geom_smooth()`?
 
-## Other predictors
+## Formulas and model families
 
-In most cases, like this one, a single variable is not enough to generate a useful model. Instead we need multiple variables in the model, which you can include with either `+` or `*` in the modelling formula. 
+The linear model formula gives a short-hand for writing out model specifications. 
 
-The distinction between `+` and `*` is important:
+* `y ~ x` -> `y = a_0 + a_1 * x`
+* `y ~ x - 1` -> `y = a_1 * x`
 
-* `x + y` adds the variables independently: the model will estimate the
-  effect of `x` and the effect of `y` completely separately. 
-  
-* `x * y` will estimate the effect of the model together. 
+If you want to 
 
-We'll explore what this means in the sections below, as we add more categorical and continuous variables to the dataset.
+* `y ~ x1 + x2` -> `y = a_0 + a_1 * x1 + a_2 * x2`
 
-### Missing values
+These each estimate the each of `x1` and `x2`
 
+* `y ~ x1 * x2` -> `y = a_0 + a_1 * a1 + a_2 * a2 + a_12 * a1 * a2`
 
-### Categorical data
+* `y ~ x1 + x2 + x1:x2` is the same thing.
 
-#### Factors
+### Categorical variables
 
-R stores categorical data as factors. If you add a string to a model, R will convert it to a factor for the purposes of the model.
+This is straightforward when the predictor is continuous, but things get a bit more complicated when the predictor is categorical. Imagine you have a formula like `y ~ sex`, where sex could either be male or female. It doesn't make sense to convert that to a formula like `y = x_0 + x_1 * sex` because `sex` isn't a number - you can't multiply it! Instead what R does is convert it to `y = x_0 + x_1 * sex_male` where `sex_male` is one if `sex` is male and 0 otherwise.
 
-A factor is an integer vector with a levels attribute. You can make a factor with `factor()`.
+You might wonder why R doesn't convert it to `y = x_0 + x_1 * sex_male + x_2 * sex_female`. A little thought should reveal that this would be difficult because ...
 
-```{r}
-fac <- factor(c("c", "a", "b"), 
-  levels = c("a", "b", "c"), 
-  labels = c("blond", "brunette", "red"))
-fac
-unclass(fac)
-```
+The process of turning a categorical variable into a 0-1 matrix has different names. Sometimes the individual 0-1 columns are called dummy variables. In machine learning, it's called one-hot encoding. In statistics, the process is called creating a contrast matrix.  General example of "feature generation": taking things that aren't continuous variables and figuring out how to represent them.
 
-Each level of the factor (i.e. unique value) is encoded as an integer and displayed with the label that is associated with that integer.
-
-If you use factors outside of a model, you will notice some limiting behavior:
-
-* You cannot add values to a factor that do not appear in its levels.
-* Factors retain all of their levels when you subset them. To avoid this use `drop = TRUE`.
-    ```{r}
-    fac[1]
-    fac[1, drop = TRUE]
-    ```
-* If you coerce a factor to a number with `as.numeric()`, R will convert the integer vector that underlies the factor to a number, not the level labels that you see when you print the factor.
-    ```{r}
-    num_fac <- factor(1:3, levels = 1:3, labels = c("100", "200", "300"))
-    num_fac
-    as.numeric(num_fac)
-    ```
-To coerce the labels that you see to a new data type, first coerce the factor to a character string with `as.character()`
-```{r}
-as.numeric(as.character(num_fac))
-```
-
-#### Interpretation
-
-Add categorical variables to a model in the same way that you would add continuous variables.
-
-
-### Nested variables
-
-Another case that occassionally crops up is nested variables: you have an identifier that is locally unique, not globally unique. For example you might have this data about students in schools:
+Let's look at some data and models to make that concrete.
 
 ```{r}
-students <- tibble::frame_data(
-  ~student_id, ~school_id,
-  1, 1,
-  2, 1,
-  1, 2,
-  1, 3,
-  2, 3,
-  3, 3
-)
+ggplot(sim2) + 
+  geom_point(aes(x, y))
 ```
-
-The student id only makes sense in the context of the school: it doesn't make sense to generate every combination of student and school. You can use `nesting()` for this case:
 
 ```{r}
-students %>% expand(nesting(school_id, student_id))
+mod2 <- lm(y ~ x, data = sim2)
+
+grid <- sim2 %>% 
+  expand(x) %>% 
+  add_predictions(mod2)
+
+ggplot(sim2, aes(x)) + 
+  geom_point(aes(y = y)) +
+  geom_point(data = grid, aes(y = pred), colour = "red", size = 4)
+
 ```
 
+Effectively, a model with a categorical `x` will predict the mean value for each category. (Why? Because the mean minimise the root-mean-squared distance.)
 
-### Interpolation vs extrapolation
+Note that (obviously) you can't make predictions about levels that you didn't observe. Sometimes you'll do this by accident so it's good to recognise this error message:
 
-One danger with prediction plots is that it's easy to make predictions that are far away from the original data. This is dangerous because it's quite possible that the model (which is a simplification of reality) will no longer apply far away from observed values. 
+```{r, error = TRUE}
+tibble(x = "e") %>% add_predictions(mod2)
+```
 
-As the number of variables in your model grows ...  "the curse of dimensionality": as the number of variables increases the average distance between points increases. That means most of the space is very sparse, and you have to rely on strong assumptions.
+### A continuous and categorical
 
-To help avoid this problem, it's good practice to include "nearby" observed data points in any prediction plot. These help you see if you're interpolating, making prediction "in between" existing data points, or extrapolating, making predictions about preivously unobserved slices of the data.
+What happens when you combine a continuous an a categorical variable? 
 
-One way to do this is to use `condvis::visualweight()`.
+```{r}
+ggplot(sim4, aes(x1, y)) + 
+  geom_point(aes(colour = x2))
+```
 
-<https://cran.rstudio.com/web/packages/condvis/>
+Let's explore two models:
 
-## Response variations
+```{r}
+mod1 <- lm(y ~ x1 + x2, data = sim4)
+mod2 <- lm(y ~ x1 * x2, data = sim4)
+```
 
-### Transformations
+There are two tricks to our grid. We have two predictors, so we need to give `expand()` two variables. It finds all the unique values of `x1` and `x2` and then generates all combinations. We are also going to add the predictions from both models simulteanously using `spread_predictions()` which adds each prediction to a new column. The complement of `spread_predictions()` is `gather_predictions()` which uses rows instead of columns
 
+```{r}
+grid <- sim4 %>% 
+  expand(x1, x2) %>% 
+  gather_predictions(mod1, mod2)
+grid
+```
 
+Let's visualise the results using facetting to display both models on one plot.
 
-### Genearlised linear models
+```{r}
+ggplot(sim4, aes(x1, y, colour = x2)) + 
+  geom_point() + 
+  geom_line(data = grid, aes(y = pred)) + 
+  facet_wrap(~ model)
+```
 
-So far the y variable of our models has been a continuous variable, `income`. You can use linear regression to model a categorical y variable by transforming y into a continuous variable with a _link function_. Then model fit a model to the results of the link function and use the link function to back transform and interpret the results.
+The model that uses `+` has the same slope for each line. The model that uses `*` has a different slope for each line.
 
-The most common link function is the logit function, which transforms a bivariate y variable into a continuous range.
+Which model is better for this data? We can take look at the residuals, using the same idea as above. Here I've used facetting because it makes it easier to see the pattern within each group.
 
-Use `glm()` to perform logistic regression in R.
+```{r}
+sim4 <- sim4 %>% 
+  gather_residuals(mod1, mod2)
+
+ggplot(sim4, aes(x1, resid, colour = x2)) + 
+  geom_point() + 
+  facet_grid(model ~ x2)
+```
+
+There is little obvious pattern in the residuals for `mod2`. The residuals for `mod1` show that the model has clearly missed some pattern in `b`, and less so, but still present is pattern in `c`, and `d`.
+
+### Two continuous variables
+
+As you move into three dimensions and higher, creating good visualisations gets harder and harder. But since we're using models to support vis of your data, it's not so bad. As you discover more patterns, you'll grow your model over time.
+
+## Missing values
+
 
 ## Other model families
 
-### Robust models
+### Generalised linear models
 
-Iteratively re-fit the model down-weighting outlying points (points with high residuals).
+Different distance metric (likelihood)
+
+Use `glm()` to perform logistic regression in R.
 
 ### Additive models    
     
-```{r eval = FALSE}
-# Linear z
-gam(y ~ s(x) + z, data = sim1)
+`mgcv::gam()`.
 
-# Smooth x and smooth z
-gam(y ~ s(x) + s(z), data = sim1)
+### Penalised models
 
-# Smooth surface of x and z 
-# (a smooth function that takes both x and z)
-gam(y ~ s(x, z), data = df)
-```
+Add penalty to distance.
 
-### Random forrests
+### Robust models
 
-## Summary
+Distance that is less sensitive to outliers.
+
+### Trees and forests
+
+### Gradient boosting
