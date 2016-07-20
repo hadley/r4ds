@@ -156,7 +156,7 @@ Here, the color doesn't convey information about a variable. It only changes the
 
 R uses the following numeric codes to refer to the following shapes. 
 
-```{r echo=FALSE}
+```{r echo = FALSE}
 shapes <- tibble(
   shape = c(0:19, 22, 21, 24, 23, 20),
   x = 0:24 %/% 5,
@@ -208,7 +208,66 @@ If you get an odd result, double check that you are calling the aesthetic as its
     a package that affect many functions. ggplot2 has two vignettes
     what do they describe?
 
-## Geoms
+## Facets
+
+One way to add additional variables is with aesthetics. Another way, particularly useful for categorical variables is to split your plot into _facets_, subplots that each display a subset of the data. 
+
+To facet your plot, add `facet_wrap()` to your plot call. The first argument of `facet_wrap()` is a formula, which you create with `~` followed by a variable name (here "formula" is the name of a data structure in R, not a synonym for "equation"). The variable that you pass to `facet_wrap()` should be discrete. 
+
+Here we create a separate subplot for each level of the `clarity` variable. The first subplot displays the group of points that have the `clarity` value `I1`. The second subplot displays the group of points that have the `clarity` value `SI2`. And so on.
+
+```{r fig.width = 7, out.width = "100%"}
+ggplot(data = mpg, mapping = aes(x = displ, y = hwy)) + 
+  geom_point() + 
+  facet_wrap(~ class, nrow = 2)
+```
+
+To facet your plot on the combination of two variables, add `facet_grid()` to your plot call. The first argument of `facet_grid()` is also a formula. This time the formula should contain two variable names separated by a `~`. 
+
+```{r fig.height = 7, out.width = "100%"}
+ggplot(data = mpg, mapping = aes(x = displ, y = hwy)) + 
+  geom_point() + 
+  facet_grid(drv ~ cyl)
+```
+
+If you prefer to not facet on the rows or columns dimension, place a `.` instead of a variable name before or after the `~`, e.g. `+ facet_grid(. ~ clarity)`.
+
+### Exercises
+
+1.  What plots will the following code make? What does `.` do?
+
+    ```{r eval = FALSE}
+    ggplot(data = mpg) + 
+      geom_point(mapping = aes(x = displ, y = hwy)) +
+      facet_grid(drv ~ .)
+    
+    ggplot(data = mpg) + 
+      geom_point(mapping = aes(x = displ, y = hwy)) +
+      facet_grid(. ~ cyl)
+    ```
+
+1.  Take the first faceted plot in this section:
+
+    ```{r}
+    ggplot(data = mpg, mapping = aes(x = displ, y = hwy)) + 
+      geom_point() + 
+      facet_wrap(~ class, nrow = 2)
+    ```
+    
+    What are the advantages to using facetting instead of the colour aesthetic?
+    What are the disadvantages? How might the balance of the two change if you
+    had a larger dataset?
+    
+1.  Read `?facet_wrap`. What does `nrows` do? What does `ncols` do? What other
+    options control the layout of the individual panels?
+
+1.  When using `facet_grid()` you should usually put the variable with more
+    unique levels in the columns. Why?
+    
+1.  How might `cut_number()` and `cut_width()` help if you wanted to facet
+    by a continuous variable?
+
+## Geometric objects
 
 How are these two plots similar? 
 
@@ -226,7 +285,7 @@ A _geom_ is the geometrical object that a plot uses to represent data. People of
 
 To change the geom in your plot, change the geom function that you add to `ggplot()`. For instance, to make the plot on the left, use `geom_point()`: 
 
-```{r eval=FALSE}
+```{r eval = FALSE}
 ggplot(data = mpg) + 
   geom_point(mapping = aes(x = displ, y = hwy))
 ```
@@ -285,6 +344,41 @@ ggplot(diamonds) +
   geom_smooth(aes(x = carat, y = price, color = cut), show.legend = FALSE)
 ```
 
+
+To display multiple geoms in the same plot, add multiple geom functions to `ggplot()`! ggplot2 will add each geom as a new layer on top of the previous geoms.
+
+```{r}
+ggplot(data = mpg) + 
+  geom_point(mapping = aes(x = displ, y = hwy)) +
+  geom_smooth(mapping = aes(x = displ, y = hwy))
+```
+
+To avoid redundancy, pay attention to your code when you use multiple geoms. Our code now calls `mapping = aes(x = displ, y = hwy)` twice. You can avoid this type of repetition by passing a set of mappings to `ggplot()`. ggplot2 will treat these mappings as global mappings that apply to each geom in the graph. 
+
+```{r}
+ggplot(data = mpg, mapping = aes(x = displ, y = hwy)) + 
+  geom_point() + 
+  geom_smooth()
+```
+
+If you place mappings in a geom function, ggplot2 will treat them as local mappings for the layer. It will use these mappings to extend or overwrite the global mappings _for that layer only_. This makes it possible to display different aesthetics in different layers.
+
+```{r}
+ggplot(data = mpg, mapping = aes(x = displ, y = hwy)) + 
+  geom_point(mapping = aes(color = class)) + 
+  geom_smooth()
+```
+
+You can use the same idea to specify different `data` for each layer. Here, our smooth line displays just a subset of the `mpg` dataset, the subcompact cars. The local data argument in `geom_smooth()` overrides the global data argument in `ggplot()` for the smooth layer only.
+
+```{r}
+ggplot(data = mpg, mapping = aes(x = displ, y = hwy)) + 
+  geom_point(mapping = aes(color = class)) + 
+  geom_smooth(data = dplyr::filter(mpg, class == "subcompact"), se = FALSE)
+```
+
+(Remember, `dplyr::filter()` means call the `filter()` function from dplyr. You'll learn how it works in the next chapter.)
+
 ### Exericses
 
 1.  What does `show.legend = FALSE` do?  What happens if you remove it?  
@@ -300,50 +394,13 @@ ggplot(diamonds) +
 1.  Why might you want to use `geom_count()` when plotting `cty` vs
     `hwy`?
 
-## Layers
-
-To display multiple geoms in the same plot, add multiple geom functions to `ggplot()`. ggplot2 will add each new geom as a new layer on top of the previous geoms.
-
-```{r}
-ggplot(data = mpg) + 
-  geom_point(mapping = aes(x = displ, y = hwy)) +
-  geom_smooth(mapping = aes(x = displ, y = hwy))
-```
-
-To avoid redundancy, pay attention to your code when you use multiple geoms. Our code now calls `mapping = aes(x = displ, y = hwy)` twice. You can avoid this type of repetition by passing a set of mappings to `ggplot()`. ggplot2 will treat these mappings as global mappings that apply to each geom in the graph. You can then remove the mapping arguments in the individual layers.
-
-```{r}
-ggplot(data = mpg, mapping = aes(x = displ, y = hwy)) + 
-  geom_point() + 
-  geom_smooth()
-```
-
-If you place mappings in a geom function, ggplot2 will treat them as local mappings for the layer. It will use these mappings to extend or overwrite the global mappings _for that layer only_. This provides an easy way to differentiate layers.
-
-```{r}
-ggplot(data = mpg, mapping = aes(x = displ, y = hwy)) + 
-  geom_point(mapping = aes(color = class)) + 
-  geom_smooth()
-```
-
-You can use the same system to specify individual datasets for each layer. Here, our smooth line displays just a subset of the `mpg` dataset, the subcompact cars. The local data argument in `geom_smooth()` overrides the global data argument in `ggplot()` for the smooth layer only.
-
-```{r}
-ggplot(data = mpg, mapping = aes(x = displ, y = hwy)) + 
-  geom_point(aes(color = class)) + 
-  geom_smooth(data = dplyr::filter(mpg, class == "subcompact"))
-```
-
-(You'll learn how `dplyr::filter()` works in the next chapter.)
-
-### Exercises
-
-1.  What would this graph look like?
+1.  Run this code in your head and predict what the output will look like.
+    Run the code in R and check your predictions.
     
     ```{r, eval = FALSE}
-    ggplot(data = mpg, mapping = aes(x = displ, y = hwy, color = class)) + 
+    ggplot(data = mpg, mapping = aes(x = displ, y = hwy, color = drv)) + 
       geom_point() + 
-      geom_smooth()
+      geom_smooth(se = FALSE)
     ```
 
 1.  Will these two graphs look different? Why/why not?
@@ -353,156 +410,41 @@ ggplot(data = mpg, mapping = aes(x = displ, y = hwy)) +
       geom_point() + 
       geom_smooth()
     
-    ggplot(mapping = aes(x = displ, y = hwy)) + 
-      geom_point(data = mpg) + 
-      geom_smooth(data = mpg)
+    ggplot() + 
+      geom_point(data = mpg, mapping = aes(x = displ, y = hwy)) + 
+      geom_smooth(data = mpg, mapping = aes(x = displ, y = hwy))
     ```
 
 1.  Recreate the R code necessary to generate the following graphs.
-    TODO: add examples.
+    
+    ```{r, echo = FALSE, fig.width = 4, out.width = "50%", fig.align = "default"}
+    ggplot(data = mpg, mapping = aes(x = displ, y = hwy, color = drv)) + 
+      geom_point() + 
+      geom_smooth(se = FALSE)
+    ggplot(data = mpg, mapping = aes(x = displ, y = hwy)) + 
+      geom_point(aes(color = drv)) + 
+      geom_smooth(se = FALSE)
+    ggplot(data = mpg, mapping = aes(x = displ, y = hwy)) + 
+      geom_point(aes(group = drv)) + 
+      geom_smooth(se = FALSE)
+    ggplot(data = mpg, mapping = aes(x = displ, y = hwy)) + 
+      geom_smooth(aes(linetype = drv), se = FALSE) + 
+      geom_point(aes(color = drv)) 
+    ggplot(data = mpg, mapping = aes(x = displ, y = hwy)) + 
+      geom_point(size = 4, colour = "white") + 
+      geom_point(aes(colour = drv))
+    ```
 
-## Position adjustments
+## Statical transformations
 
-To make a bar chart with ggplot2 use the function `geom_bar()`. `geom_bar()` does not require a $y$ aesthetic.
+Bar charts are interesting because they reveal something subtle about plots. Consider a basic bar chart, as drawn with `geom_bar()`. This chart displays the total number of diamonds in the `diamonds` dataset, grouped by `cut`. The `diamonds` dataset comes in ggplot2 and contains information about ~54,000 diamonds, including the `price`, `carat`, `color`, `clarity`, and `cut` of each diamond. The chart shows that more diamonds are available with high quality cuts than with low quality cuts. 
 
 ```{r}
 ggplot(data = diamonds) + 
   geom_bar(mapping = aes(x = cut))
 ```
 
-The chart above displays the total number of diamonds in the `diamonds` dataset, grouped by `cut`. The `diamonds` dataset comes in ggplot2 and contains information about ~54,000 diamonds, including the `price`, `carat`, `color`, `clarity`, and `cut` of each diamond. The chart shows that more diamonds are available with high quality cuts than with low quality cuts. 
-
-A bar has different visual properties than a point, which can create some surprises. For example, how would you create this simple chart? If you have an R session open, give it a try.
-
-```{r echo=FALSE}
-ggplot(data = diamonds) + 
-  geom_bar(mapping = aes(x = cut, fill = cut))
-```
-
-It may be tempting to call the color aesthetic, but for bars the color aesthetic controls the _outline_ of the bar, e.g.
-
-```{r}
-ggplot(data = diamonds) + 
-  geom_bar(mapping = aes(x = cut, color = cut))
-```
-
-The effect is interesting, and sort of psychedelic, but not what we had in mind. To control the interior fill of a bar, you must call the _fill_ aesthetic. The same pattern applies for all geoms that contain "substance." _Color_ controls the outline of the geom and _fill_ controls the interior fill.
-
-```{r}
-ggplot(data = diamonds) + 
-  geom_bar(mapping = aes(x = cut, fill = cut))
-```
-
-If you map the fill aesthetic to another variable, like `clarity`, you get a stacked bar chart. Each colored rectangle represents a combination of `cut` and `clarity`.
-
-```{r}
-ggplot(data = diamonds) + 
-  geom_bar(mapping = aes(x = cut, fill = clarity))
-```
-
-But what if you don't want a stacked bar chart? What if you want the chart below? Could you make it? 
-
-```{r echo = FALSE}
-ggplot(data = diamonds) + 
-  geom_bar(mapping = aes(x = cut, fill = clarity), position = "dodge")
-```
-
-The chart displays the same 40 color coded rectangles as the stacked bar chart above. However, the position of the bars within the two charts is different. In the stacked bar chart, ggplot2 stacked bars that have the same `cut` value on top of each other. In this plot, ggplot2 places bars that have the same `cut` value beside each other.
-
-You can control this behavior by adding a _position adjustment_ to your geom. A position adjustment tells ggplot2 what to do when two or more objects appear at the same spot in the coordinate system. To set a position adjustment, set the `position` argument of your geom function to one of `"identity"`, `"stack"`, `"dodge"`, `"fill"`, or `"jitter"`. 
-
-### Position = "identity"
-
-When `position = "identity"`, ggplot2 will place each object exactly where it falls in the context of the graph. 
-
-For our bar chart, this would mean that each bar would start at `y = 0` and would appear directly above the `cut` value that it describes. Since there are eight bars for each value of `cut`, many bars would overlap. The plot will look suspiciously like a stacked bar chart, but the stacked heights will be inaccurate, as each bar actually descends to `y = 0`. Some bars would not appear at all because they would be completely overlapped by other bars.
-
-```{r}
-ggplot(data = diamonds) + 
-  geom_bar(mapping = aes(x = cut, fill = clarity), position = "identity") +
-  ggtitle('Position = "identity"')
-```
-
-`position = "identity"` is a poor choice for a bar chart, but is the sensible default position adjustment for many geoms, such as `geom_point()`.
-
-
-***
-
-**Tip** - You can add a title to your plot by adding `+ ggtitle("<Your Title>")` to your plot call.
-
-***
-
-### Position = "stack"
-
-`position = "stack"` places overlapping objects directly _above_ one another. This is the default position adjustment for bar charts in ggplot2. Here each bar begins exactly where the bar below it ends.
-
-```{r}
-ggplot(data = diamonds) + 
-  geom_bar(mapping = aes(x = cut, fill = clarity), position = "stack") +
-  ggtitle('Position = "stack"')
-```
-
-### Position = "fill"
-
-`position = "fill"` places overlapping objects above one another. However, it scales the objects to take up all of the available vertical space. As a result, `position = "fill"` makes it easy to compare relative proportions across groups.
-
-```{r}
-ggplot(data = diamonds) + 
-  geom_bar(mapping = aes(x = cut, fill = clarity), position = "fill") +
-  ggtitle('Position = "fill"')
-```
-
-### Position = "dodge"
-
-`position = "dodge"` places overlapping objects directly _beside_ one another. This is how I created the graph at the start of the section.
-
-```{r}
-ggplot(data = diamonds) + 
-  geom_bar(mapping = aes(x = cut, fill = clarity), position = "dodge") +
-  ggtitle('Position = "dodge"')
-```
-
-### Position = "jitter"
-
-The last type of position adjustment does not make sense for bar charts, but it can be very useful for scatterplots. Recall our first scatterplot. Did you notice that the plot displays only 126 points, even though there are 234 observations in the dataset?
-
-```{r echo = FALSE}
-ggplot(data = mpg) + 
-  geom_point(mapping = aes(x = displ, y = hwy))
-```
-
-The values of `hwy` and `displ` are rounded to the nearest integer and tenths values. As a result, the points appear on a grid and many points overlap each other. This arrangement makes it hard to see where the mass of the data is. Are the data points spread equally throughout the graph, or is there one special combination of `hwy` and `displ` that contains 109 values? 
-
-You can avoid this gridding by setting the position adjustment to "jitter".  `position = "jitter"` adds a small amount of random noise to each point. This spreads the points out because no two points are likely to receive the same amount of random noise.
-
-```{r}
-ggplot(data = mpg) + 
-  geom_point(mapping = aes(x = displ, y = hwy), position = "jitter") + 
-  ggtitle('Position = "jitter"')
-```
-
-This may seem like a bad idea since jittering will make your graph less accurate at the local level, but jittering may make your graph _more_ revealing at the global level. Occasionally, jittering will reveal a pattern that was hidden within the grid.
-
-ggplot2 comes with a special geom `geom_jitter()` that is the exact equivalent of `geom_point(position = "jitter")`.
-
-To learn more about a position adjustment, look up the help page associated with each adjustment: `?position_dodge`, `?position_fill`, `?position_identity`, `?position_jitter`, and `?position_stack`.
-
-## Stats
-
-Bar charts are interesting because they reveal something subtle about plots. Consider our basic bar chart. 
-
-```{r echo = FALSE}
-ggplot(data = diamonds) + 
-  geom_bar(mapping = aes(x = cut))
-```
-
-On the x axis, the chart displays `cut`, a variable in the `diamonds` dataset. On the y axis, it displays count; but count is not a variable in the diamonds dataset:
-
-```{r}
-diamonds
-```
-
-Where does count come from?
+On the x axis, the chart displays `cut`, a variable in `diamonds`. On the y axis, it displays count; but count is not a variable in `diamonds`! Where does count come from?
 
 Some graphs, like scatterplots, plot the raw values of your dataset. Other graphs, like bar charts, calculate new values to plot:
 
@@ -516,7 +458,7 @@ Some graphs, like scatterplots, plot the raw values of your dataset. Other graph
 
 * and so on.
 
-ggplot2 calls the algorithm that a graph uses to calculate new values a _stat_, which is short for statistical transformation. Each geom in ggplot2 is associated with a default stat that it uses to calculate values to plot. The figure below describes how this process works with `geom_bar()`.
+ggplot2 calls the algorithm that a graph uses to calculate new values a __stat__, which is short for statistical transformation. Each geom in ggplot2 is associated with a default stat that it uses to calculate values to plot. The figure below describes how this process works with `geom_bar()`.
 
 ```{r, echo = FALSE, out.width = "100%"}
 knitr::include_graphics("images/visualization-stat-bar.png")
@@ -532,23 +474,22 @@ You can learn which stat a geom uses, as well as what variables it computes by v
 
 Stats are the most subtle part of plotting because you do not see them in action. ggplot2 applies the transformation and stores the results behind the scenes. You only see the finished plot. Moreover, ggplot2 applies stats automatically, with a very intuitive set of defaults. As a result, you rarely need to adjust a geom's stat. However, you can do three things with a geom's stat if you wish to.
 
-First, you can change the stat that the geom uses with the geom's stat argument. In the code below, I change the stat of `geom_bar()` from count (the default) to identity. This lets me map the height of the bars to the raw values of a $y$ variable. 
+First, you can change the stat that the geom uses with the geom's stat argument. In the code below, I change the stat of `geom_bar()` from count (the default) to identity. This lets me map to the height of the bars to the raw values of a $y$ variable. 
 
 ```{r}
-demo <- data.frame(
+demo <- tibble::tibble(
   a = c("bar_1","bar_2","bar_3"),
   b = c(20, 30, 40)
 )
+demo
 
 ggplot(data = demo) +
   geom_bar(mapping = aes(x = a, y = b), stat = "identity")
-
-demo
 ```
 
 (Unfortunately when people talk about bar charts casually, they might be referring to this type of bar chart, where the height of the bar is already present in the data, or the previous bar chart where the height of the bar is generated by counting rows.)
 
-Second, you can give some stats arguments by passing the arguments to your geom function. In the code below, I pass a width argument to the count stat, which controls the widths of the bars. `width = 1` will make the bars wide enough to touch each other.
+Second, you can give some stats arguments by passing the arguments to your geom function. We saw one earlier when we passed `se = FALSE` to `geom_smooth()`, telling it not to calculate and display the standard errors. In the code below, I pass a width argument to the count stat, which controls the widths of the bars. `width = 1` will make the bars wide enough to touch each other.
 
 ```{r}
 ggplot(data = diamonds) +
@@ -579,104 +520,174 @@ ggplot2 provides over 20 stats for you to use. Each stat is saved as a function,
 knitr::include_graphics("images/visualization-stats.png")
 ```
 
-## Coordinate systems
+### Exercises
 
-Let's leave the Cartesian coordinate system and examine the polar coordinate system. We will begin with a riddle: how is a bar chart similar to a coxcomb plot, like the one below?
 
-```{r echo = FALSE, fig.width=3, fig.height=4, out.width = "50%", fig.align = "default"}
+## Position adjustments
+
+If you want to color the inside of bars, you need to use the `fill` aesthetic rather than `colour`:
+
+```{r fig.width = 4, out.width = "50%", fig.align = "default"}
+ggplot(data = diamonds) + 
+  geom_bar(mapping = aes(x = cut, colour = cut))
 ggplot(data = diamonds) + 
   geom_bar(mapping = aes(x = cut, fill = cut))
-ggplot(data = diamonds) + 
-  geom_bar(mapping = aes(x = cut, fill = cut), width = 1) + 
-  coord_polar()
 ```
 
-A coxcomb plot is a bar chart plotted in polar coordinates. If this seems surprising, consider how you would make a coxcomb plot with ggplot2.
-
-To make a coxcomb plot, first build a bar chart and then add `coord_polar()` to your plot call. Polar bar charts will look better if you also set the width parameter of `geom_bar()` to 1. This will ensure that no space appears between the bars.
+If you map the fill aesthetic to another variable, like `clarity`, you get a stacked bar chart. Each colored rectangle represents a combination of `cut` and `clarity`.
 
 ```{r}
 ggplot(data = diamonds) + 
-  geom_bar(mapping = aes(x = cut, fill = cut), width = 1) + 
-  coord_polar()
+  geom_bar(mapping = aes(x = cut, fill = clarity))
 ```
 
-You can use `coord_polar()` to turn any plot in ggplot2 into a polar chart. Whenever you add `coord_polar()` to a plot's call, ggplot2 will draw the plot on a polar coordinate system. It will map the plot's $y$ variable to $r$ and the plot's $x$ variable to $\theta$. You can reverse this behavior by passing `coord_polar()` the argument `theta = "y"`.
+But what if you don't want a stacked bar chart? You can control how ggplot2 deals with overlapping bars using a __position adjustment__ specified by the `position` argument. There are four important options for bars:`"identity"`, `"stack"`, `"dodge"` and `"fill"`.
 
-Polar coordinates unlock another riddle as well. You may have noticed that ggplot2 does not come with a pie chart geom. In practice, a pie chart is a stacked bar chart plotted in polar coordinates. To make a pie chart in ggplot2, create a stacked bar chart and:
+*   `position = "identity"` will place each object exactly where it falls in 
+    the context of the graph. This is not very useful for bars, because it
+    overlaps them. To see that overlapping we either need to make the bars
+    slightly transparent by setting `alpha`, or completely transparent.
+    
+    ```{r, fig.width = 4, out.width = "50%", fig.align = "default"}
+    ggplot(data = diamonds, mapping = aes(x = cut, fill = clarity)) + 
+      geom_bar(alpha = 1/5, position = "identity")
+    ggplot(data = diamonds, mapping = aes(x = cut, colour = clarity)) + 
+      geom_bar(fill = NA, position = "identity")
+    ```
+    
+    The identity position adjustment is more useful for 2d geoms, where it
+    is the default.
 
-1. ensure that the x axis only has one value. An easy way to do this is to set `x = factor(1)`.
-2. set the width of the bar to one, e.g. `width = 1`
-3. Add `coord_polar()`
-4. Pass `coord_polar()` the argument `theta = "y"`
+*   `position = "stack"` is the default position adjustment for bars, as
+    you've seen above.
+    
+*   `position = "fill"` work like stacking, but makes each set of stacked bars
+    the same height. This makes it easier to compare proportions across 
+    groups.
+
+    ```{r}
+    ggplot(data = diamonds) + 
+      geom_bar(mapping = aes(x = cut, fill = clarity), position = "fill") +
+      ggtitle('Position = "fill"')
+    ```
+
+*   `position = "dodge"` places overlapping objects directly _beside_ one 
+    another. This makes it easier to compare individual values.
+
+    ```{r}
+    ggplot(data = diamonds) + 
+      geom_bar(mapping = aes(x = cut, fill = clarity), position = "dodge") +
+      ggtitle('Position = "dodge"')
+    ```
+
+***
+
+**Tip** - You can add a title to your plot by adding `+ ggtitle("<Your Title>")` to your plot call.
+
+***
+
+These last type of position adjustment does not make sense for bar charts, but it can be very useful for scatterplots. Recall our first scatterplot. Did you notice that the plot displays only 126 points, even though there are 234 observations in the dataset?
+
+```{r echo = FALSE}
+ggplot(data = mpg) + 
+  geom_point(mapping = aes(x = displ, y = hwy))
+```
+
+The values of `hwy` and `displ` are rounded to the nearest integer and tenths respectively. As a result, the points appear on a grid and many points overlap each other. This arrangement makes it hard to see where the mass of the data is. Are the data points spread equally throughout the graph, or is there one special combination of `hwy` and `displ` that contains 109 values? 
+
+You can avoid this gridding by setting the position adjustment to "jitter".  `position = "jitter"` adds a small amount of random noise to each point. This spreads the points out because no two points are likely to receive the same amount of random noise.
 
 ```{r}
-ggplot(data = diamonds) + 
-  geom_bar(mapping = aes(x = factor(1), fill = cut), width = 1) + 
-  coord_polar(theta = "y")
+ggplot(data = mpg) + 
+  geom_point(mapping = aes(x = displ, y = hwy), position = "jitter") + 
+  ggtitle('Position = "jitter"')
 ```
 
-ggplot2 comes with eight coordinate functions that you can use in the same way as `coord_polar()`. The table below describes each function and what it does. Add any of these functions to your plot's call to change the coordinate system that the plot uses.
+Adding randomness seems like a strange way to improve your plot, but while makes your graph a less accurate at small scales, it makes your graph _more_ revealing at large scales. Because this is such a useful operation, ggplot2 comes with a shorthand for `geom_point(position = "jitter")`: `geom_jitter()`.
 
-You can learn more about each coordinate system by opening its help page in R, e.g. `?coord_cartesian`, `?coord_fixed`, `?coord_flip`, `?coord_map`, `?coord_polar`, and `?coord_trans`.
+To learn more about a position adjustment, look up the help page associated with each adjustment: `?position_dodge`, `?position_fill`, `?position_identity`, `?position_jitter`, and `?position_stack`.
+
+### Exercises
+
+1.  What is the problem with this plot? How could you improve it?
+
+    ```{r}
+    ggplot(data = mpg, mapping = aes(x = cty, y = hwy)) + 
+      geom_point()
+    ```
+
+1.  Compare and contrast `geom_jitter()` with `geom_count()`.
+
+## Coordinate systems
+
+Coordinate systems are probably the most complicated part of ggplot2. The default coordinate system is the Cartesian coordinate system where the x and y position act independently to find the location of each point.
+
+There are a number of other coordinate systems that are occassionally helpful.
+
+*   `coord_flip()` switches the x and y axes. This is useful (for example),
+    if you want vertical boxplots.
+    
+    ```{r, asp = 1.61}
+    ggplot(data = mpg, mapping = aes(x = class, y = hwy)) + 
+      geom_boxplot() +
+      coord_flip()
+    ```
+
+*   `coord_quickmap()` sets the aspect ratio correctly for maps. This is very
+    important if you're plotting spatial data with ggplot2 (which unfortunately
+    we don't have the space to cover in this book).
+
+    ```{r  fig.width=3, out.width = "50%", fig.align = "default"}
+    nz <- map_data("nz")
+
+    ggplot(nz, aes(long, lat, group = group)) +
+      geom_polygon(fill = "white", colour = "black")
+
+    ggplot(nz, aes(long, lat, group = group)) +
+      geom_polygon(fill = "white", colour = "black") +
+      coord_quickmap()
+    ```
+
+*   `coord_polar()` uses polar coordinates. Polar coordinates reveals an 
+    interesting connection between a bar chart and a Coxcomb chart.
+    
+    ```{r fig.width=3, out.width = "50%", fig.align = "default"}
+    ggplot(data = diamonds) + 
+      geom_bar(mapping = aes(x = cut, fill = cut)) + 
+      theme(aspect.ratio = 1)
+    ggplot(data = diamonds) + 
+      geom_bar(mapping = aes(x = cut, fill = cut), width = 1) + 
+      coord_polar()
+    ```
+
+The table below describes each function and what it does. Add any of these functions to your plot's call to change the coordinate system that the plot uses. You can learn more about each coordinate system by opening its help page in R, e.g. `?coord_cartesian`, `?coord_fixed`, `?coord_flip`, `?coord_map`, `?coord_polar`, and `?coord_trans`.
 
 ```{r, echo = FALSE, out.width = "100%"}
 knitr::include_graphics("images/visualization-coordinate-systems.png")
 ```
 
-## Facets
-
-Coxcomb plots are especially useful when you split your plot into _facets_, subplots that each display a subset of the data. Each subplot will act as a glyph that you can use to compare groups of data.
-
-To facet your plot, add `facet_wrap()` to your plot call. The first argument of `facet_wrap()` is a formula, always a `~` followed by a variable name (here "formula" is the name of a data structure in R, not a synonym for "equation"). The variable that you pass to `facet_wrap()` should be discrete. Here we create a separate subplot for each level of the `clarity` variable. The first subplot displays the group of points that have the `clarity` value `I1`. The second subplot displays the group of points that have the `clarity` value `SI2`. And so on.
-
-```{r fig.height = 7, fig.width = 7}
-ggplot(data = diamonds) + 
-  geom_bar(mapping = aes(x = cut, fill = cut), width = 1) + 
-  coord_polar() + 
-  facet_wrap( ~ clarity)
-```
-
-To facet your plot on the combination of two variables, add `facet_grid()` to your plot call. The first argument of `facet_grid()` is also a formula. This time the formula should contain two variable names separated by a `~`. 
-
-```{r fig.height = 7, fig.width = 7}
-ggplot(data = diamonds) + 
-  geom_bar(mapping = aes(x = cut, fill = cut), width = 1) + 
-  coord_polar() + 
-  facet_grid(color ~ clarity)
-```
-
-Here the first subplot displays all of the points that have an `I1` code for `clarity` _and_ a `D` code for `color`. Don't be confused by the word color here; `color` is a variable name in the `diamonds` dataset. It contains the codes `D`, `E`, `F`, `G`, `H`, `I`, and `J`. `facet_grid(color ~ clarity)` is not invoking the color aesthetic.
-
-If you prefer to not facet on the rows or columns dimension, place a `.` instead of a variable name before or after the `~`, e.g. `+ facet_grid(. ~ clarity)`.
-
-Faceting works on more than just polar charts. You can add `facet_wrap()` or `facet_grid()` to any plot in ggplot2.
-
 ### Exercises
 
-1.  What graph will this code make? 
+1.  Turn a stacked bar chart into a pie chart using `coord_polar()`.
 
-    ```{r eval = FALSE}
-    ggplot(data = mpg) + 
-      geom_point(mapping = aes(x = displ, y = hwy)) +
-      facet_grid(drv ~ .)
-    ```
+1.  What's the difference between `coord_quickmap()` and `coord_map()`?
 
-1.  What graph will this code make? 
-
-    ```{r eval = FALSE}
-    ggplot(data = mpg) + 
-      geom_point(mapping = aes(x = displ, y = hwy)) +
-      facet_grid(. ~ cyl)
+1.  What does the plot below tell you about the relationship between city
+    and highway mpg? Why is `coord_fixed()` important? What does `geom_abline()` 
+    do?
+    
+    ```{r}
+    ggplot(data = mpg, mapping = aes(x = cty, y = hwy)) +
+      geom_point() + 
+      geom_abline() +
+      coord_fixed()
     ```
 
 ## The layered grammar of graphics
 
-In the previous sections, you learned much more than how to make scatterplots, bar charts, and coxcomb plots. You learned a foundation that you can use to make _any_ type of plot with ggplot2.
+In the previous sections, you learned much more than how to make scatterplots, bar charts, and boxplots. You learned a foundation that you can use to make _any_ type of plot with ggplot2. To see this, lets add position adjustments, stats, coordinate systems, and faceting to our code template:
 
-To see this, add position adjustments, stats, coordinate systems, and faceting to our code template. In ggplot2, each of these parameters will work with every plot and every geom. 
-
-```{r eval = FALSE}
+```
 ggplot(data = <DATA>) + 
   <GEOM_FUNCTION>(
      mapping = aes(<MAPPINGS>),
