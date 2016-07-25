@@ -2,21 +2,13 @@
 
 ## Introduction
 
-In the previous chapter you learned how some basic models worked, and learned some basic tools for understanding what a model is telling you about your data. In this chapter, we're going talk more about the model building process: how you start from nothing, and end up with a good model. 
+In the previous chapter you learned how linear models worked, and learned some basic tools for understanding what a model is telling you about your data. The previous chapter focussed on simulated datasets to help you learn about how models work. This chapter will focus on real data, showing you how you can progressively build up a model to aid your understanding of the data.
 
-We are going to focus on predictive models, how you can use simple fitted models to help better understand your data. Many of the models will be motivated by plots: you'll use a model captures to strong signals in the data so you can focus on what remains. This is a different motivation from most introductions to modelling, but if you go on to more traditional coverage, you can apply these same ideas to help you understand what's going on.
+We will take advantage of the fact that you can think about a model partition your data into pattern and residuals. We'll find patterns with visualisation, then make the concrete and precise with a model. We'll them repeat the process, replace the old response variable with the residuals from the model. The goal is to transition from implicit knowledge in the data and your head to explicit knowledge in a quantitative model. This makes it easier to apply to new domains, and easier for others to use. 
 
-We're going to give you a basic strategy, and point you to places to learn more. The key is to think about data generated from your model as regular data - you're going to want to manipulate it and visualise it in many different ways. Being good at modelling is a mixture of having some good general principles and having a big toolbox of techniques. Here we'll focus on general techniques to help you undertand what your model is telling you.
+For very large and complex datasets this will a lot of work. There are certainly alternative approaches - a more machine learning approach is simply to focus on the predictive ability of the model. These approaches tend to produce black boxes: the model does a really good job at generating predictions, but you don't know why. This is a totally reasonable approach, but it does make it hard to apply your real world knowledge to the model. That, in turn, makes it difficult to assess whether or not the model will continue work in the long-term, as fundamentals change. For most real models, I'd expect you to use some combination of this approach and a more classic automated approach.
 
-In the course of modelling, you'll often discover data quality problems. Maybe a missing value is recorded as 999. Whenever you discover a problem like this, you'll need to review an update your import scripts. You'll often discover a problem with one variable, but you'll need to think about it for all variables. This is often frustrating, but it's typical.
-
-The way we're going to work is to subtract patterns from the data, while adding them to the model. The goal is to transition from implicit knowledge in the data and your head to explicit knowledge in a quantitative model. This makes it easier to apply to new domains, and easier for others to use. 
-
-If you had a "perfect" model the residuals would be perfectly independent noise. But "perfect" is not always what you strive for: sometimes you actually want a model that leaves some signal on the table because you want a model that is simpler, faster, or easier to understand.
-
-For very large and complex datasets this is going to be a lot of work. There are certainly alternative approaches - a more machine learning approach is simply to focus on improving the predictive ability of the model, being careful to fairly assess it (i.e. not assessing the model on the data that was used to train it). These approaches tend to produce black boxes - i.e. the model does a really good job, but you don't know why. This is fine, but the main problem is that you can't apply your real world knowledge to the model to think about whether or not it's likely to work in the long-term, as fundamentals change. For most real models, I'd expect you to use some combination of this approach and a ML model building approach. If prediction is important, get to a good point, and then use visulisation to understand the most important parts of the model.
-
-As we proceed through this chapter we'll continue to 
+It's a challenge to know when to stop. You need to figure out when your model is good enough, and when additional investment is unlikely to pay off. I particularly this quote from reddit user Broseidon241: 
 
 > A long time ago in art class, my teacher told me "An artist needs to know 
 > when a piece is done. You can't tweak something into perfection - wrap it up. 
@@ -25,27 +17,132 @@ As we proceed through this chapter we'll continue to
 > works hard to correct those mistakes. A great seamstress isn't afraid to 
 > throw out the garment and start over."
 
--- Reddit user Broseidon241, https://www.reddit.com/r/datascience/comments/4irajq/mistakes_made_by_beginningaspiring_data_scientists/
+-- Broseidon241, <https://www.reddit.com/r/datascience/comments/4irajq>
 
 ### Prerequisites
 
-```{r setup, include = FALSE}
+We'll start with modelling and EDA tools we needed in the last chapter. Then we'll add in some real datasets: `diamonds` from ggplot2, and `flights` from nycflights13. We'll also need lubridate to extract useful components of datetimes.
+
+```{r setup, message = FALSE}
+# Modelling functions
+library(modelr)
 library(broom)
+
+# EDA tools
 library(ggplot2)
 library(dplyr)
-library(lubridate)
 library(tidyr)
+
+# Data
 library(nycflights13)
-library(modelr)
+library(lubridate)
 ```
+
+## Why are low quality diamonds more expensive?
+
+In previous chapters we've seen a surprising relationship between the quality of diamonds and their price: low quality diamonds (poor cuts, bad colours, and inferior clarity) have higher prices.
+
+```{r dev = "png"}
+ggplot(diamonds, aes(cut, price)) + geom_boxplot()
+ggplot(diamonds, aes(color, price)) + geom_boxplot()
+ggplot(diamonds, aes(clarity, price)) + geom_boxplot()
+```
+
+### Price and carat
+
+The basic reason we see this pattern is that the variable that is most predictive of diamond price is its size:
+
+```{r, dev = "png"}
+ggplot(diamonds, aes(carat, price)) + 
+  geom_hex(bins = 50)
+```
+
+To explore this relationship, lets make a couple of tweaks to the diamonds dataset:
+
+1. Remove all diamonds bigger than 2.5 carats
+1. Log-transform the carat and price variables
 
 ```{r}
-library(modelr)
+diamonds2 <- diamonds %>% 
+  filter(carat <= 2.5) %>% 
+  mutate(lprice = log2(price), lcarat = log2(carat))
 
-library(nycflights13)
-library(lubridate)
-library(dplyr)
+ggplot(diamonds2, aes(lcarat, lprice)) + 
+  geom_hex(bins = 50)
 ```
+
+Log-transforming is very useful here because it make a linear relationship, and linear relationships are generally much easier to work with.  We could go one step further and use a linear model to remove the strong effect of `lcarat` on `lprice`. First, let's see what a linear model tells about the data on the original scale:
+
+```{r}
+mod_diamond <- lm(lprice ~ lcarat, data = diamonds2)
+
+grid <- diamonds2 %>% 
+  expand(carat = seq_range(carat, 20)) %>% 
+  mutate(lcarat = log2(carat)) %>% 
+  add_predictions(mod_diamond, "lprice") %>% 
+  mutate(price = 2 ^ lprice)
+
+ggplot(diamonds2, aes(carat, price)) + 
+  geom_hex(bins = 50) + 
+  geom_line(data = grid, colour = "red", size = 1)
+```
+
+That's interesting! If we believe our model, then it suggests that the large diamonds we have are much cheaper than expected. This may because no diamond in this dataset costs more than $19,000.
+
+We can also look at the residuals from this model. This verifies that we have successfully removed the strong linear pattern:
+
+```{r}
+diamonds2 <- diamonds2 %>% 
+  add_residuals(mod_diamond, "lresid")
+
+ggplot(diamonds2, aes(lcarat, lresid)) + 
+  geom_hex(bins = 50)
+```
+
+Importantly, we can now use those residuals in plots instead of `price`. 
+
+```{r dev = "png"}
+ggplot(diamonds2, aes(cut, lresid)) + geom_boxplot()
+ggplot(diamonds2, aes(color, lresid)) + geom_boxplot()
+ggplot(diamonds2, aes(clarity, lresid)) + geom_boxplot()
+```
+
+Here we see the relationship we'd expect. Now that we've removed the effect of size on price,  
+
+To interpret the `y` axis, we need to think about what the residuals are telling us, and what scale they are on. A residual of -1 indicates that `lprice` was 1 unit lower than expected, based on the `carat` alone. $2^{-1}$ is 1/2, so that sugggests diamonds with colour I1 are half the price you'd expect.
+
+### A model complicated model
+
+We could continue this process, making our model complex:
+
+```{r}
+mod_diamond2 <- lm(lprice ~ lcarat + color + cut + clarity, data = diamonds2)
+
+add_predictions_trans <- function(df, mod) {
+  df %>% 
+    add_predictions(mod, "lpred") %>% 
+    mutate(pred = 2 ^ lpred)
+}
+
+diamonds2 %>% 
+  expand_model(mod_diamond2, cut) %>% 
+  add_predictions_trans(mod_diamond2) %>% 
+  ggplot(aes(cut, pred)) + 
+    geom_point()
+```
+
+
+### Exercises
+
+1.  In the plot of `lcarat` vs. `lprice`, there are some bright vertical
+    strips. What do they represent?
+
+1.  If `log(price) = a_0 + a_1 * log(carat)`, what does that say about 
+    the relationship between `price` and `carat?
+    
+1.  Extract the diamonds that have very high and very low residuals. 
+    Is there any unusual about these diamonds? Are the particularly bad
+    or good, or do you think these are pricing errors?
 
 ## What affects the number of daily flights?
 
@@ -340,25 +437,6 @@ One way to do this is to use `condvis::visualweight()`.
 
 <https://cran.rstudio.com/web/packages/condvis/>
 
-### Nested variables
+## Other types of pattern
 
-Another case that occassionally crops up is nested variables: you have an identifier that is locally unique, not globally unique. For example you might have this data about students in schools:
-
-```{r}
-students <- tibble::frame_data(
-  ~student_id, ~school_id,
-  1, 1,
-  2, 1,
-  1, 2,
-  1, 3,
-  2, 3,
-  3, 3
-)
-```
-
-The student id only makes sense in the context of the school: it doesn't make sense to generate every combination of student and school. You can use `nesting()` for this case:
-
-```{r}
-students %>% expand(nesting(school_id, student_id))
-```
-
+Pattern in variance, not just mean.  Standardised residuals.
