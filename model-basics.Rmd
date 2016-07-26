@@ -475,7 +475,39 @@ grid <- sim4 %>%
 grid
 ```
 
-Note my use of `seq_range()` inside `expand()`. Instead of using every unique value of `x`, I'm going to use a regularly spaced grid of five values between the minimum and maximum numbers. It's probably not super important here, but it's a useful technique in general.
+Note my use of `seq_range()` inside `expand()`. Instead of using every unique value of `x`, I'm going to use a regularly spaced grid of five values between the minimum and maximum numbers. It's probably not super important here, but it's a useful technique in general. There are two other useful arguments to `seq_range()`:
+
+*  `pretty = TRUE` will generate a "pretty" sequence, i.e. something that looks
+    nice to the human eye. This is useful if you want to produce tables of 
+    output:
+    
+    ```{r}
+    seq_range(c(0.0123, 0.923423), n = 5)
+    seq_range(c(0.0123, 0.923423), n = 5, pretty = TRUE)
+    ```
+    
+*   `trim = 0.1` will trim off 10% of the tail values. This is useful if the 
+    variables has an long tailed distribution and you want to focus on generating
+    values near the center:
+    
+    ```{r}
+    x1 <- rcauchy(100)
+    seq_range(x1, n = 5)
+    seq_range(x1, n = 5, trim = 0.10)
+    seq_range(x1, n = 5, trim = 0.25)
+    seq_range(x1, n = 5, trim = 0.50)
+    ```
+    
+*   `expand = 0.1` is in some sense the opposite of `trim()` it expands the 
+    range by 10%.
+    
+    ```{r}
+    x2 <- c(0, 1)
+    seq_range(x2, n = 5)
+    seq_range(x2, n = 5, expand = 0.10)
+    seq_range(x2, n = 5, expand = 0.25)
+    seq_range(x2, n = 5, expand = 0.50)
+    ```
 
 Next let's try and visualise that model. We have two continuous predictors, so you can imagine the model like a 3d surface. We could display that using `geom_tile()`:
 
@@ -512,6 +544,97 @@ Again, if you get confused about what your model is doing, you can always use `m
 df <- tibble(y = 1:3, x = 1:3)
 model_matrix(df, y ~ x^2 + x)
 model_matrix(df, y ~ I(x^2) + x)
+```
+
+Transformations are useful because you can use them to approximate non-linear functions. If you've taken a calculus class, you may have heard of Taylor's theorem which says you can approximate any smooth function with an infinite sum of polynomials. That means you can use a linear to get arbitrary close to a smooth function by fitting an equation like `y = a_1 + a_2 * x + a_3 * x^2 + a_4 * x ^ 3`. Typing that sequence by hand is tedious, so R provides a helper function: `poly()`:
+
+```{r}
+model_matrix(df, y ~ poly(x, 2))
+```
+
+However there's one major problem with using `poly()`: outside the range of the data, polynomials rapidly shoot off to positive or negative infinity. One safer alternative is to use the natural spline, `splines::ns()`.
+
+```{r}
+library(splines)
+model_matrix(df, y ~ ns(x, 2))
+```
+
+Let's see what that looks like when we try and approximate a non-linear function:
+
+```{r}
+sim5 <- tibble(
+  x = seq(0, 3.5 * pi, length = 50),
+  y = 4 * sin(x) + rnorm(length(x))
+)
+
+ggplot(sim5, aes(x, y)) +
+  geom_point()
+```
+
+I'm going to fit five models to this data.
+
+```{r}
+mod1 <- lm(y ~ ns(x, 1), data = sim5)
+mod2 <- lm(y ~ ns(x, 2), data = sim5)
+mod3 <- lm(y ~ ns(x, 3), data = sim5)
+mod4 <- lm(y ~ ns(x, 4), data = sim5)
+mod5 <- lm(y ~ ns(x, 5), data = sim5)
+
+grid <- sim5 %>% 
+  expand(x = seq_range(x, n = 50, expand = 0.1)) %>% 
+  gather_predictions(mod1, mod2, mod3, mod4, mod5, .pred = "y")
+
+ggplot(sim5, aes(x, y)) + 
+  geom_point() +
+  geom_line(data = grid, colour = "red") +
+  facet_wrap(~ model)
+```
+
+Notice that the extrapolation outside the range of the data is clearly bad. This is the downside to approximating a function with a polynomial. But this is a very real problem with every model: the model can never tell you if the behaviour is true when you start extrapolating outside the range of the data that you have seen. You must rely on theory or science.
+
+### Interpolation vs. extrapolation
+
+So far, when we've visualised the predictions from a model, we've been careful to overlay them on the data. This is important because it helps make sure we're not extrapolating the model to data that is far away from what we've observed.
+
+However, as you start working with large datasets overlaying all the data will become increasing challenging. Particularly as you'll often use a model to simplify away some of the complexities of the raw data! To make your life easier, you might be tempted to just display the predictions. This is dangerous because you might have accidentally generated predictions that are very far away from your data.
+
+As a compromise, you can use the convenient `similarityweight()` function from the __condvis__ package by Mark O'Connell. You give it your prediction grid and your dataset, and it computes the similarlity between each observation in your original dataset and the prediction grid. You can then display only the points that are close to your predictions. If no points are close, you know that your prediction grid is dangerous!
+
+```{r}
+sim6 <- tibble(
+  x1 = rbeta(1000, 2, 5),
+  x2 = rbeta(1000, 2, 5),
+  y = 2 * x1 * x2 + x1 + 2 + rnorm(length(x1))
+)
+
+mod <- lm(y ~ x1 * x2, data = sim6)
+
+grid <- sim6 %>% 
+  expand(
+    x1 = seq_range(x1, 10),
+    x2 = c(0, 0.5, 1, 1.5)
+  ) %>% 
+  add_predictions(mod)
+
+add_similarity <- function(data, grid, ..., .similarity = "sim") {
+  common <- intersect(names(data), names(grid))
+  message("Using ", paste(common, collapse = ", "))
+  
+  sim_m <- condvis::similarityweight(grid, data[common], ...)
+  sim <- apply(sim_m, 2, max)
+  
+  data[[.similarity]] <- sim
+  data
+}
+
+sim6 %>% 
+  add_similarity(grid) %>% 
+  filter(sim > 0) %>% 
+  ggplot(aes(x1, y, group = x2)) +
+    geom_point(aes(alpha = sim)) + 
+    geom_line(data = grid, aes(y = pred)) + 
+    scale_alpha(limit = c(0, NA)) 
+
 ```
 
 ### Exercises
@@ -561,6 +684,8 @@ nrow(df)
 ```
 
 ## Other model families
+
+Pattern in variance, not just mean. Or other characteristics of distribution of residuals.
 
 This chapter has focussed exclusively on the class of linear models, which assume a relationship of the form `y = a_1 * x1 + a_2 * x2 + ... + a_n * xn`. Linear models additionally assume that the residuals have a normal distribution, which we haven't talked about. There are a large set of model classes that extend the linear model in various interesting ways. Some of them are:
 
