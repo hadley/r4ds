@@ -14,7 +14,7 @@ This chapter will give you a practical introduction to tidy data and the accompa
 
 ### Prerequisites
 
-In this chapter we'll focus on tidyr, a package that provides a bundle of tools to help tidy messy datasets. We'll also need to use a little dplyr, as is common when tidying data.
+In this chapter we'll focus on tidyr, a package that provides a bunch of tools to help tidy up your messy datasets. We'll also need to use a little dplyr, as is common when tidying data.
 
 ```{r setup}
 library(tidyr)
@@ -23,7 +23,7 @@ library(dplyr)
 
 ## Tidy data
 
-You can represent the same underlying data in multiple ways. For example, the datasets below show the same data organized in four different ways. Each dataset shows the same values of four variables *country*, *year*, *population*, and *cases*, but each dataset organizes the values in different way.
+You can represent the same underlying data in multiple ways. The example below shows the same data organized in four different ways. Each dataset shows the same values of four variables *country*, *year*, *population*, and *cases*, but each dataset organizes the values in different way.
 
 ```{r}
 table1
@@ -50,9 +50,19 @@ These three rules are interrelated because it's impossible to only satisfy two o
 1.  Put each dataset in a tibble.
 1.  Put each variable in a column.
 
-The principles of tidy data seem so obvious that you might wonder if you'll ever encounter a dataset that isn't tidy. Unfortunately, while the principles are obvious in hindsight, it took Hadley over 5 years of struggling with many datasets to figure out these very simple principles. Most datasets that you will encounter in real life will not be tidy, either because the creator was not aware of the principles of tidy data, or because the data is stored to optimise 
+There are two advantages to tidy data:
 
-Once you have your data in tidy form, it's easy to manipulate it with dplyr or visualise it with ggplot2:
+1.  There's a general advantage to just picking one consistent way of storing
+    data. If you have a consistent data structure, it's easier to learn the
+    tools that work with it because they have an underlying uniformity.
+    
+1.  There's a specific advantage to placing variables in columns because
+    it allows R's vectorised nature to shine. As you learned in [useful
+    creation functions] and [useful summary functions], most built-in R
+    functions work with a vector of values. That makes transforming tidy 
+    data feel particularly natural.
+
+In this example, it's `table1` that has the tidy representation, because each of the four columns represents a variable. This form is the easiest to work with in dplyr or ggplot2. It's also well suited for modelling, as you'll learn later. In fact, the way that R's modelling functions work was an inspiration for the tidy data format. Here are a couple of small examples of how you might work with this data. Think about how you'd achieve the same result with the other representations.
 
 ```{r}
 # Compute rate 
@@ -69,21 +79,6 @@ ggplot(table1, aes(year, cases)) +
   geom_line(aes(group = country), colour = "grey50") + 
   geom_point(aes(colour = country))
 ```
-
-There are two advantages to tidy data:
-
-1.  There's a general advantage to just picking one consistent way of storing
-    data. If you have a consistent data structure, you can design tools that
-    work with that data without having to translate it into different 
-    structures.
-    
-1.  There's a specific advantage to placing variables in columns because
-    it allows R's vectorised nature to shine. As you learned in [useful
-    creation functions] and [useful summary functions], most built-in R
-    functions work with a vector of values. That makes transforming tidy 
-    data feel particularly natural.
-
-As you'll learn later, tidy data is also very well suited for modelling, and in fact, the way that R's modelling functions work was an inspiration for the tidy data format.
 
 ### Exercises
 
@@ -105,120 +100,99 @@ As you'll learn later, tidy data is also very well suited for modelling, and in 
 
 ## Spreading and gathering
 
-Now that you understand the basic principles of tidy data, it's time to learn the tools that allow you to transform untidy datasets into tidy datasets. 
+The principles of tidy data seem so obvious that you might wonder if you'll ever encounter a dataset that isn't tidy. Unfortunately, while the principles are obvious in hindsight, it took Hadley over 5 years of struggling with many datasets to figure out these very simple principles. Most datasets that you will encounter in real life will not be tidy, either because the creator was not aware of the principles of tidy data, or because the data is stored in order to make data entry, not data analysis, easy.
 
 The first step to tidying any dataset is to study it and figure out what the variables are. Sometimes this is easy; other times you'll need to consult with the people who originally generated the data.
 
-One of the most messy-data common problems is that you'll find some variables are not in the columns. One variable might be spread across multiple columns, or you might find that a set of variables is spread over the rows. To fix these problems, you'll need the two most important functions in tidyr: `gather()` and `spread()`. But before we can describe how they work, you need to understand the idea of the key-value pair.
-
-### Key-value
-
-A key-value pair is a simple way to record information. A pair contains two parts: a *key* that explains what the information describes, and a *value* that contains the actual information. So, for example, this would be a key-value pair:
-
-    Password: 0123456789
-
-`0123456789` is the value, and it is associated with the key `Password`.
-
-Data values form natural key-value pairs. The value is the value of the pair and the variable that the value describes is the key. So for example, you could decompose `table1` into a group of key-value pairs, like this:
-
-    Country: Afghanistan
-    Country: Brazil
-    Country: China
-    Year: 1999
-    Year: 2000
-    Year: 2001
-    Population:   19987071
-    Population:   20595360
-    Population:  172006362
-    Population:  174504898
-    Population: 1272915272
-    Population: 1280428583
-    Cases:    745
-    Cases:   2666
-    Cases:  37737
-    Cases:  80488
-    Cases: 212258
-    Cases: 213766
-
-However, the key-value pairs would cease to be a useful dataset because you no longer know which values belong to the same observation.
-
-Every cell in a table of data contains one half of a key-value pair, as does every column name. In tidy data, each cell will contain a value and each column name will contain a key, but this doesn't need to be the case for untidy data. Consider `table2`.
-
-```{r}
-table2
-```
-
-In `table2`, the `key` column contains only keys (and not just because the column is labeled `key`). Conveniently, the `value` column contains the values associated with those keys.
-
-You can use the `spread()` function to tidy this layout.
-
-### Spreading
-
-`spread()` turns a pair of key:value columns into a set of tidy columns. To use `spread()`, pass a data frame, and the pair of key-value columns. This is particularly easy `table2` because the columns are already called key and value!
-
-```{r}
-spread(table2, key = key, value = value)
-```
-
-You can see that `spread()` maintains each of the relationships expressed in the original dataset. The output contains the four original variables, *country*, *year*, *population*, and *cases*, and the values of these variables are grouped according to the original observations.
-
-```{r, echo = FALSE, out.width = "100%"}
-knitr::include_graphics("images/tidy-8.png")
-```
-
-In general, you'll use `spread()` when you have a column that contains variable names, the `key` column, and a column that contains the values of that variable, the `value` column. Here's another simple example:
-
-```{r}
-weather <- frame_data(
-  ~ day, ~measurement, ~record,
-  "Jan 1", "temp", 31,
-  "Jan 1", "precip", 0,
-  "Jan 2", "temp", 35,
-  "Jan 2", "precip", 5
-)
-weather %>% 
-  spread(key = measurement, value = record)
-```
-
-The result of `spread()` without the `key` and `value` columns that you specified. Instead, it will have one new variable for each unique value in the `key` column.
+One of the most messy-data common problems is that you'll some variables will not be in the columns: one variable might be spread across multiple columns, or you might find that the variables for one observation are scattered across multiple rows. To fix these problems, you'll need the two most important functions in tidyr: `gather()` and `spread()`.
 
 ### Gathering
 
-`gather()` is the opposite of `spread()`. `gather()` collects a set of column names and places them into a single "key" column. It also collects the values associated with those columns and places them into a single value column. Let's use `gather()` to tidy `table4`.
+A common problem is a dataset where some of the column names are not names of a variable, but _values_ of a variable. Take `table4a`, for example, the column names `1991` and `2000` represent values of the `year` variable.
 
 ```{r}
 table4a
 ```
 
-`gather()` takes a data frame, the names of the new key and value variables to create, and set a columns to gather:
+To tidy a dataset like these, we need to __gather__ those column into a new pair of columns. To describe that operation we need three parameters:
+
+* The set of columns that represent values, not variables. In this example, 
+  those are the columns `1999` and `2000`.
+
+* The name of variable that the column names represent, the `key`. In this
+  example, that's the `year`.
+
+* The name of the variable that the cell values represent, the `value`.
+  Here, that's the number of `cases`.
+  
+Together those parameters generate the call to `gather()`:
 
 ```{r}
-table4a %>% gather(key = "year", value = "cases", `1999`:`2000`)
+table4a %>% gather(`1999`, `2000`, key = "year", value = "cases")
 ```
 
-Here, the column names (`key`) represent the years, and the cell values (`value`) represents the number of cases. We specify the columns to gather with `dplyr::select()` style notation: use all columns from "1999" to "2000". (Note that these are non-syntactic names so we have to surround in backticks.) To refresh your memory of the other ways you can select columns, see [select](#select).
+The columns to gather are specified with `dplyr::select()` style notation. Here there are only two columns, so we list them by name. 1999 and 2000 are non-syntactic names so we have to surround in backticks. To refresh your memory of the other ways you can select columns, see [select](#select).
 
-`gather()` returns a copy of the data frame with the specified columns removed, and two new columns: a "key" column that contains the former column names of the removed columns, and a value column that contains the former values of the removed columns. `gather()` repeats each of the former column names (as well as each of the original columns) to maintain each combination of values that appeared in the original dataset.
+In the final result, the gathered columns are dropped, and we get new `key` and `value` variables. Otherwise, the relationships between the original variables are preserved.
 
 ```{r, echo = FALSE, out.width = "100%"}
 knitr::include_graphics("images/tidy-9.png")
 ```
 
-Just like `spread()`, gather maintains each of the relationships in the original dataset. This time `table4` only contained three variables, *country*, *year* and *cases*. Each of these appears in the output of `gather()` in a tidy fashion. `gather()` also maintains each of the observations in the original dataset, organizing them in a tidy fashion.
-
 We can use `gather()` to tidy `table4b` in a similar fashion. The only difference is the variable stored in the cell values:
 
 ```{r}
-table4b %>% gather(key = "year", value = "population", `1999`:`2000`)
+table4b %>% gather(`1999`, `2000`, key = "year", value = "population")
 ```
 
-It's easy to combine the `table4a` and `table4b` into a single single data frame because the new versions are both tidy. We'll use `dplyr::left_join()`,  which you'll learn about in [relational data].
+To combine the tidied versions of `table4a` and `table4b` into a single tibble, we need to use `dplyr::left_join()`, which you'll learn about in [relational data].
 
 ```{r}
 tidy4a <- table4a %>% gather("year", "cases", `1999`:`2000`)
 tidy4b <- table4b %>% gather("year", "population", `1999`:`2000`)
 left_join(tidy4a, tidy4b)
 ```
+
+### Spreading
+
+Spreading is the opposite of gathering. You use it when the variables for one observation are scattered across multiple rows. For example, take `table2`. An observation is a country in a year, but each observation is spread across two rows.
+
+```{r}
+table2
+```
+
+To tidy this up, we perform a similar operation to `gather()`. We need to identify which column:
+
+* Which column gives the name of the variable, the `key`. Here, it's `key`.
+* Which column gives the value of the variable, the `value`. Here's `value`.
+
+Once we've figured that out, we can use `spread()`:
+
+```{r}
+spread(table2, key = key, value = value)
+```
+
+Visually:
+
+```{r, echo = FALSE, out.width = "100%"}
+knitr::include_graphics("images/tidy-8.png")
+```
+
+Real-life datasets aren't usually labelled so helpfully. Here's another simple example:
+
+```{r}
+weather <- frame_data(
+  ~day,    ~measurement, ~record,
+  "Jan 1", "temp",            31,
+  "Jan 1", "precip",           0,
+  "Jan 2", "temp",            35,
+  "Jan 2", "precip",           5
+)
+weather %>% 
+  spread(key = measurement, value = record)
+```
+
+As you might have guessed from the common `key` and `value` arguments, `spread()` and `gather()` are complements. `gather()` makes wide tables narrower and longer; `spread()` makes long tables shorter and wider.
 
 ### Exercises
 
@@ -235,20 +209,29 @@ left_join(tidy4a, tidy4b)
       spread(year, return) %>% 
       gather("year", "return", `2015`:`2016`)
     ```
-
-1.  Both `spread()` and `gather()` have a `convert` argument. What does it 
+    
+    (Hint: look at the variable types and think about column _names_.)
+    
+    Both `spread()` and `gather()` have a `convert` argument. What does it 
     do?
+
+1.  Why does this code fail?
+
+    ```{r, error = TRUE}
+    table4a %>% gather(1999, 2000, key = "year", value = "cases")
+    ```
 
 1.  Why does spreading this tibble fail?
 
     ```{r}
     people <- frame_data(
-      ~name, ~key, ~value,
-      "Phillip Woods", "age", 45,
-      "Phillip Woods", "height", 186,
-      "Phillip Woods", "age", 50,
-      "Jessica Cordero", "age", 37,
-      "Jessica Cordero", "height", 156
+      ~name,             ~key,    ~value,
+      #-----------------|--------|------
+      "Phillip Woods",   "age",       45,
+      "Phillip Woods",   "height",   186,
+      "Phillip Woods",   "age",       50,
+      "Jessica Cordero", "age",       37,
+      "Jessica Cordero", "height",   156
     )
     ```
 
@@ -265,7 +248,7 @@ left_join(tidy4a, tidy4b)
 
 ## Separating and uniting
 
-You may have noticed that we skipped `table3` in the last section. `table3` has a different problem: we have one column (`rate`) that contains two variables (`cases` and `population`). To fix this problem, we'll need the `separate()` function.  In this section, we'll discuss the inverse of `separate()`: `unite()`, which you use if a single variable is spread across multiple columns.
+You've learned how to tidy `table2` and `table4`, but not `table3`. `table3` has a different problem: we have one column (`rate`) that contains two variables (`cases` and `population`). To fix this problem, we'll need the `separate()` function. You'll also learn about inverse of `separate()`: `unite()`, which you use if a single variable is spread across multiple columns.
 
 ### Separate
 
@@ -289,6 +272,8 @@ table3 %>%
   separate(rate, into = c("cases", "population"), sep = "/")
 ```
 
+(Formally, `sep` is a regular expression, which you'll learn more about in [strings].)
+
 Look carefully at the column types: you'll notice that `case` and `population` are character columns. This is the default behaviour in `separate()`: it leaves the type of the column as is. Here, however, it's not very useful those really are numbers. We can ask `separate()` to try and convert to better types using `convert = TRUE`:
 
 ```{r}
@@ -296,7 +281,7 @@ table3 %>%
   separate(rate, into = c("cases", "population"), convert = TRUE)
 ```
 
-You can also pass an integer or vector of integers to `sep`. `separate()` will interpret the integers as positions to split at. Positive values start at 1 on the far-left of the strings; negative value start at -1 on the far-right of the strings. When using integers to separate strings, the length of `sep` should be one less than the number of names in `into`. You can use this arrangement to separate the last two digits of each year.
+You can also pass a vector of integers to `sep`. `separate()` will interpret the integers as positions to split at. Positive values start at 1 on the far-left of the strings; negative value start at -1 on the far-right of the strings. When using integers to separate strings, the length of `sep` should be one less than the number of names in `into`. You can use this arrangement to separate the last two digits of each year.
 
 ```{r}
 table3 %>% 
@@ -317,14 +302,12 @@ table5 %>%
   unite(new, century, year)
 ```
 
-In this case we also need to use the `sep` arguent. The default is will place an underscore (`_`) between values from separate columns. Here we don't want any separate so we use `""`:
+In this case we also need to use the `sep` arguent. The default will place an underscore (`_`) between the values from different columns. Here we don't want any separator so we use `""`:
 
 ```{r}
 table5 %>% 
   unite(new, century, year, sep = "")
 ```
-
-`unite()` returns a copy of the data frame that includes the new column, but not the columns used to build the new column.
 
 ### Exercises
 
@@ -340,17 +323,17 @@ table5 %>%
     ```
 
 1.  Both `unite()` and `separate()` have a `remove` argument. What does it
-    do? When would you set it to `FALSE`?
+    do? Why would you set it to `FALSE`?
 
 1.  Compare and contrast `separate()` and `extract()`.  Why are there
     three variations of separation, but only one unite?
 
 ## Missing values
 
-Changing the representation of a dataset brings up an important fact about missing values. There are two types of missing values:
+Changing the representation of a dataset brings up an important subtlety of missing values. Suprisingly, a value can be missing in one of two possible ways:
 
-* __Explicit__ missing values are flagged with `NA`.
-* __Implicit__ missing values are simply not present in the data.
+* __Explicitly__, i.e. flagged with `NA`.
+* __Implicitly__, i.e. simply not present in the data.
 
 Let's illustrate this idea with a very simple data set:
 
@@ -370,9 +353,9 @@ There are two missing values in this dataset:
 * The return for the first quarter of 2016 is implicitly missing, because it
   simply does not appear in the dataset.
   
-One way to think about the difference is this Zen-like koan: An implicit missing value is the presence of an absence; an explicit missing value is the absence of a presence.
+One way to think about the difference is with this Zen-like koan: An implicit missing value is the presence of an absence; an explicit missing value is the absence of a presence.
 
-The way that a dataset is represented can make implicit values explicit. For exmaple, we can make the implicit missing value explicit putting years in the columns:
+The way that a dataset is represented can make implicit values explicit. For example, we can make the implicit missing value explicit putting years in the columns:
 
 ```{r}
 stocks %>% 
@@ -387,7 +370,7 @@ stocks %>%
   gather(year, return, `2015`:`2016`, na.rm = TRUE)
 ```
 
-An important tool to making missing values explicit in tidy data is `complete()`:
+Another important tool for making missing values explicit in tidy data is `complete()`:
 
 ```{r}
 stocks %>% 
@@ -423,20 +406,48 @@ treatment %>%
 
 ## Case Study
 
-The `who` dataset in tidyr contains cases of tuberculosis (TB) reported between 1995 and 2013 sorted by country, age, and gender. The data comes in the *2014 World Health Organization Global Tuberculosis Report*, available for download at <www.who.int/tb/country/data/download/en/>. The data provides a wealth of epidemiological information, but it's challenging to work with the data in the form that it's provided:
+To finish off the chapter, let's pull together everything you've learned to tackle a realistic data tidying problem. The `tidyr::who` dataset contains reporter tuberculosis (TB) cases broken down by year, country, age, gender, and diagnosis method. The data comes from the *2014 World Health Organization Global Tuberculosis Report*, available for download at <www.who.int/tb/country/data/download/en/>. 
+
+There's a wealth of epidemiological information in this dataset, but it's challenging to work with the data in the form that it's provided:
 
 ```{r}
 who
 ```
 
-This is a very typical example of data you are likely to encounter in real life. It contains redundant columns, odd variable codes, and many missing values. In short, `who` is messy. The most unique feature of `who` is its coding system. Columns five through sixty encode four separate pieces of information in their column names:
+This is a very typical example of data you are likely to encounter in real life. It contains redundant columns, odd variable codes, and many missing values. In short, `who` is messy, and we'll need multiple steps to tidy it. Like dplyr, tidyr is designed so that each function does one thing well. That means in real-life situations you'll typically need to string together multiple verbs. 
+
+The best place to start is almost always to gathering together the columns that are not variables. Let's have a look at what we've got: 
+
+* It looks like `country`, `iso2`, and `iso3` are redundant ways of specifying
+  the same variable, the `country`.
+  
+* `year` is clearly also a variable.
+
+* We don't know what all the other columns are yet, but given the structure 
+  in the variables (e.g. `new_sp_m014`, `new_ep_m014`, `new_ep_f014`) these
+  are likely to be values, not variable names.
+
+So we need to gather together all the columns from `new_sp_m3544` to `newrel_f65`. We don't yet know what these things mean, so for now we'll use the generic names `key`. We know the cells repesent the count of cases, so we'll use the variable `cases`. There are a lot of missing values in the current representation, so for now we'll use `na.rm` just so we can focus on the values that are present.
+
+```{r}
+who1 <- who %>% gather(new_sp_m014:newrel_f65, key = "key", value = "cases", 
+  na.rm = TRUE)
+who1
+```
+
+We can get some hint of the structure of the values in the new `key` column:
+
+```{r}
+who1 %>% count(key)
+```
+
+You might be able to parse this out by yourself with a little thought and some experimentation, but luckily we have the data dictionary handy. It tells us:
 
 1.  The first three letters of each column denote whether the column 
     contains new or old cases of TB. In this dataset, each column contains 
     new cases.
 
-1.  The next two letters describe the type of case being counted. We will 
-    treat each of these as a separate variable.
+1.  The next two letters describe the type of TB:
     
     *   `rel` stands for cases of relapse
     *   `ep` stands for cases of extrapulmonary TB
@@ -459,53 +470,35 @@ This is a very typical example of data you are likely to encounter in real life.
     * `5564` = 55 -- 64 years old
     * `65` = 65 or older
 
-The `who` dataset is untidy in multiple ways, so we'll need multiple steps to tidy it. Like dplyr, tidyr is designed so that each function does one thing well. That means in real-life situations you'll typically need to string together multiple verbs. 
-
-Let's start by gathering the columns that are not variables. This is almost always the best place to start when tidying a new dataset. Here we'll use `na.rm` just so we can focus on the values that are present, not the many missing values.
+We need to make a minor fix to the format of the column names: unfortunately the names are slightly inconsistent because instead of `new_rel_` we have `newrel` (it's hard to spot this here but if you don't fix it we'll get errors in subsequent steps). You'll learn about `str_replace()` in [strings], but the basic idea is pretty simple: replace the string "newrel" with "new_rel". This makes all variable names consistent.
 
 ```{r}
-who1 <- who %>% gather(code, value, new_sp_m014:newrel_f65, na.rm = TRUE)
-who1
-```
-
-We need to make a minor fix to the format of the column names: unfortunately the names are inconsistent because instead of `new_rel_` we have `newrel` (it's hard to spot this here but if you don't fix it we'll get errors in subsequent steps). You'll learn about `str_replace()` in [strings], but the basic idea is pretty simple: replace the string "newrel" with "new_rel". This makes all variable names consistent.
-
-```{r}
-who2 <- who1 %>% mutate(code = stringr::str_replace(code, "newrel", "new_rel"))
+who2 <- who1 %>% mutate(key = stringr::str_replace(key, "newrel", "new_rel"))
 who2
 ```
 
 We can separate the values in each code with two passes of `separate()`. The first pass will split the codes at each underscore.
 
 ```{r}
-who3 <- who2 %>% separate(code, c("new", "type", "sexage"), sep = "_")
+who3 <- who2 %>% separate(key, c("new", "type", "sexage"), sep = "_")
 who3
 ```
 
-Then we might as well drop the `new` colum because it's consistent in this dataset:
+Then we might as well drop the `new` colum because it's consistent in this dataset. While we're dropping columns, let's also drop `iso2` and `iso3` since they're redundant.
 
 ```{r}
 who3 %>% count(new)
-who4 <- who3 %>% select(-new)
+who4 <- who3 %>% select(-new, -iso2, -iso3)
 ```
 
-The second pass will split `sexage` after the first character to create two columns, a sex column and an age column.
+Next we'll split `sexage` up into `sex` and `age` by splitting after the first character:
 
 ```{r}
 who5 <- who4 %>% separate(sexage, c("sex", "age"), sep = 1)
 who5
 ```
 
-The `rel`, `ep`, `sn`, and `sp` keys are all contained in the same column. We can now move the keys into their own column names with `spread()`.
-
-```{r}
-who6 <- who5 %>% spread(type, value)
-who6
-```
-
-The `who` dataset is now tidy. It is far from clean (for example, it contains several redundant columns and many missing values), but it will now be much easier to work with in R. 
-
-Typically you wouldn't assign each step to a new variable. Instead you'd join everything together in one big pipeline:
+The `who` dataset is now tidy as each variable is a column. It is far from clean (for example, it contains several redundant columns and many missing values), but it will now be much easier to work with in R. Typically you wouldn't assign each step to a new variable. Instead you'd join everything together in one big pipeline:
 
 ```{r}
 who %>%
@@ -513,8 +506,7 @@ who %>%
   mutate(code = stringr::str_replace(code, "newrel", "new_rel")) %>%
   separate(code, c("new", "var", "sexage")) %>% 
   select(-new) %>% 
-  separate(sexage, c("sex", "age"), sep = 1) %>% 
-  spread(var, value)
+  separate(sexage, c("sex", "age"), sep = 1)
 ```
 
 ### Exercises
@@ -525,25 +517,27 @@ who %>%
     between an `NA` and zero? Do you think we should use `fill = 0` in
     the final `spread()` step?
 
-1.  What happens if you neglect the `mutate()` step? How might you use the
-    `fill` argument to `gather()`?
+1.  What happens if you neglect the `mutate()` step?
 
-1.  Compute the total number of cases of tb across all four diagnoses methods.
-    You can perform the computation either before or after the final
-    `spread()`. What are the advantages and disadvantages of each location?
+1.  I claimed that `iso2` and `iso3` were redundant with `country`. 
+    Confirm my claim by creating a table that uniquely maps from `country`
+    to `iso2` and `iso3`.
+
+1.  For each country, year, and sex compute the total number of cases of 
+    TB. Make an informative visualisation of the data.
 
 ## Non-tidy data
 
-Before you go on further, it's worth talking a little bit about non-tidy data. Early in the chapter, I used the perjorative term "messy" to refer to non-tidy data. But that is an oversimplification: there are lots of useful and well founded data structures that are not tidy data.
+Before we continue on to other topics, it's worth talking a little bit about non-tidy data. Early in the chapter, I used the perjorative term "messy" to refer to non-tidy data. That's an oversimplification: there are lots of useful and well founded data structures that are not tidy data.
 
 There are two mains reasons to use other data structures:
 
-* Alternative, non-tidy, representations maybe have substantial performance
-  or memory advantages.
+* Alternative representations may have substantial performance or space 
+  advantages.
   
 * Specialised fields have evolved their own conventions for storing data
   that may be quite different to the conventions of  tidy data.
 
-Generally, however, these reason will require the usage of something other than a tibble or a data frame. If you data does fit naturally into a rectangular structure composed of observations and variables, I think tidy data should be your default choice. But there are good reasons to other structures; tidy data is not the only way.
+Either of these reasons means you'll need something other than a tibble (or data frame). If your data does fit naturally into a rectangular structure composed of observations and variables, I think tidy data should be your default choice. But there are good reasons to use other structures; tidy data is not the only way.
 
 If you'd like to learn more about non-tidy data, I'd highly recommend this thoughtful blog post by Jeff Leek: <http://simplystatistics.org/2016/02/17/non-tidy-data/>
