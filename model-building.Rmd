@@ -21,20 +21,19 @@ It's a challenge to know when to stop. You need to figure out when your model is
 
 ### Prerequisites
 
-We'll start with modelling and EDA tools we needed in the last chapter. Then we'll add in some real datasets: `diamonds` from ggplot2, and `flights` from nycflights13. We'll also need lubridate to extract useful components of date-times.
+We'll start with modelling and EDA tools we used in the last chapter. Then we'll add in some real datasets: `diamonds` from ggplot2, and `flights` from nycflights13. We'll also need lubridate to extract useful components of date-times.
 
 ```{r setup, message = FALSE}
 # Modelling functions
 library(modelr)
-library(broom)
+options(na.action = na.warn)
+
+# Data
+library(nycflights13)
 
 # EDA tools
 library(ggplot2)
 library(dplyr)
-library(tidyr)
-
-# Data
-library(nycflights13)
 library(lubridate)
 ```
 
@@ -48,34 +47,44 @@ ggplot(diamonds, aes(color, price)) + geom_boxplot()
 ggplot(diamonds, aes(clarity, price)) + geom_boxplot()
 ```
 
+Note that the worst diamond color is J (slightly yellow), and the worst clarity is I1 (inclusions visible to the naked eye).
+
 ### Price and carat
 
-The basic reason we see this pattern is that the variable that is most predictive of diamond price is its size:
+It looks like lower quality diamonds have higher prices because there is an important cofounding variable: the weight (`carat`) of the diamond. The weight of the diamond is the single most important factor for determining the price of the diamond, and lower quality diamonds tend to be larger.
 
-```{r, dev = "png"}
+```{r}
 ggplot(diamonds, aes(carat, price)) + 
   geom_hex(bins = 50)
 ```
 
-To explore this relationship, lets make a couple of tweaks to the diamonds dataset:
+We can make it easier to see how the other attributes of a diamond affect its relative `price` by fitting a model to separate out the effect of `carat`. But first, lets make a couple of tweaks to the diamonds dataset to make it easier to work with:
 
-1. Remove all diamonds bigger than 2.5 carats
-1. Log-transform the carat and price variables
+1. Focus on diamonds bigger smaller than 2.5 carats (99.7% of the data)
+1. Log-transform the carat and price variables.
 
 ```{r}
 diamonds2 <- diamonds %>% 
   filter(carat <= 2.5) %>% 
   mutate(lprice = log2(price), lcarat = log2(carat))
+```
 
+Together, these changes make it easier to see the relationship between `carat` and `price`:
+
+```{r}
 ggplot(diamonds2, aes(lcarat, lprice)) + 
   geom_hex(bins = 50)
 ```
 
-Log-transforming is very useful here because it make a linear relationship, and linear relationships are generally much easier to work with.  We could go one step further and use a linear model to remove the strong effect of `lcarat` on `lprice`. First, let's see what a linear model tells about the data on the original scale:
+The log-transformation is particularly useful here because it makes the pattern linear, and linear patterns are the easiest to work with. Let's take the next step and remove that strong linear pattern. We first make the pattern explicit by fitting a model:
 
 ```{r}
 mod_diamond <- lm(lprice ~ lcarat, data = diamonds2)
+```
 
+Then we look at what the model tells us about the data. Note that I back transform the predictions, undoing the log transformation, so I can overlay the predictions on the raw data:
+
+```{r}
 grid <- diamonds2 %>% 
   expand(carat = seq_range(carat, 20)) %>% 
   mutate(lcarat = log2(carat)) %>% 
@@ -87,9 +96,9 @@ ggplot(diamonds2, aes(carat, price)) +
   geom_line(data = grid, colour = "red", size = 1)
 ```
 
-That's interesting! If we believe our model, then it suggests that the large diamonds we have are much cheaper than expected. This may because no diamond in this dataset costs more than $19,000.
+That tells us something interesting about. If we believe our model, then the large diamonds are much cheaper than expected. This is probably because no diamond in this dataset costs more than $19,000.
 
-We can also look at the residuals from this model. This verifies that we have successfully removed the strong linear pattern:
+Now we can look at the residuals, which verifies that we've successfully removed the strong linear pattern:
 
 ```{r}
 diamonds2 <- diamonds2 %>% 
@@ -99,7 +108,7 @@ ggplot(diamonds2, aes(lcarat, lresid)) +
   geom_hex(bins = 50)
 ```
 
-Importantly, we can now use those residuals in plots instead of `price`. 
+Importantly, we can now re-do our motivating plots using those residuals instead of `price`. 
 
 ```{r dev = "png"}
 ggplot(diamonds2, aes(cut, lresid)) + geom_boxplot()
@@ -107,30 +116,50 @@ ggplot(diamonds2, aes(color, lresid)) + geom_boxplot()
 ggplot(diamonds2, aes(clarity, lresid)) + geom_boxplot()
 ```
 
-Here we see the relationship we'd expect. Now that we've removed the effect of size on price,  
-
-To interpret the `y` axis, we need to think about what the residuals are telling us, and what scale they are on. A residual of -1 indicates that `lprice` was 1 unit lower than expected, based on the `carat` alone. $2^{-1}$ is 1/2, so that sugggests diamonds with colour I1 are half the price you'd expect.
+Now we see the relationship we expect: as the quality of the diamond increases, so to does it's relative pirce. To interpret the `y` axis, we need to think about what the residuals are telling us, and what scale they are on. A residual of -1 indicates that `lprice` was 1 unit lower than a prediction based solely on its weight. $2^{-1}$ is 1/2, points with a value of -1 are half the expected price, and residuals with value 1 are twice the predicted price.
 
 ### A model complicated model
 
-We could continue this process, making our model complex:
+If we wanted to, we could continue to build up our model, moving the effects we've observed into the model to make them explicit. For example, we could include `color`, `cut`, and `clarity` into the model so that we also make explicit the effect of these three categorical variables:
 
 ```{r}
 mod_diamond2 <- lm(lprice ~ lcarat + color + cut + clarity, data = diamonds2)
-
-add_predictions_trans <- function(df, mod) {
-  df %>% 
-    add_predictions(mod, "lpred") %>% 
-    mutate(pred = 2 ^ lpred)
-}
-
-diamonds2 %>% 
-  expand_model(mod_diamond2, cut) %>% 
-  add_predictions_trans(mod_diamond2) %>% 
-  ggplot(aes(cut, pred)) + 
-    geom_point()
 ```
 
+This model now includes four predictors, so it's getting harder to visualise. Fortunately, they're currently all independent which means that we can plot them individually in four plots. To make the process a little easier, we're going to use the `model` argument to `data_grid`:
+
+```{r}
+grid <- diamonds2 %>% 
+  data_grid(cut, .model = mod_diamond2) %>% 
+  add_predictions(mod_diamond2)
+grid
+
+ggplot(grid, aes(cut, pred)) + 
+  geom_point()
+```
+
+If the model needs variables that you haven't explicitly supplied, `data_grid()` will automatically fill them in with "typical" value. For continous variables, it uses the median, and categorical variables it uses the most common value (or values, if there's a tie).
+
+```{r}
+diamonds2 <- diamonds2 %>% 
+  add_residuals(mod_diamond2, "lresid2")
+
+ggplot(diamonds2, aes(lcarat, lresid2)) + 
+  geom_hex(bins = 50)
+```
+
+This plot indicates that there are some diamonds with quite large residuals - remember a residual of 4 indicates that the diamond is 4x the price that we expected. It's often useful to look at unusual values individually:
+
+```{r}
+diamonds2 %>% 
+  filter(abs(lresid2) > 1) %>% 
+  add_predictions(mod_diamond2) %>% 
+  mutate(pred = round(2 ^ pred)) %>% 
+  select(price, pred, carat:table, x:z) %>% 
+  arrange(price)
+```
+
+Nothing really jumps out at me here, but it's probably worth spending time considering if this indicates a problem with our model, or if there are a errors in the data. If there are mistakes in the data, this could be an opportunity to buy diamonds that have been priced low incorrectly.
 
 ### Exercises
 
@@ -143,6 +172,10 @@ diamonds2 %>%
 1.  Extract the diamonds that have very high and very low residuals. 
     Is there any unusual about these diamonds? Are the particularly bad
     or good, or do you think these are pricing errors?
+
+1.  Does the final model, `mod_diamonds2`, do a good job of predicting
+    diamond prices? Would you trust it to tell you how much to spend
+    if you were buying a diamond?
 
 ## What affects the number of daily flights?
 
