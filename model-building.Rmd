@@ -179,7 +179,7 @@ Nothing really jumps out at me here, but it's probably worth spending time consi
 
 ## What affects the number of daily flights?
 
-Let's explore the number of flights that leave NYC per day. We're not going to end up with a fully realised model, but as you'll see, the steps along the way will help us better understand the data. Let's get started by counting the number of flights per day and visualising it with ggplot2.
+Let's work through a similar process for a dataset that seems even simpler at first glance: the number of flights that leave NYC per day. This is a really small dataset --- only 365 rows and 2 columns --- and we're not going to end up with a fully realised model, but as you'll see, the steps along the way will help us better understand the data. Let's get started by counting the number of flights per day and visualising it with ggplot2.
 
 ```{r}
 daily <- flights %>% 
@@ -192,11 +192,9 @@ ggplot(daily, aes(date, n)) +
   geom_line()
 ```
 
-This is a really small dataset --- only 365 rows and 2 columns, but because as you'll see there's a rich set of interesting variables buried in the date.
-
 ### Day of week
 
-Understanding the long-term trend is challenging because there's a very strong day-of-week effect that dominates the subtler patterns. Let's summarise the number of flights per day-of-week:
+Understanding the long-term trend is challenging because there's a very strong day-of-week effect that dominates the subtler patterns. Let's start by looking at the distribution of flight numbers by day-of-week:
 
 ```{r}
 daily <- daily %>% 
@@ -205,7 +203,7 @@ ggplot(daily, aes(wday, n)) +
   geom_boxplot()
 ```
 
-There are fewer flights on weekends because most travel is for business. The effect is particularly pronounced on Saturday: you might sometimes have to leave on Sunday for a Monday morning meeting, but it's very rare that you'd leave on Saturday as you'd much rather be at home with your family.
+There are fewer flights on weekends because most travel is for business. The effect is particularly pronounced on Saturday: you might sometimes leave on Sunday for a Monday morning meeting, but it's very rare that you'd leave on Saturday as you'd much rather be at home with your family.
 
 One way to remove this strong pattern is to use a model. First, we fit the model, and display its predictions overlaid on the original data:
 
@@ -233,10 +231,9 @@ daily %>%
 
 Note the change in the y-axis: now we are seeing the deviation from the expected number of flights, given the day of week. This plot is useful because now that we've removed much of the large day-of-week effect, we can see some of the subtler patterns that remain:
 
-1.  Our day of week adjustment seems to fail starting around June: you can
-    still see a strong regular pattern that our model hasn't removed. Drawing
-    a plot with one line for each day of the week makes the cause easier
-    to see:
+1.  Our model seems to fail starting in June: you can still see a strong 
+    regular pattern that our model hasn't captured. Drawing a plot with one 
+    line for each day of the week makes the cause easier to see:
 
     ```{r}
     ggplot(daily, aes(date, resid, colour = wday)) + 
@@ -246,7 +243,7 @@ Note the change in the y-axis: now we are seeing the deviation from the expected
 
     Our model fails to accurately predict the number of flights on Saturday:
     during summer there are more flights than we expect, and during Fall there 
-    are fewer. We'll see how we can do better in the next section.
+    are fewer. We'll see how we can do capture this pattern in the next section.
 
 1.  There are some days with far fewer flights than expected:
 
@@ -256,8 +253,8 @@ Note the change in the y-axis: now we are seeing the deviation from the expected
 
     If you're familiar with American public holidays, you might spot New Year's 
     day, July 4th, Thanksgiving and Christmas. There are some others that don't 
-    seem to correspond immediately to public holidays. You'll work on those 
-    in the exercise below.
+    seem to correspond to public holidays. You'll work on those in one 
+    of the exercises.
     
 1.  There seems to be some smoother long term trend over the course of a year.
     We can highlight that trend with `geom_smooth()`:
@@ -271,8 +268,8 @@ Note the change in the y-axis: now we are seeing the deviation from the expected
     ```
 
     There are fewer flights in January (and December), and more in summer 
-    (May-Sep). We can't do much with this pattern numerically, because we only
-    have a single year of data. But we can use our domain knowledge to 
+    (May-Sep). We can't do much with this pattern quantitatively, because we 
+    only have a single year of data. But we can use our domain knowledge to 
     brainstorm potential explanations.
 
 ### Seasonal Saturday effect
@@ -290,9 +287,9 @@ daily %>%
 
 (I've used both points and lines to make it more clear what is data and what is interpolation.)
 
-I suspect pattern is caused by summer holidays: many people go on holiday in the summer, and people don't mind travelling on Saturdays for vacation. Looking at this plot, we might guess that summer holidays are from early June to late August. That seems to line up fairly well with the [state's school terms](http://schools.nyc.gov/Calendar/2013-2014+School+Year+Calendars.htm): summer break in 2013 was Jun 26--Sep 9. 
+I suspect this pattern is caused by summer holidays: many people go on holiday in the summer, and people don't mind travelling on Saturdays for vacation. Looking at this plot, we might guess that summer holidays are from early June to late August. That seems to line up fairly well with the [state's school terms](http://schools.nyc.gov/Calendar/2013-2014+School+Year+Calendars.htm): summer break in 2013 was Jun 26--Sep 9. 
 
-Why are there Saturday flights in the Fall than the Spring? I asked some American friends and they suggested that it's less common to plan family vacations during the Fall becuase of the big Thanksgiving and Christmas holidays. We can't tell if that's exactly the reason, but it seems like a plausible working hypothesis.
+Why are there more Saturday flights in the Fall than the Spring? I asked some American friends and they suggested that it's less common to plan family vacations during the Fall because of the big Thanksgiving and Christmas holidays. We don't have the data to know for sure, but it seems like a plausible working hypothesis.
 
 Lets create a "term" variable that roughly captures the three school terms, and check our work with a plot:
 
@@ -349,7 +346,7 @@ ggplot(daily, aes(wday, n)) +
   facet_wrap(~ term)
 ```
 
-Our model is finding the _mean_ effect, but we have a lot of big outliers, so they tend to drag the mean far away from the typical value. We can alleviate this problem by using a model that is robust to the effect of outliers: `MASS::rlm()`. This greatly reduces the impact of the outliers on our estimates, and gives a model that does a good job of removing the day of week pattern:
+Our model is finding the _mean_ effect, but we have a lot of big outliers, so mean tends to be far away from the typical value. We can alleviate this problem by using a model that is robust to the effect of outliers: `MASS::rlm()`. This greatly reduces the impact of the outliers on our estimates, and gives a model that does a good job of removing the day of week pattern:
 
 ```{r, warn = FALSE}
 mod3 <- MASS::rlm(n ~ wday * term, data = daily)
@@ -363,25 +360,6 @@ daily %>%
 
 It's now much easier to see the long-term trend, and the positive and negative outliers.
 
-### Time of year: an alternative approach
-
-In the previous section we used our domain knowledge (how the US school term affects travel) to improve the model. An alternative to using making our knowledge explicit in the model is to give the data more room to speak. We could use a more flexible model and allow that to capture the pattern we're interested in. We know that a simple linear trend isn't adeqaute, so instead we could use a natural spline to allow a smoothly varying trend across the year:
-
-```{r}
-library(splines)
-mod <- MASS::rlm(n ~ wday * ns(date, 5), data = daily)
-
-daily %>% 
-  data_grid(wday, date = seq_range(date, n = 13)) %>% 
-  add_predictions(mod) %>% 
-  ggplot(aes(date, pred, colour = wday)) + 
-    geom_line() +
-    geom_point()
-```
-
-We see a strong pattern in the numbers of Saturday flights. This is reassuring, because we also saw that pattern in the raw data. It's  a good sign when you see the same signal from multiple approaches.
-
-How do you decide how many parameters to use for the spline? You can either either it pick by eye, or you could use automated techniques which you'll learn about in [model assessment]. For exploration, picking by eye to capture the most important patterns is fine.
 
 ### Computed variables
 
@@ -405,6 +383,26 @@ mod3 <- lm(n ~ wday2(date) * term(date), data = daily)
 
 Either approach is reasonable. Making the transformed variable explicit is useful if you want to check your work, or use them in a visualisation. But you can't easily use transformations (like splines) that return multiple columns. Including the transformations in the model function makes life a little easier when you're working with many different datasets because the model is self contained.
 
+### Time of year: an alternative approach
+
+In the previous section we used our domain knowledge (how the US school term affects travel) to improve the model. An alternative to using making our knowledge explicit in the model is to give the data more room to speak. We could use a more flexible model and allow that to capture the pattern we're interested in. A simple linear trend isn't adeqaute, so we could try using a natural spline to fit a smooth curve across the year:
+
+```{r}
+library(splines)
+mod <- MASS::rlm(n ~ wday * ns(date, 5), data = daily)
+
+daily %>% 
+  data_grid(wday, date = seq_range(date, n = 13)) %>% 
+  add_predictions(mod) %>% 
+  ggplot(aes(date, pred, colour = wday)) + 
+    geom_line() +
+    geom_point()
+```
+
+We see a strong pattern in the numbers of Saturday flights. This is reassuring, because we also saw that pattern in the raw data. It's a good sign when you get the same signal from different approaches.
+
+How do you decide how many parameters to use for the spline? You can either either it pick by eye, or you could use automated techniques which you'll learn about in [model assessment]. For exploration, picking by eye to capture the most important patterns is fine.
+
 ### Exercises
 
 1.  Use your google sleuthing skills to brainstorm why there were fewer than
@@ -423,7 +421,7 @@ Either approach is reasonable. Making the transformed variable explicit is usefu
     `Sat-spring`, `Sat-fall`. How does this model compare with the model with 
     every combination of `wday` and `term`?
     
-1.  Create a new wday variable that combines the day of week, term 
+1.  Create a new `wday` variable that combines the day of week, term 
     (for Saturdays), and public holidays. What do the residuals of 
     that model look like?
 
