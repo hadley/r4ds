@@ -2,21 +2,20 @@
 
 ## Introduction
 
-This chapter introduces you to string manipulation in R. You'll learn the basics of how strings work and how to create them by hand, but the focus of this chapter will be on regular expressions, or regexps for short. Regular expressions are useful because strings usually contain unstructured or semi-structured data, and regexps provide powerful tools to make order from this sort of madness. 
-
-Regexps are a very concise language that let you describe patterns in strings. When you first look at them, you'll think a cat walked across your keyboard, but as you learn more, you'll see how they allow you to express complex patterns very concisely. The goal of this chapter is not to teach you every detail of regular expressions. Instead I'll give you a solid foundation that allows you to solve a wide variety of problems and point you to resources where you can learn more.
+This chapter introduces you to string manipulation in R. You'll learn the basics of how strings work and how to create them by hand, but the focus of this chapter will be on regular expressions, or regexps for short. Regular expressions are useful because strings usually contain unstructured or semi-structured data, and regexps are a concise language for describing patterns in strings. When you first look at a regexp, you'll think a cat walked across your keyboard, but as your understanding improves they will soon start to make sense.
 
 ### Prerequisites
 
-This chapter will focus on the __stringr__ package. This package provides a consistent set of functions that all work the same way and are easier to learn than the base R equivalents.
+This chapter will focus on the __stringr__ package for string manipulation. We'll also show a couple of examples of using stringr functions in conjunction with dplyr.
 
 ```{r setup}
 library(stringr)
+library(dplyr)
 ```
 
 ## String basics
 
-You can create strings with either single quotes or double quotes: unlike other languages, there is no difference in behaviour. I recommend always using `"`, unless you want to create a string that contains multiple `"`.
+You can create strings with either single quotes or double quotes. Unlike other languages, there is no difference in behaviour. I recommend always using `"`, unless you want to create a string that contains multiple `"`.
 
 ```{r}
 string1 <- "This is a string"
@@ -55,10 +54,10 @@ c("one", "two", "three")
 
 ### String length
 
-Base R contains many functions to work with strings but we'll avoid them because they can be inconsistent, which makes them hard to remember. Instead we'll use functions from stringr. These have more intuitive names, and all start with `str_`:
+Base R contains many functions to work with strings but we'll avoid them because they can be inconsistent, which makes them hard to remember. Instead we'll use functions from stringr. These have more intuitive names, and all start with `str_`. For example, `str_length()` tells you the number of characters in a string:
 
 ```{r}
-str_length(NA)
+str_length(c("a", "R for data science", NA))
 ```
 
 The common `str_` prefix is particularly useful if you use RStudio, because typing `str_` will trigger autocomplete, allowing you to see all stringr functions:
@@ -103,7 +102,8 @@ name <- "Hadley"
 time_of_day <- "morning"
 birthday <- FALSE
 
-str_c("Good ", time_of_day, " ", name,
+str_c(
+  "Good ", time_of_day, " ", name,
   if (birthday) " and HAPPY BIRTHDAY",
   "."
 )
@@ -132,7 +132,7 @@ Note that `str_sub()` won't fail if the string is too short: it will just return
 str_sub("a", 1, 5)
 ```
 
-You can also use the assignment form of `str_sub()`, `` `str_sub<-()` ``, to modify strings:
+You can also use the assignment form of `str_sub()` to modify strings:
 
 ```{r}
 str_sub(x, 1, 1) <- str_to_lower(str_sub(x, 1, 1))
@@ -150,26 +150,28 @@ str_to_upper(c("i", "ı"))
 str_to_upper(c("i", "ı"), locale = "tr")
 ```
 
-The locale is specified as a ISO 639 language code, which are two or three letter abbreviations. If you don't already know the code for your language, [Wikipedia](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes) has a good list. If you leave the locale blank, it will use the current locale.
+The locale is specified as a ISO 639 language code, which is a two or three letter abbreviation. If you don't already know the code for your language, [Wikipedia](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes) has a good list. If you leave the locale blank, it will use the current locale, as provided by your operating system.
 
 Another important operation that's affected by the locale is sorting. The base R `order()` and `sort()` functions sort strings using the current locale. If you want robust behaviour across different computers, you may want to use `str_sort()` and `str_order()` which take an additional `locale` argument:
 
 ```{r}
 x <- c("apple", "eggplant", "banana")
+
 str_sort(x, locale = "en")  # English
+
 str_sort(x, locale = "haw") # Hawaiian
 ```
 
 ### Exercises
-
-1.  In your own words, describe the difference between the `sep` and `collapse`
-    arguments to `str_c()`.
 
 1.  In code that doesn't use stringr, you'll often see `paste()` and `paste0()`.
     What's the difference between the two functions? What stringr function are
     they equivalent to? How do the functions differ in their handling of 
     `NA`?
     
+1.  In your own words, describe the difference between the `sep` and `collapse`
+    arguments to `str_c()`.
+
 1.  Use `str_length()` and `str_sub()` to extract the middle character from 
     a string. What will you do if the string has an even number of characters?
 
@@ -202,7 +204,7 @@ The next step up in complexity is `.`, which matches any character (except a new
 str_view(x, ".a.")
 ```
 
-But if "`.`" matches any character, how do you match an actual "`.`"? You need to use an "escape" to tell the regular expression you want to match it exactly, not use the special behaviour. Like strings, regexps use the backslash, `\`, to escape special behaviour. So to match an `.`, you need the regexp `\.`. Unfortunately this creates a problem. We use strings to represent regular expressions, and `\` is also used as an escape symbol in strings. So to create the regular expression `\.` we need the string `"\\."`. 
+But if "`.`" matches any character, how do you match the character "`.`"? You need to use an "escape" to tell the regular expression you want to match it exactly, not use its special behaviour. Like strings, regexps use the backslash, `\`, to escape special behaviour. So to match an `.`, you need the regexp `\.`. Unfortunately this creates a problem. We use strings to represent regular expressions, and `\` is also used as an escape symbol in strings. So to create the regular expression `\.` we need the string `"\\."`. 
 
 ```{r}
 # To create the regular expression, we need \\
@@ -215,7 +217,7 @@ writeLines(dot)
 str_view(c("abc", "a.c", "bef"), "a\\.c")
 ```
 
-If `\` is used as an escape character in regular expressions, how do you match a literal `\`? Well you need to escape it, creating the regular expression `\\`. To create that regular expression, you need to use a string, which also needs to escape `\`. That means to match a literal `\` you need to write `"\\\\"` - you need four backslashes to match one!
+If `\` is used as an escape character in regular expressions, how do you match a literal `\`? Well you need to escape it, creating the regular expression `\\`. To create that regular expression, you need to use a string, which also needs to escape `\`. That means to match a literal `\` you need to write `"\\\\"` --- you need four backslashes to match one!
 
 ```{r}
 x <- "a\\b"
@@ -232,7 +234,7 @@ In this book, I'll write regular expression as `\.` and strings that represent t
 
 1.  How would you match the sequence `"'\`?
 
-1.  What patterns will the regular expression `"\..\..\..` match? 
+1.  What patterns will the regular expression `\..\..\..` match? 
     How would you represent it as a string?
 
 ### Anchors
@@ -286,13 +288,7 @@ There are number of special patterns that match more than one character. You've 
 
 Remember, to create a regular expression containing `\d` or `\s`, you'll need to escape the `\` for the string, so you'll type `"\\d"` or `"\\s"`.
 
-You can use _alternation_ to pick between one or more alternative patterns. For example, `abc|d..f` will match either '"abc"', or `"deaf"`. Note that the precedence for `|` is low, so that `abc|xyz` matches `abc` or `xyz` not `abcyz` or `abxyz`:
-
-```{r}
-str_view(c("abc", "xyz"), "abc|xyz")
-```
-
-Like with mathematical expressions, if precedence ever gets confusing, use parentheses to make it clear what you want:
+You can use _alternation_ to pick between one or more alternative patterns. For example, `abc|d..f` will match either '"abc"', or `"deaf"`. Note that the precedence for `|` is low, so that `abc|xyz` matches `abc` or `xyz` not `abcyz` or `abxyz`. Like with mathematical expressions, if precedence ever gets confusing, use parentheses to make it clear what you want:
 
 ```{r}
 str_view(c("grey", "gray"), "gr(e|a)y")
@@ -336,9 +332,9 @@ str_view(x, "CC+")
 str_view(x, 'C[LX]+')
 ```
 
-Note that the precedence of these operators is high, so you can write: `colou?r` to match either American or British spellings. That means most uses will need parentheses, like `bana(na)+` or `ba(na){2,}`.
+Note that the precedence of these operators is high, so you can write: `colou?r` to match either American or British spellings. That means most uses will need parentheses, like `bana(na)+`.
 
-You can also specify the number of matches numerically:
+You can also specify the number of matches precisely:
 
 * `{n}`: exactly n
 * `{n,}`: n or more
@@ -360,6 +356,8 @@ str_view(x, 'C[LX]+?')
 
 #### Exercises
 
+1.  Describe the equivalents of `?`, `+`, `*` in `{m,n}` form.
+
 1.  Describe in words what these regular expressions match:
     (read carefully to see if I'm using a regular expression or a string
     that defines a regular expression.)
@@ -375,12 +373,12 @@ str_view(x, 'C[LX]+?')
     1. Have three or more vowels in a row.
     1. Have two or more vowel-consonant pairs in a row.
 
-1.  Solve the beginner regexp crosswords:   
-    <https://regexcrossword.com/challenges/beginner/puzzles/1>
+1.  Solve the beginner regexp crosswords at
+    <https://regexcrossword.com/challenges/beginner>.
 
 ### Grouping and backreferences
 
-Earlier, you learned about parentheses as a way to disambiguate complex expressions. They also definie "groups" that you can refer to with _backreferences_, like `\1`, `\2` etc. For example, the following regular expression finds all fruits that have a pair of letters that's repeated.
+Earlier, you learned about parentheses as a way to disambiguate complex expressions. They also definie "groups" that you can refer to with _backreferences_, like `\1`, `\2` etc. For example, the following regular expression finds all fruits that have a repeated pair of letters.
 
 ```{r}
 str_view(fruit, "(..)\\1", match = TRUE)
@@ -388,12 +386,11 @@ str_view(fruit, "(..)\\1", match = TRUE)
 
 (Shortly, you'll also see how they're useful in conjunction with `str_match()`.)
 
-Unfortunately `()` in regexps serve two purposes: you usually use them to disambiguate precedence, but you can also use them for grouping. If you're using one set for grouping and one set for disambiguation, things can get confusing. You might want to use `(?:)` instead: it only disambiguates, and doesn't modify the grouping. `(?:)` are called non-capturing parentheses.
-
 #### Exercises
 
 1.  Describe, in words, what these expressions will match:
 
+    1. `(.)\1\1`
     1. `"(.)(.)\\2\\1"`
     1. `(..)\1`
     1. `"(.).\\1.\\1"`
@@ -413,13 +410,13 @@ Unfortunately `()` in regexps serve two purposes: you usually use them to disamb
 
 Now that you've learned the basics of regular expressions, it's time to learn how to apply them to real problems. In this section you'll learn a wide array of stringr functions that let you:
 
-* Determine which elements match a pattern.
+* Determine which strings match a pattern.
 * Find the positions of matches.
 * Extract the content of matches.
 * Replace matches with new values.
 * Split a string based on a match.
 
-Because regular expressions are so powerful, it's easy to try and solve every problem with a single regular expression. But since you're in a programming language, it's often easy to break the problem down into smaller pieces. If you find yourself getting stuck trying to create a single regexp that solves your problem, take a step back and think if you could break the problem down into smaller pieces, solving each challenge before moving onto the next one.
+A word of caution before we continue: because regular expressions are so powerful, it's easy to try and solve every problem with a single regular expression. But since you're in a programming language, it's often easy to break the problem down into smaller pieces. If you find yourself getting stuck trying to create a single regexp that solves your problem, take a step back and think if you could break the problem down into smaller pieces, solving each challenge before moving onto the next one.
 
 ### Detect matches
 
@@ -458,6 +455,18 @@ words[str_detect(words, "x$")]
 str_subset(words, "x$")
 ```
 
+Typically, however, your strings will be one column of a data frame, and you'll want to use filter instead:
+
+```{r}
+df <- tibble(
+  word = words, 
+  i = seq_along(word)
+)
+df %>% 
+  filter(str_detect(words, "x$"))
+```
+
+
 A variation on `str_detect()` is `str_count()`: rather than a simple yes or no, it tells you how many matches there are in a string:
 
 ```{r}
@@ -466,6 +475,16 @@ str_count(x, "a")
 
 # On average, how many vowels per word?
 mean(str_count(words, "[aeiou]"))
+```
+
+It's natural to use `str_count()` with `mutate()`:
+
+```{r}
+df %>% 
+  mutate(
+    vowels = str_count(word, "[aeiou]"),
+    consontants = str_count(word, "[^aeiou]")
+  )
 ```
 
 Note that matches never overlap. For example, in `"abababa"`, how many times will the pattern `"aba"` match? Regular expressions say two, not three:
@@ -557,7 +576,7 @@ str_extract_all(x, "[a-z]", simplify = TRUE)
 
 ### Grouped matches
 
-Earlier in this chapter we talked about the use of parentheses for clarifying precedence and for backreferences when matching. You can also use parentheses to extract parts of a complex match. For example, imagine we want to extract nouns from the sentences. As a heuristic, we'll look for any word that comes after "a" or "the". Defining a "word" in a regular expression is a little tricky, so here I use a sequence of at least one character that isn't a space.
+Earlier in this chapter we talked about the use of parentheses for clarifying precedence and for backreferences when matching. You can also use parentheses to extract parts of a complex match. For example, imagine we want to extract nouns from the sentences. As a heuristic, we'll look for any word that comes after "a" or "the". Defining a "word" in a regular expression is a little tricky, so here I use a simple approximation: a sequence of at least one character that isn't a space.
 
 ```{r}
 noun <- "(a|the) ([^ ]+)"
@@ -578,6 +597,16 @@ has_noun %>%
 
 (Unsurprisingly, our heuristic for detecting nouns is poor, and also picks up adjectives like smooth and parked.)
 
+If your data is in a tibble, it's often easier to use `tidyr::extract()`. It works like `str_match()` but requires you to name the matches, which are then placed in new columns:
+
+```{r}
+tibble(sentence = sentences) %>% 
+  tidyr::extract(
+    sentence, c("article", "noun"), "(a|the) ([^ ]+)", 
+    remove = FALSE
+  )
+```
+
 Like `str_extract()`, if you want all matches for each string, you'll need `str_match_all()`.
 
 #### Exercises
@@ -590,7 +619,7 @@ Like `str_extract()`, if you want all matches for each string, you'll need `str_
 
 ### Replacing matches
 
-`str_replace()` and `str_replace_all()` allow you to replace matches with new strings. The simplest use to replace a pattern with a fixed string:
+`str_replace()` and `str_replace_all()` allow you to replace matches with new strings. The simplest use is to replace a pattern with a fixed string:
 
 ```{r}
 x <- c("apple", "pear", "banana")
@@ -605,7 +634,7 @@ x <- c("1 house", "2 cars", "3 people")
 str_replace_all(x, c("1" = "one", "2" = "two", "3" = "three"))
 ```
 
-Instead of replacing with a fixed string you can use backreferences to insert components of the match. For example, the following code flips the order of the second and third words.
+Instead of replacing with a fixed string you can use backreferences to insert components of the match. In the following code, I flip the order of the second and third words.
 
 ```{r}
 sentences %>% 
@@ -615,7 +644,9 @@ sentences %>%
 
 #### Exercises
 
-1.   Replace all `/`s in a string with `\`s.
+1.   Replace all forward slashes in a string with backslashes.
+
+1.   Implement a simple version of `str_to_lower()` using `replace_all()`.
 
 1.   Switch the first and last letters in `words`. Which of those strings
      are still words?
@@ -704,14 +735,27 @@ You can use the other arguments of `regex()` to control details of the match:
     
     ```{r}
     x <- "Line 1\nLine 2\nLine 3"
-    str_view_all(x, "^Line")
-    str_view_all(x, regex("^Line", multiline = TRUE))
+    str_extract_all(x, "^Line")[[1]]
+    str_extract_all(x, regex("^Line", multiline = TRUE))[[1]]
     ```
     
 *   `comments = TRUE` allows you to use comments and white space to make 
     complex regular expressions more understandable. Spaces are ignored, as is 
     everything after `#`. To match a literal space, you'll need to escape it: 
     `"\\ "`.
+    
+    ```{r}
+    phone <- regex("
+      \\(?     # optional opening parens
+      (\\d{3}) # area code
+      [)- ]?   # optional closing parens, dash, or space
+      (\\d{3}) # another three numbers
+      [ -]?    # optional space or dash
+      (\\d{3}) # three more numbers
+      ", comments = TRUE)
+    
+    str_match("514-791-8141", phone)
+    ```
 
 *   `dotall = TRUE` allows `.` to match everything, including `\n`.
 
@@ -721,7 +765,7 @@ There are three other functions you can use instead of `regex()`:
     all special regular expressions and operates at a very low level. 
     This allows you to avoid complex escaping and can be much faster than 
     regular expressions. The following microbenchmark shows that it's about
-    3x faster for a simple exmaple.
+    3x faster for a simple example.
   
     ```{r}
     microbenchmark::microbenchmark(
@@ -763,8 +807,8 @@ There are three other functions you can use instead of `regex()`:
     i <- c("I", "İ", "i", "ı")
     i
     
-    str_subset(i, coll("i", TRUE))
-    str_subset(i, coll("i", TRUE, locale = "tr"))
+    str_subset(i, coll("i", ignore_case = TRUE))
+    str_subset(i, coll("i", ignore_case = TRUE, locale = "tr"))
     ```
     
     Both `fixed()` and `regex()` have `ignore_case` arguments, but they
@@ -798,7 +842,7 @@ There are three other functions you can use instead of `regex()`:
 
 ## Other uses of regular expressions
 
-There are a few other functions in base R that accept regular expressions:
+There are two useful function in base R that also use regular expressions:
 
 *   `apropos()` searches all objects available from the global environment. This
     is useful if you can't quite remember the name of the function.
@@ -809,7 +853,7 @@ There are a few other functions in base R that accept regular expressions:
     
 *   `dir()` lists all the files in a directory. The `pattern` argument takes
     a regular expression and only returns file names that match the pattern.
-    For example, you can find all the rmarkdown files in the current
+    For example, you can find all the R Markdown files in the current
     directory with:
     
     ```{r}
@@ -818,15 +862,10 @@ There are a few other functions in base R that accept regular expressions:
     
     (If you're more comfortable with "globs" like `*.Rmd`, you can convert
     them to regular expressions with `glob2rx()`):
-   
-*   `ls()` is similar to `apropos()` but only works in the current 
-    environment. However, if you have so many objects in your environment
-    that you have to use a regular expression to filter them all, you 
-    need to think about what you're doing! (And probably use a list instead).
 
 ## stringi
 
-stringr is built on top of the __stringi__ package. stringr is useful when you're learning because it exposes a minimal set of functions, that have been carefully picked to handle the most common string manipulation functions. stringi, on the other hand, is designed to be comprehensive. It contains almost every function you might ever need: stringi has `r length(getNamespaceExports("stringi"))` functions to stringr's `r length(getNamespaceExports("stringr"))`.
+stringr is built on top of the __stringi__ package. stringr is useful when you're learning because it exposes a minimal set of functions, which have been carefully picked to handle the most common string manipulation functions. stringi, on the other hand, is designed to be comprehensive. It contains almost every function you might ever need: stringi has `r length(getNamespaceExports("stringi"))` functions to stringr's `r length(getNamespaceExports("stringr"))`.
 
 If you find yourself struggling to do something in stringr, it's worth taking a look at stringi. The packages work very similarly, so you should be able to translate your stringr knowledge in a natural way. The main difference is the prefix: `str_` vs. `stri_`.
 
