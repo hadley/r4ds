@@ -17,7 +17,7 @@ library(ggplot2)
 library(dplyr)
 ```
 
-## Labels
+## Titles
 
 One of the most helpful things you can do to an exploratory graphic into an expository graphic is to add good titles.
 
@@ -30,7 +30,7 @@ ggplot(mpg, aes(displ, hwy)) +
   labs(title = "Fuel efficiency decreases with engine size")
 ```
 
-Generally, titles should be written in sentence case, and should describe the main finding in the plot, not just 
+Generally, titles should be written in sentence case, and should describe the main finding in the plot, not just what the plot displays. In ggplot2 2.2.0, which should be available by the time you're reading this book, you can also set `subtitle` and `caption` to add either a subtitle beneath the main title, or a caption at the bottom right of the plot.
 
 ```{r}
 ggplot(mpg, aes(displ, hwy)) +
@@ -41,10 +41,9 @@ ggplot(mpg, aes(displ, hwy)) +
     subtitle = "Two seaters don't follow the rule because they are light weight",
     caption = "Data from fueleconomy.gov"
   )
-
 ```
 
-(In ggplot2 2.2.0, which should be available by the time you're reading this book, you can also set `subtitle` and `caption` to add either a subtitle beneath the main title, or a caption at the bottom right of the plot.)
+### Axes and legend labels
 
 You can also use `labs()` to replace the axis and legend labels in your plot, which might be a good idea if your data uses ambiguous or abbreviated variable names. To replace either of the axis labels, set the `x` or `y` arguments to a character string. `ggplot2` will replace the associated axis label with your character string. To replace a legend label, set the name of the aesthetic displayed in the legend to the character string that should appear as the title of the legend. For example, the legend in our plot corresponds to the color aesthetic. We can change its title with the command, `labs(color = "New Title")`, or, more usefully:
 
@@ -60,15 +59,153 @@ ggplot(mpg, aes(displ, hwy)) +
   ) 
 ```
 
+### Legend layout
+
+```{r}
+ggplot(mpg, aes(displ, hwy)) +
+  geom_point(aes(colour = class)) +
+  geom_smooth(se = FALSE) + 
+  theme(legend.position = "bottom")
+```
+
+For even finer control, use `guides()` and `guide_legend()` (or `guide_colourbar()`). The following example shows two important settings: controlling the number of rows with `nrow`, and override one of the aesthetics to make the points bigger. This is particularly useful if you hae
+
+```{r}
+ggplot(mpg, aes(displ, hwy)) +
+  geom_point(aes(colour = class)) +
+  geom_smooth(se = FALSE) + 
+  theme(legend.position = "bottom") + 
+  guides(colour = guide_legend(nrow = 1, override.aes = list(size = 4)))
+```
+
+### Exercises
+
+1.  Low alpha - use `override.aes` to make legend more useful.
+
+## Annotations
+
+`labs()` help you better label your plot, but often you will want to label components of the data too. The first tool you have at your disposal is `geom_text()`. `geom_text()` is similar to `geom_point()`, but it has an additional aesthetic: `label`. This makes it possible to add textual labels to your plots.
+
+There are two possible sources of labels. First, you might have a data set that you want to label. The plot below isn't terribly useful, but I first pull out the most efficient car in each class using a little dplyr, and then add it to the plot.
+
+```{r}
+best_in_class <- mpg %>% 
+  group_by(class) %>% 
+  filter(row_number(desc(hwy)) == 1)
+
+ggplot(mpg, aes(displ, hwy)) + 
+  geom_point(aes(colour = class)) + 
+  geom_text(aes(label = model), data = best_in_class)
+```
+
+This plot illustrates some common problems when labelling text: it's hard to read the labels because they overlap on top of the points. We can make things a little easier by switching to `geom_label()` which draws a rectangle behind the text.  We also use the `nudge_y` parameter to move the labels slightly about the corresponding points:
+
+```{r}
+ggplot(mpg, aes(displ, hwy)) + 
+  geom_point(aes(colour = class)) + 
+  geom_label(aes(label = model), data = best_in_class, nudge_y = 2, alpha = 0.5)
+```
+
+That helps a bit, but if you look closely in the top-left hand corner, you'll notice that there are two labels practically on top of each other. There's no way that we can fix these by applying the same transformation for every label.
+
+Instead, we can use the __ggrepel__ package by Kamil Slowikowski. This useful package will automatically adjust labels so that they don't overlap:
+
+```{r}
+ggplot(mpg, aes(displ, hwy)) + 
+  geom_point(aes(colour = class)) + 
+  ggrepel::geom_label_repel(aes(label = model), data = best_in_class)
+```
+
+You can sometimes use the same idea to replace the legend with labels directly on the same graph. I'm not sure it's terribly effective here, but it isn't too bad. (We'll turn out `legend.position = "none"` very shortly).
+
+```{r}
+class_avg <- mpg %>% 
+  group_by(class) %>% 
+  summarise(
+    displ = median(displ),
+    hwy = median(hwy)
+  )
+
+ggplot(mpg, aes(displ, hwy, colour = class)) + 
+  ggrepel::geom_label_repel(aes(label = class), 
+    data = class_avg, 
+    size = 6, 
+    label.size = 0, 
+    segment.color = NA
+  ) + 
+  geom_point() + 
+  theme(legend.position = "none")
+```
+
+If you want to add a single label, you'll still need to create a data frame. Often you want to the label in the corner of the plot, so it's convenient to create a new data frame using `summarise()`. (If you want to add it at an arbitrary location just use `tibble()` to create the data frame.)
+
+```{r}
+label <- mpg %>% 
+  summarise(
+    displ = max(displ),
+    hwy = max(hwy),
+    label = "Increasing engine size is \nrelated to decreasing fuel economy."
+  )
+label
+
+ggplot(mpg, aes(displ, hwy)) + 
+  geom_point() + 
+  geom_text(aes(label = label), data = label, vjust = "top", hjust = "right")
+```
+
+If you want to place the text in the absolute top-right corner, you can use inf:
+
+```{r}
+label <- tibble(
+    displ = Inf,
+    hwy = Inf,
+    label = "Increasing engine size is \nrelated to decreasing fuel economy."
+  )
+
+ggplot(mpg, aes(displ, hwy)) + 
+  geom_point() + 
+  geom_text(aes(label = label), data = label, vjust = "top", hjust = "right")
+```
+
+Here I manually broke the label up in lines using `"\n"`. Alternatively, you could use `stringr::str_wrap()` to automatically wrap it, given the number of characters you want per line:
+
+```{r}
+"Increasing engine size is related to decreasing fuel economy." %>% 
+  stringr::str_wrap(width = 40) %>% 
+  writeLines()
+```
+
+Note the use of `hjust` and `vjust` to control the the alignment of the label. \@ref(fig:just) shows all nine possible combinations.
+
+```{r just, echo = FALSE, fig.cap = "All nine combinations of `hjust` and `vjust`."}
+vjust <- c(bottom = 0, center = 0.5, top = 1)
+hjust <- c(left = 0, center = 0.5, right = 1)
+
+df <- tidyr::crossing(hj = names(hjust), vj = names(vjust)) %>% 
+  mutate(
+    y = vjust[vj],
+    x = hjust[hj],
+    label = paste0("hjust = '", hj, "'\n", "vjust = '", vj, "'")
+  )
+
+ggplot(df, aes(x, y)) + 
+  geom_point(colour = "grey60", size = 5) + 
+  geom_text(aes(label = label, hjust = hj, vjust = vj), size = 4)
+```
+
+### Exercises
+
 ## Scales
 
+The third way you can make your plot better for communication is to adjust the scales. Scales control the mapping from data values to things that you can perceive. 
+Normally, ggplot2 automatically adds scales for you. That means behind the scenes when you type:
 
 ```{r default-scales, fig.show = "hide"}
 ggplot(mpg, aes(displ, hwy)) + 
   geom_point(aes(colour = class))
 ```
 
-What actually happens is this:
+ggplot2 automatically fills in the default scales for you:
 
 ```{r, fig.show = "hide"}
 ggplot(mpg, aes(displ, hwy)) + 
@@ -78,19 +215,18 @@ ggplot(mpg, aes(displ, hwy)) +
   scale_colour_discrete()
 ```
 
-Scales control the mapping from data values to things that you can perceive. ggplot2 automatically adds a default scale whenever you use an aesthetic. The default have been tuned to be widely useful, but often you can do even better with a little hand tuning.
+You need to know this for two reasons:
 
-You can also replace the scale altogether, using a completely different algorithm. This is particularly important for colour
+*   You might want to tweak some of the parameters of the default scale. 
+    This allows you to do things like change the breaks on the legend.
+    
+*   You might want to replace the scale altogether. The defaults have been 
+    tuned to be widely useful, but often you can do even better with a little 
+    hand tuning.
 
-You've seen how to change the labels above.
-
-You can control `breaks` and `labels`.
-
-Control the position and layout of the legend
+Note the naming scheme for scales: `scale_` followed by the name of the aesthetic, then `_`, then the name of the scale. The default scales are named according to the type of variable they with: continuous, discrete, datetime, or date. There are lots of non-default scales which you'll learn about below.
 
 ### Axis breaks and legend keys
-
-
 
 `date_format` and `date_labels`. Uses the same format specification as `parse_datetime()`.
 
@@ -101,27 +237,6 @@ presidential %>%
     geom_point() +
     geom_segment(aes(xend = end, yend = id)) + 
     scale_x_date(NULL, breaks = presidential$start, date_labels = "'%y")
-```
-
-
-### Legend layout
-
-```{r}
-ggplot(mpg, aes(displ, hwy)) +
-  geom_point(aes(colour = class)) +
-  geom_smooth(se = FALSE) + 
-  theme(legend.position = "bottom")
-```
-
-
-For even finer control, use `guides()` and `guide_legend()` (or `guide_colourbar()`). The following example shows two important settings: controlling the number of rows with `nrow`, and override one of the aesthetics to make the points bigger. This is particularly useful if you hae
-
-```{r}
-ggplot(mpg, aes(displ, hwy)) +
-  geom_point(aes(colour = class)) +
-  geom_smooth(se = FALSE) + 
-  theme(legend.position = "bottom") + 
-  guides(colour = guide_legend(nrow = 1, override.aes = list(size = 4)))
 ```
 
 ### Replacing a scale
@@ -155,22 +270,12 @@ presidential %>%
 
 For continuous colour, you can use the built-in `scale_colour_gradient()` (or `scale_fill_gradient()`).
 
-
 viridis
 
 ### Exercises
 
 1. Example where you set colour scale instead of fill. Why doesn't it work?
 
-1.  Low alpha - use `override.aes` to make legend more useful.
-
-## Annotations
-
-You should also familiarise yourself with <http://www.ggplot2-exts.org/>.
-
-`geom_text()`, `geom_label()`.
-
-`annotate()`, which allows you to place a single graphical element.
 
 ## Zooming
 
@@ -182,14 +287,12 @@ ggplot(mpg, mapping = aes(displ, hwy)) +
   geom_smooth() + 
   coord_cartesian(xlim = c(5, 7), ylim = c(10, 30)) 
 
-
 mpg %>% 
   filter(displ >= 5, displ <= 7, hwy >= 10, hwy <= 30) %>% 
   ggplot(aes(displ, hwy)) +
   geom_point(aes(color = class)) +
   geom_smooth() + 
   coord_cartesian(xlim = c(5, 7), ylim = c(10, 30)) 
-
 ```
 
 `coord_cartesian()` adds a cartesian coordinate system to your plot (which is the default coordinate system). However, the new coordinate system will use the zoomed in limits. 
@@ -222,3 +325,10 @@ knitr::include_graphics("images/visualization-themes.png")
 You can also control the individual components of the plot using `theme()`. There are a lot of options and .  You'll need to refer to the ggplot2 book for the full details.
 
 Finally, if you have a corporate style or you're trying to match a specific journal, you might want to create your own theme. Once you've figured out the    . This is an increasingly common trend: for example, both AirBnB and 538 have custom ggplot2 styles that they use internally.
+
+## Learning more
+
+The absolute best place to learn more is the ggplot2 book: [_ggplot2: elegant graphics for data analysis_](https://amzn.com/331924275X).  Unfortunately it is not available online for free, but you can find the source code for the book at <https://github.com/hadley/ggplot2-book>.
+
+Another great resource is the ggplot2 extensions guide at  <http://www.ggplot2-exts.org/>. This lists many of the packages that extend ggplot2 with new geoms and scales. It's a great place to start if you're trying to do something that seems really hard with ggplot2.
+
