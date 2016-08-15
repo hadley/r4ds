@@ -14,82 +14,211 @@ In this chapter, we'll focus once again on ggplot2.
 
 ```{r}
 library(ggplot2)
+library(dplyr)
 ```
 
 ## Labels
 
-### Plot
-
-### Axes and legends
+One of the most helpful things you can do to an exploratory graphic into an expository graphic is to add good titles.
 
 You can add a title to any `ggplot2` plot by adding the command `labs()` to your plot call. Set the `title` argument of `labs()` to the character string that you would like to appear as the title of your plot. `ggplot2` will place the title at the top of your plot.
 
 ```{r}
-ggplot(data = mpg, mapping = aes(x = displ, y = hwy)) +
-  geom_point(mapping = aes(color = class)) +
-  geom_smooth() + 
-  labs(title = "Fuel efficiency vs. Engine size")
+ggplot(mpg, aes(displ, hwy)) +
+  geom_point(aes(color = class)) +
+  geom_smooth(se = FALSE) + 
+  labs(title = "Fuel efficiency decreases with engine size")
 ```
 
-You can also use `labs()` to replace the axis and legend labels in your plot, which might be a good idea if your data uses ambiguous or abbreviated variable names. To replace either of the axis labels, set the `x` or `y` arguments to a character string. `ggplot2` will replace the associated axis label with your character string.
+Generally, titles should be written in sentence case, and should describe the main finding in the plot, not just 
 
 ```{r}
-ggplot(data = mpg, mapping = aes(x = displ, y = hwy)) +
-  geom_point(mapping = aes(color = class)) +
-  geom_smooth() + 
-  labs(title = "Fuel efficiency vs. Engine size",
-       x = "Engine displacement (L)", 
-       y = "Highway fuel efficiency (mpg)") 
+ggplot(mpg, aes(displ, hwy)) +
+  geom_point(aes(color = class)) +
+  geom_smooth(se = FALSE) + 
+  labs(
+    title = "Fuel efficiency decreases with engine size",
+    subtitle = "Two seaters don't follow the rule because they are light weight",
+    caption = "Data from fueleconomy.gov"
+  )
+
 ```
 
-To replace a legend label, set the name of the aesthetic displayed in the legend to the character string that should appear as the title of the legend. For example, the legend in our plot corresponds to the color aesthetic. We can change it's title with the command, `labs(color = "New Title")`, or, more usefully:
+(In ggplot2 2.2.0, which should be available by the time you're reading this book, you can also set `subtitle` and `caption` to add either a subtitle beneath the main title, or a caption at the bottom right of the plot.)
+
+You can also use `labs()` to replace the axis and legend labels in your plot, which might be a good idea if your data uses ambiguous or abbreviated variable names. To replace either of the axis labels, set the `x` or `y` arguments to a character string. `ggplot2` will replace the associated axis label with your character string. To replace a legend label, set the name of the aesthetic displayed in the legend to the character string that should appear as the title of the legend. For example, the legend in our plot corresponds to the color aesthetic. We can change its title with the command, `labs(color = "New Title")`, or, more usefully:
 
 ```{r}
-ggplot(data = mpg, mapping = aes(x = displ, y = hwy)) +
-  geom_point(mapping = aes(color = class)) +
-  geom_smooth() + 
-  labs(title = "Fuel efficiency vs. Engine size",
-       x = "Engine displacement (L)", 
-       y = "Highway fuel efficiency (mpg)",
-       color = "Type of Car") 
+ggplot(mpg, aes(displ, hwy)) +
+  geom_point(aes(colour = class)) +
+  geom_smooth(se = FALSE) + 
+  labs(
+    title = "Fuel efficiency decreases with engine size",
+    x = "Displacement (L)", 
+    y = "Highway mpg",
+    colour = "Car type"
+  ) 
 ```
 
 ## Scales
 
-### Transformations
 
-### Colour
+```{r default-scales, fig.show = "hide"}
+ggplot(mpg, aes(displ, hwy)) + 
+  geom_point(aes(colour = class))
+```
+
+What actually happens is this:
+
+```{r, fig.show = "hide"}
+ggplot(mpg, aes(displ, hwy)) + 
+  geom_point(aes(colour = class)) +
+  scale_x_continuous() + 
+  scale_y_continuous() + 
+  scale_colour_discrete()
+```
+
+Scales control the mapping from data values to things that you can perceive. ggplot2 automatically adds a default scale whenever you use an aesthetic. The default have been tuned to be widely useful, but often you can do even better with a little hand tuning.
+
+You can also replace the scale altogether, using a completely different algorithm. This is particularly important for colour
+
+You've seen how to change the labels above.
+
+You can control `breaks` and `labels`.
+
+Control the position and layout of the legend
+
+### Axis breaks and legend keys
+
+
+
+`date_format` and `date_labels`. Uses the same format specification as `parse_datetime()`.
+
+```{r}
+presidential %>% 
+  mutate(id = 33 + row_number()) %>% 
+  ggplot(aes(start, id)) + 
+    geom_point() +
+    geom_segment(aes(xend = end, yend = id)) + 
+    scale_x_date(NULL, breaks = presidential$start, date_labels = "'%y")
+```
+
+
+### Legend layout
+
+```{r}
+ggplot(mpg, aes(displ, hwy)) +
+  geom_point(aes(colour = class)) +
+  geom_smooth(se = FALSE) + 
+  theme(legend.position = "bottom")
+```
+
+
+For even finer control, use `guides()` and `guide_legend()` (or `guide_colourbar()`). The following example shows two important settings: controlling the number of rows with `nrow`, and override one of the aesthetics to make the points bigger. This is particularly useful if you hae
+
+```{r}
+ggplot(mpg, aes(displ, hwy)) +
+  geom_point(aes(colour = class)) +
+  geom_smooth(se = FALSE) + 
+  theme(legend.position = "bottom") + 
+  guides(colour = guide_legend(nrow = 1, override.aes = list(size = 4)))
+```
+
+### Replacing a scale
+
+We'll focus on colour scales because those are most likely.
+
+```{r}
+ggplot(mpg, aes(displ, hwy)) +
+  geom_point(aes(color = class)) +
+  geom_smooth(se = FALSE) + 
+  scale_colour_brewer(palette = "Set1")
+```
+
+Figure \@ref(fig-brewer) shows the complete list of all palettes.
+
+```{r brewer, fig.asp = 2.5, echo = FALSE, fig.cap = "All ColourBrewer scales."}
+par(mar = c(0, 3, 0, 0))
+RColorBrewer::display.brewer.all()
+```
+
+When you have a predefined mapping between values and colours use `scale_colour_manual()`. For example, if we map Presidential party to colour, we want to use the standard mapping of red for Republicans and blue for Democrats:
+
+```{r}
+presidential %>% 
+  mutate(id = 33 + row_number()) %>% 
+  ggplot(aes(start, id, colour = party)) + 
+    geom_point() +
+    geom_segment(aes(xend = end, yend = id)) + 
+    scale_colour_manual(values = c(Republican = "Red", Democratic = "Blue"))
+```
+
+For continuous colour, you can use the built-in `scale_colour_gradient()` (or `scale_fill_gradient()`).
+
+
+viridis
+
+### Exercises
+
+1. Example where you set colour scale instead of fill. Why doesn't it work?
+
+1.  Low alpha - use `override.aes` to make legend more useful.
+
+## Annotations
+
+You should also familiarise yourself with <http://www.ggplot2-exts.org/>.
+
+`geom_text()`, `geom_label()`.
+
+`annotate()`, which allows you to place a single graphical element.
 
 ## Zooming
 
 Often, it can be helpful to zoom in on a specific region of your plot. In `ggplot2` you can do this by adding `coord_cartesian()` to your plot and setting it's `xlim` and `ylim` arguments. Pass each argument a vector of two numbers, the minimum value to display on that axis and the maximum value, e.g.
 
-```{r}
-ggplot(data = mpg, mapping = aes(x = displ, y = hwy)) +
-  geom_point(mapping = aes(color = class)) +
+```{r out.width = "50%", fig.align = "default"}
+ggplot(mpg, mapping = aes(displ, hwy)) +
+  geom_point(aes(color = class)) +
   geom_smooth() + 
   coord_cartesian(xlim = c(5, 7), ylim = c(10, 30)) 
+
+
+mpg %>% 
+  filter(displ >= 5, displ <= 7, hwy >= 10, hwy <= 30) %>% 
+  ggplot(aes(displ, hwy)) +
+  geom_point(aes(color = class)) +
+  geom_smooth() + 
+  coord_cartesian(xlim = c(5, 7), ylim = c(10, 30)) 
+
 ```
 
 `coord_cartesian()` adds a cartesian coordinate system to your plot (which is the default coordinate system). However, the new coordinate system will use the zoomed in limits. 
 
-What if your plot uses a different coordinate system? Most of the other coordinate functions also take `xlim` and `ylim` arguments. You can look up the help pages of the coordinate functions to learn more.
+`filter()`
+
+Nowdays, I'd generally avoid the `xlim()` and `ylim()` helpers.
 
 ## Themes
 
-Finally, you can also quickly customize the "look" of your plot by adding a theme function to your plot call. This can be a useful thing to do, for example, if you'd like to save ink when you print your plots, or if you wish to ensure that the plots photocopy well. 
+Finally, you can also quickly customize the "look" of your plot by adding a theme function to your plot call. This is useful if you have a corporate style that youcan be a useful thing to do, for example, if you'd like to save ink when you print your plots, or if you wish to ensure that the plots photocopy well. 
+
+The theme is designed to put the data forward while supporting comparisons, following the advice of Edward Tufte, Cynthia Brewer, and Dan Carr. We can still see the gridlines, which are important aid to the judgement of position,  but they have little visual impact and we can easily 'tune' them out. The grey background gives the plot a similar typographic colour to the text, ensuring that the graphics fit in with the flow of a  document without jumping out with a bright white background. Finally, the grey background creates a continuous field of colour which ensures that the plot is perceived as a single visual entity.
 
 ggplot2 contains eight theme functions, listed in the table below. Each applies a different visual theme to your finished plot. You can think of the themes as "skins" for the plot. The themes change how the plot looks without changing the information that the plot displays.
 
-To use any of the theme functions, add the function to your plot all. No arguments are necessary.
+To use a theme, add it to your plot:
 
 ```{r}
-ggplot(data = mpg, mapping = aes(x = displ, y = hwy)) +
-  geom_point(mapping = aes(color = class)) +
-  geom_smooth() + 
-  theme_bw() 
+ggplot(mpg, aes(displ, hwy)) +
+  geom_point(aes(color = class)) +
+  geom_smooth(se = FALSE) + 
+  theme_bw()
 ```
 
 ```{r, echo = FALSE}
 knitr::include_graphics("images/visualization-themes.png")
 ```
+
+You can also control the individual components of the plot using `theme()`. There are a lot of options and .  You'll need to refer to the ggplot2 book for the full details.
+
+Finally, if you have a corporate style or you're trying to match a specific journal, you might want to create your own theme. Once you've figured out the    . This is an increasingly common trend: for example, both AirBnB and 538 have custom ggplot2 styles that they use internally.
