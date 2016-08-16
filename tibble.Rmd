@@ -2,13 +2,13 @@
 
 ## Introduction
 
-Throughout this book we work with "tibbles" instead of the traditional data frame. Tibbles _are_ data frames, but tweak some older behaviours to make life a littler easier. R is an old language, and some things that were useful 10 or 20 years ago now get in your way. It's difficult to change base R without breaking existing code, so most innovation occurs in packages. Here we will describe the tibble package, which provides opinionated data frames that make working in the tidyverse a little easier. 
+Throughout this book we work with "tibbles" instead of R's traditional data frame. Tibbles _are_ data frames, but they tweak some older behaviours to make life a littler easier. R is an old language, and some things that were useful 10 or 20 years ago now get in your way. It's difficult to change base R without breaking existing code, so most innovation occurs in packages. Here we will describe the __tibble__ package, which provides opinionated data frames that make working in the tidyverse a little easier. 
 
-If this chapter leaves you wanting to learn even more about tibbles, you can read more about them in the vignette that is include in the tibble package: `vignette("tibble")`.
+If this chapter leaves you wanting to learn more about tibbles, you might enjoy `vignette("tibble")`.
 
 ### Prerequisites
 
-In this chapter we'll specifically explore the __tibble__ package. Most chapters don't load tibble explicitly, because most of the functions you'll use from tibble are automatically provided by dplyr. You'll only need if you are creating tibbles "by hand".
+In this chapter we'll explore the __tibble__ package. Most chapters don't load the tibble package explicitly, because we just using tibbles, not create them. Here we're going to create them by hand (not from an existing data source), so we'll need to load it explicitly.
 
 ```{r setup}
 library(tibble)
@@ -16,23 +16,25 @@ library(tibble)
 
 ## Creating tibbles {#tibbles}
 
-The majority of the functions that you'll use in this book already produce tibbles. If you're working with functions from other packages, you might need to coerce a regular data frame to a tibble. You can do that with `as_tibble()`:
+Almost all of the functions that you'll use in this book produce tibbles as using tibbles is one of the common features of packages in the tidyverse. Most other R packages use regular data frames, so you might want to coerce a data frame to a tibble. You can do that with `as_tibble()`:
 
 ```{r}
 as_tibble(iris)
 ```
 
-`as_tibble()` knows how to convert data frames, lists (provided the elements are vectors with the same length), matrices, and tables. 
-
-You can create a new tibble from individual vectors with `tibble()`:
+You can create a new tibble from individual vectors with `tibble()`. `tibble()` will automatically recycle inputs of length 1, and allows you to refer to variables that you just created, as shown below.
 
 ```{r}
-tibble(x = 1:5, y = 1, z = x ^ 2 + y)
+tibble(
+  x = 1:5, 
+  y = 1, 
+  z = x ^ 2 + y
+)
 ```
 
-`tibble()` automatically recycles inputs of length 1, and you can refer to variables that you just created. If you're already familiar with `data.frame()`, note that `tibble()` does much less: it never changes the type of the inputs (e.g. it never converts strings to factors!), it never changes the names of variables, and it never creates row names.
+If you're already familiar with `data.frame()`, note that `tibble()` does much less: it never changes the type of the inputs (e.g. it never converts strings to factors!), it never changes the names of variables, and it never creates row names.
 
-It's possible for a tibble to have column names that are not valid R variable names, called __non-syntactic__ names. For example, they might not start with a letter, or they might contain unusual values like a space. To refer to these variables, you need to surround them with backticks, `` ` ``:
+It's possible for a tibble to have column names that are not valid R variable names, aka __non-syntactic__ names. For example, they might not start with a letter, or they might contain unusual characters like a space. To refer to these variables, you need to surround them with backticks, `` ` ``:
 
 ```{r}
 tb <- tibble(
@@ -43,10 +45,17 @@ tb <- tibble(
 tb
 ```
 
-Another way to create a tibble is with `frame_data()`, which is customised for data entry in R code. Column headings are defined by formulas (`~`), and entries are separated by commas:
+You'll also need the backticks when working with these variables in other packages, like ggplot2, dplyr, and tidyr.
+
+Another way to create a tibble is with `tribble()`, short for **tr**ansposed tibble.  `tribble()` is customised for data entry in code: column headings are defined by formulas (i.e. they start with `~`), and entries are separated by commas. This makes it possible to lay out small amounts of data in easy to read form.
+
+```{r, include = FALSE}
+# Until https://github.com/hadley/tibble/issues/143 is fixed
+tribble <- frame_data
+```
 
 ```{r}
-frame_data(
+tribble(
   ~x, ~y, ~z,
   #--|--|----
   "a", 2, 3.6,
@@ -54,30 +63,11 @@ frame_data(
 )
 ```
 
-### Exercises
-
-1.  How can you tell if an object is a tibble?
-
-1.  What does `enframe()` do? When might you use it?
-
-1.  Practice referring to non-syntactic names by:
-
-    1.  Plotting a scatterplot of `1` vs `2`.
-
-    1.  Creating a new column called `3` which is `2` divided by `1`.
-        
-    1.  Renaming the columns to `one`, `two` and `three`. 
-    
-    ```{r}
-    annoying <- tibble(
-      `1` = 1:10,
-      `2` = `1` * 2 + rnorm(length(`1`))
-    )
-    ```
+I often add a comment (the line starting with `#`), to make it really clear where the header is.
 
 ## Tibbles vs. data frames
 
-There are two main differences in the usage of a data frame vs a tibble: printing, and subsetting.
+There are two main differences in the usage of a data frame vs a tibble: printing and subsetting.
 
 ### Printing
 
@@ -93,73 +83,95 @@ tibble(
 )
 ```
 
-To show all the columns in a single tibble, explicitly call `print()` with `width = Inf`:
+Tibbles are designed so that you don't accidentally overwhelm your console when you print large data frames. But sometimes you need more output than the default display. There are a few options that can help.
+
+First, you can explicitly `print()` the data frame and control the number of rows (`n`) and the `width` of the display. `width = Inf` will display all columns:
 
 ```{r, eval = FALSE}
 nycflights13::flights %>% 
-  print(width = Inf)
+  print(n = 10, width = Inf)
 ```
 
-You can also get a scrollable view of the complete data set using RStudio's built-in data viewer. This is often useful at the end of a long chain of manipulations.
-
-```{r, eval = FALSE}
-nycflights13::flights %>% View()
-```
-
-You can also control the default appearance globally, by setting options:
+You can also control the default print behaviour by setting options:
 
 * `options(tibble.print_max = n, tibble.print_min = m)`: if more than `m`
-  rows, print `n` rows. Use `options(dplyr.print_max = Inf)` to always
+  rows, print only `n` rows. Use `options(dplyr.print_max = Inf)` to always
   show all rows.
 
-* `options(tibble.width = Inf)` will always print all columns, regardless
-   of the width of the screen.
+* Use `options(tibble.width = Inf)` to always print all columns, regardless
+  of the width of the screen.
 
-You can see a complete list of options by looking at the package help: `package?tibble`.
+You can see a complete list of options by looking at the package help with `package?tibble`.
+
+A final option is to use RStudio's built-in data viewer to get a scrollable view of the complete dataset. This is also often useful at the end of a long chain of manipulations.
+
+```{r, eval = FALSE}
+nycflights13::flights %>% 
+  View()
+```
 
 ### Subsetting
 
-Tibbles are strict about subsetting. If you try to access a variable that does not exist, you'll get a warning. Unlike data frames, tibbles do not use partial matching on column names:
+So far all the tools you've learned have worked with complete data frames. If you want to pull out a single variable, you need some new tools, `$` and `[[`. `[[` can extract by name or position; `$` only extracts by name but is a little less typing.
 
 ```{r}
-df <- data.frame(
-  abc = 1:10, 
-  def = runif(10), 
-  xyz = sample(letters, 10)
+df <- tibble(
+  x = runif(5),
+  y = rnorm(5)
 )
-tb <- as_tibble(df)
 
-df$a
-tb$a
+# Extract by name
+df$x
+df[["x"]]
+
+# Extract by position
+df[[1]]
 ```
 
-Tibbles clearly delineate `[` and `[[`: `[` always returns another tibble, `[[` always returns a vector.
+To use these in a pipe, you'll need to use the special placeholder `.`:
+
+```{r, include = FALSE}
+library(magrittr)
+```
 
 ```{r}
-# With data frames, [ sometimes returns a data frame, and sometimes returns 
-# a vector
-df[, "abc"]
-
-# With tibbles, [ always returns another tibble
-tb[, "abc"]
-
-# To extract a single element, you should always use [[
-tb[["abc"]]
+df %>% .$x
+df %>% .[["x"]]
 ```
 
-This is useful to know if you want to extract a single column at the end of dplyr pipeline.
+## Interacting with older code
 
-### Exercises
-
-1.  How can you print all rows of a tibble?
-
-1.  What option controls how many additional column names are printed
-    at the footer of a tibble?
-
-## Interacting with legacy code
-
-Some older functions don't work with tibbles because they expect `df[, 1]` to return a vector, not a data frame. If you encounter one of these functions, use `as.data.frame()` to turn a tibble back to a data frame:
+Some older functions don't work with tibbles. If you encounter one of these functions, use `as.data.frame()` to turn a tibble back to a data frame:
 
 ```{r}
 class(as.data.frame(tb))
 ```
+
+The main reason that some older functions don't work with tibble is the `[` function.  We don't use `[` much in this book much because `dplyr::filter()` and `dplyr::select()` allow you to solve the same problems with clearer code (but you will learn a little about it in [vector subsetting](#vector-subsetting). With base R data frames, `[` sometimes returns a data frame, and sometimes returns a vector. With tibbles, `[` always returns another tibble.
+
+## Exercises
+
+1.  How can you tell if an object is a tibble? (Hint: trying print `mtcars`,
+    which is a regular data frame). 
+
+1.  Practice referring to non-syntactic names by:
+
+    1.  Plotting a scatterplot of `1` vs `2`.
+
+    1.  Creating a new column called `3` which is `2` divided by `1`.
+        
+    1.  Renaming the columns to `one`, `two` and `three`. 
+    
+    1.  Extracting the variable called `1`.
+    
+    ```{r}
+    annoying <- tibble(
+      `1` = 1:10,
+      `2` = `1` * 2 + rnorm(length(`1`))
+    )
+    ```
+
+1.  What does `tibble::enframe()` do? When might you use it?
+
+1.  What option controls how many additional column names are printed
+    at the footer of a tibble?

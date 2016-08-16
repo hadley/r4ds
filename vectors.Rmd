@@ -2,13 +2,17 @@
 
 ## Introduction
 
-So far this book has focussed on data frames and packages that work with them. But as you start to write your own functions, and dig deeper into R, you need to learn about vectors, the objects that underpin data frames. If you've learned R in a more traditional way, you're probably already familiar with vectors, as most R resources start with vectors and work their way up to data frames. I think it's better to start with data frames because they're immediately useful, and then work your way down to the underlying components.
+So far this book has focussed on data frames and packages that work with them. But as you start to write your own functions, and dig deeper into R, you need to learn about vectors, the objects that underlie data frames. If you've learned R in a more traditional way, you're probably already familiar with vectors, as most R resources start with vectors and work their way up to data frames. I think it's better to start with data frames because they're immediately useful, and then work your way down to the underlying components.
 
-Vectors are particularly important as its to learn to write functions that work with vectors, rather than data frames. The technology that lets ggplot2, tidyr, dplyr etc work with data frames is considerably more complex and not currently standardised. While I'm currently working on a new standard that will make life much easier, it's unlikely to be ready in time for this book.
+Vectors are particularly important as most of the functions you will write will work with vectors. It is possible to write functions that work with data frames (like ggplot2, dplyr, tidyr, etc), but the underlying technology is more complex and less consistent. I am working on a system to make to it easier, but it will not be ready in time for the publication of the book. This system will still require you understand vectors, but will help provide a user-friendly layer on top.
 
 ### Prerequisites
 
-The focus of this chapter is on base R data structures, so you don't need any extra packages to be loaded.
+The focus of this chapter is on base R data structures, so you it isn't essential to load any packages. However, the __purrr__ package, which you'll learn more about in [iteration], provides some useful tools to help us see what's going on.
+
+```{r}
+library(purrr)
+```
 
 ## Vector overview
 
@@ -19,11 +23,11 @@ There are two types of vectors:
   __raw__. Integer and double vectors are collectively known as
   __numeric__ vectors. 
 
-1. __Lists__, are sometimes called recursive vectors, because lists can 
+1. __Lists__,  sometimes called recursive vectors, because lists can 
   contain other lists. This is the chief difference between atomic vectors
   and lists: atomic vectors are homogeneous, lists can be heterogeneous.
 
-There's a somewhat related object: `NULL`. It's often used to represent the absence of a vector (as opposed to `NA` which is used to represent the absence of a value in a vector). `NULL` typically behaves like a vector of length 0.
+There's a somewhat related object: `NULL`. `NULL` is often used to represent the absence of a vector (as opposed to `NA` which is used to represent the absence of a value in a vector). `NULL` typically behaves like a vector of length 0.
 
 The structure of the vector types is summarised in the following diagram:
 
@@ -59,17 +63,6 @@ This chapter will introduce you to these important vectors from simplest to most
 
 The four most important types of atomic vector are logical, integer, double, and character. Raw and complex are rarely used during a data analysis, so I won't discuss them here.
 
-Each type of atomic vector has its own missing value:
-
-```{r}
-NA            # logical
-NA_integer_   # integer
-NA_real_      # double
-NA_character_ # character
-```
-
-Normally, you don't need to know about these different types because you can always use `NA` it will be converted to the correct type. However, there are some functions that are strict about their inputs, so it's useful to have this knowledge sitting in your back pocket so you can be specific when needed.
-
 ### Logical
 
 Logical vectors are the simplest type of atomic vector because they can take only three possible values: `FALSE`, `TRUE`, and `NA`. Logical vectors are usually constructed with comparison operators, as described in [comparisons]. You can also create them by hand with `c()`:
@@ -88,9 +81,9 @@ typeof(1L)
 1.5L
 ```
 
-Most of the time the distinction between integers and doubles is not important. However, there are two important differences that you need to be aware of:
+The distinction between integers and doubles is not usually important. However, there are two important differences that you need to be aware of:
 
-1. Doubles are approximations, 
+1. Doubles are approximations.
 
 1. Integers have one special value: `NA_integer_`, while doubles have four:
    `NA_real_`, `NaN`, `Inf` and `-Inf`
@@ -102,7 +95,7 @@ x <- sqrt(2) ^ 2
 x
 ```
 
-It certainly looks like we get what we expect: 2. But things are not exactly as they seem:
+It certainly looks like R calculates the number we expect: 2. But things are not exactly as they seem:
 
 ```{r}
 x == 2
@@ -111,11 +104,11 @@ x - 2
 
 This behaviour is common when working with floating point numbers: most calculations include some approximation error. Instead of comparing floating point numbers using `==`, you should use `dplyr::near()` which allows for some numerical tolerance.
 
-```{r, eval = packageVersion("dplyr") >= "0.4.3.9000"}
+```{r}
 dplyr::near(x, 2)
 ```
 
-Doubles also have three special values in addition to `NA`:
+Doubles have three special values in addition to `NA`:
 
 ```{r}
 c(NA, -1, 0, 1) / 0
@@ -130,11 +123,9 @@ Avoid using `==` to check for these other special values. Instead use the helper
 | `is.na()`        |     |     |  x  |  x  |
 | `is.nan()`       |     |     |     |  x  |
 
-Note that `is.finite(x)` is not the same as `!is.infinite(x)`.
-
 ### Character
 
-Character vectors are the most complex type of atomic vector, because each element of a character vector is a string, and a string can contain an arbitrary amount of data. Strings are such an important data type, they have their own chapter: [strings].
+Character vectors are the most complex type of atomic vector, because each element of a character vector is a string, and a string can contain an arbitrary amount of data. You've already learned a lot about working with strings in [strings].
 
 Here I wanted to mention one important feature of the underlying string implementation: R uses a global string pool. This means that each unique string is only stored in memory once, and every use of the string points to that representation. This reduces the amount of memory needed by duplicated strings. You can see this behaviour in practice with `pryr::object_size()`:
 
@@ -148,12 +139,28 @@ pryr::object_size(y)
 
 `y` doesn't take up 1,000x as much memory as `x`, because each element of `y` is just a pointer to that same string. A pointer is 8 bytes, so 1000 pointers to a 136 B string is 8 * 1000 + 136 = 8.13 kB.
 
+### Missing values
+
+Each type of atomic vector has its own missing value:
+
+```{r}
+NA            # logical
+NA_integer_   # integer
+NA_real_      # double
+NA_character_ # character
+```
+
+Normally, you don't need to know about these different types because you can always use `NA` and it will be converted to the correct type. However, there are some functions that are strict about their inputs, so it's useful to have this knowledge sitting in your back pocket so you can be specific when needed.
+
 ### Exercises
+
+1.  Describe the difference between `is.finite(x)` and  `!is.infinite(x)`.
 
 1.  Read the source code for `dplyr::near()`. How does it work?
 
 1.  A logical vector can take 3 possible values. How many possible
-    values can an integer vector take?
+    values can an integer vector take? How many possible values can
+    a double take? Use google to do some research.
 
 1.  Brainstorm at least four functions that allow you to convert a double to an
     integer. How do they differ? Be precise.
@@ -170,7 +177,7 @@ Now that you understand the different types of atomic vector, it's useful to rev
 
 1.  Tools to test if an function input is a specific type of vector.
 
-1.  R's recycling rules which govern what happens when you attempt to work
+1.  R's recycling rules which govern what happens when you work
     with vectors of different lengths.
 
 1.  Naming the elements of a vector.
@@ -217,18 +224,18 @@ In this case, 0 is converted to `FALSE` and everything else is converted to `TRU
 It's also important to understand what happens when you try and create a vector containing multiple types with `c()`: the most complex type always wins.
 
 ```{r}
-str(c(TRUE, 1L))
-str(c(1L, 1.5))
-str(c(1.5, "a"))
+typeof(c(TRUE, 1L))
+typeof(c(1L, 1.5))
+typeof(c(1.5, "a"))
 ```
 
 An atomic vector can not have a mix of different types because the type is a property of the complete vector, not of the individual elements. If you need to mix multiple types in the same vector, you should use a list, which you'll learn about shortly.
 
 ### Test functions
 
-Sometimes you want to do different things based on the type of vector you get. One option is to use `typeof()`. Another is to use a test function which returns a `TRUE` or `FALSE` (broadly, functions that return a single logical value are often called __predicate__ functions). 
+Sometimes you want to do different things based on the type of vector. One option is to use `typeof()`. Another is to use a test function which returns a `TRUE` or `FALSE` (broadly, functions that return a single logical value are often called __predicate__ functions). 
 
-Base R provides many functions like `is.vector()` and `is.atomic()`, but they are often surprising. Instead, it's safer to use the `is_*` functions provided by purrr, which are summarised in the table below.
+Base R provides many functions like `is.vector()` and `is.atomic()`, but they often returns surprising results. Instead, it's safer to use the `is_*` functions provided by purrr, which are summarised in the table below.
 
 |                  | lgl | int | dbl | chr | list |
 |------------------|-----|-----|-----|-----|------|
@@ -247,14 +254,14 @@ Each predicate also comes with a "scalar" version, which checks that the length 
 
 As well as implicitly coercion the types of vectors to be compatible, R will also implicit coerce the length of vectors. This is called vector "recycling", because the shorter vector is repeated, or __recycled__, to be the same length as the longer vector. 
 
-This is generally most useful when you are mixing vectors and "scalars". But note that R does not actually have scalars. In R, a single number is a vector of length 1. Because there are no scalars, most built-in functions are __vectorised__, meaning that they will operate on a vector of numbers. That's why, for example, this code works:
+This is generally most useful when you are mixing vectors and "scalars". I put scalars in quotes because R doesn't actually have scalars: instead, a single number is a vector of length 1. Because there are no scalars, most built-in functions are __vectorised__, meaning that they will operate on a vector of numbers. That's why, for example, this code works:
 
 ```{r}
 sample(10) + 100
 runif(10) > 0.5
 ```
 
-In R, basic mathematical operations work with vectors, not scalars like in most programming languages. This means that you should never need to perform explicit iteration (either with a loop or a map function) performing simple mathematical computations.
+In R, basic mathematical operations work with vectors, not scalars like in most programming languages. This means that you should never need to perform explicit iteration when performing simple mathematical computations.
 
 It's intuitive what should happen if you add two vectors of the same length, or a vector and a "scalar", but what happens if you add two vectors of different lengths?
 
@@ -268,17 +275,15 @@ Here, R will expand the shortest vector to the same length as the longest, so ca
 1:10 + 1:3
 ```
 
-While vector recycling can be used to create very succinct, clever code, it can also silently conceal problems. For this reason, the vectorised functions in dplyr, purrr, etc will throw errors when you recycle anything other than a scalar.
+While vector recycling can be used to create very succinct, clever code, it can also silently conceal problems. For this reason, the vectorised functions in tidyverse will throw errors when you recycle anything other than a scalar.
 
 ```{r, error = TRUE}
-data.frame(x = 1:4, y = 1:2)
 tibble::tibble(x = 1:4, y = 1:2)
-purrr::map2(1:4, 1:2, `+`)
 ```
 
 ### Naming vectors
 
-All types of vectors can be named. You can either name them during creation with `c()`:
+All types of vectors can be named. You can name them during creation with `c()`:
 
 ```{r}
 c(x = 1, y = 2, z = 4)
@@ -292,11 +297,9 @@ purrr::set_names(1:3, c("a", "b", "c"))
 
 Named vectors are most useful for subsetting, described next.
 
-### Subsetting
+### Subsetting {#vector-subsetting}
 
-So far we've used `dplyr::filter()` to filter the rows in a data frame. `filter()`, however, does not work with vectors, so we need to learn a new tool: `[`. `[` is the subsetting function, and is called like `x[a]`. We're not going to cover 2d and higher data structures here, but the idea generalises in a straightforward way: `x[a, b]` for 2d, `x[a, b, c]` for 3d, and so on. 
-
-There are four types of thing that you can subset a vector with:
+So far we've used `dplyr::filter()` to filter the rows in a data frame. `filter()`, however, does not work with vectors, so we need to learn a new tool: `[`. `[` is the subsetting function, and is called like `x[a]`. There are four types of thing that you can subset a vector with:
 
 1.  A numeric vector containing only integers. The integers must either be all 
     positive, all negative, or zero.
@@ -308,7 +311,7 @@ There are four types of thing that you can subset a vector with:
     x[c(3, 2, 5)]
     ```
     
-    By repeating a position, you can actually make an longer output than 
+    By repeating a position, you can actually make a longer output than 
     input:
     
     ```{r}
@@ -340,15 +343,17 @@ There are four types of thing that you can subset a vector with:
     `TRUE` value. This is most often useful in conjunction with a function
     that creates a logical vector.
     
-    ```{r, eval = FALSE}
+    ```{r}
+    x <- c(10, 3, NA, 5, 8, 1, NA)
+    
     # All non-missing values of x
     x[!is.na(x)]
     
-    # All even values of x
+    # All even (or missing!) values of x
     x[x %% 2 == 0]
     ```
 
-1.  If you have a named vector, you can subset it with a character vector. 
+1.  If you have a named vector, you can subset it with a character vector""
     
     ```{r}
     x <- c(abc = 1, def = 2, xyz = 5)
@@ -383,6 +388,8 @@ There is an important variation of `[` called `[[`. `[[` only ever extracts a si
     1. The elements at even numbered positions.
     
     1. Every element except the last value.
+    
+    1. Only even numbers (and no missing values).
 
 1.  Why is `x[-which(x > 0)]` not the same as `x[x <= 0]`? 
 
@@ -390,12 +397,18 @@ There is an important variation of `[` called `[[`. `[[` only ever extracts a si
     than the length of the vector? What happens when you subset with a 
     name that doesn't exist?
 
-## Recursive vectors (lists)
+## Recursive vectors (lists) {#lists}
 
 Lists are a step up in complexity from atomic vectors, because lists can contain other lists. This makes them suitable for representing hierarchical or tree-like structures. You create a list with `list()`:
 
 ```{r}
 x <- list(1, 2, 3)
+x
+```
+
+A very useful tool for working with lists is `str()` because it focusses on the **str**ucture, not the contents.
+
+```{r}
 str(x)
 
 x_named <- list(a = 1, b = 2, c = 3)
@@ -416,8 +429,6 @@ z <- list(list(1, 2), list(3, 4))
 str(z)
 ```
 
-`str()` is very helpful when looking at lists because it focusses on the **str**ucture, not the contents.
-
 ### Visualising lists
 
 To explain more complicated list manipulation functions, it's helpful to have a visual representation of lists. For example, take these three lists:
@@ -434,14 +445,16 @@ I'll draw them as follows:
 knitr::include_graphics("diagrams/lists-structure.png")
 ```
 
-* Lists are rounded rectangles that contain their children.
+There are three principles:
+
+1.  Lists have rounded corners. Atomic vectors have square corners.
   
-* I draw each child a little darker than its parent to make it easier to see 
-  the hierarchy.
+1.  Children are drawn inside their parent, and have a slightly darker
+    background to make it easier to see  the hierarchy.
   
-* The orientation of the children (i.e. rows or columns) isn't important, 
-  so I'll pick a row or column orientation to either save space or illustrate 
-  an important property in the example.
+1.  The orientation of the children (i.e. rows or columns) isn't important, 
+    so I'll pick a row or column orientation to either save space or illustrate 
+    an important property in the example.
 
 ### Subsetting
 
@@ -474,7 +487,7 @@ a <- list(a = 1:3, b = "a string", c = pi, d = list(-1, -5))
     
     ```{r}
     a$a
-    a[["b"]]
+    a[["a"]]
     ```
 
 The distinction between `[` and `[[` is really important for lists, because `[[` drills down into the list while `[` returns a new, smaller list. Compare the code and output above with the visual representation below.
@@ -485,7 +498,7 @@ knitr::include_graphics("diagrams/lists-subsetting.png")
 
 ### Lists of condiments
 
-It's easy to get confused between `[` and `[[`, but it's important to understand the difference. A few months ago I stayed at a hotel with a pretty interesting pepper shaker that I hope will help you remember these differences:
+The difference between `[` and `[[` is very important, but it's easy to get confused. A few months ago I stayed at a hotel with a rather interesting pepper shaker that I hope will help you remember these differences:
 
 ```{r, echo = FALSE, out.width = "25%"} 
 knitr::include_graphics("images/pepper.jpg")
@@ -516,16 +529,14 @@ knitr::include_graphics("images/pepper-3.jpg")
 1.  Draw the following lists as nested sets:
 
     1.  `list(a, b, list(c, d), list(e, f))`
-    1.   `list(list(list(list(list(list(a))))))`
+    1.  `list(list(list(list(list(list(a))))))`
 
 1.  What happens if you subset a data frame as if you're subsetting a list?
     What are the key differences between a list and a data frame?
 
-## Augmented vectors
+## Attributes
 
-Atomic vectors and lists are the building blocks for four other important vector types: factors, dates, date-times, and data frames. I call these __augmented vectors__, because they are vectors with additional __attributes__. 
-
-Attributes are a way of adding arbitrary additional metadata to a vector. You can think of attributes as named list of vectors that can be attached to any object. You can get and set individual attribute values with `attr()` or see them all at once with `attributes()`.
+Any vector can contain arbitrary additional metadata through its __attributes__. You can think of attributes as named list of vectors that can be attached to any object. You can get and set individual attribute values with `attr()` or see them all at once with `attributes()`.
 
 ```{r}
 x <- 1:10
@@ -537,13 +548,11 @@ attributes(x)
 
 There are three very important attributes that are used to implement fundamental parts of R:
 
-* "names" are used to name the elements of a vector. 
-* "dims" make a vector behave like a matrix or array.
-* "class" is used to implement the S3 object oriented system.
+1. __Names__ are used to name the elements of a vector.
+1. __Dimensions__ (dims, for short) make a vector behave like a matrix or array.
+1. __Class__ is used to implement the S3 object oriented system.
 
-### S3
-
-Class is particularly important because it changes what __generic functions__ do with the object. Generic functions are key to object oriented programming in R, and are what make augmented vectors behave differently to the vector they are built on top of. A detailed discussion of the S3 object oriented system is beyond the scope of this book, but you can read more about it at <http://adv-r.had.co.nz/OO-essentials.html#s3>.
+You've seen names above, and we won't cover dimensions because we don't use matrices in this book. It remains to describe the class, which controls how __generic functions work__. Generic functions are key to object oriented programming in R, making different types of vector act differently. A detailed discussion of the S3 object oriented system is beyond the scope of this book, but you can read more about it at <http://adv-r.had.co.nz/OO-essentials.html#s3>.
 
 Here's what a typical generic function looks like:
 
@@ -557,14 +566,26 @@ The call to "UseMethod" means that this is a generic function, and it will call 
 methods("as.Date")
 ```
 
-And you can see the specific implementation of a method with `getS3method()`:
+For example, if `x` is a character vector, `as.Date()` will call `as.Date.charcter()`; if it's a factor, it'll call `as.Date.factor()`.
+
+You can see the specific implementation of a method with `getS3method()`:
 
 ```{r}
 getS3method("as.Date", "default")
 getS3method("as.Date", "numeric")
 ```
 
-The most important S3 generic is `print()`: it controls how the object is printed when you type its name on the console. Other important generics are the subsetting functions `[`, `[[`, and `$`. 
+The most important S3 generic is `print()`: it controls how the object is printed when you type its name at the console. Other important generics are the subsetting functions `[`, `[[`, and `$`. 
+
+## Augmented vectors
+
+Atomic vectors and lists are the building blocks for other important vector types like factors and dates. I call these __augmented vectors__, because they are vectors with additional __attributes__. Generic methods make augmented vectors behave differently, depending on their class. In this book, we make use of four important augmented vectors:
+
+* Factors.
+* Date-times and times.
+* Tibbles.
+
+These are described below.
 
 ### Factors
 
@@ -578,13 +599,15 @@ attributes(x)
 
 Historically, factors were much easier to work with than characters so many functions in base R automatically convert characters to factors (controlled by the dread `stringsAsFactors` argument). To get more historical context, you might want to read [stringsAsFactors: An unauthorized biography](http://simplystatistics.org/2015/07/24/stringsasfactors-an-unauthorized-biography/) by Roger Peng or [stringsAsFactors = \<sigh\>](http://notstatschat.tumblr.com/post/124987394001/stringsasfactors-sigh) by Thomas Lumley.  The motivation for factors is modelling. If you're going to fit a model to categorical data, you need to know in advance all the possible values. There's no way to make a prediction for "green" if all you've ever seen is "red", "blue", and "yellow".
 
-The packages in this book keep characters as is, but you will need to deal with them if you are working with base R or many other packages. When you encounter a factor, you should first check to see if you can avoid creating it in the first. Often there will be `stringsAsFactors` argument that you can set to `FALSE`. Otherwise, you can apply `as.character()` to the column to explicitly turn back into a character vector.
+Factors aren't common in the tidyverse, but you will need to deal with them if you are working with base R or many other packages. When you encounter a factor, you should first check to see if you can avoid creating it in the first place. Often there will be `stringsAsFactors` argument that you can set to `FALSE`. Otherwise, you can apply `as.character()` to the column to explicitly turn back into a character vector.
 
 ```{r}
 x <- factor(letters[1:5])
 is.factor(x)
 as.factor(letters[1:5])
 ```
+
+Otherwise, you might try my __forcats__ package, which provides handy functions for working with factors (forcats = tools **for** **cat**egorical variables, and is an anagram of factors!). At the time of writing it was only available on github, <https://github.com/hadley/forcats>, but it may have made it to CRAN by the time you read this book.
 
 ### Dates and date-times
 
@@ -613,10 +636,9 @@ The `tzone` is optional. It controls how the time is printed, not what absolute 
 ```{r}
 attr(x, "tzone") <- "US/Pacific"
 x
+
 attr(x, "tzone") <- "US/Eastern"
 x
-log(-1)
-1
 ```
 
 There is another type of date-times called POSIXlt. These are built on top of named lists:
@@ -627,26 +649,35 @@ typeof(y)
 attributes(y)
 ```
 
-If you use the packages outlined in this book, you should never encounter a POSIXlt. They do crop up in base R, because they are used to extract specific components of a date (like the year or month). However, lubridate provides helpers for you to do this instead. Otherwise POSIXct's are always easier to work with, so if you find you have a POSIXlt, you should always convert it to a POSIXct with `as.POSIXct()`.
+POSIXlts are rare inside the tidyverse. They do crop up in base R, because they are needed to extract specific components of a date (like the year or month). Since lubridate provides helpers for you to do this instead, you don't need them. POSIXct's are always easier to work with, so if you find you have a POSIXlt, you should always convert it to a POSIXct with `as.POSIXct()`.
 
-### Data frames and tibbles
+### Tibbles
 
-Data frames are augmented lists: they have class "data.frame", and `names` (column) and `row.names` attributes:
-
-```{r}
-df1 <- data.frame(x = 1:5, y = 5:1)
-typeof(df1)
-attributes(df1)
-```
-
-The difference between a data frame and a list is that all the elements of a data frame must be the same length. All functions that work with data frames enforce this constraint.
-
-In this book, we use tibbles, rather than data frames. Tibbles are identical to data frames, except that they have two additional components in the class:
+Tibbles are augmented lists: they have class "tbl_df" + "tbl" + "data.frame", and `names` (column) and `row.names` attributes:
 
 ```{r}
-df2 <- tibble::tibble(x = 1:5, y = 5:1)
-typeof(df2)
-attributes(df2)
+tb <- tibble::tibble(x = 1:5, y = 5:1)
+typeof(tb)
+attributes(tb)
 ```
 
-These extra components give tibbles the helpful behaviours defined in [tibbles].
+The difference between a tibble and a list is that all the elements of a data frame must be the same length. All functions that work with tibbles enforce this constraint.
+
+Traditional data.frames have a very similar structure:
+
+```{r}
+df <- data.frame(x = 1:5, y = 5:1)
+typeof(df)
+attributes(df)
+```
+
+The main difference is the class. The class of tibble includes "data.frame" which means tibbles inherit the regular data frame behaviour by default.
+
+### Exercises
+
+1.  What does `hms::hms(3600)` return? How does it print? What primitive
+    type is the augmented vector built on top of? What attributes does it 
+    use?
+    
+1.  Try and make a tibble that has columns with different lengths. What
+    happens?

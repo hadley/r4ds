@@ -4,19 +4,19 @@
 
 It's rare that a data analysis involves only a single table of data. Typically you have many tables of data, and you must combine them to answer the questions that you're interested in. Collectively, multiple tables of data are called __relational data__ because it is the relations, not just the individual datasets, that are important.
 
-Relations are always defined between a pair of tables. All other relations are built up from this simple idea: the relations of three or more tables are always a property of the relations between each pair. Sometimes both elements of a pair can be the same table! This is common for example, if you have a table of people, and each person has a reference to their parents.
+Relations are always defined between a pair of tables. All other relations are built up from this simple idea: the relations of three or more tables are always a property of the relations between each pair. Sometimes both elements of a pair can be the same table! This is needed if, for example, you have a table of people, and each person has a reference to their parents.
 
 To work with relational data you need verbs that work with pairs of tables. There are three families of verbs designed to work with relational data:
 
 * __Mutating joins__, which add new variables to one data frame from matching
-  rows in another.
+  observations in another.
 
 * __Filtering joins__, which filter observations from one data frame based on
   whether or not they match an observation in the other table.
 
-* __Set operations__, which treat observations like they were set elements.
+* __Set operations__, which treat observations as if they were set elements.
 
-The most common place to find relational data is in a _relational_ database management system (or RDBMS), a term that encompasses almost all modern databases. If you've used a database before, you've almost certainly used SQL. If so, you should find the concepts in this chapter familiar, although their expression in dplyr is a little different. Generally, dplyr is a little easier to use than SQL because dplyr is specialised to data analysis: it makes common data analysis operations easier, at the expense of making it more difficult to do other things.
+The most common place to find relational data is in a _relational_ database management system (or RDBMS), a term that encompasses almost all modern databases. If you've used a database before, you've almost certainly used SQL. If so, you should find the concepts in this chapter familiar, although their expression in dplyr is a little different. Generally, dplyr is a little easier to use than SQL because dplyr is specialised to do data analysis: it makes common data analysis operations easier, at the expense of making it more difficult to do other things that aren't commonly needed for data analysis.
 
 ### Prerequisites
 
@@ -26,8 +26,6 @@ We will explore relational data from `nycflights13` using the two-table verbs fr
 library(nycflights13)
 library(dplyr)
 ```
-
-We'll also use the `str_c()` function from stringr, but rather than loading the complete package just to access this one function, we'll use it as `stringr::str_c()`.
 
 ## nycflights13 {#nycflights13-relational}
 
@@ -86,7 +84,7 @@ For nycflights13:
     would you need to combine?
 
 1.  I forgot to draw the a relationship between `weather` and `airports`.
-    What is the relationship and what should it look like in the diagram?
+    What is the relationship and how should it appear in the diagram?
 
 1.  `weather` only contains information for the origin (NYC) airports. If
     it contained weather records for all airports in the USA, what additional
@@ -120,15 +118,25 @@ A variable can be both a primary key _and_ a foreign key. For example, `origin` 
 Once you've identified the primary keys in your tables, it's good practice to verify that they do indeed uniquely identify each observation. One way to do that is to `count()` the primary keys and look for entries where `n` is greater than one:
 
 ```{r}
-planes %>% count(tailnum) %>% filter(n > 1)
-weather %>% count(year, month, day, hour, origin) %>% filter(n > 1)
+planes %>% 
+  count(tailnum) %>% 
+  filter(n > 1)
+
+weather %>% 
+  count(year, month, day, hour, origin) %>% 
+  filter(n > 1)
 ```
 
 Sometimes a table doesn't have an explicit primary key: each row is an observation, but no combination of variables reliably identifies it. For example, what's the primary key in the `flights` table? You might think it would be the date plus the flight or tail number, but neither of those are unique:
 
 ```{r}
-flights %>% count(year, month, day, flight) %>% filter(n > 1)
-flights %>% count(year, month, day, tailnum) %>% filter(n > 1)
+flights %>% 
+  count(year, month, day, flight) %>% 
+  filter(n > 1)
+
+flights %>% 
+  count(year, month, day, tailnum) %>% 
+  filter(n > 1)
 ```
 
 When starting to work with this data, I had naively assumed that each flight number would be only used once per day: that would make it much easier to communicate problems with a specific flight. Unfortunately that is not the case! If a table lacks a primary key, it's sometimes useful to add one with `mutate()` and `row_number()`. That makes it easier to match observations if you've done some filtering and want to check back in with the original data. This is called a __surrogate key__.
@@ -137,12 +145,15 @@ A primary key and the corresponding foreign key in another table form a __relati
 
 ### Exercises
 
+1.  Add a surrogate key to `flights`.
+
 1.  Identify the keys in the following datasets
 
     1.  `Lahman::Batting`,
     1.  `babynames::babynames`
     1.  `nasaweather::atmos`
     1.  `fueleconomy::vehicles`
+    1.  `ggplot2::diamonds`
     
     (You might need to install some packages and read some documentation.)
 
@@ -160,23 +171,27 @@ The first tool we'll look at for combining a pair of tables is the __mutating jo
 Like `mutate()`, the join functions add variables to the right, so if you have a lot of variables already, the new variables won't get printed out. For these examples, we'll make it easier to see what's going on in the examples by creating a narrower dataset:
 
 ```{r}
-(flights2 <- flights %>% select(year:day, hour, origin, dest, tailnum, carrier))
+flights2 <- flights %>% 
+  select(year:day, hour, origin, dest, tailnum, carrier)
+flights2
 ```
 
-(When you're in RStudio, you can use `View()` to avoid this problem).
+(Remember, when you're in RStudio, you can also use `View()` to avoid this problem.)
 
-For example, imagine you want to add the full airline name to the `flights2` data. You can combine the `airlines` and `flights2` data frames with `left_join()`:
+Imagine you want to add the full airline name to the `flights2` data. You can combine the `airlines` and `flights2` data frames with `left_join()`:
 
 ```{r}
 flights2 %>%
+  select(-origin, -dest) %>% 
   left_join(airlines, by = "carrier")
 ```
 
-The result of joining airlines to flights is an additional variable: `name`. This is why I call this type of join a mutating join. In this case, you could have got to the same place using `mutate()` and basic subsetting:
+The result of joining airlines to flights2 is an additional variable: `name`. This is why I call this type of join a mutating join. In this case, you could have got to the same place using `mutate()` and R's base subsetting:
 
 ```{r}
 flights2 %>%
-  mutate(carrier = airlines$name[match(carrier, airlines$carrier)])
+  select(-origin, -dest) %>% 
+  mutate(name = airlines$name[match(carrier, airlines$carrier)])
 ```
 
 But this is hard to generalise when you need to match multiple variables, and takes close reading to figure out the overall intent.
@@ -224,10 +239,11 @@ knitr::include_graphics("diagrams/join-inner.png")
 The output of an inner join is a new data frame that contains the key, the x values, and the y values. We use `by` to tell dplyr which variable is the key:
 
 ```{r}
-x %>% inner_join(y, by = "key")
+x %>% 
+  inner_join(y, by = "key")
 ```
 
-The most important property of an inner join is that unmatched rows are not included in the result. This means that generally inner joins are not appropriate for use in analysis because it's too easy to lose observations.
+The most important property of an inner join is that unmatched rows are not included in the result. This means that generally inner joins are usually not appropriate for use in analysis because it's too easy to lose observations.
 
 ### Outer joins {#outer-join}
 
@@ -301,7 +317,8 @@ So far, the pairs of tables have always been joined by a single variable, and th
     `origin`.
 
     ```{r}
-    flights2 %>% left_join(weather)
+    flights2 %>% 
+      left_join(weather)
     ```
 
   * A character vector, `by = "x"`. This is like a natural join, but uses only
@@ -310,7 +327,8 @@ So far, the pairs of tables have always been joined by a single variable, and th
     `tailnum`.
 
     ```{r}
-    flights2 %>% left_join(planes, by = "tailnum")
+    flights2 %>% 
+      left_join(planes, by = "tailnum")
     ```
 
     Note that the `year` variables (which appear in both input data frames,
@@ -327,8 +345,11 @@ So far, the pairs of tables have always been joined by a single variable, and th
     need to specify which one we want to join to:
 
     ```{r}
-    flights2 %>% left_join(airports, c("dest" = "faa"))
-    flights2 %>% left_join(airports, c("origin" = "faa"))
+    flights2 %>% 
+      left_join(airports, c("dest" = "faa"))
+    
+    flights2 %>% 
+      left_join(airports, c("origin" = "faa"))
     ```
 
 ### Exercises
@@ -346,8 +367,14 @@ So far, the pairs of tables have always been joined by a single variable, and th
         coord_quickmap()
     ```
 
+    (Don't worry if you don't understand what `semi_join()` does --- you'll
+    learn about it next.)
+
     You might want to use the `size` or `colour` of the points to display
     the average delay for each airport.
+
+1.  Add the location of the origin _and_ destination (i.e. the `lat` and `lon`)
+    to `flights`.
 
 1.  Is there a relationship between the age of a plane and its delays?
 
@@ -414,7 +441,8 @@ top_dest
 Now you want to find each flight that went to one of those destinations. You could construct a filter yourself:
 
 ```{r}
-flights %>% filter(dest %in% top_dest$dest)
+flights %>% 
+  filter(dest %in% top_dest$dest)
 ```
 
 But it's difficult to extend that approach to multiple variables. For example, imagine that you'd found the 10 days with highest average delays. How would you construct the filter statement that used `year`, `month`, and `day` to match it back to `flights`?
@@ -422,7 +450,8 @@ But it's difficult to extend that approach to multiple variables. For example, i
 Instead you can use a semi-join, which connects the two tables like a mutating join, but instead of adding new columns, only keeps the rows in `x` that have a match in `y`:
 
 ```{r}
-flights %>% semi_join(top_dest)
+flights %>% 
+  semi_join(top_dest)
 ```
 
 Graphically, a semi-join looks like this:
@@ -443,7 +472,7 @@ The inverse of a semi-join is an anti-join. An anti-join keeps the rows that _do
 knitr::include_graphics("diagrams/join-anti.png")
 ```
 
-Anti-joins are are useful for diagnosing join mismatches. For example, when connecting `flights` and `planes`, you might be interested to know that there are many `flights` that don't have a match in `planes`:
+Anti-joins are useful for diagnosing join mismatches. For example, when connecting `flights` and `planes`, you might be interested to know that there are many `flights` that don't have a match in `planes`:
 
 ```{r}
 flights %>%
@@ -456,6 +485,12 @@ flights %>%
 1.  What does it mean for a flight to have a missing `tailnum`? What do the
     tail numbers that don't have a matching record in `planes` have in common?
     (Hint: one variable explains ~90% of the problems.)
+
+1.  Filter flights to only show flights with planes that have flown at least 100
+    flights.
+
+1.  Combine `fueleconomy::vehicles` and `fueleconomy::common` to find only the
+    records for the most common models.
 
 1.  Find the 48 hours (over the course of the whole year) that have the worst
     delays. Cross-reference it with the `weather` data. Can you see any
@@ -476,11 +511,11 @@ The data you've been working with in this chapter has been cleaned up so that yo
     unique in your current data but the relationship might not be true in
     general.
 
-    For example, the altitude and latitude uniquely identify each airport,
+    For example, the altitude and longitude uniquely identify each airport,
     but they are not good identifiers!
 
     ```{r}
-    airports %>% count(alt, lat) %>% filter(n > 1)
+    airports %>% count(alt, lon) %>% filter(n > 1)
     ```
 
 1.  Check that none of the variables in the primary key are missing. If
@@ -499,9 +534,7 @@ Be aware that simply checking the number of rows before and after the join is no
 
 ## Set operations {#set-operations}
 
-The final type of two-table verb is set operations. Generally, I use these the least frequently, but they are occasionally useful when you want to break a single complex filter into simpler pieces that you then combine.
-
-All these operations work with a complete row, comparing the values of every variable. These expect the `x` and `y` inputs to have the same variables, and treat the observations like sets:
+The final type of two-table verb are the set operations. Generally, I use these the least frequently, but they are occasionally useful when you want to break a single complex filter into simpler pieces. All these operations work with a complete row, comparing the values of every variable. These expect the `x` and `y` inputs to have the same variables, and treat the observations like sets:
 
 * `intersect(x, y)`: return only observations in both `x` and `y`.
 * `union(x, y)`: return unique observations in `x` and `y`.
@@ -518,8 +551,11 @@ The four possibilities are:
 
 ```{r}
 intersect(df1, df2)
+
 # Note that we get 3 rows, not 4
 union(df1, df2)
+
 setdiff(df1, df2)
+
 setdiff(df2, df1)
 ```
