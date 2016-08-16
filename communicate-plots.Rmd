@@ -2,7 +2,7 @@
 
 ## Introduction
 
-In [EDA], you learned how to use plots as tools for _exploration_. When you made these plots, you knew---even before you looked at them---which variables the plot would display and which datasets the variables would come from. You might have even known what to look for in the completed plots, assuming that you made each plot with a goal in mind. As a result, it was not very important to put a title or a useful set of labels on your plots.
+In [exploratory data analysis], you learned how to use plots as tools for _exploration_. When you made these plots, you knew---even before you looked at them---which variables the plot would display and which datasets the variables would come from. You might have even known what to look for in the completed plots, assuming that you made each plot with a goal in mind. As a result, it was not very important to put a title or a useful set of labels on your plots.
 
 The importance of titles and labels changes once you use your plots for _communication_. Your audience will not share your background knowledge. In fact, they may not know anything about your plots except what the plots themselves display. If you want your plots to communicate your findings effectively, you will need to make them as self-explanatory as possible.
 
@@ -16,6 +16,8 @@ In this chapter, we'll focus once again on ggplot2.
 library(ggplot2)
 library(dplyr)
 ```
+
+We'll use a few ggplot2 extension packages, including __ggrepel__ and __viridis__, but rather than loading then here we'll use the `::` form to emphasise where the functions come from.
 
 ## Titles
 
@@ -153,19 +155,20 @@ ggplot(mpg, aes(displ, hwy)) +
   geom_text(aes(label = label), data = label, vjust = "top", hjust = "right")
 ```
 
-If you want to place the text in the absolute top-right corner, you can use inf:
+If you want to place the text in the absolute top-right corner, you can use infinite positions. In ggplot2, the convention is for these values to be the outside-most positions. Here I use `tibble()`, but if I was going to add multiple labels, I'd use `tribble()` to make the data easier to line up across rows.
 
 ```{r}
 label <- tibble(
-    displ = Inf,
-    hwy = Inf,
-    label = "Increasing engine size is \nrelated to decreasing fuel economy."
-  )
+  displ = Inf,
+  hwy = Inf,
+  label = "Increasing engine size is \nrelated to decreasing fuel economy."
+)
 
 ggplot(mpg, aes(displ, hwy)) + 
   geom_point() + 
   geom_text(aes(label = label), data = label, vjust = "top", hjust = "right")
 ```
+
 
 Here I manually broke the label up in lines using `"\n"`. Alternatively, you could use `stringr::str_wrap()` to automatically wrap it, given the number of characters you want per line:
 
@@ -193,7 +196,30 @@ ggplot(df, aes(x, y)) +
   geom_text(aes(label = label, hjust = hj, vjust = vj), size = 4)
 ```
 
+Remember, as well as `geom_text()` you have all the other geoms in ggplot2 available to help annotate your plot. A few ideas:
+
+*   Use `geom_hline()` and `geom_vline()` to add reference lines. I often make
+    them thick (`size = 2`) and white (`colour = white`) and draw them 
+    underneath the primary data layer. That makes them easy to see without 
+    drawing too much attention.
+    
+*   Use `geom_rect()` to draw are rectangle around points of interesent. The
+    boundaries of the rectangle are defined by aesthetics `xmin`, `xmax`,
+    `ymin`, `ymax`.
+    
+*   Use `geom_segment()` with optional `arrow` argument to draw attention
+    to a point with a arrow. Use aesthetics `x` and `y` to define the 
+    starting location, and `xend` and `yend` to define the end location.
+
+The only limitation is your imagination! (and your patience at position annotations in a way that looks good).
+
 ### Exercises
+
+1.  Read the documentation for `annotate()`. How can you use it to add a text
+    label to a plot without having to create a tibble?
+    
+1.  What arguments to `geom_label()` control the appearance of the background
+    box?
 
 ## Scales
 
@@ -226,9 +252,28 @@ You need to know this for two reasons:
 
 Note the naming scheme for scales: `scale_` followed by the name of the aesthetic, then `_`, then the name of the scale. The default scales are named according to the type of variable they with: continuous, discrete, datetime, or date. There are lots of non-default scales which you'll learn about below.
 
-### Axis breaks and legend keys
+### Axis ticks and legend keys
 
-`date_format` and `date_labels`. Uses the same format specification as `parse_datetime()`.
+There are two primary arguments that affect the appearance of the ticks on the axes and the keys on the legend: `breaks` and `labels`. Breaks controls the position of the ticks, or the values associated with the keys. Labels controls the text label associated with each tick/key.
+
+The most common use of `breaks` is to add extra breaks (or remove) if the defaults aren't great.
+
+```{r}
+ggplot(mpg, aes(displ, hwy)) + 
+  geom_point() + 
+  scale_y_continuous(breaks = seq(15, 40, by = 5))
+```
+
+`labels` should be a character vector the same length as `breaks`. It can also be `NULL` if you'd like to suppress the numbers altogether. This is useful for maps, or when you want to publish semi-public data with out lables.
+
+```{r}
+ggplot(mpg, aes(displ, hwy)) + 
+  geom_point() + 
+  scale_x_continuous(labels = NULL) +
+  scale_y_continuous(labels = NULL)
+```
+
+Another use of `breaks` is when you have relatively few data points and want to highlight exactly where the observations occur. For example, take this plot that shows when each US presidient started and ended their term.
 
 ```{r}
 presidential %>% 
@@ -239,18 +284,29 @@ presidential %>%
     scale_x_date(NULL, breaks = presidential$start, date_labels = "'%y")
 ```
 
+Note that the specification of breaks and labels for date and datetime scales are a little different:
+
+* `date_labels` takes a format specification, in the same form as 
+  `parse_datetime()`.
+  
+* `date_breaks` (not shown here), takes a string like "2 days" or "1 month".
+
 ### Replacing a scale
 
-We'll focus on colour scales because those are most likely.
+We'll focus on colour scales because those are most likely. All of these scales have two variants `scale_colour_x()` and `scale_fill_x()` for the `colour` and `fill` aesthetics respectically. (And the colour scales are available in both UK and US spellings.)
 
-```{r}
+The default categorical scale picks colours that are evenly spaced around the colour wheel. A useful alternative are the ColourBrewer scales which have been hand tuned to work better for people with common types of colour blindness. The two plots below don't look that different, but there's enough difference in the shades of red and green that they can be distinguished even by people with red-green colour blindness.
+
+```{r, fig.align = "default", out.width = "50%"}
 ggplot(mpg, aes(displ, hwy)) +
-  geom_point(aes(color = class)) +
-  geom_smooth(se = FALSE) + 
+  geom_point(aes(color = drv))
+
+ggplot(mpg, aes(displ, hwy)) +
+  geom_point(aes(color = drv)) +
   scale_colour_brewer(palette = "Set1")
 ```
 
-Figure \@ref(fig-brewer) shows the complete list of all palettes.
+Figure \@ref(fig-brewer) shows the complete list of all palettes. The sequential (top) and diverging (bottom) palettes are particularly useful if your categorical values are ordered, or have a "middle". This often arises if you've used `cut()` to make a continuous varible into a categorical variable.
 
 ```{r brewer, fig.asp = 2.5, echo = FALSE, fig.cap = "All ColourBrewer scales."}
 par(mar = c(0, 3, 0, 0))
@@ -268,16 +324,42 @@ presidential %>%
     scale_colour_manual(values = c(Republican = "Red", Democratic = "Blue"))
 ```
 
-For continuous colour, you can use the built-in `scale_colour_gradient()` (or `scale_fill_gradient()`).
+For continuous colour, you can use the built-in `scale_colour_gradient()` (or `scale_fill_gradient()`). If you have a diverging scale, you can use `scale_colour_gradient2()`. That allows you to give (for example), positive and negative values different colours. That's sometimes also useful if you want to distinguish points above or below the mean.
 
-viridis
+Another option is `scale_colour_viridis()` provided by the __viridis__ package. It's a continuous analog of the categorical Brewer scales. The designers, Nathaniel Smith and Stéfan van der Walt, carefully tailored a continuous colour scheme that has good perceptual properities. Here's an example from the viridis vignette.
+
+```{r, fig.align = "default", fig.asp = 1, out.width = "50%", fig.width = 4}
+df <- tibble(
+  x = rnorm(10000), 
+  y = rnorm(10000)
+)
+ggplot(df, aes(x, y)) +
+  geom_hex() + 
+  coord_fixed() 
+
+ggplot(df, aes(x, y)) +
+  geom_hex() + 
+  viridis::scale_fill_viridis() + 
+  coord_fixed() 
+```
 
 ### Exercises
 
-1. Example where you set colour scale instead of fill. Why doesn't it work?
+1.  Example where you set colour scale instead of fill. Why doesn't it work?
 
+1.  What is first argument to every scale? How is it different to `labs()`?
+
+1.  Improve the display of the presidential terms by:
+
+    1. Enhancing the display of the y axis.
+    1. Labelling each term with the name of the President.
 
 ## Zooming
+
+There are three ways to control the limits of the axes:
+
+1. By controlling the data
+1. By setting `xlim` and `ylim` in `coord_cartesian()`.
 
 Often, it can be helpful to zoom in on a specific region of your plot. In `ggplot2` you can do this by adding `coord_cartesian()` to your plot and setting it's `xlim` and `ylim` arguments. Pass each argument a vector of two numbers, the minimum value to display on that axis and the maximum value, e.g.
 
@@ -297,19 +379,44 @@ mpg %>%
 
 `coord_cartesian()` adds a cartesian coordinate system to your plot (which is the default coordinate system). However, the new coordinate system will use the zoomed in limits. 
 
-`filter()`
+There is one other way: you can also set the `limits` in the scale. If you are reducing the limits, this is basically equivalent to subsetting the data. It's more useful if you want _expand_ the limits. This is particularly useful if you want to make sure that scales match across multiple plots. Take the following toy example: if we extract out two classes of car and plot them separately, it's hard to compare the plots because all three scales have different ranges.
 
-Nowdays, I'd generally avoid the `xlim()` and `ylim()` helpers.
+```{r out.width = "50%", fig.align = "default", fig.width = 4}
+suv <- mpg %>% filter(class == "suv")
+compact <- mpg %>% filter(class == "compact")
+
+ggplot(suv, aes(displ, hwy, colour = drv)) + 
+  geom_point()
+
+ggplot(compact, aes(displ, hwy, colour = drv)) + 
+  geom_point()
+```
+
+One way to overcome this problem is to share scales across multiple plots, training the scales with the `limits` of the full data.
+
+```{r out.width = "50%", fig.align = "default", fig.width = 4}
+x_scale <- scale_x_continuous(limits = range(mpg$displ))
+y_scale <- scale_y_continuous(limits = range(mpg$hwy))
+col_scale <- scale_colour_discrete(limits = unique(mpg$drv))
+
+ggplot(suv, aes(displ, hwy, colour = drv)) + 
+  geom_point() + 
+  x_scale +
+  y_scale + 
+  col_scale
+
+ggplot(compact, aes(displ, hwy, colour = drv)) + 
+  geom_point() + 
+  x_scale +
+  y_scale + 
+  col_scale
+```
+
+In this case you could have used facetting, but this technique is broadly useful if you want to make your plots are comparable even when spread across multiple pages of your final report.
 
 ## Themes
 
-Finally, you can also quickly customize the "look" of your plot by adding a theme function to your plot call. This is useful if you have a corporate style that youcan be a useful thing to do, for example, if you'd like to save ink when you print your plots, or if you wish to ensure that the plots photocopy well. 
-
-The theme is designed to put the data forward while supporting comparisons, following the advice of Edward Tufte, Cynthia Brewer, and Dan Carr. We can still see the gridlines, which are important aid to the judgement of position,  but they have little visual impact and we can easily 'tune' them out. The grey background gives the plot a similar typographic colour to the text, ensuring that the graphics fit in with the flow of a  document without jumping out with a bright white background. Finally, the grey background creates a continuous field of colour which ensures that the plot is perceived as a single visual entity.
-
-ggplot2 contains eight theme functions, listed in the table below. Each applies a different visual theme to your finished plot. You can think of the themes as "skins" for the plot. The themes change how the plot looks without changing the information that the plot displays.
-
-To use a theme, add it to your plot:
+Finally, you can also quickly customize the non-data elements of your plot with a theme:
 
 ```{r}
 ggplot(mpg, aes(displ, hwy)) +
@@ -318,17 +425,19 @@ ggplot(mpg, aes(displ, hwy)) +
   theme_bw()
 ```
 
-```{r, echo = FALSE}
+ggplot2 includes eight themes by default, as shown in Figure \@ref(fig:themes). Many more are included in add-on packages like __ggthemes__ (<https://github.com/jrnold/ggthemes>), by Jeremy Arnold.
+
+```{r themes, echo = FALSE, fig.cap = "The eight themes built-in to ggplot2."}
 knitr::include_graphics("images/visualization-themes.png")
 ```
 
-You can also control the individual components of the plot using `theme()`. There are a lot of options and .  You'll need to refer to the ggplot2 book for the full details.
+Many people wonder why the default theme as grey background. This was a deliberate choice to put the data forward while supporting comparisons, following the advice of Edward Tufte, Cynthia Brewer, and Dan Carr. We can still see the gridlines, which are important aid to the judgement of position,  but they have little visual impact and we can easily 'tune' them out. The grey background gives the plot a similar typographic colour to the text, ensuring that the graphics fit in with the flow of a  document without jumping out with a bright white background. Finally, the grey background creates a continuous field of colour which ensures that the plot is perceived as a single visual entity.
 
-Finally, if you have a corporate style or you're trying to match a specific journal, you might want to create your own theme. Once you've figured out the    . This is an increasingly common trend: for example, both AirBnB and 538 have custom ggplot2 styles that they use internally.
+It's also possible to control individual components of each theme, like the size and colour of the font used for the y axis. This unfortunately is outside the scope of this book, so you'll need to ggplot2 book for the full details. You can also create your themes if you have a corporate style or you're trying to match a specific journal.
 
 ## Learning more
 
-The absolute best place to learn more is the ggplot2 book: [_ggplot2: elegant graphics for data analysis_](https://amzn.com/331924275X).  Unfortunately it is not available online for free, but you can find the source code for the book at <https://github.com/hadley/ggplot2-book>.
+The absolute best place to learn more is the ggplot2 book: [_ggplot2: Elegant graphics for data analysis_](https://amzn.com/331924275X). Unfortunately it is not available online for free, but you can find the source code for the book at <https://github.com/hadley/ggplot2-book>.
 
 Another great resource is the ggplot2 extensions guide at  <http://www.ggplot2-exts.org/>. This lists many of the packages that extend ggplot2 with new geoms and scales. It's a great place to start if you're trying to do something that seems really hard with ggplot2.
 
