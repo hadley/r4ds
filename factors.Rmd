@@ -1,0 +1,145 @@
+# Factors
+
+## Introduction
+
+In R, factors are used to work with categorical variables, variables that have a fixed and known set of possible values. They are also useful when you want to display character vectors with non-alphabetical order.
+
+Historically, factors were much easier to work with than characters so many functions in base R automatically convert characters to factors (controlled by the dread `stringsAsFactors` argument). To get more historical context, you might want to read [_stringsAsFactors: An unauthorized biography_](http://simplystatistics.org/2015/07/24/stringsasfactors-an-unauthorized-biography/) by Roger Peng or [_stringsAsFactors = \<sigh\>_](http://notstatschat.tumblr.com/post/124987394001/stringsasfactors-sigh) by Thomas Lumley.  
+
+Factors aren't as common in the tidyverse, because no function will automatically turn a character vector into a factor. It is, however, a good idea to use factors when appropriate, and controlling their levels can be particularly useful for tailoring visualisations of categorical data.
+
+### Prerequisites
+
+To work with factors, we'll use the __forcats__ packages (tools for dealing **cat**egorical variables + anagram of factors). It provides a wide range of helpers for working with factors.  We'll also use ggplot2 because factors are particularly important for visualisation.
+
+```{r setup, message = FALSE}
+# devtools::install_github("hadley/forcats")
+library(forcats)
+library(ggplot2)
+library(dplyr)
+```
+
+## Creating factors
+
+There are two ways to create a factor: during import with readr, using `col_factor()`, or after the fact, turning a string into a factor. Often you'll need to do a little experimetation, so I recommend starting with strings.
+
+To turn a string into a factor, call `factor()`, supplying list of possible values:
+
+```{r}
+
+```
+
+For the rest of this chapter, we're going to focus on `forcats::gss_cat`. It's a sample of variables from the [General Social Survey](https://gssdataexplorer.norc.org/). The variables have been selected to illustrate a number of challenges with working with factors.
+
+```{r}
+gss_cat
+````
+
+You can see the levels of a factor with `levels()`:
+
+```{r}
+levels(gss_cat$race)
+```
+
+And this order is preserved in operations like `count()`:
+
+```{r}
+gss_cat %>% 
+  count(race)
+```
+
+And in visualisations like `geom_bar()`:
+
+```{r}
+ggplot(gss_cat, aes(race)) + 
+  geom_bar()
+```
+
+Note that by default, ggplot2 will drop levels that don't have any values. You can force them to appear with :
+
+```{r}
+ggplot(gss_cat, aes(race)) + 
+  geom_bar() + 
+  scale_x_discrete(drop = FALSE)
+```
+
+Currently dplyr doesn't have a `drop` option, but it will in the future.
+
+## Modifying factor order
+
+```{r}
+relig <- gss_cat %>% 
+  group_by(relig) %>% 
+  summarise(
+    age = mean(age, na.rm = TRUE),
+    tvhours = mean(tvhours, na.rm = TRUE),
+    n = n()
+  )
+
+ggplot(relig, aes(tvhours, relig)) + geom_point()
+ggplot(relig, aes(tvhours, fct_reorder(relig, tvhours))) + geom_point()
+```
+
+If you just want to pull a couple of levels out to the front, you can use `fct_relevel()`.
+
+```{r}
+rincome <- gss_cat %>% 
+  group_by(rincome) %>% 
+  summarise(
+    age = mean(age, na.rm = TRUE),
+    tvhours = mean(tvhours, na.rm = TRUE),
+    n = n()
+  )
+
+ggplot(rincome, aes(age, rincome)) + geom_point()
+
+gss_cat %>% count(fct_rev(rincome))
+```
+
+`fct_rev(rincome)`
+`fct_reorder(religion, rincome)`
+`fct_reorder2(religion, year, rincome)`
+
+
+```{r}
+by_year <- gss_cat %>% 
+  group_by(year, marital) %>% 
+  count() %>% 
+  mutate(prop = n / sum(n))
+
+ggplot(by_year, aes(year, prop, colour = marital)) + 
+  geom_line()
+
+ggplot(by_year, aes(year, prop, colour = fct_reorder2(marital, year, prop))) + 
+  geom_line()
+
+```
+
+## Modifying factor levels
+
+`fct_recode()` is the most general. It allows you to transform levels.
+
+### Manually grouping
+
+```{r}
+fct_count(fct_collapse(gss_cat$partyid,
+  other = c("No answer", "Don't know", "Other party"), 
+  rep = c("Strong republican", "Not str republican"), 
+  ind = c("Ind,near rep", "Independent", "Ind,near dem"),
+  dem = c("Not str democrat", "Strong democrat")
+))
+```
+
+### Lumping small groups together
+
+```{r}
+gss_cat %>% mutate(relig = fct_lump(relig)) %>% count(relig)
+gss_cat %>% mutate(relig = fct_lump(relig, 5)) %>% count(relig, sort = TRUE)
+```
+
+```{r}
+gss_cat$relig %>% fct_infreq() %>% fct_lump(5) %>% fct_count()
+gss_cat$relig %>% fct_lump(5) %>% fct_infreq() %>% fct_count()
+```
+
+`fct_reorder()` is sometimes also useful. It...
