@@ -26,22 +26,47 @@ There are two ways to create a factor: during import with readr, using `col_fact
 To turn a string into a factor, call `factor()`, supplying list of possible values:
 
 ```{r}
-
+x <- c("pear", "apple", "banana", "apple", "pear", "apple")
+factor(x, levels = c("apple", "banana", "pear"))
 ```
 
-For the rest of this chapter, we're going to focus on `forcats::gss_cat`. It's a sample of variables from the [General Social Survey](https://gssdataexplorer.norc.org/). The variables have been selected to illustrate a number of challenges with working with factors.
+Any values not in the list of levels will be silently converted to `NA`:
+
+```{r}
+factor(x, levels = c("apple", "banana"))
+```
+
+If you omit the levels, they'll be taken from the data in alphabetical order:
+
+```{r}
+factor(x)
+```
+
+Sometimes you'd prefer that the order of the levels match the order of the first appearnace in the data. You can do that during creation by setting levels to `unique(x)`, or after the with `fct_inorder()`:
+
+```{r}
+factor(x, levels = unique(x))
+
+f <- factor(x)
+f <- fct_inorder(f)
+f
+```
+
+You can access the levels of the factor with `levels()`:
+
+```{r}
+levels(f)
+```
+
+## General Social Survey
+
+For the rest of this chapter, we're going to focus on `forcats::gss_cat`. It's a sample of variables from the [General Social Survey](http://gss.norc.org), which is a long-running US survey run by the the independent research organization NORC at the University of Chicago. The survey has thousands of questions, and in `gss_cat` I've selected a handful of variables to illustrate some common challenges you'll hit when working with factors.
 
 ```{r}
 gss_cat
-````
-
-You can see the levels of a factor with `levels()`:
-
-```{r}
-levels(gss_cat$race)
 ```
 
-And this order is preserved in operations like `count()`:
+Note that the order of levels is preserved in operations like `count()`:
 
 ```{r}
 gss_cat %>% 
@@ -55,7 +80,7 @@ ggplot(gss_cat, aes(race)) +
   geom_bar()
 ```
 
-Note that by default, ggplot2 will drop levels that don't have any values. You can force them to appear with :
+By default, ggplot2 will drop levels that don't have any values. You can force them to appear with:
 
 ```{r}
 ggplot(gss_cat, aes(race)) + 
@@ -63,9 +88,26 @@ ggplot(gss_cat, aes(race)) +
   scale_x_discrete(drop = FALSE)
 ```
 
-Currently dplyr doesn't have a `drop` option, but it will in the future.
+Unfortunatealy dplyr doesn't yet have a `drop` option, but it will in the future.
+
+### Exercise
+
 
 ## Modifying factor order
+
+The levels of a factor can be meaningful or arbitary:
+
+* arbitrary: where the order of the factor levels is arbitrary, like race, sex,
+  or religion. You have to pick an order for display, but it doesn't mean 
+  anything.
+
+* meaningful: where the order of levels reflects an underlying order like
+  party affiliation (from strong republican - indepedent - strong democrat)
+  or income (from low to high)
+
+Generally, you should avoid jumbling the order if it's meaningful. 
+
+Let's take a look with a concrete example. Here I compute the average number of tv hours for each religion:
 
 ```{r}
 relig <- gss_cat %>% 
@@ -77,10 +119,16 @@ relig <- gss_cat %>%
   )
 
 ggplot(relig, aes(tvhours, relig)) + geom_point()
-ggplot(relig, aes(tvhours, fct_reorder(relig, tvhours))) + geom_point()
 ```
 
-If you just want to pull a couple of levels out to the front, you can use `fct_relevel()`.
+This plot is a little hard to take in because the order of religion is basically arbitary.  We can improve it by reordering the levels of `relig`. This makes it much easier to see that "Don't know" seems to watch much more, and Hinduism & Other Eastern religions watch much less.
+
+```{r}
+ggplot(relig, aes(tvhours, fct_reorder(relig, tvhours))) + 
+  geom_point()
+```
+
+What if we do the same thing for income levels?
 
 ```{r}
 rincome <- gss_cat %>% 
@@ -92,54 +140,132 @@ rincome <- gss_cat %>%
   )
 
 ggplot(rincome, aes(age, rincome)) + geom_point()
-
-gss_cat %>% count(fct_rev(rincome))
 ```
 
-`fct_rev(rincome)`
-`fct_reorder(religion, rincome)`
-`fct_reorder2(religion, year, rincome)`
-
+Arbitrarily reordering the levels isn't a good idea!
 
 ```{r}
-by_year <- gss_cat %>% 
-  group_by(year, marital) %>% 
+ggplot(rincome, aes(age, fct_reorder(rincome, age))) + geom_point()
+```
+
+But it does make sense to pull "Not applicable" to the front with the other special levels. You can use `fct_relevel()`. Why do you think the average age for "Not applicable" is so high?
+
+```{r}
+ggplot(rincome, aes(age, fct_relevel(rincome, "Not applicable"))) + 
+  geom_point()
+```
+
+Another variation of `fct_reorder()` is useful when you are colouring the lines on a plot. Using `fct_reorder2()` makes the line colours nicely match the order of the legend.
+
+```{r, fig.align = "default", out.width = "50%"}
+by_age <- gss_cat %>% 
+  group_by(age, marital) %>% 
   count() %>% 
   mutate(prop = n / sum(n))
 
-ggplot(by_year, aes(year, prop, colour = marital)) + 
+ggplot(by_age, aes(age, prop, colour = marital)) + 
   geom_line()
 
-ggplot(by_year, aes(year, prop, colour = fct_reorder2(marital, year, prop))) + 
-  geom_line()
-
+ggplot(by_age, aes(age, prop, colour = fct_reorder2(marital, age, prop))) + 
+  geom_line() +
+  labs(colour = "marital")
 ```
+
+Finally, for bar plots, you can use `fct_infreq()` to order levels in increasing frequency. You may want to combine with `fct_rev()`.
+
+```{r}
+gss_cat %>% 
+  mutate(marital = marital %>% fct_infreq() %>% fct_rev()) %>% 
+  ggplot(aes(marital)) +
+    geom_bar()
+```
+
+### Exercises
+
+1.  There are some suspiciously high numbers in `tvhours`. Is the mean a good 
+    summary?
+
+1.  For each factor in `gss_cat` identify whether the order is arbitrary
+    or meaningful.
+
+1.  Recreate the display of marital status by age, using `geom_area()` instead
+    of `geom_line()`. What do you need to change to the plot? How might you
+    tweak the levels?
 
 ## Modifying factor levels
 
-`fct_recode()` is the most general. It allows you to transform levels.
+More powerful than changing the orders of the levels is to change their values. This allows you to clarify labels for publication, and collapse levels for high-level displays.
 
-### Manually grouping
-
-```{r}
-fct_count(fct_collapse(gss_cat$partyid,
-  other = c("No answer", "Don't know", "Other party"), 
-  rep = c("Strong republican", "Not str republican"), 
-  ind = c("Ind,near rep", "Independent", "Ind,near dem"),
-  dem = c("Not str democrat", "Strong democrat")
-))
-```
-
-### Lumping small groups together
+The most general and powerful tool is `fct_recode()`. It allows you to recode, or change, the value of each level. For example, take the `gss_cat$partyid`:
 
 ```{r}
-gss_cat %>% mutate(relig = fct_lump(relig)) %>% count(relig)
-gss_cat %>% mutate(relig = fct_lump(relig, 5)) %>% count(relig, sort = TRUE)
+gss_cat %>% count(partyid)
 ```
+
+The levels are little hard to read. Let's tweak them to be longer and more consistent. Any levels that aren't explicitly mentioned will be left as is.
 
 ```{r}
-gss_cat$relig %>% fct_infreq() %>% fct_lump(5) %>% fct_count()
-gss_cat$relig %>% fct_lump(5) %>% fct_infreq() %>% fct_count()
+gss_cat %>% 
+  mutate(partyid = fct_recode(partyid,
+    "Republican, strong"    = "Strong republican",
+    "Republican, weak"      = "Not str republican",
+    "Independent, near rep" = "Ind,near rep",
+    "Independent, near dem" = "Ind,near dem",
+    "Democrat, weak"        = "Not str democrat",
+    "Democrat, strong"      = "Strong democrat"
+  )) %>% 
+  count(partyid)
 ```
 
-`fct_reorder()` is sometimes also useful. It...
+You can assign multiple old levels to the same new level:
+
+```{r}
+gss_cat %>% 
+  mutate(partyid = fct_recode(partyid,
+    "Republican, strong"    = "Strong republican",
+    "Republican, weak"      = "Not str republican",
+    "Independent, near rep" = "Ind,near rep",
+    "Independent, near dem" = "Ind,near dem",
+    "Democrat, weak"        = "Not str democrat",
+    "Democrat, strong"      = "Strong democrat",
+    "Other"                 = "No answer",
+    "Other"                 = "Don't know",
+    "Other"                 = "Other party" 
+  )) %>% 
+  count(partyid)
+``` 
+
+You must use this technique with extreme care: if you group together categories that are truly different you will end up with misleading results.
+
+If you want to collapse a lot of levels, `fct_collapse()` is a useful variant. For each new variable, you can provide a vector of old levels: 
+
+```{r}
+gss_cat %>% 
+  mutate(partyid = fct_collapse(partyid,
+    other = c("No answer", "Don't know", "Other party"),
+    rep = c("Strong republican", "Not str republican"), 
+    ind = c("Ind,near rep", "Independent", "Ind,near dem"),
+    dem = c("Not str democrat", "Strong democrat")
+  )) %>% 
+  count(partyid)
+```
+
+Sometimes you just want to lump together all the small groups to make a plot or table simpler. That's the job of `fct_lump()`:
+
+```{r}
+gss_cat %>% 
+  mutate(relig = fct_lump(relig)) %>% 
+  count(relig)
+```
+
+The default behaviour is to lump together all the smallest groups, ensuring that the aggregate is still the smallest group. In this case it's not super helpful: it is true that the majority of Americans are protestant, but we've probably over collapsed.
+
+Instead, we can use the `n` parameter to specify how many groups (excluding other) we want to keep:
+
+```{r}
+gss_cat %>% 
+  mutate(relig = fct_lump(relig, n = 5)) %>% 
+  count(relig, sort = TRUE)
+```
+
+### Exercises
