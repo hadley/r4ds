@@ -2,11 +2,11 @@
 
 ## Introduction
 
-You've been using the pipe for a while now, so you already understand the basics. Pipes transform the way you invoke deeply nested functions. Using a pipe doesn't affect what the code does; behind the scenes it is run in (almost) the exact same way. What the pipe does is change how _you_ write, and read, code. The point of this chapter is to explore the pipe in more detail. You'll learn the alternatives to pipe replaces, and their pro and cons. Importantly, you'll also learn the cases where you should avoid the pipe. 
+Pipes are a powerful tool for clearly expressing a sequence of multiple operations. So far, you've been using them without knowing how they work, or what the alternatives are. Now, in this chapter, it's time to explore the pipe in more detail. You'll learn the alternatives to the pipe, when you shouldn't use the pipe, and some useful related tools.
 
 ### Prerequisites
 
-The pipe, `%>%`, comes from the __magrittr__ package by Stefan Milton Bache. Packages in the tidyverse load `%>%` for you automatically, so you don't usually explicitly load magrittr.  Here, however, we're focussing on piping, and we aren't loading any other packages, so we'll need to load it explicitly. At the end of the chapter, we'll explore some other tool also provided by magrittr.
+The pipe, `%>%`, comes from the __magrittr__ package by Stefan Milton Bache. Packages in the tidyverse load `%>%` for you automatically, so you don't usually load magrittr explicitly.  Here, however, we're focussing on piping, and we aren't loading any other packages, so we will load it explicitly.
 
 ```{r setup}
 library(magrittr)
@@ -14,14 +14,14 @@ library(magrittr)
 
 ## Piping alternatives
 
-The point of the pipe is to help you write code in a way that easier to read and understand. To see why the pipe is so useful, we're going to explore a number of ways of writing the same code. 
-
-Let's use code to tell a story about a little bunny named Foo Foo:
+The point of the pipe is to help you write code in a way that easier to read and understand. To see why the pipe is so useful, we're going to explore a number of ways of writing the same code. Let's use code to tell a story about a little bunny named Foo Foo:
 
 > Little bunny Foo Foo  
 > Went hopping through the forest  
 > Scooping up the field mice  
 > And bopping them on the head  
+
+This is a popular Children's poem that is accompanied by hand actions.
 
 We'll start by defining an object to represent little bunny Foo Foo:
 
@@ -36,7 +36,7 @@ And we'll use a function for each key verb: `hop()`, `scoop()`, and `bop()`. Usi
 1. Compose functions.
 1. Use the pipe.
 
-We'll work through each approach, showing you the code and talking about the advantages and disadvantages. These are made up functions; please don't expect this code to actually work!
+We'll work through each approach, showing you the code and talking about the advantages and disadvantages.
 
 ### Intermediate steps
 
@@ -48,13 +48,20 @@ foo_foo_2 <- scoop(foo_foo_1, up = field_mice)
 foo_foo_3 <- bop(foo_foo_2, on = head)
 ```
 
-The main downside of this form is that it forces you to name each intermediate element. If there are natural names, this is a good idea, and you should use it. But many times, like this in this example, there aren't natural names, and you add numeric suffixes just to make the names unique. That leads to two problems: the code is cluttered with unimportant names, and you have to carefully increment the suffix on each line. Whenever I write code like this, I invariably use the wrong number on one line and then spend 10 minutes scratching my head and trying to figure out what went wrong with my code.
+The main downside of this form is that it forces you to name each intermediate element. If there are natural names, this is a good idea, and you should do it. But many times, like this in this example, there aren't natural names, and you add numeric suffixes to make the names unique. That leads to two problems:
 
-You may also worry that this form creates many copies of your data and takes up a lot of memory. Suprisingly, that's not the case. But first note that worrying about memory is not a useful way to spend your time: worry about it when it becomes a problem (i.e. you run out of memory), not before. Second, R isn't stupid: if you're working with data frames, R will share columns where possible. Let's take a look at an actual data manipulation pipeline where we add a new column to `ggplot2::diamonds`:
+1. The code is cluttered with unimportant names
+
+1. You have to carefully increment the suffix on each line. 
+
+Whenever I write code like this, I invariably use the wrong number on one line and then spend 10 minutes scratching my head and trying to figure out what went wrong with my code.
+
+You may also worry that this form creates many copies of your data and takes up a lot of memory. Suprisingly, that's not the case. First, note that proactively worrying about memory is not a useful way to spend your time: worry about it when it becomes a problem (i.e. you run out of memory), not before. Second, R isn't stupid, and it will share columns across data frames, where possible. Let's take a look at an actual data manipulation pipeline where we add a new column to `ggplot2::diamonds`:
 
 ```{r}
 diamonds <- ggplot2::diamonds
-diamonds2 <- dplyr::mutate(diamonds, price_per_carat = price / carat)
+diamonds2 <- diamonds %>% 
+  dplyr::mutate(price_per_carat = price / carat)
 
 pryr::object_size(diamonds)
 pryr::object_size(diamonds2)
@@ -67,9 +74,7 @@ pryr::object_size(diamonds, diamonds2)
 * `diamonds2` takes up 3.89 MB,
 * `diamonds` and `diamonds2` together take up 3.89 MB!
 
-How can that work? Well, `diamonds2` has 10 columns in common with `diamonds`: there's no need to duplicate all that data, so the two data frames have variables in common. These variables will only get copied if you modify one of them. 
-
-In the following example, we modify a single value in `diamonds$carat`. That means the `carat` variable can no longer be shared between the two data frames, and a copy must be made. The individual size of each data frame will be unchanged, but the collective size increases:
+How can that work? Well, `diamonds2` has 10 columns in common with `diamonds`: there's no need to duplicate all that data, so the two data frames have variables in common. These variables will only get copied if you modify one of them. In the following example, we modify a single value in `diamonds$carat`. That means the `carat` variable can no longer be shared between the two data frames, and a copy must be made. The size of each data frame is unchanged, but the collective size increases:
 
 ```{r}
 diamonds$carat[1] <- NA
@@ -78,7 +83,7 @@ pryr::object_size(diamonds2)
 pryr::object_size(diamonds, diamonds2)
 ```
 
-(Note that we use `pryr::object_size()` here, not the built-in `object.size()`. `object.size()` isn't quite smart enough to recognise that the columns are shared across multiple data frames.)
+(Note that we use `pryr::object_size()` here, not the built-in `object.size()`. `object.size()` only takes a single object so it can't compute how data is shared across multiple objects.)
 
 ### Overwrite the original
 
@@ -96,7 +101,7 @@ This is less typing (and less thinking), so you're less likely to make mistakes.
     complete pipeline from the beginning.
     
 1.  The repetition of the object being transformed (we've written `foo_foo` six 
-    times!) obscures what's different on each line. 
+    times!) obscures what's chaning on each line. 
 
 ### Function composition
 
@@ -126,9 +131,9 @@ foo_foo %>%
   bop(on = head)
 ```
 
-This is my favourite form, because it focusses on verbs, not nouns. You can read this series of function compositions like it's a set of imperative actions. Foo foo hops, then scoops, then bops. The downside, of course, is that you need to be familiar with the pipe. If you've never seen `%>%` before, you'll have no idea what this code does. Fortunately, most people pick up the idea very quickly, so when you share you code with others who aren't familiar with the pipe, you can easily teach them.
+This is my favourite form, because it focusses on verbs, not nouns. You can read this series of function compositions like it's a set of imperative actions. Foo Foo hops, then scoops, then bops. The downside, of course, is that you need to be familiar with the pipe. If you've never seen `%>%` before, you'll have no idea what this code does. Fortunately, most people pick up the idea very quickly, so when you share you code with others who aren't familiar with the pipe, you can easily teach them.
 
-The pipe works by doing "lexical transformation". Behind the scenes, magrittr reassembles the code in the pipe to a form that works by overwriting an intermediate object. When you run a pipe like the one above, magrittr does something like this:
+The pipe works by performing a "lexical transformation": behind the scenes, magrittr reassembles the code in the pipe to a form that works by overwriting an intermediate object. When you run a pipe like the one above, magrittr does something like this:
 
 ```{r, eval = FALSE}
 my_pipe <- function(.) {
@@ -187,7 +192,7 @@ This means that the pipe won't work for two classes of functions:
 
 The pipe is a powerful tool, but it's not the only tool at your disposal, and it doesn't solve every problem! Pipes are most useful for rewriting a fairly short linear sequence of operations. I think you should reach for another tool when:
 
-* Your pipes are longer than five or six steps. In that case, create 
+* Your pipes are longer than (say) ten steps. In that case, create 
   intermediate objects with meaningful names. That will make debugging easier,
   because you can more easily check the intermediate results, and it makes
   it easier to understand your code, because the variable names can help 
@@ -203,7 +208,7 @@ The pipe is a powerful tool, but it's not the only tool at your disposal, and it
 
 ## Other tools from magrittr
 
-All packages in the tidyverse automatically make `%>%` avaiable for you, so you don't normally load magrittr explicitly. However, there are some other useful tools inside magrittr that you might want to try out:
+All packages in the tidyverse automatically make `%>%` alivaiable for you, so you don't normally load magrittr explicitly. However, there are some other useful tools inside magrittr that you might want to try out:
 
 *   When working with more complex pipes, it's sometimes useful to call a 
     function for its side-effects. Maybe you want to print out the current 
@@ -211,8 +216,8 @@ All packages in the tidyverse automatically make `%>%` avaiable for you, so you 
     return anything, effectively terminating the pipe.
     
     To work around this problem, you can use the "tee" pipe. `%T>%` works like 
-    `%>%` except that it returns the LHS instead of the RHS. It's called 
-    "tee" because it's like a literal T-shaped pipe.
+    `%>%` except that it returns the left-hand side instead of the right-hand 
+    side. It's called "tee" because it's like a literal T-shaped pipe.
 
     ```{r}
     rnorm(100) %>%
