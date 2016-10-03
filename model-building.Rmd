@@ -4,7 +4,7 @@
 
 In the previous chapter you learned how linear models worked, and learned some basic tools for understanding what a model is telling you about your data. The previous chapter focussed on simulated datasets to help you learn about how models work. This chapter will focus on real data, showing you how you can progressively build up a model to aid your understanding of the data.
 
-We will take advantage of the fact that you can think about a model partitioning your data into pattern and residuals. We'll find patterns with visualisation, then make them concrete and precise with a model. We'll them repeat the process, but replace the old response variable with the residuals from the model. The goal is to transition from implicit knowledge in the data and your head to explicit knowledge in a quantitative model. This makes it easier to apply to new domains, and easier for others to use. 
+We will take advantage of the fact that you can think about a model partitioning your data into pattern and residuals. We'll find patterns with visualisation, then make them concrete and precise with a model. We'll then repeat the process, but replace the old response variable with the residuals from the model. The goal is to transition from implicit knowledge in the data and your head to explicit knowledge in a quantitative model. This makes it easier to apply to new domains, and easier for others to use. 
 
 For very large and complex datasets this will be a lot of work. There are certainly alternative approaches - a more machine learning approach is simply to focus on the predictive ability of the model. These approaches tend to produce black boxes: the model does a really good job at generating predictions, but you don't know why. This is a totally reasonable approach, but it does make it hard to apply your real world knowledge to the model. That, in turn, makes it difficult to assess whether or not the model will continue to work in the long-term, as fundamentals change. For most real models, I'd expect you to use some combination of this approach and a more classic automated approach.
 
@@ -51,7 +51,7 @@ Note that the worst diamond color is J (slightly yellow), and the worst clarity 
 
 ### Price and carat
 
-It looks like lower quality diamonds have higher prices because there is an important cofounding variable: the weight (`carat`) of the diamond. The weight of the diamond is the single most important factor for determining the price of the diamond, and lower quality diamonds tend to be larger.
+It looks like lower quality diamonds have higher prices because there is an important confounding variable: the weight (`carat`) of the diamond. The weight of the diamond is the single most important factor for determining the price of the diamond, and lower quality diamonds tend to be larger.
 
 ```{r}
 ggplot(diamonds, aes(carat, price)) + 
@@ -118,7 +118,7 @@ ggplot(diamonds2, aes(clarity, lresid)) + geom_boxplot()
 
 Now we see the relationship we expect: as the quality of the diamond increases, so to does it's relative price. To interpret the `y` axis, we need to think about what the residuals are telling us, and what scale they are on. A residual of -1 indicates that `lprice` was 1 unit lower than a prediction based solely on its weight. $2^{-1}$ is 1/2, points with a value of -1 are half the expected price, and residuals with value 1 are twice the predicted price.
 
-### A model complicated model
+### A more complicated model
 
 If we wanted to, we could continue to build up our model, moving the effects we've observed into the model to make them explicit. For example, we could include `color`, `cut`, and `clarity` into the model so that we also make explicit the effect of these three categorical variables:
 
@@ -126,7 +126,7 @@ If we wanted to, we could continue to build up our model, moving the effects we'
 mod_diamond2 <- lm(lprice ~ lcarat + color + cut + clarity, data = diamonds2)
 ```
 
-This model now includes four predictors, so it's getting harder to visualise. Fortunately, they're currently all independent which means that we can plot them individually in four plots. To make the process a little easier, we're going to use the `model` argument to `data_grid`:
+This model now includes four predictors, so it's getting harder to visualise. Fortunately, they're currently all independent which means that we can plot them individually in four plots. To make the process a little easier, we're going to use the `.model` argument to `data_grid`:
 
 ```{r}
 grid <- diamonds2 %>% 
@@ -138,7 +138,7 @@ ggplot(grid, aes(cut, pred)) +
   geom_point()
 ```
 
-If the model needs variables that you haven't explicitly supplied, `data_grid()` will automatically fill them in with "typical" value. For continous variables, it uses the median, and categorical variables it uses the most common value (or values, if there's a tie).
+If the model needs variables that you haven't explicitly supplied, `data_grid()` will automatically fill them in with "typical" value. For continuous variables, it uses the median, and categorical variables it uses the most common value (or values, if there's a tie).
 
 ```{r}
 diamonds2 <- diamonds2 %>% 
@@ -148,7 +148,7 @@ ggplot(diamonds2, aes(lcarat, lresid2)) +
   geom_hex(bins = 50)
 ```
 
-This plot indicates that there are some diamonds with quite large residuals - remember a residual of 4 indicates that the diamond is 4x the price that we expected. It's often useful to look at unusual values individually:
+This plot indicates that there are some diamonds with quite large residuals - remember a residual of 2 indicates that the diamond is 4x the price that we expected. It's often useful to look at unusual values individually:
 
 ```{r}
 diamonds2 %>% 
@@ -167,10 +167,10 @@ Nothing really jumps out at me here, but it's probably worth spending time consi
     strips. What do they represent?
 
 1.  If `log(price) = a_0 + a_1 * log(carat)`, what does that say about 
-    the relationship between `price` and `carat?
+    the relationship between `price` and `carat`?
     
 1.  Extract the diamonds that have very high and very low residuals. 
-    Is there any unusual about these diamonds? Are the particularly bad
+    Is there anything unusual about these diamonds? Are the particularly bad
     or good, or do you think these are pricing errors?
 
 1.  Does the final model, `mod_diamonds2`, do a good job of predicting
@@ -183,7 +183,7 @@ Let's work through a similar process for a dataset that seems even simpler at fi
 
 ```{r}
 daily <- flights %>% 
-  mutate(date = make_datetime(year, month, day)) %>% 
+  mutate(date = make_date(year, month, day)) %>% 
   group_by(date) %>% 
   summarise(n = n())
 daily
@@ -244,7 +244,8 @@ Note the change in the y-axis: now we are seeing the deviation from the expected
 
     Our model fails to accurately predict the number of flights on Saturday:
     during summer there are more flights than we expect, and during Fall there 
-    are fewer. We'll see how we can do capture this pattern in the next section.
+    are fewer. We'll see how we can do better to capture this pattern in the
+    next section.
 
 1.  There are some days with far fewer flights than expected:
 
@@ -284,7 +285,7 @@ daily %>%
   ggplot(aes(date, n)) + 
     geom_point() + 
     geom_line() +
-    scale_x_datetime(NULL, date_breaks = "1 month", date_labels = "%b")
+    scale_x_date(NULL, date_breaks = "1 month", date_labels = "%b")
 ```
 
 (I've used both points and lines to make it more clear what is data and what is interpolation.)
@@ -298,7 +299,7 @@ Lets create a "term" variable that roughly captures the three school terms, and 
 ```{r}
 term <- function(date) {
   cut(date, 
-    breaks = as.POSIXct(ymd(20130101, 20130605, 20130825, 20140101)),
+    breaks = ymd(20130101, 20130605, 20130825, 20140101),
     labels = c("spring", "summer", "fall") 
   )
 }
@@ -311,7 +312,7 @@ daily %>%
   ggplot(aes(date, n, colour = term)) +
   geom_point(alpha = 1/3) + 
   geom_line() +
-  scale_x_datetime(NULL, date_breaks = "1 month", date_labels = "%b")
+  scale_x_date(NULL, date_breaks = "1 month", date_labels = "%b")
 ```
 
 (I manually tweaked the dates to get nice breaks in the plot. Using a visualisation to help you understand what your function is doing is a really powerful and general technique.)
@@ -389,7 +390,7 @@ Either approach is reasonable. Making the transformed variable explicit is usefu
 
 ### Time of year: an alternative approach
 
-In the previous section we used our domain knowledge (how the US school term affects travel) to improve the model. An alternative to using making our knowledge explicit in the model is to give the data more room to speak. We could use a more flexible model and allow that to capture the pattern we're interested in. A simple linear trend isn't adeqaute, so we could try using a natural spline to fit a smooth curve across the year:
+In the previous section we used our domain knowledge (how the US school term affects travel) to improve the model. An alternative to using making our knowledge explicit in the model is to give the data more room to speak. We could use a more flexible model and allow that to capture the pattern we're interested in. A simple linear trend isn't adequate, so we could try using a natural spline to fit a smooth curve across the year:
 
 ```{r}
 library(splines)
@@ -408,7 +409,7 @@ We see a strong pattern in the numbers of Saturday flights. This is reassuring, 
 
 ### Exercises
 
-1.  Use your google sleuthing skills to brainstorm why there were fewer than
+1.  Use your Google sleuthing skills to brainstorm why there were fewer than
     expected flights on Jan 20, May 26, and Sep 9. (Hint: they all have the
     same explanation.) How would these days generalise to another year?
 
@@ -417,7 +418,7 @@ We see a strong pattern in the numbers of Saturday flights. This is reassuring, 
 
     ```{r}
     daily %>% 
-      filter(resid > 80)
+      top_n(3, resid)
     ```
 
 1.  Create a new variable that splits the `wday` variable into terms, but only
@@ -438,17 +439,17 @@ We see a strong pattern in the numbers of Saturday flights. This is reassuring, 
 
 1.  We hypothesised that people leaving on Sundays are more likely to be 
     business travellers who need to be somewhere on Monday. Explore that 
-    hypothesis by seeing how it breaks down based on distance and itme: if 
+    hypothesis by seeing how it breaks down based on distance and time: if 
     it's true, you'd expect to see more Sunday evening flights to places that 
     are far away.
 
 1.  It's a little frustrating that Sunday and Saturday are on separate ends
-    of the plot. Write a small function to set the manipulate the levels of the 
+    of the plot. Write a small function to set the levels of the 
     factor so that the week starts on Monday.
 
 ## Learning more about models
 
-We have only scratched the absolute surface of modelling, but you have hopefully gained some simple, but general purpose tools that you can use to improve your own data analyses. It's ok to start simple! As you've seen, even very simple models can make a dramatic difference in your ability to tease out interactions between variables.
+We have only scratched the absolute surface of modelling, but you have hopefully gained some simple, but general-purpose tools that you can use to improve your own data analyses. It's OK to start simple! As you've seen, even very simple models can make a dramatic difference in your ability to tease out interactions between variables.
 
 These modelling chapters are even more opinionated than the rest of the book. I approach modelling from a somewhat different perspective to most others, and there is relatively little space devoted to it. Modelling really deserves a book on its own, so I'd highly recommend that you read at least one of these three books:
 
@@ -470,5 +471,5 @@ These modelling chapters are even more opinionated than the rest of the book. I 
 
 * *Applied Predictive Modeling* by Max Kuhn and Kjell Johnson, 
   <http://appliedpredictivemodeling.com>. This book is a companion to the 
-  __caret__ package, and provides practical tools for dealing with real-life
+  __caret__ package and provides practical tools for dealing with real-life
   predictive modelling challenges.
