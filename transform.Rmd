@@ -25,12 +25,24 @@ flights
 
 You might notice that this data frame prints a little differently from other data frames you might have used in the past: it only shows the first few rows and all the columns that fit on one screen. (To see the whole dataset, you can run `View(flights)` which will open the dataset in the RStudio viewer). It prints differently because it's a __tibble__. Tibbles are data frames, but slightly tweaked to work better in the tidyverse. For now, you don't need to worry about the differences; we'll come back to tibbles in more detail in [wrangle](#wrangle-intro).
  
-You might also have noticed the row of three letter abbreviations under the column names. These describe the type of each variable:
+You might also have noticed the row of three (or four) letter abbreviations under the column names. These describe the type of each variable:
+
+* `int` stands for integers.
+
+* `dbl` stands for doubles, or real numbers.
+
+* `chr` stands for character vectors, or strings.
+
+* `dttm` stands for date-times (a date + a time).
+
+There are three other common types of variables that aren't used in this dataset but you'll encounter later in the book:
 
 * `lgl` stands for logical, vectors that contain only `TRUE` or `FALSE`.
-* `int` stands for integers.
-* `dbl` stands for doubles, or real numbers.
-* `chr` stands for character vectors, or strings.
+
+* `fctr` stands for factors, which R uses to represent categorical variables
+  with fixed possible values.
+
+* `date` stands for dates.
 
 ### Dplyr basics
 
@@ -48,9 +60,9 @@ All verbs work similarly:
 
 1.  The first argument is a data frame.
 
-1.  The subsequent arguments describe what to do with the data frame. 
-    You can refer to columns in the data frame directly without using `$`.
-
+1.  The subsequent arguments describe what to do with the data frame,
+    using the variable names (without quotes).
+    
 1.  The result is a new data frame.
 
 Together these properties make it easy to chain together multiple simple steps to achieve a complex result. Let's dive in and see how these verbs work.
@@ -92,14 +104,12 @@ sqrt(2) ^ 2 == 2
 1/49 * 49 == 1
 ```
 
-Computers use finite precision arithmetic (they obviously can't store an infinite number of digits!) so remember that every number you see is an approximation. Instead of relying on `==`, use `dplyr::near()`:
+Computers use finite precision arithmetic (they obviously can't store an infinite number of digits!) so remember that every number you see is an approximation. Instead of relying on `==`, use `near()`:
 
 ```{r}
 near(sqrt(2) ^ 2,  2)
 near(1 / 49 * 49, 1)
 ```
-
-(Remember that we use `::` to be explicit about where a function lives. If dplyr is installed, `dplyr::near()` will always work. If you want to use the shorter `near()`, you need to make sure you have loaded dplyr with `library(dplyr)`.)
 
 ### Logical operators
 
@@ -117,6 +127,12 @@ filter(flights, month == 11 | month == 12)
 
 The order of operations doesn't work like English. You can't write `filter(flights, month == 11 | 12)`, which you might literally translate into  "finds all flights that departed in November or December". Instead it finds all months that equal `11 | 12`, an expression that evaluates to `TRUE`. In a numeric context (like here), `TRUE` becomes one, so this finds all flights in January, not November or December. This is quite confusing!
 
+A useful short-hand for this problem is `x %in% y`. This will select every row where `x` is one of the values in `y`. We could use it to rewrite the code above:
+
+```{r, eval = FALSE}
+nov_dec <- filter(flights, month %in% c(11, 12))
+```
+
 Sometimes you can simplify complicated subsetting by remembering De Morgan's law: `!(x & y)` is the same as `!x | !y`, and `!(x | y)` is the same as `!x & !y`. For example, if you wanted to find flights that weren't delayed (on arrival or departure) by more than two hours, you could use either of the following two filters:
 
 ```{r, eval = FALSE}
@@ -125,20 +141,6 @@ filter(flights, arr_delay <= 120, dep_delay <= 120)
 ```
 
 As well as `&` and `|`, R also has `&&` and `||`. Don't use them here! You'll learn when you should use them in [conditional execution].
-
-Sometimes you want to find all rows after the first `TRUE`, or all rows until the first `FALSE`. The window functions `cumany()` and `cumall()` allow you to find these values:
-
-```{r}
-df <- tibble(
-  x = c(FALSE, TRUE, FALSE), 
-  y = c(TRUE, FALSE, TRUE)
-)
-
-filter(df, cumany(x)) # all rows after first TRUE
-filter(df, cumall(y)) # all rows until first FALSE
-```
-
-(`tibble()` creates a dataset "by hand". You'll learn more about it in [tibbles].)
 
 Whenever you start using complicated, multipart expressions in `filter()`, consider making them explicit variables instead. That makes it much easier to check your work. You'll learn how to create new variables shortly.
 
@@ -702,24 +704,26 @@ Just using means, counts, and sum can get you a long way, but R provides many ot
 *   Measures of position: `first(x)`, `nth(x, 2)`, `last(x)`. These work 
     similarly to `x[1]`, `x[2]`, and `x[length(x)]` but let you set a default 
     value if that position does not exist (i.e. you're trying to get the 3rd
-    element from a group that only has two elements). 
-    
-    These functions are complementary to filtering on ranks. Filtering gives
-    you all variables, with each observation in a separate row. Summarising
-    gives you one row per group, with multiple variables:
+    element from a group that only has two elements). For example, we can
+    find the first and last departure for each day:
     
     ```{r}
-    not_cancelled %>% 
-      group_by(year, month, day) %>% 
-      mutate(r = min_rank(desc(dep_time))) %>% 
-      filter(r %in% range(r))
-    
     not_cancelled %>% 
       group_by(year, month, day) %>% 
       summarise(
         first_dep = first(dep_time), 
         last_dep = last(dep_time)
       )
+    ```
+    
+    These functions are complementary to filtering on ranks. Filtering gives
+    you all variables, with each observation in a separate row:
+    
+    ```{r}
+    not_cancelled %>% 
+      group_by(year, month, day) %>% 
+      mutate(r = min_rank(desc(dep_time))) %>% 
+      filter(r %in% range(r))
     ```
 
 *   Counts: You've seen `n()`, which takes no arguments, and returns the 
@@ -847,6 +851,7 @@ Grouping is most useful in conjunction with `summarise()`, but you can also do c
     popular_dests <- flights %>% 
       group_by(dest) %>% 
       filter(n() > 365)
+    popular_dests
     ```
 
 *   Standardise to compute per group metrics:
@@ -871,6 +876,9 @@ Functions that work most naturally in grouped mutates and filters are known as  
 
 1.  What time of day should you fly if you want to avoid delays as much
     as possible?
+    
+1.  For each destination, compute the total minutes of delay. For each, 
+    flight, compute the proportion of the total delay for its destination.
     
 1.  Delays are typically temporally correlated: even once the problem that
     caused the initial delay has been resolved, later flights are delayed 
