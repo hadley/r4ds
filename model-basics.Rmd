@@ -192,7 +192,7 @@ sim1_mod <- lm(y ~ x, data = sim1)
 coef(sim1_mod)
 ```
 
-These are exactly the same values we got with `optim()`! Behind the scenes `lm()` doesn't use `optim()` but instead takes advantage of the mathematical structure of linear models. Using some connections between geometry, calculus, and linear algebra, `lm()` actually finds the closest model by (effectively) inverting a matrix. This approach is both faster, and guarantees that there is a global minimum.
+These are exactly the same values we got with `optim()`! Behind the scenes `lm()` doesn't use `optim()` but instead takes advantage of the mathematical structure of linear models. Using some connections between geometry, calculus, and linear algebra, `lm()` actually finds the closest model by in a single step, using a sophisticated algorithm. This approach is both faster, and guarantees that there is a global minimum.
 
 ### Exercises
 
@@ -591,52 +591,7 @@ ggplot(sim5, aes(x, y)) +
   facet_wrap(~ model)
 ```
 
-Notice that the extrapolation outside the range of the data is clearly bad. This is the downside to approximating a function with a polynomial. But this is a very real problem with every model: the model can never tell you if the behaviour is true when you start extrapolating outside the range of the data that you have seen. You must rely on theory or science.
-
-### Interpolation vs. extrapolation
-
-So far, when we've visualised the predictions from a model, we've been careful to overlay them on the data. This is important because it helps make sure we're not extrapolating the model to data that is far away from what we've observed.
-
-However, as you start working with large datasets overlaying all the data will become increasing challenging. Particularly as you'll often use a model to simplify away some of the complexities of the raw data! To make your life easier, you might be tempted to just display the predictions. This is dangerous because you might have accidentally generated predictions that are very far away from your data.
-
-As a compromise, you can use the convenient `similarityweight()` function from the __condvis__ package by Mark O'Connell. You give it your prediction grid and your dataset, and it computes the similarlity between each observation in your original dataset and the prediction grid. You can then display only the points that are close to your predictions. If no points are close, you know that your prediction grid is dangerous!
-
-```{r}
-sim6 <- tibble(
-  x1 = rbeta(1000, 2, 5),
-  x2 = rbeta(1000, 2, 5),
-  y = 2 * x1 * x2 + x1 + 2 + rnorm(length(x1))
-)
-
-mod <- lm(y ~ x1 * x2, data = sim6)
-
-grid <- sim6 %>% 
-  data_grid(
-    x1 = seq_range(x1, 10),
-    x2 = c(0, 0.5, 1, 1.5)
-  ) %>% 
-  add_predictions(mod)
-
-add_similarity <- function(data, grid, ..., .similarity = "sim") {
-  common <- intersect(names(data), names(grid))
-  message("Using ", paste(common, collapse = ", "))
-  
-  sim_m <- condvis::similarityweight(grid, data[common], ...)
-  sim <- apply(sim_m, 2, max)
-  
-  data[[.similarity]] <- sim
-  data
-}
-
-sim6 %>% 
-  add_similarity(grid) %>% 
-  filter(sim > 0) %>% 
-  ggplot(aes(x1, y, group = x2)) +
-    geom_point(aes(alpha = sim)) + 
-    geom_line(data = grid, aes(y = pred)) + 
-    scale_alpha(limit = c(0, NA)) 
-
-```
+Notice that the extrapolation outside the range of the data is clearly bad. This is the downside to approximating a function with a polynomial. But this is a very real problem with every model: the model can never tell you if the behaviour is true when you start extrapolating outside the range of the data that you have seen. You must rely on theory and science.
 
 ### Exercises
 
