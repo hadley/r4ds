@@ -38,7 +38,7 @@ You can test your answer with the `mpg` dataset in ggplot2, or `ggplot2::mpg`:
 mpg
 ```
 
-The dataset contains observations collected by the EPA on 38 models of cars. Among the variables in `mpg` are:
+The dataset contains observations collected by the US Environment Protection Agency on 38 models of cars. Among the variables in `mpg` are:
 
 1. `displ`, a car's engine size, in litres.
 
@@ -345,14 +345,7 @@ ggplot(data = mpg, mapping = aes(x = displ, y = hwy, color = drv)) +
 
 Notice that this plot contains two geoms in the same graph! If this makes you excited, buckle up. In the next section, we will learn how to place multiple geoms in the same plot.
 
-ggplot2 provides over 30 geoms, and extension packages provide even more (see <https://www.ggplot2-exts.org> for a sampling). The table below lists the geoms in ggplot2, loosely organized by the type of relationship that they visualise. Beneath each geom is a list of aesthetics the geom understands, and mandatory aesthetics are bolded. The geom call lists the most important arguments. To learn more about any single geom, open its help page in R by running the command `?` followed by the name of the geom function, e.g. `?geom_smooth`.
-
-```{r, echo = FALSE, out.width = "100%"}
-knitr::include_graphics("images/visualization-geoms-1.png")
-knitr::include_graphics("images/visualization-geoms-2.png")
-knitr::include_graphics("images/visualization-geoms-3.png")
-knitr::include_graphics("images/visualization-geoms-4.png")
-```
+ggplot2 provides over 30 geoms, and extension packages provide even more (see <https://www.ggplot2-exts.org> for a sampling). The best way to get a comprehensive overview is the ggplot2 cheatsheet, which you can find at <http://rstudio.com/cheatsheets>. To learn more about any single geom, use help: `?geom_smooth`.
 
 Many geoms, like `geom_smooth()`, use a single geometric object to display multiple rows of data. For these geoms, you can set the `group` aesthetic to a categorical variable to draw multiple objects. ggplot2 will draw a separate object for each unique value of the grouping variable. In practice, ggplot2 will automatically group the data for these geoms whenever you map an aesthetic to a discrete variable (as in the `linetype` example). It is convenient to rely on this feature because the group aesthetic by itself does not add a legend or distinguishing features to the geoms.
 
@@ -470,34 +463,39 @@ ggplot(data = diamonds) +
 
 On the x-axis, the chart displays `cut`, a variable from `diamonds`. On the y-axis, it displays count, but count is not a variable in `diamonds`! Where does count come from? Many graphs, like scatterplots, plot the raw values of your dataset. Other graphs, like bar charts, calculate new values to plot:
 
-* __bar charts__, __histograms__, and __frequency polygons__ bin your data 
+* bar charts, histograms, and frequency polygons bin your data 
   and then plot bin counts, the number of points that fall in each bin.
 
-* __smoothers__ fit a model to your data and then plot predictions from the
+* smoothers fit a model to your data and then plot predictions from the
   model.
 
-* __boxplots__ calculate the quartiles of your data and then plot the 
-  quartiles as a box.
+* boxplots compute a robust summary of the distribution and display as 
+  specially formatted box.
 
-ggplot2 calls the algorithm that a graph uses to calculate new values, a __stat__, which is short for statistical transformation. Each geom in ggplot2 is associated with a default stat that it uses to calculate values to plot. The figure below describes how this process works with `geom_bar()`.
+The algorithm used calculate new values for a graph is called a __stat__, short for statistical transformation. The figure below describes how this process works with `geom_bar()`.
 
 ```{r, echo = FALSE, out.width = "100%"}
 knitr::include_graphics("images/visualization-stat-bar.png")
 ```
 
-A few geoms, like `geom_point()`, plot your raw data as it is. These geoms also apply a transformation to your data, the identity transformation, which returns the data in its original state. Now we can say that _every_ geom uses a stat.
+You can learn which stat a geom uses by inspecting the default value for the `stat` argument. For example, `?geom_bar` shows the default value for `stat` is "count", which means that `geom_bar()` uses `stat_count()`. `stat_count()` is documented on the same page as `geom_bar()`, and if you scroll down you can find a section called "Computed variables". That tells that it computes two new variables: `count` and `prop`.
 
-```{r, echo = FALSE, out.width = "100%"}
-knitr::include_graphics("images/visualization-stat-point.png")
+You can generally use geoms and stats interchangeably. For example, you can recreate the previous plot using `stat_count()` instead of `geom_bar()`:
+
+```{r}
+ggplot(data = diamonds) + 
+  stat_count(mapping = aes(x = cut))
 ```
 
-You can learn which stat a geom uses, as well as what variables it computes by visiting the geom's help page. For example, the help page of `geom_bar()` shows that it uses the count stat and that the count stat computes two new variables, `count` and `prop`.
-
-Stats are the most subtle part of plotting because you can't see them directly. ggplot2 applies the transformation and stores the results behind the scenes. You only see the impact in the final plot. Generally, you don't need to think about stats: the defaults work away on your behalf to summarise your data as needed for a particular plot. However, there are two cases where you might need to know about them:
+This works because every geom has a default stat; and every stat has a default geom. This means that you can typically use geoms without worrying about the underlying statistical transformation. There are three reasons you might need to use a stat explicitly:
 
 1.  You might want to override the default stat. In the code below, I change 
     the stat of `geom_bar()` from count (the default) to identity. This lets 
     me map the height of the bars to the raw values of a $y$ variable. 
+    Unfortunately when people talk about bar charts casually, they might be
+    referring to this type of bar chart, where the height of the bar is already
+    present in the data, or the previous bar chart where the height of the bar
+    is generated by counting rows.
     
     ```{r}
     demo <- tibble(
@@ -510,10 +508,9 @@ Stats are the most subtle part of plotting because you can't see them directly. 
       geom_bar(mapping = aes(x = a, y = b), stat = "identity")
     ```
     
-    (Unfortunately when people talk about bar charts casually, they might be
-    referring to this type of bar chart, where the height of the bar is already
-    present in the data, or the previous bar chart where the height of the bar
-    is generated by counting rows.)
+    (Don't worry that you haven't seen `<-` or `tibble()` before. You might be
+    able to guess at their meaning from the context, and you'll learn exactly
+    what they do soon!)
 
 1.  You might want to override the default mapping from transformed variables
     to aesthetics. For example, you might want to display a bar chart of
@@ -524,36 +521,57 @@ Stats are the most subtle part of plotting because you can't see them directly. 
       geom_bar(mapping = aes(x = cut, y = ..prop.., group = 1))
     ```
 
-    The help page of `?geom_bar` reveals that the sum stat creates two
-    variables, `count` and `prop`. By default, `geom_bar()` maps `y`
-    to `count`, but you can ask it to use `prop` instead with 
-    `aes(y = ..prop..)`.The two dots that surround prop notify ggplot2 that 
-    the `prop` variable appears in the transformed dataset not in the 
-    raw dataset.
+    To find the variables computed by the stat, look for the help section
+    titled "computed variables".
     
-ggplot2 provides over 20 stats for you to use. Each stat is saved as a function, which provides a convenient way to access a stat's help page, e.g. `?stat_identity`.  The table below describes each stat in ggplot2 and lists the parameters that the stat takes, as well as the variables that the stat makes. 
-
-```{r, echo = FALSE, out.width = "100%"}
-knitr::include_graphics("images/visualization-stats.png")
-```
+1.  You might want to draw greater attention to the statistical transformation
+    in your code. For example, you might use `stat_summary()`, which
+    summarises the y values for each unique x value, to draw 
+    attention to the summary that you're computing:
+    
+    ```{r}
+    ggplot(data = diamonds) + 
+      stat_summary(
+        mapping = aes(x = cut, y = depth),
+        fun.ymin = min,
+        fun.ymax = max,
+        fun.y = median
+      )
+    ```
+    
+ggplot2 provides over 20 stats for you to use. Each stat is a function, so you can get help in usual way, e.g. `?stat_bin`. To see a complete list of stats, try the ggplot2 cheatsheet.
 
 ### Exercises
 
-1.  In our proportion bar chart, we need to set `group = 1`. Why?  In other
-    words, why is this graph not useful?
+1.  What is the default geom associated with `stat_summary()`? How could
+    you rewrite the previous plot to use that geom function instead of the 
+    stat function?
+
+1.  What does `geom_col()` do? How is it different to `geom_bar()`?
+
+1.  Most geoms and stats come in pairs that are almost always used in 
+    concert. Read through the documentation and make a list of all the 
+    pairs. What do they have in common?
+
+1.  What variables does `stat_smooth()` compute? What parameters control
+    its behaviour?
+
+1.  In our proportion bar chart, we need to set `group = 1`. Why? In other
+    words what is the problem with these two graphs?
     
     ```{r, eval = FALSE}
     ggplot(data = diamonds) + 
       geom_bar(mapping = aes(x = cut, y = ..prop..))
+    ggplot(data = diamonds) + 
+      geom_bar(mapping = aes(x = cut, fill = color, y = ..prop..))
     ```
-    
-1.  How do you find out the default stat associated with a geom?
+  
 
 ## Position adjustments
 
 There's one more piece of magic associated with bar charts. You can colour a bar chart using either the `colour` aesthetic, or more usefully, `fill`:
 
-```{r fig.width = 3, out.width = "50%", fig.align = "default"}
+```{r out.width = "50%", fig.align = "default"}
 ggplot(data = diamonds) + 
   geom_bar(mapping = aes(x = cut, colour = cut))
 ggplot(data = diamonds) + 
@@ -631,6 +649,8 @@ To learn more about a position adjustment, look up the help page associated with
       geom_point()
     ```
 
+1.  What parameters to `geom_jitter()` control the amount of jittering?
+
 1.  Compare and contrast `geom_jitter()` with `geom_count()`.
 
 1.  What's the default position adjustment for `geom_boxplot()`? Create
@@ -638,9 +658,7 @@ To learn more about a position adjustment, look up the help page associated with
 
 ## Coordinate systems
 
-Coordinate systems are probably the most complicated part of ggplot2. The default coordinate system is the Cartesian coordinate system where the x and y position act independently to find the location of each point.
-
-There are a number of other coordinate systems that are occasionally helpful.
+Coordinate systems are probably the most complicated part of ggplot2. The default coordinate system is the Cartesian coordinate system where the x and y position act independently to find the location of each point. There are a number of other coordinate systems that are occasionally helpful.
 
 *   `coord_flip()` switches the x and y axes. This is useful (for example),
     if you want horizontal boxplots.
@@ -684,12 +702,6 @@ There are a number of other coordinate systems that are occasionally helpful.
     bar + coord_flip()
     bar + coord_polar()
     ```
-
-The table below describes each built-in coord. You can learn more about each coordinate system by opening its help page in R, e.g. `?coord_cartesian`.
-
-```{r, echo = FALSE, out.width = "100%"}
-knitr::include_graphics("images/visualization-coordinate-systems.png")
-```
 
 ### Exercises
 
