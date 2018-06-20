@@ -1,14 +1,11 @@
 # R for Data Science
+[![Travis build status](https://travis-ci.org/hadley/r4ds.svg?branch=master)](https://travis-ci.org/hadley/r4ds)
 
-This is code and text behind the [R for Data Science](http://r4ds.had.co.nz)
-book. 
+This repository contains the source of [R for Data Science](http://r4ds.had.co.nz)
+book. The book is built using [bookdown](https://github.com/rstudio/bookdown).
 
 The R packages used in this book can be installed via
 
 ```{r}
 devtools::install_github("hadley/r4ds")
 ```
-The site is built using [bookdown package](https://github.com/rstudio/bookdown).
-To create the site, you also need:
-
-* [pandoc](http://johnmacfarlane.net/pandoc/)
