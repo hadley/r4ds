@@ -1,354 +1,347 @@
-# Dates and times
+# Horas y Fechas
 
-## Introduction
+## Introducción
 
-This chapter will show you how to work with dates and times in R. At first glance, dates and times seem simple. You use them all the time in your regular life, and they don't seem to cause much confusion. However, the more you learn about dates and times, the more complicated they seem to get. To warm up, try these three seemingly simple questions:
+Este capítulo te mostrará cómo trabajar con fechas y horas en R. A primera vista, esto parece sencillo. Las usas en todo momento en tu vida regular, y no parecen causar demasiada confusión. Sin embargo, cuanto más aprendes de horas y fechas, más complicadas se vuelven. Para prepararnos, intenta estas preguntas sencillas:
 
-* Does every year have 365 days?
-* Does every day have 24 hours?
-* Does every minute have 60 seconds?
+* ¿Todos los años tienen 365 días?
+* ¿Todos los días tienen 24 horas?
+* ¿Cada minuto tiene 60 segundos?
 
-I'm sure you know that not every year has 365 days, but do you know the full rule for determining if a year is a leap year? (It has three parts.) You might have remembered that many parts of the world use daylight savings time (DST), so that some days have 23 hours, and others have 25. You might not have known that some minutes have 61 seconds because every now and then leap seconds are added because the Earth's rotation is gradually slowing down.
+Estoy seguro que sabes que no todos los años tienen 365 días ¿pero acaso conoces la regla entera para determinar si un año es bisiesto? (Tiene tres partes, de hecho). Puedes recordar que muchas partes del mundo usan horarios de verano (las siglas en inglés son DST, por _daylight savings time_), así que algunos días tienen 23 horas, y otros tienen 25. Puede ser que no supieras que algunos minutos tienen 61 segundos, porque de vez en cuando se agregan segundos adicionales ya que la rotación de la tierra se hace cada vez más lenta.
 
-Dates and times are hard because they have to reconcile two physical phenomena (the rotation of the Earth and its orbit around the sun) with a whole raft of geopolitical phenomena including months, time zones, and DST. This chapter won't teach you every last detail about dates and times, but it will give you a solid grounding of practical skills that will help you with common data analysis challenges.
+Las fechas y las horas son complicadas porque tienen que reconciliar dos fenómenos físicos (la rotación de la Tierra, y su órbita alrededor del sol), con todo un conjunto de fenómenos geopolíticos que incluyen a los meses, los husos horarios y los horarios de verano (DST). Este capítulo no te enseñará cada detalle sobre las horas y fechas, pero te dará un sólido fundamento de habilidades prácticas que te ayudarán con los desafíos más comunes de análisis de datos.
 
-### Prerequisites
 
-This chapter will focus on the __lubridate__ package, which makes it easier to work with dates and times in R. lubridate is not part of core tidyverse because you only need it when you're working with dates/times. We will also need nycflights13 for practice data.
+### Requisitos Previos
+
+Este capítulo se centra en el paquete __lubridate__, que simplifica el trabajo con fechas y tiempo en R. __lubridate__ no es parte de los paquetes centrales de __tidyverse__ porque sólo se necesita al trabajar con fechas/horas. A su vez, necesitaremos `vuelos` del conjunto de datos traducidos que acompañan a este libro.
 
 ```{r setup, message = FALSE}
 library(tidyverse)
 
 library(lubridate)
-library(nycflights13)
+library(datos)
 ```
 
-## Creating date/times
+## Creando Horas/Fechas
 
-There are three types of date/time data that refer to an instant in time:
+Hay tres tipos de datos de horas/fechas que se refieren a un instante en el tiempo:
 
-* A __date__. Tibbles print this as `<date>`.
+* Un `date` o fecha (del inglés, _fecha_). Un _tibble_ lo imprime como `<date>`.
 
-* A __time__ within a day. Tibbles print this as `<time>`.
+* Un `time` u hora (del ingles, _hora_) dentro de un día. Los _tibbles_ lo imprimen como `<time>`.
 
-* A __date-time__ is a date plus a time: it uniquely identifies an
-  instant in time (typically to the nearest second). Tibbles print this
-  as `<dttm>`. Elsewhere in R these are called POSIXct, but I don't think
-  that's a very useful name.
+* Un  `date-time` o fecha-hora (del inglés, _fecha-hora_) es una fecha con una hora adjunta:  idenfica de forma única como un instante en el tiempo (típicamente al segundo más cercano). Los _tibbles_ imprimen esto como `<dttm>`. En otras partes de R, éstos se llaman POSIXct, pero yo no creo que sea un nombre muy útil.
+
+En este capítulo sólo nos concentraremos en fechas (`date`) y fechas con horas (`date-time`) ya que R no tiene una clase nativa para almacenar horas. Si necesitas una, puedes usar el paquete __hms__.
   
-In this chapter we are only going to focus on dates and date-times as R doesn't have a native class for storing times. If you need one, you can use the __hms__ package.
+Siempre deberías usar el tipo de datos más sencillo que se ajusta a tus necesidades. Esto significa que si puedes usar un `date` en lugar de un `date-time`, deberías hacerlo. Las fechas-horas son sustancialmente más complicadas porque necesitas gestionar los husos horarios, a los cuales estudiaremos al final del capítulo.
 
-You should always use the simplest possible data type that works for your needs. That means if you can use a date instead of a date-time, you should. Date-times are substantially more complicated because of the need to handle time zones, which we'll come back to at the end of the chapter.
-
-To get the current date or date-time you can use `today()` or `now()`:
+Para obtener la fecha (`date`) o fecha-hora (`date-time`) actual, puedes usar `today()` (del inglés, _hoy_) o `now()` (del inglés, _ahora_):
 
 ```{r}
 today()
 now()
 ```
 
-Otherwise, there are three ways you're likely to create a date/time:
+De otra forma, hay tres modos en los que puedes crear una fecha/hora:
 
-* From a string.
-* From individual date-time components.
-* From an existing date/time object.
+* Desde una cadena de caracteres (o _string_, en inglés).
+* Desde componentes `date-time` individuales. 
+* Desde un objeto fecha-hora existente.
 
-They work as follows.
+Éstos funcionan de la siguiente manera.
 
-### From strings
 
-Date/time data often comes as strings. You've seen one approach to parsing strings into date-times in [date-times](#readr-datetimes). Another approach is to use the helpers provided by lubridate. They automatically work out the format once you specify the order of the component. To use them, identify the order in which year, month, and day appear in your dates, then arrange "y", "m", and "d" in the same order. That gives you the name of the lubridate function that will parse your date. For example:
+### Desde Cadenas de Caracteres
+
+Los datos de fecha/hora a menudo vienen como cadenas de caracteres. Ya has visto una forma de análisis gramatical de _strings_ hacia `date-times` en [date-times](#readr-datetimes). Otra forma es usar los ayudantes provistos por __lubridate__. Ellos automáticamente trabajan el formato una vez que especificas el orden de los componentes. Para usarlos, identifica el orden en el cual el año, mes y día aparecen en tus fechas, y luego agrega "y" (del inglés _year_), "m" (mes) y "d" (día) en el mismo orden. Esto te da el nombre de la función __lubridate__ que traducirá tu fecha. Por ejemplo:
 
 ```{r}
 ymd("2017-01-31")
-mdy("January 31st, 2017")
-dmy("31-Jan-2017")
+mdy("Enero 31, 2017")
+dmy("31-Ene-2017")
 ```
 
-These functions also take unquoted numbers. This is the most concise way to create a single date/time object, as you might need when filtering date/time data. `ymd()` is short and unambiguous:
+Estas funciones también reciben números sin comillas. Esta es la forma más concisa de crear un sólo objeto fecha/hora, ya que puedes necesitarlo cuando filtres datos temporales. `ymd()` (del inglés _año-mes-día_)  es corto y no ambigüo:
 
 ```{r}
 ymd(20170131)
 ```
 
-`ymd()` and friends create dates. To create a date-time, add an underscore and one or more of "h", "m", and "s" to the name of the parsing function:
+`ymd()` y funciones amigas crean fechas (`date`). Para generar un `date-time`, agrega un guión bajo y uno o más de "h", "m" y "s" al nombre de la función de análisis:
 
 ```{r}
 ymd_hms("2017-01-31 20:11:59")
 mdy_hm("01/31/2017 08:01")
 ```
 
-You can also force the creation of a date-time from a date by supplying a timezone:
+También puedes forzar la creación de un `date-time` desde una fecha, al proveer un huso horario:
 
 ```{r}
 ymd(20170131, tz = "UTC")
 ```
 
-### From individual components
+### Desde Componentes Individuales
 
-Instead of a single string, sometimes you'll have the individual components of the date-time spread across multiple columns. This is what we have in the flights data:
+En lugar de una cadena de caracteres simple, a veces tienes los componentes individuales de una fecha/hora esparcidos en múltiples columnas. Esto es lo que tenemos en los datos de vuelos:
 
 ```{r}
-flights %>% 
-  select(year, month, day, hour, minute)
+vuelos %>% 
+  select(anio, mes, dia, hora, minuto)
 ```
 
-To create a date/time from this sort of input, use `make_date()` for dates, or `make_datetime()` for date-times:
+Para crear una fehca y hora desde este tipo de entrada, usa `make_date()` (del inglés, _crear fechas_) para las fechas, o `make_datetime()` (del inglés _crear fecha-hora_) para las fechas-horas:
 
 ```{r}
-flights %>% 
-  select(year, month, day, hour, minute) %>% 
-  mutate(departure = make_datetime(year, month, day, hour, minute))
+vuelos %>% 
+  select(anio, mes, dia, hora, minuto) %>% 
+  mutate(salida = make_datetime(anio, mes, dia, hora, minuto))
 ```
 
-Let's do the same thing for each of the four time columns in `flights`. The times are represented in a slightly odd format, so we use modulus arithmetic to pull out the hour and minute components. Once I've created the date-time variables, I focus in on the variables we'll explore in the rest of the chapter.
+Hagamos esto mismo para cada una de las cuatro columnas de tiempo en `vuelos`. Las horas están representadas en un formato ligeramente más extraño, así que usamos el módulo aritmético para extraer los componentes de horas y minutos. Una vez que hayamos creado las variables `date-time`, nos centraremos en las variables que usaremos por el resto del capítulo.
 
 ```{r}
-make_datetime_100 <- function(year, month, day, time) {
-  make_datetime(year, month, day, time %/% 100, time %% 100)
+hacer_fechahora_100 <- function(anio, mes, dia, tiempo) {
+  make_datetime(anio, mes, dia, tiempo %/% 100, tiempo %% 100)
 }
 
-flights_dt <- flights %>% 
-  filter(!is.na(dep_time), !is.na(arr_time)) %>% 
+vuelos_dt <- vuelos %>% 
+  filter(!is.na(horario_salida), !is.na(horario_llegada)) %>% 
   mutate(
-    dep_time = make_datetime_100(year, month, day, dep_time),
-    arr_time = make_datetime_100(year, month, day, arr_time),
-    sched_dep_time = make_datetime_100(year, month, day, sched_dep_time),
-    sched_arr_time = make_datetime_100(year, month, day, sched_arr_time)
+    horario_salida = hacer_fechahora_100(anio, mes, dia, horario_salida),
+    horario_llegada = hacer_fechahora_100(anio, mes, dia, horario_llegada),
+    salida_programada = hacer_fechahora_100(anio, mes, dia, salida_programada),
+    llegada_programada = hacer_fechahora_100(anio, mes, dia, llegada_programada)
   ) %>% 
-  select(origin, dest, ends_with("delay"), ends_with("time"))
+  select(origen, destino, starts_with("atraso"), starts_with("horario"))
 
-flights_dt
+vuelos_dt
 ```
 
-With this data, I can visualise the distribution of departure times across the year:
+Con estos datos, puedo visualizar la distribución de las horas de salida a lo largo del año:
 
 ```{r}
-flights_dt %>% 
-  ggplot(aes(dep_time)) + 
-  geom_freqpoly(binwidth = 86400) # 86400 seconds = 1 day
+vuelos_dt %>% 
+  ggplot(aes(horario_salida)) + 
+  geom_freqpoly(binwidth = 86400) # 86400 segundos = 1 día
 ```
 
-Or within a single day:
+O para un solo día:
 
 ```{r}
-flights_dt %>% 
-  filter(dep_time < ymd(20130102)) %>% 
-  ggplot(aes(dep_time)) + 
-  geom_freqpoly(binwidth = 600) # 600 s = 10 minutes
+vuelos_dt %>% 
+  filter(horario_salida < ymd(20130102)) %>% 
+  ggplot(aes(horario_salida)) + 
+  geom_freqpoly(binwidth = 600) # 600 segundos = 10 minutos
 ```
 
-Note that when you use date-times in a numeric context (like in a histogram), 1 means 1 second, so a binwidth of 86400 means one day. For dates, 1 means 1 day.
+Mira con detenimiento, ya que cuando usas `date-times` en un contexto numérico (como en un histograma), 1 significa un segundo, entonces un `binwidth` (del inglés, _ancho del cajón_) de 86400 significa un día. Para las fechas, 1 significa un día.
 
-### From other types
 
-You may want to switch between a date-time and a date. That's the job of `as_datetime()` and `as_date()`:
+### Desde Otros Tipos
+
+Puedes querer cambiar entre una fecha-hora y una fecha. Ese es el trabajo de  `as_datetime()` (del inglés, _como fecha-hora_) y `as_date()` (del inglés, _como fecha_):
 
 ```{r}
 as_datetime(today())
 as_date(now())
 ```
 
-Sometimes you'll get date/times as numeric offsets from the "Unix Epoch", 1970-01-01. If the offset is in seconds, use `as_datetime()`; if it's in days, use `as_date()`.
+A veces, tendrás fechas/horas como desfasajes numéricos de la "Época Unix" similares a 1970-01-01. Si el desfasaje es un segundos, usa `as_datetime()`; si es en días, usa `as_date()`.
 
 ```{r}
 as_datetime(60 * 60 * 10)
 as_date(365 * 10 + 2)
 ```
 
-### Exercises
+### Ejercicios
 
-1.  What happens if you parse a string that contains invalid dates?
+1. ¿Qué sucede si analizas una cadena de caracteres que contiene fechas inválidas?
 
     ```{r, eval = FALSE}
     ymd(c("2010-10-10", "bananas"))
     ```
 
-1.  What does the `tzone` argument to `today()` do? Why is it important?
+1. ¿Qué hace el argumento `tzone` (del inglés, _huso horario_ abreviado) para `today()`? ¿Por qué es importante?
 
-1.  Use the appropriate lubridate function to parse each of the following dates:
+1. Usa la función de __lubridate__ apropiada para analizar las siguientes fechas:
 
     ```{r}
-    d1 <- "January 1, 2010"
+    d1 <- "Enero 1, 2010"
     d2 <- "2015-Mar-07"
     d3 <- "06-Jun-2017"
-    d4 <- c("August 19 (2015)", "July 1 (2015)")
-    d5 <- "12/30/14" # Dec 30, 2014
+    d4 <- c("Agosto 19 (2015)", "Julio 1 (2015)")
+    d5 <- "12/30/14" # Diciembre 30, 2014
     ```
 
-## Date-time components
+## Componentes Fecha-Hora
 
-Now that you know how to get date-time data into R's date-time data structures, let's explore what you can do with them. This section will focus on the accessor functions that let you get and set individual components. The next section will look at how arithmetic works with date-times.
+Ahora que ya conoces cómo tener datos de fechas y horas en las estructuras de datos de R, vamos a explorar qué puedes hacer con ellos. Esta sección se concentrará en las funciones de acceso que te permiten obtener y configurar componentes individuales. La siguiente sección mirará el trabajo aritmético con fechas-horas.
 
-### Getting components
 
-You can pull out individual parts of the date with the accessor functions `year()`, `month()`, `mday()` (day of the month), `yday()` (day of the year), `wday()` (day of the week), `hour()`, `minute()`, and `second()`. 
+### Obteniendo los Componentes
+
+Puedes obtener las partes individuales de una fecha con las funciones de acceso `year()` (del inglés, _año_), `month()` (del inglés, _mes_), `mday()` (del inglés, _día del mes_), `yday()` (del inglés, _día del año_), `wday()` (del inglés, _día de la semana_), `hour()` (del inglés, _hora_), `minute()` (del inglés, _minuto_), y `second()` (del inglés, _segundo_). 
 
 ```{r}
-datetime <- ymd_hms("2016-07-08 12:34:56")
+fechahora <- ymd_hms("2016-07-08 12:34:56")
 
-year(datetime)
-month(datetime)
-mday(datetime)
+year(fechahora)
+month(fechahora)
+mday(fechahora)
 
-yday(datetime)
-wday(datetime)
+yday(fechahora)
+wday(fechahora)
 ```
 
-For `month()` and `wday()` you can set `label = TRUE` to return the abbreviated name of the month or day of the week. Set `abbr = FALSE` to return the full name.
+Para `month()` y `wday()` puedes configurar `label = TRUE` para retornar el nombre abreviado del mes o del día de la semana. Usa `abbr = FALSE` para retornar el nombre completo.
 
 ```{r}
-month(datetime, label = TRUE)
-wday(datetime, label = TRUE, abbr = FALSE)
+month(fechahora, label = TRUE)
+wday(fechahora, label = TRUE, abbr = FALSE)
 ```
 
-We can use `wday()` to see that more flights depart during the week than on the weekend:
+Podemos usar `wday()` para ver que más vuelos salen durante la semana que durante el fin de semana:
 
 ```{r}
-flights_dt %>% 
-  mutate(wday = wday(dep_time, label = TRUE)) %>% 
-  ggplot(aes(x = wday)) +
+vuelos_dt %>% 
+  mutate(dia_semana = wday(horario_salida, label = TRUE)) %>% 
+  ggplot(aes(x = dia_semana)) +
     geom_bar()
 ```
 
-There's an interesting pattern if we look at the average departure delay by minute within the hour. It looks like flights leaving in minutes 20-30 and 50-60 have much lower delays than the rest of the hour!
+Hay un patrón interesante si miramos a la demora promedio por minuto dentro de la hora. ¡Parece que los vuelos que salen en los minutos 20-30 y 50-30 tienen mucho más demora que en el resto de las horas!
 
 ```{r}
-flights_dt %>% 
-  mutate(minute = minute(dep_time)) %>% 
-  group_by(minute) %>% 
+vuelos_dt %>% 
+  mutate(minuto = minute(horario_salida)) %>% 
+  group_by(minuto) %>% 
   summarise(
-    avg_delay = mean(arr_delay, na.rm = TRUE),
+    atraso_promedio = mean(atraso_llegada, na.rm = TRUE),
     n = n()) %>% 
-  ggplot(aes(minute, avg_delay)) +
+  ggplot(aes(minuto, atraso_promedio)) +
     geom_line()
 ```
 
-Interestingly, if we look at the _scheduled_ departure time we don't see such a strong pattern:
+De forma interesante, si miramos al horario _programado_ de salida, no vemos un patrón tan prominente:
 
 ```{r}
-sched_dep <- flights_dt %>% 
-  mutate(minute = minute(sched_dep_time)) %>% 
-  group_by(minute) %>% 
-  summarise(
-    avg_delay = mean(arr_delay, na.rm = TRUE),
-    n = n())
-
-ggplot(sched_dep, aes(minute, avg_delay)) +
-  geom_line()
-```
-
-So why do we see that pattern with the actual departure times? Well, like much data collected by humans, there's a strong bias towards flights leaving at "nice" departure times. Always be alert for this sort of pattern whenever you work with data that involves human judgement!
-
-```{r}
-ggplot(sched_dep, aes(minute, n)) +
-  geom_line()
-```
-
-### Rounding
-
-An alternative approach to plotting individual components is to round the date to a nearby unit of time, with `floor_date()`, `round_date()`, and `ceiling_date()`. Each function takes a vector of dates to adjust and then the name of the unit round down (floor), round up (ceiling), or round to. This, for example, allows us to plot the number of flights per week:
-
-```{r}
-flights_dt %>% 
-  count(week = floor_date(dep_time, "week")) %>% 
-  ggplot(aes(week, n)) +
+  salida_programada <- vuelos_dt %>% 
+    mutate(minuto = minute(salida_programada)) %>% 
+    group_by(minuto) %>% 
+    summarise(
+      atraso_promedio = mean(atraso_llegada, na.rm = TRUE),
+      n = n())
+  
+  ggplot(salida_programada, aes(minuto, atraso_promedio)) +
     geom_line()
 ```
 
-Computing the difference between a rounded and unrounded date can be particularly useful.
+Entonces ¿por qué vemos ese patrón con los horarios reales de salida? Bueno, como muchos datos recolectados por los humanos, hay un sesgo importante hacia los vuelos que salen en horas "lindas". ¡Mantente siempre alerta respecto a este tipo de patrón, cuando sea que trabajes con datos que involucran al juicio humano!
 
-### Setting components
-
-You can also use each accessor function to set the components of a date/time: 
 
 ```{r}
-(datetime <- ymd_hms("2016-07-08 12:34:56"))
-
-year(datetime) <- 2020
-datetime
-month(datetime) <- 01
-datetime
-hour(datetime) <- hour(datetime) + 1
-datetime
+ggplot(salida_programada, aes(minuto, n)) +
+  geom_line()
 ```
 
-Alternatively, rather than modifying in place, you can create a new date-time with `update()`. This also allows you to set multiple values at once.
+### Redondeo
+
+Un método alternativo para graficar los componentes individuales es redondear la fecha a una unidad de tiempo cercana, con `floor_date()` (del inglés, _redondear fecha hacia abajo_), `round_date()` (del inglés, _redondear fecha_), y `ceiling_date()` (del inglés, _redondear fecha hacia arriba_). Cada función toma un vector de fechas para ajustarlas, y luego el nombre de la unidad redondeada hacia abajo (con _floor_), hacia arriba (con _ceiling_), o al mas cercano. Esto, por ejemplo, nos permite graficiar el número de vuelos por semana:
 
 ```{r}
-update(datetime, year = 2020, month = 2, mday = 2, hour = 2)
+vuelos_dt %>% 
+  count(semana = floor_date(horario_salida, "week")) %>% 
+  ggplot(aes(semana, n)) +
+    geom_line()
 ```
 
-If values are too big, they will roll-over:
+Calcular la diferencia entre una fecha redondeada y una sin redondear puede ser particularmente útil.
+
+### Configurando Componentes
+
+También puedes usar las funciones de acceso para darle un valor a los componentes de las fechas/horas:
 
 ```{r}
-ymd("2015-02-01") %>% 
-  update(mday = 30)
-ymd("2015-02-01") %>% 
-  update(hour = 400)
+(fechahora <- ymd_hms("2016-07-08 12:34:56"))
+
+year(fechahora) <- 2020
+fechahora
+month(fechahora) <- 01
+fechahora
+hour(fechahora) <- hour(fechahora) + 1
+fechahora
 ```
 
-You can use `update()` to show the distribution of flights across the course of the day for every day of the year: 
+Alternativamente, en lugar de modificar en un sólo lugar, puedes crear una nueva fecha-hora con `update()` (del inglés, _actualizar_). Esto también te permite configurar múltiples valores al mismo tiempo.
 
 ```{r}
-flights_dt %>% 
-  mutate(dep_hour = update(dep_time, yday = 1)) %>% 
-  ggplot(aes(dep_hour)) +
+update(fechahora, year = 2020, month = 2, mday = 2, hour = 2)
+```
+
+Si los valores son demasiado grandes, darán la vuelta:
+
+```{r}
+ymd("2015-02-01") %>% update(mday = 30)
+ymd("2015-02-01") %>% update(hour = 400)
+```
+
+Puedes usar `update()` para mostrar la distribución de los vuelos a lo largo del día para cada día del año: 
+
+```{r}
+vuelos_dt %>% 
+  mutate(horario_salida = update(horario_salida, yday = 1)) %>% 
+  ggplot(aes(horario_salida)) +
     geom_freqpoly(binwidth = 300)
 ```
 
-Setting larger components of a date to a constant is a powerful technique that allows you to explore patterns in the smaller components.
+Fijar los componentes más grandes de una fecha con una constante es una técnica que te permite explorar patrones en los componentes más pequeños.
 
-### Exercises
 
-1.  How does the distribution of flight times within a day change over the 
-    course of the year?
+### Ejercicios
+
+1. ¿Cómo cambia la distribución de las horas de los vuelos dentro de un día, a lo largo del año?
     
-1.  Compare `dep_time`, `sched_dep_time` and `dep_delay`. Are they consistent?
-    Explain your findings.
+1. Compara `horario_salida`, `salida_programada` and `atraso_salida`. ¿Son consistentes? Explica tus hallazgos.
 
-1.  Compare `air_time` with the duration between the departure and arrival.
-    Explain your findings. (Hint: consider the location of the airport.)
-    
-1.  How does the average delay time change over the course of a day?
-    Should you use `dep_time` or `sched_dep_time`? Why?
+1. Compara `tiempo_vuelo` con la duración entre la salida y la llegada. Explica tus hallazgos. (Pista: considera la ubicación del aeropuerto).
 
-1.  On what day of the week should you leave if you want to minimise the
-    chance of a delay?
+1. ¿Cómo cambia la demora promedio durante el curso de un día? ¿Deberías usar `horario_salida` o `salida_programada`? ¿Por qué?
 
-1.  What makes the distribution of `diamonds$carat` and 
-    `flights$sched_dep_time` similar?
+1. ¿En qué día de la semana deberías salir, si quieres minimizar las posibilidades de una demora?
 
-1.  Confirm my hypothesis that the early departures of flights in minutes
-    20-30 and 50-60 are caused by scheduled flights that leave early. 
-    Hint: create a binary variable that tells you whether or not a flight 
-    was delayed.
+1. ¿Qué hace que la distribución de `diamantes$carat` y `vuelos$salida_programada` sean similares? 
 
-## Time spans
+1. Confirma mi hipótesis de que salidas programas en los minutos 20-30 y 50-60 están casuadas por los vuelos programados que salen más temprano. Pista: crea una variable binaria que te diga si un vuelo tuvo o no demora.
 
-Next you'll learn about how arithmetic with dates works, including subtraction, addition, and division. Along the way, you'll learn about three important classes that represent time spans:
 
-* __durations__, which represent an exact number of seconds.
-* __periods__, which represent human units like weeks and months.
-* __intervals__, which represent a starting and ending point.
+## Plazos de Tiempo
 
-### Durations
+Ahora, aprenderás cómo trabaja la aritmética con fechas, incluyendo la sustracción, adición y división. En el camino, aprenderás sobre tres importantes clases que representan períodos de tiempo:
 
-In R, when you subtract two dates, you get a difftime object:
+* __durations__ (del inglés, _duraciones_), que representa un número exacto de segundos.
+* __periods__ (del inglés, _períodos_), que representan unidades humanas como semanas o meses.
+* __intervals__ (del inglés, _intervalos_), que representan un punto de inicio y uno de finalización.
+
+### Duraciones
+
+En R, cuando restas dos fechas, obtienes un objeto de diferencia temporal (en inglés, _difftimes_):
 
 ```{r}
-# How old is Hadley?
-h_age <- today() - ymd(19791014)
-h_age
+# ¿Cuán viejo es Hadley?
+edad_h <- today() - ymd(19791014)
+edad_h
 ```
 
-A difftime class object records a time span of seconds, minutes, hours, days, or weeks. This ambiguity can make difftimes a little painful to work with, so lubridate provides an alternative which always uses seconds: the __duration__.
+Un objeto de clase _difftime_ registra un período de tiempo se segundos, minutos, horas, días o semanas. Esta ambiguedad hacia que los _difftimes_ sean un poco complicados de trabjar, por lo que __lubridate__ provee una alternativa que siempre usa segundos: la __duration__.
 
 ```{r}
-as.duration(h_age)
+as.duration(edad_h)
 ```
 
-Durations come with a bunch of convenient constructors:
+Las duraciones traen un conveniente grupo de constructores:
 
 ```{r}
 dseconds(15)
@@ -359,43 +352,44 @@ dweeks(3)
 dyears(1)
 ```
 
-Durations always record the time span in seconds. Larger units are created by converting minutes, hours, days, weeks, and years to seconds at the standard rate (60 seconds in a minute, 60 minutes in an hour, 24 hours in day, 7 days in a week, 365 days in a year).
+Las duraciones siempre registran el período de tiempo en segundos. Las unidades más grandes se crean al convertir minutos, horas, días, semanas y años a segundos, mediante una conversión estándar (60 segundos en un minuto, 60 minutos en una hora, 24 horas en un día, 7 días en una semana, 365 días en un año).
 
-You can add and multiply durations:
+Puedes agregar y multiplicar duraciones:
 
 ```{r}
 2 * dyears(1)
 dyears(1) + dweeks(12) + dhours(15)
 ```
 
-You can add and subtract durations to and from days:
+Puedes sumar y restar duraciones a días:
 
 ```{r}
-tomorrow <- today() + ddays(1)
-last_year <- today() - dyears(1)
+ayer <- today() + ddays(1)
+anio_pasado <- today() - dyears(1)
 ```
 
-However, because durations represent an exact number of seconds, sometimes you might get an unexpected result:
+Sin embargo, como las duraciones representan un número exacto de segundos, a veces puedes obtener un resultado inesperado:
 
 ```{r}
-one_pm <- ymd_hms("2016-03-12 13:00:00", tz = "America/New_York")
+una_pm <- ymd_hms("2016-03-12 13:00:00", tz = "America/New_York")
 
-one_pm
-one_pm + ddays(1)
+una_pm
+una_pm + ddays(1)
 ```
 
-Why is one day after 1pm on March 12, 2pm on March 13?! If you look carefully at the date you might also notice that the time zones have changed. Because of DST, March 12 only has 23 hours, so if we add a full days worth of seconds we end up with a different time.
+¿¡Por qué un día antes de la 1PM del 12 de Marzo, resulta ser las 2PM del 13 de Marzo!? Si miras con cuidado a la fecha, te darás cuenta que los husos horarios han cambiado. Debido al horario de verano (DST, o EDT para el horario de verano de la costa Este), el 12 de Marzo sólo tiene 23 horas, por lo que si agregamos un día entero de segundos, terminamos con una hora diferente.
 
-### Periods
 
-To solve this problem, lubridate provides __periods__. Periods are time spans but don't have a fixed length in seconds, instead they work with "human" times, like days and months. That allows them work in a more intuitive way:
+### Períodos
+
+Para resolver este problema, __lubridate__ provee a __periods__ (del inglés, _períodos_). Estos son plazos de tiempo que no tienen un largo fijo en segundos, sino que funcionan con tiempos "humanos", como días o meses. Esto les permite trabajar en una forma más intuitiva:
 
 ```{r}
-one_pm
-one_pm + days(1)
+una_pm
+una_pm + days(1)
 ```
 
-Like durations, periods can be created with a number of friendly constructor functions. 
+Como las duraciones, los períodos pueden ser creados mediante un número de funciones constructoras amigables.
 
 ```{r}
 seconds(15)
@@ -407,123 +401,120 @@ weeks(3)
 years(1)
 ```
 
-You can add and multiply periods:
+Puedes sumar y multiplicar períodos: 
 
 ```{r}
 10 * (months(6) + days(1))
 days(50) + hours(25) + minutes(2)
 ```
 
-And of course, add them to dates. Compared to durations, periods are more likely to do what you expect:
+Y, por supuesto, puedes sumarlos a las fechas. Comparados a las duraciones, los períodos son más propensos a hacer lo que esperas que hagan:
+
 
 ```{r}
-# A leap year
+# Un año bisiesto
 ymd("2016-01-01") + dyears(1)
 ymd("2016-01-01") + years(1)
 
-# Daylight Savings Time
-one_pm + ddays(1)
-one_pm + days(1)
+# Horarios de verano
+una_pm + ddays(1)
+una_pm + days(1)
 ```
 
-Let's use periods to fix an oddity related to our flight dates. Some planes appear to have arrived at their destination _before_ they departed from New York City.
+Usemos los períodos para arreglar una rareza relacionada a nuestras fechas de vuelos. Algunos aviones parecen arrivar a su destino _antes_ de salir de la ciudad de Nueva York.
 
 ```{r}
-flights_dt %>% 
-  filter(arr_time < dep_time) 
+vuelos_dt %>% 
+  filter(horario_llegada < horario_salida) 
 ```
 
-These are overnight flights. We used the same date information for both the departure and the arrival times, but these flights arrived on the following day. We can fix this by adding `days(1)` to the arrival time of each overnight flight.
+Estos son vuelos nocturnos. Usamos la misma información de fecha para los horarios de salida y llegada, pero estos vuelos llegaron en el día siguiente. Podemos arreglarlo al sumar `days(1)` a la fecha de llegada de cada vuelo nocturno.
 
 ```{r}
-flights_dt <- flights_dt %>% 
+vuelos_dt <- vuelos_dt %>% 
   mutate(
-    overnight = arr_time < dep_time,
-    arr_time = arr_time + days(overnight * 1),
-    sched_arr_time = sched_arr_time + days(overnight * 1)
+    nocturno = horario_llegada < horario_salida,
+    horario_llegada = horario_llegada + days(nocturno * 1),
+    llegada_programada = llegada_programada + days(nocturno * 1)
   )
 ```
 
-Now all of our flights obey the laws of physics.
+Ahora todos los vuelos obedecen a las leyes de la física.
 
 ```{r}
-flights_dt %>% 
-  filter(overnight, arr_time < dep_time) 
+vuelos_dt %>% 
+  filter(nocturno, horario_llegada < horario_salida) 
 ```
 
-### Intervals
+### Intervalos
 
-It's obvious what `dyears(1) / ddays(365)` should return: one, because durations are always represented by a number of seconds, and a duration of a year is defined as 365 days worth of seconds.
+Resulta obvio lo que `dyears(1) / ddays(365)` debería retornar: uno, porque las duraciones siempre se representan por un número de segundos, y la duración de un año se define como 365 días convertidos a segundos.
 
-What should `years(1) / days(1)` return? Well, if the year was 2015 it should return 365, but if it was 2016, it should return 366! There's not quite enough information for lubridate to give a single clear answer. What it does instead is give an estimate, with a warning:
+¿Qué debería devolver `years(1) / days(1)`? Bueno, si el año fuera 2015 debería retornar 365, ¡pero si fuera 2016 debería retornar 366! No hay suficiente información para que __lubridate__ nos de una sóla respuesta sencilla. Entonces, lo que hace es darnos una estimación, con una advertencia:
 
 ```{r}
 years(1) / days(1)
 ```
 
-If you want a more accurate measurement, you'll have to use an __interval__. An interval is a duration with a starting point: that makes it precise so you can determine exactly how long it is:
+Si quieres una medida más precisa, tendrás que usar un __interval__ (del inglés, _intervalo_). Un intervalo es una duración con un punto de partida: eso lo hace preciso, porque puedes determinar exactamente cuán largo es:
 
 ```{r}
-next_year <- today() + years(1)
-(today() %--% next_year) / ddays(1)
+siguiente_anio <- today() + years(1)
+(today() %--% siguiente_anio) / ddays(1)
 ```
 
-To find out how many periods fall into an interval, you need to use integer division:
+Para encontrar cuántos períodos caen dentro de un intervalo, tienes que usar la división entera:
 
 ```{r}
-(today() %--% next_year) %/% days(1)
+(today() %--% siguiente_anio) %/% days(1)
 ```
 
-### Summary
+### Resumen
 
-How do you pick between duration, periods, and intervals? As always, pick the simplest data structure that solves your problem. If you only care about physical time, use a duration; if you need to add human times, use a period; if you need to figure out how long a span is in human units, use an interval.
+¿Cómo eliges entre duraciones, períodos e intervalos? Como siempre, selecciona la estructura de datos más sencilla que resuelva tu problema. Si sólo necesitas tiempo físico, usa una duración; si necesitas agregar tiempos humanos, usa un período; si tienes que deducir cuán largo es un plazo en unidades humanas, usa un intervalo.
 
-Figure \@ref(fig:dt-algebra) summarises permitted arithmetic operations between the different data types.
+La figura \@ref(fig:dt-algebra) resume las operaciones artiméticas permitidas entre los tipos de datos.
 
-```{r dt-algebra, echo = FALSE, fig.cap = "The allowed arithmetic operations between pairs of date/time classes."}
+```{r dt-algebra, echo = FALSE, fig.cap = "Las operaciones artiméticas permitidas entre pares de clases fecha/hora."}
 knitr::include_graphics("diagrams/datetimes-arithmetic.png")
 ```
 
-### Exercises
+### Ejercicios
 
-1.  Why is there `months()` but no `dmonths()`?
+1. ¿Por qué hay `months()` pero no `dmonths()` (del inglés, _días del mes_)?
 
-1.  Explain `days(overnight * 1)` to someone who has just started 
-    learning R. How does it work?
+1. Explica `days(nocturno * 1)` a alguien que apenas comienza a aprender R. ¿Cómo funciona?
 
-1.  Create a vector of dates giving the first day of every month in 2015.
-    Create a vector of dates giving the first day of every month
-    in the _current_ year.
+1. Crea un vector de fechas dando el primer día de cada mes en 2015. Crea un vector de fechas dando el primer día de cada mes del año _actual_.
 
-1.  Write a function that given your birthday (as a date), returns 
-    how old you are in years.
+1. Crea una función en la cual, dado tu cumpleaños (como una fecha), retorne cuán viejo eres en años.
 
-1.  Why can't `(today() %--% (today() + years(1)) / months(1)` work?
+1. ¿Por qué no puedes hacer funcionar a `(today() %--% (today() + years(1)) / months(1)` ?
 
-## Time zones 
+## Husos Horarios
 
-Time zones are an enormously complicated topic because of their interaction with geopolitical entities. Fortunately we don't need to dig into all the details as they're not all important for data analysis, but there are a few challenges we'll need to tackle head on.
+Los husos horarios son un tema enormemente complicado, debido a su interacción con entidades geopolíticas. Afortunadamente, no necesitamos excarbar en todos los detalles, ya que no son tan necesarios para el análisis de datos, pero hay algunos desafíos sobre los que tenemos que trabajar.
 
-The first challenge is that everyday names of time zones tend to be ambiguous. For example, if you're American you're probably familiar with EST, or Eastern Standard Time. However, both Australia and Canada also have EST! To avoid confusion, R uses the international standard IANA time zones. These use a consistent naming scheme "<area>/<location>", typically in the form "\<continent\>/\<city\>" (there are a few exceptions because not every country lies on a continent). Examples include "America/New_York", "Europe/Paris", and "Pacific/Auckland".
+El primer desafío es que los nombres comunes de los husos horarios tienden a ser ambiguos. Por ejemplo, si eres Americano probablemente estés familiarizado con EST, (siglas en inglés de _Tiempo Este Estándar_). Sin embargo, ¡Canadá y Australia también tienen EST! Para evitar la confusión, R usa el estándar internacional IANA para husos horarios. Estos tienen un esquema de nombres que sigue el formato "<área>/<ubicación>", típicamente escrito como "\<continente\>/\<ciudad\>", en idioma inglés (hay algunas pocas excepciones porque no todos los países están ubicados en un continente). Ejemplos incluyen: "America/New_York", "Europe/Paris", and "Pacific/Auckland".
 
-You might wonder why the time zone uses a city, when typically you think of time zones as associated with a country or region within a country. This is because the IANA database has to record decades worth of time zone rules. In the course of decades, countries change names (or break apart) fairly frequently, but city names tend to stay the same. Another problem is that name needs to reflect not only to the current behaviour, but also the complete history. For example, there are time zones for both "America/New_York" and "America/Detroit". These cities both currently use Eastern Standard Time but in 1969-1972 Michigan (the state in which Detroit is located), did not follow DST, so it needs a different name. It's worth reading the raw time zone database (available at <http://www.iana.org/time-zones>) just to read some of these stories!
+Puedes preguntarte por qué un huso horario usa una ciudad, cuando típicamente piensas en ellos como asociados a un país, o a una región dentro de un país. Esto es porque la base de datos de IANA tiene que registrar décadas de reglamentos sobre husos horarios. En el curso de las décadas, los países cambian nombres (o desaparecen) de forma bastante frecuente, pero los nombres de las ciudades tienden a mantenerse igual. Otro problema es que los nombres tienen que reflejar no sólo el comportamiento actual, sino también la historia completa. Por ejemplo, hay husos horarios tanto para "America/New_York" como para "America/Detroit". Actualmente, ambas ciudades usan el EST, pero entre 1969 y 1972, Michigan (el estado en el cual Detroit está ubicado), no empleaba el horario de verano, así que necesita un nombre diferente. ¡Vale mucho leer la base de datos cruda (disponible en <http://www.iana.org/time-zones>) sólo para enterarse de algunas de estas historias!
 
-You can find out what R thinks your current time zone is with `Sys.timezone()`:
+Puedes encontrar cuál es tu huso horario actual para R, usando `Sys.timezone()` (del inglés, _sistema, huso horario_):
 
 ```{r}
 Sys.timezone()
 ```
 
-(If R doesn't know, you'll get an `NA`.)
+(Si R no lo sabe, obtendrás un `NA`.)
 
-And see the complete list of all time zone names with `OlsonNames()`:
+Y puedes ver la lista completa de todos los husos horarios con `OlsonNames()`:
 
 ```{r}
 length(OlsonNames())
 head(OlsonNames())
 ```
 
-In R, the time zone is an attribute of the date-time that only controls printing. For example, these three objects represent the same instant in time:
+En R, el huso horario es un atributo de la fecha-hora (`date-time`) que sólo controla la impresión. Por ejemplo, estos tres objetos representan el mismo instante en el tiempo:
 
 ```{r}
 (x1 <- ymd_hms("2015-06-01 12:00:00", tz = "America/New_York"))
@@ -531,25 +522,23 @@ In R, the time zone is an attribute of the date-time that only controls printing
 (x3 <- ymd_hms("2015-06-02 04:00:00", tz = "Pacific/Auckland"))
 ```
 
-You can verify that they're the same time using subtraction:
+Puedes verificar que son lo mismo al usar una resta:
 
 ```{r}
 x1 - x2
 x1 - x3
 ```
 
-Unless otherwise specified, lubridate always uses UTC. UTC (Coordinated Universal Time) is the standard time zone used by the scientific community and roughly equivalent to its predecessor GMT (Greenwich Mean Time). It does not have DST, which makes a convenient representation for computation. Operations that combine date-times, like `c()`, will often drop the time zone. In that case, the date-times will display in your local time zone:
+Excepto que sea especificado claramente, __lubridate__ siempre usa UTC. UTC significa _Tiempo Universal Coordinado_ (por las siglas en inglés), y es el huso horario estándar empleado por la comunidad científica, y es aproximadamente equivalente a su predecesor GMT (_Tiempo del Meridiano de Greenwich_, por las siglas en inglés). No tiene horario de verano, por lo que resulta una representación conveniente para la computación. Las operaciones que combinan fechas y horas, como `c()`, a menudo descartan el huso horario. En ese caso, las fechas y horas se muestran en tu huso local:
 
 ```{r}
 x4 <- c(x1, x2, x3)
 x4
 ```
 
-You can change the time zone in two ways:
+Puedes cambiar el huso horario de dos formas:
 
-*   Keep the instant in time the same, and change how it's displayed.
-    Use this when the instant is correct, but you want a more natural
-    display.
+* Mantener el instante en el tiempo igual, y cambiar sólo cómo se representa. Usa esto cuando el instante es correcto, pero quieres una visualización más natural.
   
     ```{r}
     x4a <- with_tz(x4, tzone = "Australia/Lord_Howe")
@@ -557,12 +546,9 @@ You can change the time zone in two ways:
     x4a - x4
     ```
     
-    (This also illustrates another challenge of times zones: they're not
-    all integer hour offsets!)
+    (Esto también ilustra otro desafío de los husos horarios: ¡no todos los desfasajes son horas como números enteros!)
 
-*   Change the underlying instant in time. Use this when you have an
-    instant that has been labelled with the incorrect time zone, and you
-    need to fix it.
+* Cambia el instante en el tiempo. Usa esto cuando tienes un instante que ha sido etiquetado con un huso horario incorrecto, y necesitas arreglarlo.
 
     ```{r}
     x4b <- force_tz(x4, tzone = "Australia/Lord_Howe")
