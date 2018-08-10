@@ -1,43 +1,42 @@
-# Many models
+# Muchos modelos
 
-## Introduction
+## Introducción
 
-In this chapter you're going to learn three powerful ideas that help you to work with large numbers of models with ease:
+En este capítulo vas a aprender tres ideas poderosas que te van a ayudar a trabajar fácilmente con un gran número de modelos:
 
-1.  Using many simple models to better understand complex datasets.
+1.  Usar muchos modelos simples para entender mejor conjuntos de datos complejos.
 
-1.  Using list-columns to store arbitrary data structures in a data frame.
-    For example, this will allow you to have a column that contains linear 
-    models.
+1.  Usar columnas-lista (_list-columns_) para almacenar estructuras de datos arbitrarias en un _data frame_.
+    Ésto, por ejemplo, te permitirá tener una columna que contenga modelos lineales.
    
-1.  Using the __broom__ package, by David Robinson, to turn models into tidy 
-    data. This is a powerful technique for working with large numbers of models
-    because once you have tidy data, you can apply all of the techniques that 
-    you've learned about earlier in the book.
+1.  Usar el paquete __broom__, por David Robinson, para transformar modelos en datos ordenados.
+    Ésta es una técnica poderosa para trabajar con un gran número de modelos
+    porque una vez que tienes datos ordenados, puedes aplicar todas las técnicas que 
+    has aprendido anteriormente en el libro.
 
-We'll start by diving into a motivating example using data about life expectancy around the world. It's a small dataset but it illustrates how important modelling can be for improving your visualisations. We'll use a large number of simple models to partition out some of the strongest signals so we can see the subtler signals that remain. We'll also see how model summaries can help us pick out outliers and unusual trends.
+Empezaremos entrando de lleno en un ejemplo motivador usando datos sobre la esperanza de vida alrededor del mundo. Es un conjunto de datos pequeño pero que ilustra cuán importante puede ser modelizar para mejorar tus visualizaciones. Utilizaremos un número grande de modelos simples para extraer algunas de las señales más fuertes y que podamos ver las sutiles que permanecen. También veremos cómo las medidas de resumen de los modelos nos pueden ayudar a encontrar datos atípicos y tendencias inusuales.
 
-The following sections will dive into more detail about the individual techniques:
+Las siguientes secciones ahondarán en más detalles acerca de las técnicas:
 
-1. In [list-columns], you'll learn more about the list-column data structure,
-   and why it's valid to put lists in data frames.
+1. En [columnas-lista], aprenderás más acerca de la estructura de datos columna-lista,
+   y por qué es válido poner listas en _data frames_.
    
-1. In [creating list-columns], you'll learn the three main ways in which you'll
-   create list-columns.
+1. En [creando columnas-lista], aprenderás las tres maneras principales en las que 
+   crearás columnas-lista.
    
-1. In [simplifying list-columns] you'll learn how to convert list-columns back
-   to regular atomic vectors (or sets of atomic vectors) so you can work
-   with them more easily.
+1. En [simplificando columnas-lista] aprenderás cómo convertir columnas-lista de vuelta
+   a vectores atómicos regulares (o conjuntos de vectores atómicos) para que puedas trabajar
+   con ellos más fácilmente.
    
-1. In [making tidy data with broom], you'll learn about the full set of tools
-   provided by broom, and see how they can be applied to other types of 
-   data structure.
+1. En [haciendo datos ordenados con broom], aprenderás sobre el conjunto de herramientas completo
+   provisto por __broom__ (del inglés _escoba_), y verás cómo puede ser aplicado a otros tipos de 
+   estructuras de datos.
 
-This chapter is somewhat aspirational: if this book is your first introduction to R, this chapter is likely to be a struggle. It requires you have to deeply internalised ideas about modelling, data structures, and iteration. So don't worry if you don't get it --- just put this chapter aside for a few months, and come back when you want to stretch your brain. 
+Este capítulo es de alguna forma aspiracional: si este libro es tu primera introducción a R, este capítulo es probable que sea una lucha para ti. Requiere que tengas profundamente internalizadas ideas acerca de modelización, estructuras de datos, e iteración. Así que no te preocupes si no lo entiendes --- solo aparta este capítulo por un par de meses, y vuelve cuando quieras ejercitar tu cerebro.
 
-### Prerequisites
+### Prerrequisitos
 
-Working with many models requires many of the packages of the tidyverse (for data exploration, wrangling, and programming) and modelr to facilitate modelling.
+Trabajar con muchos modelos requiere muchos de los paquetes del __tidyverse__ (para exploración de datos, doma y programación) y __modelr__ para facilitar la modelización.
 
 ```{r setup, message = FALSE}
 library(modelr)
@@ -46,238 +45,238 @@ library(tidyverse)
 
 ## gapminder
 
-To motivate the power of many simple models, we're going to look into the "gapminder" data. This data was popularised by Hans Rosling, a Swedish doctor and statistician. If you've never heard of him, stop reading this chapter right now and go watch one of his videos! He is a fantastic data presenter and illustrates how you can use data to present a compelling story. A good place to start is this short video filmed in conjunction with the BBC: <https://www.youtube.com/watch?v=jbkSRLYSojo>.
+Para motivar el poder de muchos modelos simples, vamos a mirar los datos de "gapminder". Estos datos fueron popularizados por Hans Rosling, un doctor y estadístico sueco. Si nunca has escuchado de él, para de leer este capítulo ahora mismo y ve a mirar uno de sus videos! Él es un presentador de datos fantástico e ilustra cómo puedes usar datos para presentar una historia convincente. Un buen lugar para empezar es este video corto filmado en conjunto con la BBC: <https://www.youtube.com/watch?v=jbkSRLYSojo>.
 
-The gapminder data summarises the progression of countries over time, looking at statistics like life expectancy and GDP. The data is easy to access in R, thanks to Jenny Bryan who created the gapminder package:
+Los datos de gapminder resumen la progresión de países a través del tiempo, mirando estadísticos como esperanza de vida y PIB. Los datos son de fácil acceso en R, gracias a Jenny Bryan que creó el paquete __gapminder__. Utilizaremos la versión en español contenida en el paquete __datos__ (TODO: ver cómo poner esto):
 
 ```{r}
-library(gapminder)
-gapminder
+library(datos)
+paises
 ```
 
-In this case study, we're going to focus on just three variables to answer the question "How does life expectancy (`lifeExp`) change over time (`year`) for each country (`country`)?". A good place to start is with a plot:
+En este caso de estudio, nos enfocaremos en solo tres variables para responder la pregunta "¿Cómo la esperanza de vida (`esperanza_de_vida`) cambia a través del tiempo (`anio`) para cada país (`pais`)?". Un buen lugar para empezar es con un gráfico:
 
 ```{r}
-gapminder %>% 
-  ggplot(aes(year, lifeExp, group = country)) +
+paises %>% 
+  ggplot(aes(anio, esperanza_de_vida, group = pais)) +
     geom_line(alpha = 1/3)
 ```
 
-This is a small dataset: it only has ~1,700 observations and 3 variables. But it's still hard to see what's going on! Overall, it looks like life expectancy has been steadily improving. However, if you look closely, you might notice some countries that don't follow this pattern. How can we make those countries easier to see?
+Es un conjunto de datos pequeño: solo tiene ~1,700 observaciones y 3 variables. Pero aún así es difícil ver qué está pasando! En general, parece que la esperanza de vida ha estado mejorando en forma constante. Sin embargo, si miras de cerca, puedes notar algunos países que no siguen este patrón. ¿Cómo podemos hacer que esos países se vean más fácilmente?
 
-One way is to use the same approach as in the last chapter: there's a strong signal (overall linear growth) that makes it hard to see subtler trends. We'll tease these factors apart by fitting a model with a linear trend. The model captures steady growth over time, and the residuals will show what's left.
+Una forma es usar el mismo enfoque que en el último capítulo: hay una señal fuerte (en general crecimiento lineal) que hace difícil ver tendencias más sutiles. Separaremos estos factores estimando un modelo con una tendencia lineal. El modelo captura el crecimiento estable en el tiempo, y los residuos mostrarán lo que queda fuera.
 
-You already know how to do that if we had a single country:
+Ya sabes cómo hacer eso si tenemos un solo país:
 
 ```{r, out.width = "33%", fig.asp = 1, fig.width = 3, fig.align='default'}
-nz <- filter(gapminder, country == "New Zealand")
+nz <- filter(paises, pais == "Nueva Zelandia")
 nz %>% 
-  ggplot(aes(year, lifeExp)) + 
+  ggplot(aes(anio, esperanza_de_vida)) + 
   geom_line() + 
-  ggtitle("Full data = ")
+  ggtitle("Datos completos = ")
 
-nz_mod <- lm(lifeExp ~ year, data = nz)
+nz_mod <- lm(esperanza_de_vida ~ anio, data = nz)
 nz %>% 
   add_predictions(nz_mod) %>%
-  ggplot(aes(year, pred)) + 
+  ggplot(aes(anio, pred)) + 
   geom_line() + 
-  ggtitle("Linear trend + ")
+  ggtitle("Tendencia lineal + ")
 
 nz %>% 
   add_residuals(nz_mod) %>% 
-  ggplot(aes(year, resid)) + 
+  ggplot(aes(anio, resid)) + 
   geom_hline(yintercept = 0, colour = "white", size = 3) + 
   geom_line() + 
-  ggtitle("Remaining pattern")
+  ggtitle("Patrón restante")
 ```
 
-How can we easily fit that model to every country?
+¿Cómo podemos ajustar fácilmente ese modelo para cada país?
 
-### Nested data
+### Datos anidados
 
-You could imagine copy and pasting that code multiple times; but you've already learned a better way! Extract out the common code with a function and repeat using a map function from purrr. This problem is structured a little differently to what you've seen before. Instead of repeating an action for each variable, we want to repeat an action for each country, a subset of rows. To do that, we need a new data structure: the __nested data frame__. To create a nested data frame we start with a grouped data frame, and "nest" it:
+Te puedes imaginar copiando y pegando ese código múltiples veces; pero ya has aprendido una mejor forma! Extrae el código en común con una función y repítelo usando una función map (TODO: no me queda claro que tenga sentido poner que el nombre de esta función venga del inglés, y no sé si ponerla en cursiva) de __purrr__. Este problema se estructura un poco diferente respecto a lo que has visto antes. En lugar de repetir una acción por cada variable, queremos repetirla para cada país, un subconjunto de filas. Para hacer eso, necesitamos una nueva estructura de datos: el __*data frame* anidado__ (_nested data frame_). Para crear un _data frame_ anidado empezamos con un _data frame_ agrupado, y lo "anidamos":
 
 ```{r}
-by_country <- gapminder %>% 
-  group_by(country, continent) %>% 
+por_pais <- paises %>% 
+  group_by(pais, continente) %>% 
   nest()
 
-by_country
+por_pais
 ```
 
-(I'm cheating a little by grouping on both `continent` and `country`. Given `country`, `continent` is fixed, so this doesn't add any more groups, but it's an easy way to carry an extra variable along for the ride.)
+(Estoy haciendo un poco de trampa agrupando por `continente` y `pais` al mismo tiempo. Dado el `pais`, `continente` es fijo, así que no agrega ningún grupo más, pero es una forma fácil de llevarnos una variable adicional para el camino. (TODO: to carry an extra variable along for the ride.))
 
-This creates a data frame that has one row per group (per country), and a rather unusual column: `data`. `data` is a list of data frames (or tibbles, to be precise).  This seems like a crazy idea: we have a data frame with a column that is a list of other data frames! I'll explain shortly why I think this is a good idea.
+Ésto crea un _data frame_ que tiene una fila por grupo (por país), y una columna bastante inusual: `data`. `data` es una lista de _data frames_ (o _tibbles_, para ser precisos). Esto parece una idea un poco loca: tenemos un _data frame_ con una columna que es una lista de otros _data frames_! Explicaré brevemente por qué pienso que es una buena idea.
 
-The `data` column is a little tricky to look at because it's a moderately complicated list, and we're still working on good tools to explore these objects. Unfortunately using `str()` is not recommended as it will often produce very long output. But if you pluck out a single element from the `data` column you'll see that it contains all the data for that country (in this case, Afghanistan).
+La columna `data` es un poco difícil de examinar porque es una lista moderadamente complicada, y todavía estamos trabajando para tener buenas herramientas para explorar estos objetos. Desafortunadamente usar `str()` no es recomendable porque usualmente producirá un _output_ (salida de código) muy extenso. Pero si extraes un solo elemento de la columna `data` verás que contiene todos los datos para ese país (en este caso, Afganistán).
 
 ```{r}
-by_country$data[[1]]
+por_pais$data[[1]]
 ```
 
-Note the difference between a standard grouped data frame and a nested data frame: in a grouped data frame, each row is an observation; in a nested data frame, each row is a group. Another way to think about a nested dataset is we now have a meta-observation: a row that represents the complete time course for a country, rather than a single point in time.
+Nota la diferencia entre un _data frame_ agrupado estándar y un _data frame_ anidado: en un _data frame_ agrupado, cada fila es una observación; en un _data frame_ anidado, cada fila es un grupo. Otra forma de pensar en un conjunto de datos anidado es que ahora tenemos una meta-observación: una fila que representa todo el transcurso de tiempo para un país, en lugar de solo un punto en el tiempo.
 
-### List-columns
+### Columnas-lista
 
-Now that we have our nested data frame, we're in a good position to fit some models. We have a model-fitting function:
+Ahora que tenemos nuestro _data frame_ anidado, estamos en una buena posición para ajustar algunos modelos. Tenemos una función para ajustar modelos:
 
 ```{r}
-country_model <- function(df) {
-  lm(lifeExp ~ year, data = df)
+modelo_pais <- function(df) {
+  lm(esperanza_de_vida ~ anio, data = df)
 }
 ```
 
-And we want to apply it to every data frame. The data frames are in a list, so we can use `purrr::map()` to apply `country_model` to each element:
+Y queremos aplicarlo a cada _data frame_. Los _data frames_ están en una lista, así que podemos usar `purrr::map()` para aplicar `modelo_pais` a cada elemento:
 
 ```{r}
-models <- map(by_country$data, country_model)
+modelos <- map(por_pais$data, modelo_pais)
 ```
 
-However, rather than leaving the list of models as a free-floating object, I think it's better to store it as a column in the `by_country` data frame. Storing related objects in columns is a key part of the value of data frames, and why I think list-columns are such a good idea. In the course of working with these countries, we are going to have lots of lists where we have one element per country. So why not store them all together in one data frame?
+Sin embargo, en lugar de dejar la lista de modelos como un objeto suelto, creo que es mejor almacenarlo como una columna en el _data frame_ `por_pais`. Almacenar objetos relacionados en columnas es una parte clave del valor de los _data frames_, y por eso pienso que las columnas-lista son tan buena idea. En el transcurso de nuetro trabajo con estos países, vamos a tener muchas listas donde tenemos un elemento por país. ¿Por qué no almacenarlos todos juntos en un _data frame_?
 
-In other words, instead of creating a new object in the global environment, we're going to create a new variable in the `by_country` data frame. That's a job for `dplyr::mutate()`:
+En otras palabras, en lugar de crear un nuevo objeto en el entorno global, vamos a crear una nueva variable en el _data frame_ `por_pais`. Ese es un trabajo para `dplyr::mutate()`:
 
 ```{r}
-by_country <- by_country %>% 
-  mutate(model = map(data, country_model))
-by_country
+por_pais <- por_pais %>% 
+  mutate(modelo = map(data, modelo_pais))
+por_pais
 ```
 
-This has a big advantage: because all the related objects are stored together, you don't need to manually keep them in sync when you filter or arrange. The semantics of the data frame takes care of that for you:
+Esto tiene una gran ventaja: como todos los objetos relacionados están almacenados juntos, no necesitas manualmente mantenerlos sincronizados cuando filtras o reordenas. La semántica del _data frame_ se ocupa de esto por ti:
 
 ```{r}
-by_country %>% 
-  filter(continent == "Europe")
-by_country %>% 
-  arrange(continent, country)
+por_pais %>% 
+  filter(continente == "Europa")
+por_pais %>% 
+  arrange(continente, pais)
 ```
 
-If your list of data frames and list of models were separate objects, you have to remember that whenever you re-order or subset one vector, you need to re-order or subset all the others in order to keep them in sync. If you forget, your code will continue to work, but it will give the wrong answer!
+Si tu lista de _data frames_ y lista de modelos fueran objetos separados, tienes (TODO: acá usaría "tendrías" pero no es lo que usa el original) que acordarte de que cuando reordenas o seleccionas un subconjunto de un vector, necesitas reordenar o seleccionar el subconjunto de todos los demás para mantenerlos sincronizados. Si te olvidas, tu código va a seguir funcionando, pero va a devolver la respuesta equivocada!
 
-### Unnesting
+### Desanidando
 
-Previously we computed the residuals of a single model with a single dataset. Now we have 142 data frames and 142 models. To compute the residuals, we need to call `add_residuals()` with each model-data pair:
+Previamente calculamos los residuos de un único modelo con un conjunto de datos también único. Ahora tenemos 142 _data frames_ y 142 modelos. Para calcular los residuos, necesitamos llamar a la función `add_residuals()` (del inglés _adicionar residuos_) con cada par modelo-datos:
 
 ```{r}
-by_country <- by_country %>% 
+por_pais <- por_pais %>% 
   mutate(
-    resids = map2(data, model, add_residuals)
+    residuos = map2(data, modelo, add_residuals)
   )
-by_country
+por_pais
 ```
 
-But how you can plot a list of data frames? Instead of struggling to answer that question, let's turn the list of data frames back into a regular data frame. Previously we used `nest()` to turn a regular data frame into an nested data frame, and now we do the opposite with `unnest()`:
+¿Pero cómo puedes graficar una lista de _data frames_? En lugar de luchar para contestar esa pregunta, transformemos la lista de _data frames_ de vuelta en un _data frame_ regular. Previamente usamos `nest()` (del inglés _anidar_) para transformar un _data frame_ regular en uno anidado, y ahora desanidamos con `unnest()`:
 
 ```{r}
-resids <- unnest(by_country, resids)
-resids
+residuos <- unnest(por_pais, residuos)
+residuos
 ```
 
-Note that each regular column is repeated one for each row in the nested column.
+Nota que cada columna regular está repetida una vez por cada fila en la columna anidada. 
 
-Now we have regular data frame, we can plot the residuals:
+Ahora tenemos un _data frame_ regular, podemos graficar los residuos:
 
 ```{r}
-resids %>% 
-  ggplot(aes(year, resid)) +
-    geom_line(aes(group = country), alpha = 1 / 3) + 
+residuos %>% 
+  ggplot(aes(anio, resid)) +
+    geom_line(aes(group = pais), alpha = 1 / 3) + 
     geom_smooth(se = FALSE)
 
 ```
 
-Facetting by continent is particularly revealing:
+Separar facetas por continente es particularmente revelador:
  
 ```{r}
-resids %>% 
-  ggplot(aes(year, resid, group = country)) +
+residuos %>% 
+  ggplot(aes(anio, resid, group = pais)) +
     geom_line(alpha = 1 / 3) + 
-    facet_wrap(~continent)
+    facet_wrap(~continente)
 ```
 
-It looks like we've missed some mild patterns. There's also something interesting going on in Africa: we see some very large residuals which suggests our model isn't fitting so well there. We'll explore that more in the next section, attacking it from a slightly different angle.
+Parece que hemos perdido algunos patrones suaves. También hay algo interesante pasando en África: vemos algunos residuos muy grandes lo que sugiere que nuestro modelo no está ajustando muy bien. Exploraremos más eso en la próxima sección, atacando el problema desde un ángulo un poco diferente.
 
-### Model quality
+### Calidad del modelo
 
-Instead of looking at the residuals from the model, we could look at some general measurements of model quality. You learned how to compute some specific measures in the previous chapter. Here we'll show a different approach using the broom package. The broom package provides a general set of functions to turn models into tidy data. Here we'll use `broom::glance()` to extract some model quality metrics. If we apply it to a model, we get a data frame with a single row:
+En lugar de examinar los residuos del modelo, podríamos examinar algunas medidas generales de la calidad del modelo. Aprendiste cómo calcular algunas medidas específicas en el capítulo anterior. Aquí mostraremos un enfoque diferente usando el paquete __broom__. El paquete __broom__ provee un conjunto de funciones generales para transformar modelos en datos ordenados. Aquí utilizaremos `broom::glance()` (del inglés _vistazo_) para extraer algunas métricas de la calidad del modelo. Si lo aplicamos a un modelo, obtenemos un _data frame_ con una única fila:
 
 ```{r}
 broom::glance(nz_mod)
 ```
 
-We can use `mutate()` and `unnest()` to create a data frame with a row for each country:
+Podemos usar `mutate()` y `unnest()` para crear un _data frame_ con una fila por cada país:
 
 ```{r}
-by_country %>% 
-  mutate(glance = map(model, broom::glance)) %>% 
+por_pais %>% 
+  mutate(glance = map(modelo, broom::glance)) %>% 
   unnest(glance)
 ```
 
-This isn't quite the output we want, because it still includes all the list columns. This is default behaviour when `unnest()` works on single row data frames. To suppress these columns we use `.drop = TRUE`:
+Este no es exactamente el _output_ que queremos, porque aún incluye todas las columnas que son una lista. Éste es el comportamiento por defecto cuando `unnest()` trabaja sobre _data frames_ con una única fila. Para suprimir esas columnas usamos `.drop = TRUE` (`drop`  — del inglés _descartar_):
 
 ```{r}
-glance <- by_country %>% 
-  mutate(glance = map(model, broom::glance)) %>% 
+glance <- por_pais %>% 
+  mutate(glance = map(modelo, broom::glance)) %>% 
   unnest(glance, .drop = TRUE)
 glance
 ```
 
-(Pay attention to the variables that aren't printed: there's a lot of useful stuff there.)
+(Presta atención a las variables que no se imprimieron: hay mucha información útil allí.)
 
-With this data frame in hand, we can start to look for models that don't fit well:
+Con este _data frame_, podemos empezar a buscar modelos que no se ajustan bien:
 
 ```{r}
 glance %>% 
   arrange(r.squared)
 ```
 
-The worst models all appear to be in Africa. Let's double check that with a plot. Here we have a relatively small number of observations and a discrete variable, so `geom_jitter()` is effective:
+Los peores modelos parecen estar todos en África. Vamos a chequear ésto con un gráfico. Tenemos un número relativamente chico de observaciones y una variable discreta, así que `geom_jitter()` (TODO: en inglés jitter es temblar o algo similar, pero no sé si estaría bien poner acá eso porque no es exactamente eso...) es efectiva:
 
 ```{r}
 glance %>% 
-  ggplot(aes(continent, r.squared)) + 
+  ggplot(aes(continente, r.squared)) + 
     geom_jitter(width = 0.5)
 ```
 
-We could pull out the countries with particularly bad $R^2$ and plot the data:
+Podríamos quitar los países con un $R^2$ particularmente malo y graficar los datos:
 
 ```{r}
-bad_fit <- filter(glance, r.squared < 0.25)
+mal_ajuste <- filter(glance, r.squared < 0.25)
 
-gapminder %>% 
-  semi_join(bad_fit, by = "country") %>% 
-  ggplot(aes(year, lifeExp, colour = country)) +
+paises %>% 
+  semi_join(mal_ajuste, by = "pais") %>% 
+  ggplot(aes(anio, esperanza_de_vida, colour = pais)) +
     geom_line()
 ```
 
-We see two main effects here: the tragedies of the HIV/AIDS epidemic and the Rwandan genocide.
+Vemos dos efectos principales aquí: las tragedias de la epidemia de VIH/SIDA y el genocidio de Ruanda.
 
-### Exercises
+### Ejercicios
 
-1.  A linear trend seems to be slightly too simple for the overall trend.
-    Can you do better with a quadratic polynomial? How can you interpret
-    the coefficients of the quadratic? (Hint you might want to transform
-    `year` so that it has mean zero.)
+1.  Una tendencia lineal parece ser demasiado simple para la tendencia general.
+    ¿Puedes hacerlo mejor con un polinomio cuadrático? ¿Cómo puedes interpretar
+    el coeficiente del término cuadrático? (Pista: puedes querer transformar
+    `year` para que tenga media cero.)
 
-1.  Explore other methods for visualising the distribution of $R^2$ per
-    continent. You might want to try the ggbeeswarm package, which provides 
-    similar methods for avoiding overlaps as jitter, but uses deterministic
-    methods.
+1.  Explora otros métodos para visualizar la distribución del $R^2$ por
+    continente. Puedes querer probar el paquete __ggbeeswarm__, que provee 
+    métodos similares para evitar superposiciones como jitter, pero usa métodos
+    determinísticos.
 
-1.  To create the last plot (showing the data for the countries with the
-    worst model fits), we needed two steps: we created a data frame with
-    one row per country and then semi-joined it to the original dataset.
-    It's possible to avoid this join if we use `unnest()` instead of 
-    `unnest(.drop = TRUE)`. How?
+1.  Para crear el último gráfico (mostrando los datos para los países con los
+    peores ajustes del modelo), precisamos dos pasos: creamos un _data frame_ con
+    una fila por país y después hicimos un _semi-join_ (del inglés _semi juntar_) (TODO: deberíamos aclarar algo?) al conjunto de datos original.
+    Es posible evitar este _join_ si usamos `unnest()` en lugar de 
+    `unnest(.drop = TRUE)`. ¿Cómo?
 
-## List-columns
+## Columnas-lista
 
-Now that you've seen a basic workflow for managing many models, let's dive back into some of the details. In this section, we'll explore the list-column data structure in a little more detail. It's only recently that I've really appreciated the idea of the list-column. List-columns are implicit in the definition of the data frame: a data frame is a named list of equal length vectors. A list is a vector, so it's always been legitimate to use a list as a column of a data frame. However, base R doesn't make it easy to create list-columns, and `data.frame()` treats a list as a list of columns:.
+Ahora que has visto un flujo de trabajo básico para manejar muchos modelos, vamos a sumergirnos en algunos detalles. En esta sección, exploraremos en más detalle la estructura de datos columna-lista. Solo recientemente es que he comenzado a apreciar realmente la idea de la columna-lista. Esta estructura está implícita en la definición de _data frame_: un _data frame_ es una lista nombrada de vectores de igual largo. Una lista es un vector, así que siempre ha sido legítimo usar una lista como una columna de un _data frame_. Sin embargo, R base no hace las cosas fáciles para crear columnas-lista, y `data.frame()` trata a la lista como una lista de columnas:
 
 ```{r}
 data.frame(x = list(1:3, 3:5))
 ```
 
-You can prevent `data.frame()` from doing this with `I()`, but the result doesn't print particularly well:
+Puedes prevenir que `data.frame()` haga esto con `I()`, pero el resultado no se imprime particularmente bien:
 
 ```{r}
 data.frame(
@@ -286,7 +285,7 @@ data.frame(
 )
 ```
 
-Tibble alleviates this problem by being lazier (`tibble()` doesn't modify its inputs) and by providing a better print method:
+_Tibble_ mitiga este problema siendo más perezoso (TODO: lazier) (`tibble()` no modifica sus _inputs_) y proporcionando un mejor método de impresión:
 
 ```{r}
 tibble(
@@ -295,7 +294,7 @@ tibble(
 )
 ```
 
-It's even easier with `tribble()` as it can automatically work out that you need a list:
+Es incluso más fácil con `tribble()` ya que automáticamente puede interpretar que necesitas una lista:
 
 ```{r}
 tribble(
@@ -305,58 +304,58 @@ tribble(
 )
 ```
 
-List-columns are often most useful as intermediate data structure. They're hard to work with directly, because most R functions work with atomic vectors or data frames, but the advantage of keeping related items together in a data frame is worth a little hassle.
+Columnas-lista son usualmente más útiles como estructuras de datos intermedias. Es difícil trabajar con ellas directamente, porque la mayoría de las funciones de R trabajan con vectores atómicos o _data frames_, pero la ventaja de mantener ítems relacionados juntos en un _data frame_ hace que valga la pena un poco de molestia.
 
-Generally there are three parts of an effective list-column pipeline:
+Generalmente hay tres partes de un _pipeline_ (del inglés _tubería_) efectivo de columnas-lista:
 
-1.  You create the list-column using one of `nest()`, `summarise()` + `list()`,
-    or `mutate()` + a map function, as described in [Creating list-columns].
+1.  Creas la columna-lista usando uno entre `nest()`, `summarise()` + `list()`,
+    o `mutate()` + una función map, como se describió en [Creando columnas-lista].
 
-1.  You create other intermediate list-columns by transforming existing
-    list columns with `map()`, `map2()` or `pmap()`. For example, 
-    in the case study above, we created a list-column of models by transforming
-    a list-column of data frames.
+1.  Creas otra columna-lista intermedia transformando columnas lista 
+    existentes con `map()`, `map2()` o `pmap()`. Por ejemplo, 
+    en el caso de estudio de arriba, creamos una columna-lista de modelos transformando
+    una columna-lista de _data frames_.
     
-1.  You simplify the list-column back down to a data frame or atomic vector,
-    as described in [Simplifying list-columns].
+1.  Simplificas la columna-lista de vuelta en un _data frame_ o vector atómico,
+    como se describió en [Simplificando columnas-lista].
 
-## Creating list-columns
+## Creando columnas-lista
 
-Typically, you won't create list-columns with `tibble()`. Instead, you'll create them from regular columns, using one of three methods: 
+Típicamente, no crearás columnas-lista con `tibble()`. En cambio, las crearás a partir de columnas regulares, usando uno de tres métodos: 
 
-1.  With `tidyr::nest()` to convert a grouped data frame into a nested data 
-    frame where you have list-column of data frames.
+1.  Con `tidyr::nest()` para convertir un _data frame_ agrupado en uno anidado
+    donde tengas columnas-lista de _data frames_.
     
-1.  With `mutate()` and vectorised functions that return a list.
+1.  Con `mutate()` y funciones vectorizadas que retornan una lista.
 
-1.  With `summarise()` and summary functions that return multiple results. 
+1.  Con `summarise()` y funciones de resumen que retornan múltiples resultados.
 
-Alternatively, you might create them from a named list, using `tibble::enframe()`.
+Alternativamente, podrías crearlas a partir de una lista nombrada, usando `tibble::enframe()`.
 
-Generally, when creating list-columns, you should make sure they're homogeneous: each element should contain the same type of thing. There are no checks to make sure this is true, but if you use purrr and remember what you've learned about type-stable functions, you should find it happens naturally.
+Generalmente, cuando creas columnas-lista, debes asegurarte de que sean homogéneas: cada elemento debe contener el mismo tipo de cosa. No hay chequeos para asegurarte de que sea así, pero si usas __purrr__ y recuerdas lo que aprendiste sobre funciones de tipo estable (TODO: type-stable functions), encontrarás que eso pasa naturalmente.
 
-### With nesting
+### Con anidación
 
-`nest()` creates a nested data frame, which is a data frame with a list-column of data frames. In a nested data frame each row is a meta-observation: the other columns give variables that define the observation (like country and continent above), and the list-column of data frames gives the individual observations that make up the meta-observation.
+`nest()` crea un _data frame_ anidado, que es un _data frame_ con una columna-lista de _data frames_. En un _data frame_ anidado cada fila es una meta-observación: las otras columnas son variables que definen la observación (como país y continente arriba), y la columna-lista de _data frames_ tiene las observaciones individuales que construyen la meta-observación.
 
-There are two ways to use `nest()`. So far you've seen how to use it with a grouped data frame. When applied to a grouped data frame, `nest()` keeps the grouping columns as is, and bundles everything else into the list-column:
+Hay dos formas de usar `nest()`. Hasta ahora has visto cómo usarlo con un _data frame_ agrupado. Cuando se aplica a un _data frame_ agrupado, `nest()` mantiene las columnas que agrupan tal cual, y envuelve todo lo demás en la columna-lista:
 
 ```{r}
-gapminder %>% 
-  group_by(country, continent) %>% 
+paises %>% 
+  group_by(pais, continente) %>% 
   nest()
 ```
 
-You can also use it on an ungrouped data frame, specifying which columns you want to nest:
+También lo puedes usar en un _data frame_ no agrupado, especificando cuáles columnas quieres anidar:
 
 ```{r}
-gapminder %>% 
-  nest(year:gdpPercap)
+paises %>% 
+  nest(anio:pib_per_capita)
 ```
 
-### From vectorised functions
+### A partir de funciones vectorizadas
 
-Some useful functions take an atomic vector and return a list. For example, in [strings] you learned about `stringr::str_split()` which takes a character vector and returns a list of character vectors. If you use that inside mutate, you'll get a list-column:
+Algunas funciones útiles toman un vector atómico y retornan una lista. Por ejemplo, en [strings] (TODO: chequear cómo se llama el capítulo en español) aprendiste `stringr::str_split()` que toma un vector de caracteres y retorna una lista de vectores de caracteres. Si lo usas dentro de mutate (TODO: no sé si ponerlo en cursiva o dejarlo como el original), obtendrás una columna-lista:
 
 ```{r}
 df <- tribble(
@@ -369,7 +368,7 @@ df %>%
   mutate(x2 = stringr::str_split(x1, ","))
 ```
 
-`unnest()` knows how to handle these lists of vectors:
+`unnest()` sabe cómo manejar estas listas de vectores:
 
 ```{r}
 df %>% 
@@ -377,9 +376,9 @@ df %>%
   unnest()
 ```
 
-(If you find yourself using this pattern a lot, make sure to check out `tidyr::separate_rows()` which is a wrapper around this common pattern).
+(Si usas mucho este patrón, asegúrate de chequear `tidyr::separate_rows()` (del inglés _separar filas_) que es un _wrapper_ (TODO: cuando esté el capítulo de Joshua poner explicación) alrededor de este patrón común).
 
-Another example of this pattern is using the `map()`, `map2()`, `pmap()` from purrr. For example, we could take the final example from [Invoking different functions] and rewrite it to use `mutate()`:
+Otro ejemplo de este patrón es usar `map()`, `map2()`, `pmap()` de __purrr__. Por ejemplo, podríamos tomar el ejemplo final de [Invoking different functions] (TODO: chequear nombre en español) y reescribirlo usando `mutate()`:
 
 ```{r}
 sim <- tribble(
@@ -393,28 +392,31 @@ sim %>%
   mutate(sims = invoke_map(f, params, n = 10))
 ```
 
-Note that technically `sim` isn't homogeneous because it contains both double and integer vectors. However, this is unlikely to cause many problems since integers and doubles are both numeric vectors.
+Nota que técnicamente `sim` no es homogénea porque contiene vectores con tipo de datos dobles así como enteros (TODO: both double and integer vectors). Sin embargo, es probable que ésto no cause muchos problemas porque ambos vectores son numéricos.
 
-### From multivalued summaries
+### A partir de medidas de resumen con más de un valor
 
-One restriction of `summarise()` is that it only works with summary functions that return a single value. That means that you can't use it with functions like `quantile()` that return a vector of arbitrary length:
+Una restricción de `summarise()` es que solo funciona con funciones de resumen que retornan un único valor. Eso significa que no puedes usarlo con funciones como `quantile()` que retorna un vector de largo arbitrario:
 
+(TODO: traducir cuando esté traducido el dataset)
 ```{r, error = TRUE}
 mtcars %>% 
   group_by(cyl) %>% 
   summarise(q = quantile(mpg))
 ```
 
-You can however, wrap the result in a list! This obeys the contract of `summarise()`, because each summary is now a list (a vector) of length 1.
+Sin embargo, puedes envolver el resultado en una lista! Esto obedece el contrato de `summarise()`, porque cada resumen ahora es una lista (un vector) de largo 1.
 
+(TODO: traducir cuando esté traducido el dataset)
 ```{r}
 mtcars %>% 
   group_by(cyl) %>% 
   summarise(q = list(quantile(mpg)))
 ```
 
-To make useful results with unnest, you'll also need to capture the probabilities:
+Para producir resultados útiles con unnest, también necesitarás capturar las probabilidades:
 
+(TODO: traducir cuando esté traducido el dataset)
 ```{r}
 probs <- c(0.01, 0.25, 0.5, 0.75, 0.99)
 mtcars %>% 
@@ -423,9 +425,9 @@ mtcars %>%
   unnest()
 ```
 
-### From a named list
+### A partir de una lista nombrada
 
-Data frames with list-columns provide a solution to a common problem: what do you do if you want to iterate over both the contents of a list and its elements? Instead of trying to jam everything into one object, it's often easier to make a data frame: one column can contain the elements, and one column can contain the list.  An easy way to create such a data frame from a list is `tibble::enframe()`.  
+_Data frames_ con columnas-lista proveen una solución a un problema común: ¿qué haces si quieres iterar sobre el contenido de una lista y también sobre sus elementos? En lugar de tratar de juntar todo en un único objeto, usualmente es más fácil hacer un _data frame_: una columna puede contener los elementos y otra columna la lista. Una forma fácil de crear un _data frame_ como éste desde una lista es `tibble::enframe()`.  
 
 ```{r}
 x <- list(
@@ -438,9 +440,9 @@ df <- enframe(x)
 df
 ```
 
-The advantage of this structure is that it generalises in a straightforward way - names are useful if you have character vector of metadata, but don't help if you have other types of data, or multiple vectors.
+La ventaja de esta estructura es que se generaliza de una forma relativamente sencilla - los nombres son útiles si tienes como metadata vectores de caracteres, pero no ayudan para otros tipos de datos o para múltiples vectores.
 
-Now if you want to iterate over names and values in parallel, you can use `map2()`:
+Ahora, si quieres iterar sobre los nombres y valores en paralelo, puedes usar `map2()`:
 
 ```{r}
 df %>% 
@@ -449,47 +451,49 @@ df %>%
   )
 ```
 
-### Exercises
+### Ejercicios
 
-1.  List all the functions that you can think of that take a atomic vector and 
-    return a list.
+1.  Lista todas las funciones en las que puedas pensar que tomen como _input_ un vector atómico y 
+    retornen una lista.
     
-1.  Brainstorm useful summary functions that, like `quantile()`, return
-    multiple values.
+1.  Piensa en funciones de resumen útiles que, como `quantile()`, retornen
+    múltiples valores.
     
-1.  What's missing in the following data frame? How does `quantile()` return
-    that missing piece? Why isn't that helpful here?
+1.  ¿Qué es lo que falta en el siguiente _data frame_? ¿Cómo `quantile()` retorna
+    eso que falta? ¿Por qué eso no es tan útil aquí?
 
-    ```{r}
-    mtcars %>% 
-      group_by(cyl) %>% 
-      summarise(q = list(quantile(mpg))) %>% 
-      unnest()
-    ```
+(TODO: traducir cuando esté traducido el dataset)
+```{r}
+mtcars %>% 
+  group_by(cyl) %>% 
+  summarise(q = list(quantile(mpg))) %>% 
+  unnest()
+```
 
-1.  What does this code do? Why might might it be useful?
+1.  ¿Qué hace este código? ¿Por qué podría ser útil?
 
-    ```{r, eval = FALSE}
-    mtcars %>% 
-      group_by(cyl) %>% 
-      summarise_each(funs(list))
-    ```
+(TODO: traducir cuando esté traducido el dataset)
+```{r, eval = FALSE}
+mtcars %>% 
+  group_by(cyl) %>% 
+  summarise_each(funs(list))
+```
 
-## Simplifying list-columns
+## Simplificando columnas-lista
 
-To apply the techniques of data manipulation and visualisation you've learned in this book, you'll need to simplify the list-column back to a regular column (an atomic vector), or set of columns. The technique you'll use to collapse back down to a simpler structure depends on whether you want a single value per element, or multiple values:
+Para aplicar las técnicas de manipulación de datos y visualización que has aprendido en este libro, necesitarás simplificar la columna-lista de vuelta a una columna regular (un vector atómico), o conjunto de columnas. La técnica que usarás para volver a una estructura más sencilla depende de si quieres un único valor por elemento, o múltiples valores.
 
-1.  If you want a single value, use `mutate()` with `map_lgl()`, 
-    `map_int()`, `map_dbl()`, and `map_chr()` to create an atomic vector.
+1.  Si quieres un único valor, usa `mutate()` con `map_lgl()`, 
+    `map_int()`, `map_dbl()`, y `map_chr()` para crear un vector atómico.
     
-1.  If you want many values, use `unnest()` to convert list-columns back
-    to regular columns, repeating the rows as many times as necessary.
+1.  Si quieres varios valores, usa `unnest()` para convertir columnas-lista de vuelta a
+    columnas regulares, repitiendo las filas tantas veces como sea necesario.
 
-These are described in more detail below.
+Estas técnicas están descritas con más detalle abajo.
 
-### List to vector
+### Lista a vector
 
-If you can reduce your list column to an atomic vector then it will be a regular column. For example, you can always summarise an object with its type and length, so this code will work regardless of what sort of list-column you have:
+Si puedes reducir tu columna lista a un vector atómico entonces será una columna regular. Por ejemplo, siempre puedes resumir un objeto con su tipo y largo, por lo que este código funcionará sin importar cuál tipo de columna-lista tengas:
 
 ```{r}
 df <- tribble(
@@ -500,14 +504,14 @@ df <- tribble(
 )
   
 df %>% mutate(
-  type = map_chr(x, typeof),
-  length = map_int(x, length)
+  tipo = map_chr(x, typeof),
+  largo = map_int(x, length)
 )
 ```
 
-This is the same basic information that you get from the default tbl print method, but now you can use it for filtering. This is a useful technique if you have a heterogeneous list, and want to filter out the parts aren't working for you.
+Ésta es la misma información básica que obtienes del método por defecto de imprimir _tbl_ (TODO: esto se traduce?), pero ahora lo puedes usar para filtrar. Es una técnica útil si tienes listas heterogéneas, y quieres remover las partes que no te sirven.
 
-Don't forget about the `map_*()` shortcuts - you can use `map_chr(x, "apple")` to extract the string stored in `apple` for each element of `x`. This is useful for pulling apart nested lists into regular columns. Use the `.null` argument to provide a value to use if the element is missing (instead of returning `NULL`):
+No te olvides de los atajos de `map_*()` - puedes usar `map_chr(x, "manzana")` para extraer la cadena de caracteres almacenada en `manzana` para cada elemento de `x`. Ésto es útil para separar listas anidadas en columnas regulares. Usa el argumento `.null` para proveer un valor para usar si el elemento es un valor perdido (_missing_) (TODO: traducimos missing?) (en lugar de retornar `NULL`):
 
 ```{r}
 df <- tribble(
@@ -521,19 +525,19 @@ df %>% mutate(
 )
 ```
 
-### Unnesting
+### Desanidando
 
-`unnest()` works by repeating the regular columns once for each element of the list-column. For example, in the following very simple example we repeat the first row 4 times (because there the first element of `y` has length four), and the second row once:
+`unnest()` trabaja repitiendo la columna regular una vez para cada elemento de la columna-lista. Por ejemplo, en el siguiente ejemplo sencillo repetimos la primera fila 4 veces (porque el primer elemento de `y` tiene largo cuatro), y la segunda fila una vez:
 
 ```{r}
 tibble(x = 1:2, y = list(1:4, 1)) %>% unnest(y)
 ```
 
-This means that you can't simultaneously unnest two columns that contain different number of elements:
+Esto significa que no puedes simultáneamente desanidar dos columnas que contengan un número diferente de elementos:
 
 ```{r, error = TRUE}
-# Ok, because y and z have the same number of elements in
-# every row
+# Funciona, porque y y z tienen el mismo número de elementos en
+# cada fila
 df1 <- tribble(
   ~x, ~y,           ~z,
    1, c("a", "b"), 1:2,
@@ -542,7 +546,7 @@ df1 <- tribble(
 df1
 df1 %>% unnest(y, z)
 
-# Doesn't work because y and z have different number of elements
+# No funciona porque y y z tienen un número diferente de elementos
 df2 <- tribble(
   ~x, ~y,           ~z,
    1, "a",         1:2,  
@@ -552,27 +556,28 @@ df2
 df2 %>% unnest(y, z)
 ```
 
-The same principle applies when unnesting list-columns of data frames. You can unnest multiple list-cols as long as all the data frames in each row have the same number of rows.
+El mismo principio aplica al desanidar columnas-lista de _data frames_. Puedes desanidar múltiples columnas-lista siempre que todos los _data frames_ de cada fila tengan la misma cantidad de filas.
 
-### Exercises
+### Ejercicios
 
-1.  Why might the `lengths()` function be useful for creating atomic
-    vector columns from list-columns?
+1.  ¿Por qué podría ser útil la función `lengths()` para crear columnas de 
+    vectores atómicos a partir de columnas-lista?
     
-1.  List the most common types of vector found in a data frame. What makes
-    lists different?
+1.  Lista los tipos de vectores más comúnes que se encuentran en un _data frame_. ¿Qué hace que las 
+    listas sean diferentes?
 
-## Making tidy data with broom
+## Haciendo datos ordenados con broom
 
-The broom package provides three general tools for turning models into tidy data frames:
+El paquete __broom__ provee tres herramientas generales para transformar modelos en en _data frames_ ordenados:
 
-1.  `broom::glance(model)` returns a row for each model. Each column gives a 
-    model summary: either a measure of model quality, or complexity, or a 
-    combination of the two.
+1.  `broom::glance(modelo)` retorna una fila para cada modelo. Cada columna tiene una 
+    medida de resumen del modelo: o bien una medida de la calidad del modelo, o complejidad, o 
+    una combinación de ambos.
    
-1.  `broom::tidy(model)` returns a row for each coefficient in the model. Each 
-    column gives information about the estimate or its variability.
+1.  `broom::tidy(modelo)` retorna una fila por cada coeficiente en el modelo. Cada 
+    columna brinda información acerca de la estimación o su variabilidad.
     
-1.  `broom::augment(model, data)` returns a row for each row in `data`, adding
-    extra values like residuals, and influence statistics.
-
+1.  `broom::augment(modelo, datos)` retorna una fila por cada fila en `datos`, agregando
+    valores adicionales como residuos, y estadísticos de influencia.
+    
+    
