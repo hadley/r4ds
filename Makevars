@@ -1,0 +1,2 @@
+CC=clang
+CXX=clang++
