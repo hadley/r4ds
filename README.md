@@ -1,5 +1,7 @@
 # R for Data Science
 
+[![Build Status](https://travis-ci.org/pachamaltese/r4ds.svg?branch=traduccion)(https://travis-ci.org/pachamaltese/r4ds)]
+
 Este es el repositorio (y branch) para la traducción de [R for Data Science](http://r4ds.had.co.nz).
 
 Instrucciones para colaborar:
