@@ -1,7 +1,6 @@
 ---
 title: "Untitled"
 author: "Ortac Cetintas"
-output: word_document
 ---
 
 # Birçok Model
@@ -14,7 +13,7 @@ Bu bölümde çok sayıda model ile kolaylıkla çalışmanıza yardımcı olaca
 1.  Karmaşık veri setlerini daha iyi anlamak için birçok basit model kullanmak.
 
 1.  Using list-columns to store arbitrary data structures in a data frame.
-1.  Rastgele veri yapılarını bir veri çerçevesinde depolamak için liste sütunlarını kullanmak.
+1.  Rastgele veri yapılarını bir veri çerçevesinde depolamak için liste-sütunlarını kullanmak.
 
 1.  For example, this will allow you to have a column that contains linear 
     models.
@@ -51,8 +50,9 @@ Aşağıdaki bölümler, bireysel teknikler hakkında daha detaylı olarak ele a
 1. [broom ile düzenli veri yapma]'da broom tarafından sağlanan tüm araçlar hakkında bilgi edineceksiniz ve ve diğer veri yapıları tiplerine nasıl uygulanabileceklerini görün. 
 
 This chapter is somewhat aspirational: if this book is your first introduction to R, this chapter is likely to be a struggle. It requires you have to deeply internalised ideas about modelling, data structures, and iteration. So don't worry if you don't get it --- just put this chapter aside for a few months, and come back when you want to stretch your brain.
-Bu bölüm biraz ilham verici: Eğer bu kitap sizin R'ye ilk girişiniz ise bu bölüm size biraz mücadele gibi gözükebilir. Modelleme, veri yapıları ve tekrarlamalar hakkında derinlemesine içselleştirilmiş bilgiye sahip olmanız gerekiyor. Bu nedenle eğer anlamadıysanız endişelenmeyin--sadece bu bölümü birkaç aylığına bir kenara koyun ve beyin jimnastiği yapmanız gerektiğinde geri dönün. 
+Bu bölüm biraz ilham verici: Eğer bu kitap sizin R'ye ilk girişiniz ise bu bölüm size biraz mücadele gibi gözükebilir. Modelleme, veri yapıları ve tekrarlamalar hakkında derinlemesine içselleştirilmiş bilgiye sahip olmanız gerekiyor. Bu nedenle eğer anlamadıysanız endişelenmeyin--sadece bu bölümü birkaç aylığına bir kenara koyun ve beyin jimnastiği yapmanız gerektiğinde geri dönün.
 
+### Prerequisites
 ### Önkoşullar
 
 Working with many models requires many of the packages of the tidyverse (for data exploration, wrangling, and programming) and modelr to facilitate modelling.
@@ -120,6 +120,7 @@ nz %>%
 How can we easily fit that model to every country?
 Bu modeli her ülkeye kolayca nasıl uydurabiliriz?
 
+### Nested data
 ### İç içe veri
 
 You could imagine copy and pasting that code multiple times; but you've already learned a better way! Extract out the common code with a function and repeat using a map function from purrr. This problem is structured a little differently to what you've seen before. Instead of repeating an action for each variable, we want to repeat an action for each country, a subset of rows. To do that, we need a new data structure: the __nested data frame__. To create a nested data frame we start with a grouped data frame, and "nest" it:
@@ -137,18 +138,23 @@ by_country
 (`continent` ve `country`'yi birlikte gruplayarak biraz hile yapıyorum. Verilen `continent`, `country` sabittir, bu nedenle daha fazla grup eklenmiyor fakat işlem boyunca bir ekstra değişken taşımak kolay bir yol.)
 
 This creates a data frame that has one row per group (per country), and a rather unusual column: `data`. `data` is a list of data frames (or tibbles, to be precise).  This seems like a crazy idea: we have a data frame with a column that is a list of other data frames! I'll explain shortly why I think this is a good idea.
+Bu, grup başına bir satır (ülke başına) ve sıra dışı bir sütuna sahip bir veri çerçevesi oluşturur: `data`. `data` data çerçevelerinin bir listesidir (kesin konuşmak gerekirse ya da tibbles). Bu çılgın bir fikir gibi görünüyor: Diğer veri çerçevelerinin bir listesi olan bir sütunu olan bir veri çerçevesine sahibiz! Bunun neden iyi bir fikir olduğunu kısaca açıklayacağım.
 
 The `data` column is a little tricky to look at because it's a moderately complicated list, and we're still working on good tools to explore these objects. Unfortunately using `str()` is not recommended as it will often produce very long output. But if you pluck out a single element from the `data` column you'll see that it contains all the data for that country (in this case, Afghanistan).
+`data` sütunu bakmak için biraz aldatıcıdır çünkü kısmen karmaşık bir liste ve hala bu nesneleri keşfetmek için iyi araçlar üzerinde çalışıyoruz. Ne yazık ki `str()`'yi kullanmak her zaman çok uzun çıktılar meydana getireceği için önerilmez. Ancak `data` sütunundan tek bir öğe çıkarırsanız, o ülke için tüm verilerini içerdiğini göreceksiniz (bu örnekte Afganistan).  
 
 ```{r}
 by_country$data[[1]]
 ```
 
 Note the difference between a standard grouped data frame and a nested data frame: in a grouped data frame, each row is an observation; in a nested data frame, each row is a group. Another way to think about a nested dataset is we now have a meta-observation: a row that represents the complete time course for a country, rather than a single point in time.
+Bir standart gruplanmış veri çerçevesi ve bir iç içe veri çerçevesi arasındaki farkı not edin: bir gruplanmış veri çerçevesinde her satır bir gözlem; bir iç içe veri çerçevesinde her satır bir gruptur. İç içe bir veri kümesi hakkında düşünmenin bir başka yolu, artık bir meta-gözlemimiz var: bir ülke için zaman içinde bir noktadan ziyade tüm süreci temsil eden bir satır.
 
 ### List-columns
+### liste-sütunları
 
 Now that we have our nested data frame, we're in a good position to fit some models. We have a model-fitting function:
+Şimdi iç içe geçmiş veri çerçevemize sahip olduğumuza göre, bazı modellere uyacak kadar iyi bir konumdayız. Modele uygun bir fonksiyonumuz var:
 
 ```{r}
 country_model <- function(df) {
@@ -157,12 +163,14 @@ country_model <- function(df) {
 ```
 
 And we want to apply it to every data frame. The data frames are in a list, so we can use `purrr::map()` to apply `country_model` to each element:
+Ve bunu her veri çerçevesine uygulamak istiyoruz. Veri çerçeveleri listede var, o yüzden `country_model`'i her elemente uygulamak için `purrr::map()`'i kullanabiliriz.  
 
 ```{r}
 models <- map(by_country$data, country_model)
 ```
 
 However, rather than leaving the list of models as a free-floating object, I think it's better to store it as a column in the `by_country` data frame. Storing related objects in columns is a key part of the value of data frames, and why I think list-columns are such a good idea. In the course of working with these countries, we are going to have lots of lists where we have one element per country. So why not store them all together in one data frame?
+
 
 In other words, instead of creating a new object in the global environment, we're going to create a new variable in the `by_country` data frame. That's a job for `dplyr::mutate()`:
 
