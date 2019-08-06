@@ -170,9 +170,10 @@ models <- map(by_country$data, country_model)
 ```
 
 However, rather than leaving the list of models as a free-floating object, I think it's better to store it as a column in the `by_country` data frame. Storing related objects in columns is a key part of the value of data frames, and why I think list-columns are such a good idea. In the course of working with these countries, we are going to have lots of lists where we have one element per country. So why not store them all together in one data frame?
-
+Ancak, modeller listesini serbest kayan bir nesne olarak bırakmak yerine, `by_country` veri çerçevesinde bir sütun olarak saklamanın daha iyi olacağını düşünüyorum. İlgili nesneleri sütunlarda saklamak, veri çerçevelerinin değerinin önemli bir parçasıdır ve bu yüzden liste sütunlarının bu kadar iyi bir fikir olduğunu düşünüyorum. Bu ülkelerle çalışma sürecinde, her ülkede bir elementin bulunduğu birçok listemiz olacak. Peki neden hepsini bir veri çerçevesinde saklamıyorsunuz?
 
 In other words, instead of creating a new object in the global environment, we're going to create a new variable in the `by_country` data frame. That's a job for `dplyr::mutate()`:
+Başka bir deyişle, küresel ortamda yeni bir nesne oluşturmak yerine `by_country` veri çerçevesinde yeni bir değişken yaratacağız. Bu `dplyr::mutate()`'in işi:  
 
 ```{r}
 by_country <- by_country %>% 
@@ -181,6 +182,7 @@ by_country
 ```
 
 This has a big advantage: because all the related objects are stored together, you don't need to manually keep them in sync when you filter or arrange. The semantics of the data frame takes care of that for you:
+Bunun büyük bir avantajı var: çünkü ilgili tüm nesneler bir arada saklandığından, filtrelerken veya düzenlerken bunları el ile senkronize etmenize gerek kalmaz. Veri çerçevesinin anlambilimi sizin için bunu önemser:
 
 ```{r}
 by_country %>% 
@@ -190,10 +192,13 @@ by_country %>%
 ```
 
 If your list of data frames and list of models were separate objects, you have to remember that whenever you re-order or subset one vector, you need to re-order or subset all the others in order to keep them in sync. If you forget, your code will continue to work, but it will give the wrong answer!
+Veri çerçeveleri listeniz ve model listeniz ayrı nesneler ise, bir vektörü ne zaman yeniden sıralar ya da altküme ayarlarsanız, bunları senkronize tutmak yerine diğerlerini tekrar sıralamanız ya da alt kümelemeniz gerektiğini unutmayın. If you forget, your code will continue to work, but it will give the wrong answer!
 
 ### Unnesting
+### iç içelikten kurtarma
 
 Previously we computed the residuals of a single model with a single dataset. Now we have 142 data frames and 142 models. To compute the residuals, we need to call `add_residuals()` with each model-data pair:
+Daha önce, tek bir modelin kalıntılarını tek bir veri setiyle hesapladık. Şimdi 142 veri çerçevemiz ve 142 modelimiz var. Artıkları hesaplamak için, her model-veri çifti ile birlikte 'add_residuals () `'ı çağırmamız gerekir: 
 
 ```{r}
 by_country <- by_country %>% 
@@ -204,6 +209,7 @@ by_country
 ```
 
 But how you can plot a list of data frames? Instead of struggling to answer that question, let's turn the list of data frames back into a regular data frame. Previously we used `nest()` to turn a regular data frame into an nested data frame, and now we do the opposite with `unnest()`:
+Ancak, veri çerçevelerinin bir listesini nasıl çizebilirsiniz? Bu soruyu cevaplamak ile uğraşmak yerine veri çerçeveleri listesini düzenli veri çerçevesine geri çevirelim. Daha önce düzenli bir veri çerçevesini iç içe bir veri çerçevesine dönüştürmek için `nest ()`'i kullanıyorduk ve şimdi tam  tersini `unnest()` ile yapıyoruz.
 
 ```{r}
 resids <- unnest(by_country, resids)
@@ -211,8 +217,10 @@ resids
 ```
 
 Note that each regular column is repeated one for each row in the nested column.
+Her normal sütunun iç içe sütundaki her satır için bir kez tekrarlandığını unutmayın.
 
 Now we have regular data frame, we can plot the residuals:
+Şimdi düzenli bir veri çerçevesine sahibiz, artıkları çizebiliriz:
 
 ```{r}
 resids %>% 
@@ -223,7 +231,8 @@ resids %>%
 ```
 
 Facetting by continent is particularly revealing:
- 
+Kıtaya göre ayırmak özellikle açıklayıcıdır:
+
 ```{r}
 resids %>% 
   ggplot(aes(year, resid, group = country)) +
@@ -232,16 +241,20 @@ resids %>%
 ```
 
 It looks like we've missed some mild patterns. There's also something interesting going on in Africa: we see some very large residuals which suggests our model isn't fitting so well there. We'll explore that more in the next section, attacking it from a slightly different angle.
+Görünüşe göre bazı hafif kalıpları kaçırdık. Afrika'da da ilginç şeyler oluyor: modelimizin o kadar iyi uymadığını gösteren çok büyük bazı kalıntıları görüyoruz. Bunu, bir sonraki bölümde biraz daha farklı bir açıdan atağa geçerek daha fazlasını keşfedeceğiz.
 
 ### Model quality
+### Model kalitesi
 
 Instead of looking at the residuals from the model, we could look at some general measurements of model quality. You learned how to compute some specific measures in the previous chapter. Here we'll show a different approach using the broom package. The broom package provides a general set of functions to turn models into tidy data. Here we'll use `broom::glance()` to extract some model quality metrics. If we apply it to a model, we get a data frame with a single row:
+Modelden kalanlara bakmak yerine, model kalitesinin bazı genel ölçümlerine bakabiliriz. Önceki bölümde bazı özel ölçümlerin nasıl hesaplanacağını öğrendiniz. Burada broom paketini kullanarak farklı bir yaklaşım göstereceğiz. broom paketi, modelleri düzenli veriye dönüştürmek için genel bir işlevler kümesi sağlar. Burada bazı model kalitesi ölçümlerini çıkarmak için `broom :: glance ()`'i kullanacağız. Eğer bunu  bir modele uygularsak, tek satırlı bir veri çerçevesi elde ederiz:
 
 ```{r}
 broom::glance(nz_mod)
 ```
 
 We can use `mutate()` and `unnest()` to create a data frame with a row for each country:
+Her ülke için bir satır ile veri çerçevesi oluşturmak için `mutate ()` ve `unnest ()`'i  kullanabiliriz:
 
 ```{r}
 by_country %>% 
@@ -250,6 +263,7 @@ by_country %>%
 ```
 
 This isn't quite the output we want, because it still includes all the list columns. This is default behaviour when `unnest()` works on single row data frames. To suppress these columns we use `.drop = TRUE`:
+Bu tam olarak istediğimiz çıktı değil çünkü hala tüm liste sütunlarını içeriyor. Bu, `unnest()`'in tek satır veri çerçeveleri üzerinde çalıştığı zamanki varsayılan davranışıdır. Bu sütunları gizlemek için `.drop = TRUE` kullanıyoruz:  
 
 ```{r}
 glance <- by_country %>% 
@@ -259,6 +273,7 @@ glance
 ```
 
 (Pay attention to the variables that aren't printed: there's a lot of useful stuff there.)
+(Basılmayan değişkenlere dikkat edin: orada birçok faydalı şey var.)
 
 With this data frame in hand, we can start to look for models that don't fit well:
 
