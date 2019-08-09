@@ -1,0 +1,588 @@
+---
+title: "Chapter_7_Exploratory_Data_Analysis_Ceviri"
+author: "Ayse"
+date: "21 Temmuz 2019"
+output: html_document
+---
+
+# Keşfedici Veri Analizi
+
+## Giriş
+
+Bu bölümde verinizi sistematik şekilde keşfetmek için görselleştirme ve dönüştürmeyi nasıl kullanacağınız  anlatılmaktadır. Bu işlemi istatistikçiler keşfedici veri analizi veya kısaca EDA (Exploratory Data Analysis) olarak adlandırır. EDA tekrarlı bir döngüdür: 
+
+1. Veriniz hakkında sorular oluşturursunuz.
+
+2. Verinizi görselleştirerek, dönüştürerek ve modelleyerek cevapları ararsınız. 
+
+3. Sorularınızı geliştirmek ve/veya yeni sorular üretmek için öğrendiklerinizi kullanırsınız.
+
+
+EDA katı kurallar dizisi olan resmi bir süreç değildir. EDA her şeyden çok bir düşünüş tarzıdır. EDA'nın ilk başlarında aklınıza gelen her fikri araştırmakta özgür hissetmelisiniz. Bu fikirlerden bazıları meyve verirken diğerleri solup gidecektir. Keşfiniz devam ettikçe, sonunda yazıp başkalarıyla paylaşacağınız belirli üretken alanlara yöneleceksiniz.
+
+Sorular size bir tabakta sunulsa bile EDA her veri analizinin önemli bir bölümüdür çünkü her zaman verinizin kalitesini incelemeye ihtiyaç duyarsınız. Veri temizleme EDA uygulamalarından sadece biridir. Verinizin beklentileri karşılayıp karşılamadığını sorarsınız. Veri temizlemek için bütün EDA araçlarını kullanmanız gerekir: görselleştirme, dönüştürme ve modelleme.
+
+
+### Ön koşullar
+
+Bu bölümde interaktif şekilde sorular sormak, bunları veri ile cevaplamak ve sonra yeni sorular sormak için dplyr ve ggplot2 hakkında öğrendiklerinizi birleştireceğiz.
+
+```{r setup, message = FALSE}
+library(tidyverse)
+```
+
+## Sorular
+
+> "Rutin istatistiksel sorular yoktur, sadece sorgulanabilir istatistiksel rutinler vardır." --- Sir David Cox
+
+
+
+> "Doğru bir soruya çoğu zaman belirsiz olan yaklaşık bir cevap, yanlış bir soruya her zaman kesin hale getirilebilen tam bir cevaptan yeğdir." --- John Tukey
+
+EDA sırasında amacınız veriniz hakkında bir anlayış geliştirmektir. Bunu yapmanın en kolay yolu, araştırmanıza rehberlik edecek sorular kullanmaktır.Soru sorduğunuzda soru, dikkatinizi veri setininizin belirli bir bölgesine toplar ve hangi grafikler, modeller veya dönüşümleri yapacağınıza karar vermenize yardımcı olur.
+
+EDA esasen yaratıcı bir süreçtir. Çoğu yaratıcı süreç gibi _kaliteli_ sorular sormanın yolu çok _miktarda_ soru üretmekten geçer. Veri setinizde ne gibi içgörüler olduğunu bilmediğinizden analizinizin başlangıcında açıklayıcı sorular sormak zordur. Diğer taraftan sorduğunuz her yeni soru size verinizin başka bir yönünü gösterecektir ve keşif yapma şansınızı artıracaktır. Her soruyu, bulduklarınıza dayanarak yeni bir soruyla takip ettiğinizde verinizin en ilginç kısımlarına hızlıca dalabilir ve bir dizi düşünce provoke eden soru geliştirebilirsiniz.
+
+Araştırmanıza rehberlik etmesi için hangi soruları soracağınıza dair hiçbir kural yoktur. Ancak verinizde keşifler yapmak için iki tip soru her zaman faydalı olacaktır. Genel olarak bu soruları şu şekilde ifade edebilirsiniz:
+
+1. Değişkenlerimde ne tür bir varyasyon var?
+
+1. Değişkenlerim arasında ne tür bir kovaryasyon var?
+
+Bu bölümün geri kalanı bu iki soruya odaklanacaktır. Varyasyon ve kovaryasyonun ne olduğunu açıklayacağım ve her soruya cevap vermenin çeşitli yollarını göstereceğim. Tartışmayı kolaylaştırmak için bazı terimleri açıklayalım:
+
+
+*   __variable__ (değişken) ölçebileceğiniz bir miktar, nitelik veya özelliktir. 
+
+*   __value__ (değer) ölçtüğünüzde değişkenin durumudur. Değişkenin durumu ölçümden ölçüme değişebilir.
+  
+*   __observation__ (gözlem) benzer koşullar altında yapılan ölçüm dizisidir.
+    (genelde bir gözlemdeki ölçümlerin hepsini aynı zamanda ve aynı nesenede yaparsınız). Gözlem her biri farklı bir değişkenle ilişkili çeşitli değerler içerir.  Gözlemi bazen veri noktası olarak adlandıracağım.
+
+*   __Tabular data__ (veri tablosu) her biri bir değişken ve bir gözlemle ilişkili bir değerler dizisidir. Her değer kendi "hücresine" yerleştirilmişse, her değişken kendi sütununda ve her gözlem kendi sırasındaysa veri tablosu _tidy_ olur (düzenlidir). 
+
+Şu ana kadar gördüğünüz bütün veriler düzenli idi. Gerçek hayatta verilerin çoğu düzenli değildir bu nedenle [düzenli veri] kısmında bu fikirlere geri döneceğiz.
+
+## Varyasyon
+
+**Varyasyon** bir değişkendeki değerlerin ölçümden ölçüme değişme eğilimidir. Varyasyonu gerçek yaşamda kolaylıkla görebilirsiniz. Herhangi bir sürekli değişkeni iki kere ölçerseniz iki farklı sonuç alırsınız. Işığın hızı gibi sabit değerleri ölçtüğünüzde de bu geçerlidir. Ölçümlerinizin her biri ölçümden ölçüme farklılık gösteren küçük bir miktar içerecektir. Kategorik değişkenler farklı denekler (örn. farklı kişilerin göz renkleri) veya farklı zamanlarda (örn. farklı anlarda bir elektronun enerji düzeyleri) ölçtüğünüzde de değişkenlik gösterebilir.
+
+Her değişken ilginç bilgiler ortaya çıkarabilen kendi varyasyon desenine sahiptir. Bu deseni anlamanın en iyi yolu değişkenin değerlerinin dağılımını görselleştirmektir.
+
+
+### Dağılımları görselleştirme
+
+Bir değişkenin dağılımını nasıl görselleştireceğiniz değişkenin kategorik mi yoksa devamlı mı olduğuna bağlıdır. Bir değişken, küçük bir değer dizisinden sadece birini alabiliyorsa **kategorik**tir. R'da kategorik değişkenler genellikle faktörler veya karakter vektörleri olarak kaydedilir. Bir kategorik değişkenin dağılımını incelemek için çubuk grafik kullanın:
+
+```{r}
+ggplot(data = diamonds) +
+  geom_bar(mapping = aes(x = cut))
+```
+
+Çubukların yüksekliği her x değeri ile kaç gözlem olduğunu gösterir.Bu değerleri elle `dplyr::count()`ile hesaplayabilirsiniz:
+
+```{r}
+diamonds %>% 
+  count(cut)
+```
+
+Sıralı değerlerden oluşan sonsuz bir dizi alabiliyorsa değişken **sürekli**dir. Sayılar ve tarih ve zamanlar sürekli değişkenlere iki örnektir. Sürekli değişkenin dağılımını incelemek için histogram kullanın:
+
+```{r}
+ggplot(data = diamonds) +
+  geom_histogram(mapping = aes(x = carat), binwidth = 0.5)
+```
+
+Bunu elle `dplyr::count()` ve `ggplot2::cut_width()`i birleştirerek hesaplayabilirsiniz:
+
+```{r}
+diamonds %>% 
+  count(cut_width(carat, 0.5))
+```
+
+Histogram x eksenini eşit aralıklı gruplara böler ve her gruba düşen gözlem sayısını göstermek için çubuğun yüksekliğini kullanır. Yukarıdaki grafikte en uzun çubuk neredeyse 30.000 gözlemin, çubuğun sağ ve sol kenarları olan 0,25 ve 0,75 arası bir 'carat' (karat) değerine sahip olduğunu göstermiştir.
+
+Bir histogramdaki aralıkların genişliğini,`x` değişkeni birimlerinde ölçülen `binwidth`(grup genişliği) argümanı ile belirleyebilirsiniz. Histogramlarla çalışırken daima çeşitli grup genişliklerini araştırmalısınız çünkü farklı grup genişlikleri farklı desenler ortaya çıkarabilir. Örneğin, sadece üç karattan küçük boyuttaki elmaslara odaklandığımızda ve daha küçük bir grup genişliği seçtiğimizde yukarıdaki grafik şöyle görünür:
+
+```{r}
+smaller <- diamonds %>% 
+  filter(carat < 3)
+  
+ggplot(data = smaller, mapping = aes(x = carat)) +
+  geom_histogram(binwidth = 0.1)
+```
+
+Birden çok histogramı aynı grafiğe yerleştirmek isterseniz `geom_histogram()`yerine `geom_freqpoly()` kullanmanızı tavsiye ederim. `geom_freqpoly()` , `geom_histogram()`ile aynı hesaplamaları yapar fakat sayımları çubuklarla göstermek yerine çizgileri kullanır. Çakışan çizgileri anlamak çakışan çubukları anlamaktan daha kolaydır.
+
+```{r}
+ggplot(data = smaller, mapping = aes(x = carat, colour = cut)) +
+  geom_freqpoly(binwidth = 0.1)
+```
+
+Bu tür grafikle ilişkili bir kaç güçlük vardır. Bunlara [bir kategorik ve bir sürekli değişkeni görselleştirme](#cat-cont) bölümünde değineceğiz.
+
+Şimdi varyasyonu görselleştirebildiğinize göre, grafiklerinizde neyi aramalısınız? Ve ne tür takip sorularu sormalısınız? Grafiklerinizde bulacağınız en faydalı türde bilgilerin bir listesinin yanı sıra her türde bilgi için bazı takip sorularını bir araya getirdim. İyi takip soruları sormanın püf noktası merakınıza (daha fazla neyi öğrenmek istersiniz) ve şüpheciliğinize (bu nasıl yanıltıcı olabilir) güvenmektir.
+
+### Tipik değerler
+
+Hem çubuk grafik hem de histogramlarda, uzun çubuklar bir değişkenin yaygın değerlerini ve daha kısa çubuklar daha az yaygın değerlerini gösterir. Çubuk olmayan yerler verinizde görülmeyen değerleri ortaya çıkarırlar. Bu bilgiyi faydalı sorulara dönüştürmek için beklenmedik her şeyi araştırın:
+
+* Hangi değerler en yaygın? Neden?
+
+* Hangi değerler nadir? Neden?
+
+* Herhangi bir sıradışı desen görebiliyor musunuz? Bunun açıklaması ne olabilir?
+
+Örnek olarak, aşağıdaki histogram çeşitli ilginç sorular göstermektedir:
+
+* Neden tam karatlarda ve yaygın karat fraksiyonlarında daha fazla elmas var?
+
+* Neden her pikin biraz sağında, her pikin biraz solunda olduğundan daha fazla elmas var?
+  
+* Neden 3 karattan büyük hiç elmas yok?
+
+```{r}
+ggplot(data = smaller, mapping = aes(x = carat)) +
+  geom_histogram(binwidth = 0.01)
+```
+
+Benzer değerlerden oluşan kümeler verinizde alt gruplar olduğunu gösterir. Alt grupları anlamak için şu soruları sorun:
+
+* Her küme içerisindeki gözlemler birbirine nasıl benzerlik gösteriyor?
+
+* Ayrı kümelerdeki gözlemler birbirinden nasıl farklılık gösteriyor?
+
+* Kümeleri nasıl açıklar veya tarif edersiniz?
+
+* Kümelerin görünümü neden yanıltıcı olabilir?
+
+Aşağıdaki histogram Yellowstone Milli Parkı'nda Old Faithful Geyser'in 272 patlamasının uzunluğunu (dakika cinsinden) göstermektedir. Patlama süreleri iki gruba ayrılıyor gibi görünmektedir: kısa patlamalar (yaklaşık 2 dakika) ve uzun patlamalar (4-5 dakika) ve ikisinin arasında çok az patlama vardır.
+
+
+```{r}
+ggplot(data = faithful, mapping = aes(x = eruptions)) + 
+  geom_histogram(binwidth = 0.25)
+```  
+
+Yukarıdaki sorulardan çoğu, bir değişkenin değerinin başka bir değişkenin davranışını açıklayıp açıklayamayacağını görmek gibi değişkenler *arasında* bir ilişki olup olmadığını araştırmanızı teşvik edecektir. Bu konuya geleceğiz.
+
+### Sıradışı değerler
+
+Uç değerler sıradışı değerlerdir; desene uyuyor gibi görünmeyen veri noktalarıdır. Bazen uç değerler veri girme hatalarıdır; bazen önemli yeni bilime işaret ederler. Çok veriniz olduğunda histogramda uç değerleri histogramda görmek zordur. Örneğin elmas veri setinden `y` değişkeninin dağılımını alın. Uç değerlerin tek kanıtı x eksenindeki sıradışı genişlikte sınırlardır.
+
+```{r}
+ggplot(diamonds) + 
+  geom_histogram(mapping = aes(x = y), binwidth = 0.5)
+```   
+
+Yaygın gruplarda o kadar çok gözlem vardır ki, nadir gruplar çok kısadır ve göremezsiniz (ancak 0'a dikkatle bakarsanız belki birşey görebilirsiniz). Olağandışı değerleri görmeyi kolaylaştırmak için `coord_cartesian()` ile y ekseninin küçük değerlerine odaklanmalıyız:
+
+
+```{r}
+ggplot(diamonds) + 
+  geom_histogram(mapping = aes(x = y), binwidth = 0.5) +
+  coord_cartesian(ylim = c(0, 50))
+```   
+
+(`coord_cartesian()` aynı zamanda x eksenine yakınlaşmanız gerektiğinde kullanmanız için `xlim()` argümanına sahiptir. ggplot2 de biraz farklı çalışan `xlim()` ve `ylim()` fonksiyonlarına sahiptir: sınırların dışındaki verileri atarlar.)
+
+Bu, üç sıradışı değer olduğunu görmemize olanak tanır: 0, ~30 ve ~60. Bunları dplyr ile çıkarırız: 
+
+```{r, include = FALSE}
+old <- options(tibble.print_max = 10, tibble.print_min = 10)
+```
+
+```{r}
+unusual <- diamonds %>% 
+  filter(y < 3 | y > 20) %>% 
+  select(price, x, y, z) %>%
+  arrange(y)
+unusual
+```
+
+```{r, include = FALSE}
+options(old)
+```
+
+`y`değişkeni bu elmasların üç boyutundan birini mm cinsinden ölçer. Elmasın 0 mm çapa sahip olmayacağını biliyoruz bu nedenle bu değerler hatalı olmalıdır. 32 mm ve 59 mm ölçümlerinin de mantıksız olduğundan şüphe edebiliriz: bu elmaslar bir inçten uzun ancak yüzbinlerce dolar etmiyorlar!
+
+Analizi uç değerler ile ve uç değerler olmadan tekrar etmek iyi bir uygulamadır. Sonuçlar üzerindeki etkisi minimum ise ve neden orada olduklarını anlayamıyorsanız bunların yerine eksik değer koyarak devam etmek makuldur. Ancak sonuçlarınız üzerinde önemli bir etkiye sahiplerse gerekçe olmadan bunları atmamalısınız. Bunlara neyin sebep olduğunu bulmalısınız (örn. veri giriş hatası) ve raporunuzda bunları çıkardığınızı bildirmelisiniz. 
+
+
+### Alıştırmalar
+
+1.  `diamonds`da (elmaslar) `x`, `y` ve `z` değişkenlerinin herbirinin dağılımını inceleyin. Ne öğrenirsiniz? Bir elmas düşünün ve hangi boyutun uzunluk, genişlik ve derinlik olduğuna nasıl karar verebileceğinizi düşünün.
+
+1.  `price` (fiyat) dağılımını inceleyin. Sıradışı veya şaşırtıcı birşey keşfettiniz mi? (İp ucu: `binwidth` (grup genişliği) dikkatlice düşünün ve geniş bir değer aralığı denediğinizden emin olun.)
+
+1.  Kaç tane elmas 0,99 karat? Kaç tanesi 1 karat? Farklılığın nedeninin ne olduğunu düşünüyorsunuz?
+    
+1.  Bir histograma yakınlaşırken `coord_cartesian()` ile `xlim()` veya `ylim()`i karşılaştırıp kıyaslayın.  `binwidth`i ayarlamadan bırakırsanız ne oluyor?
+    Bir çubuğun sadece yarısı görünecek şekilde yakınlaşınca ne oluyor?
+    
+## Eksik değerler
+
+Veri setinizde sıradışı değerlerle karşılaştıysanız ve analizin geri kalanına ilerlemek istiyorsanız iki seçeneğiniz var. 
+
+1.  Tuhaf değerler olan bütün sırayı çıkarın:
+
+    ```{r, eval = FALSE}
+    diamonds2 <- diamonds %>% 
+      filter(between(y, 3, 20))
+    ```
+    
+   Bu seçeneği önermiyorum çünkü sadece bir ölçümün geçersiz olması bütün ölçümlerin geçersiz olduğu anlamına gelmez. Ayrıca, düşük kaliteli bir veriye sahipseniz her değişkene bu yaklaşımı uyguladığınızda hiç veriniz kalmayabilir!
+   
+1.  Bunun yerine sıradışı değerleri eksik değerler ile değiştirmenizi tavsiye ediyorum. 
+Bunu yapmanın en kolay yolu değişkenin yerine değiştirilmiş bir kopyasını koymak için `mutate()` kullanmaktır. Sıradışı değerleri `NA` ile değiştirmek için `ifelse()` fonksiyonunu kullanabilirsiniz:
+
+    ```{r}
+    diamonds2 <- diamonds %>% 
+      mutate(y = ifelse(y < 3 | y > 20, NA, y))
+    ```
+
+`ifelse()` üç argümana sahiptir. İlk argüman `test` mantıklı bir vektör olmalıdır. `test` `TRUE` olduğunda sonuç ikinci argümanın değerini, `yes`, ve false olduğunda ve üçüncü argümanın değerini,`no`, içerecektir. ifelse fonksiyonuna alternatif olarak `dplyr::case_when()`kullanın. Mevcut değişkenlerin karmaşık bir kombinasyonuna dayalı olan yeni bir değişken yaratmak istediğinizde mutate içindeki `case_when()` özellikle kullanışlıdır.
+
+R gibi, ggplot2 eksik değerlerin asla sessizce eksik kalmaması gerektiği felsefesine dayalıdır. Eksik değerleri nerede grafiğe aktarmanız gerektiği açık değildir, bu yüzden ggplot2 grafikte bunları içermez ancak çıkarıldıklarına dair uyarı verir:
+
+```{r, dev = "png"}
+ggplot(data = diamonds2, mapping = aes(x = x, y = y)) + 
+  geom_point()
+```
+
+Bu uyarıyı ortadan kaldırmak için `na.rm = TRUE` olarak ayarlayın:
+
+```{r, eval = FALSE}
+ggplot(data = diamonds2, mapping = aes(x = x, y = y)) + 
+  geom_point(na.rm = TRUE)
+```
+
+Başka bir zaman eksik değerler olan gözlemlerin kayıtlı değerler olan gözlemlerden farkını anlamak isteyebilirsiniz. Örneğin, `nycflights13::flights`da, `dep_time` değişkenindeki eksik değerler uçuşun iptal edildiğini gösterir. Bu yüzden iptal edilen ve iptal edilmeyen zamanlarda planlanan uçuş zamanlarını karşılaştırmak isteyebiliriniz. Bunu `is.na()` ile yeni bir değişken yaparak yapabilirsiniz.
+
+```{r}
+nycflights13::flights %>% 
+  mutate(
+    cancelled = is.na(dep_time),
+    sched_hour = sched_dep_time %/% 100,
+    sched_min = sched_dep_time %% 100,
+    sched_dep_time = sched_hour + sched_min / 60
+  ) %>% 
+  ggplot(mapping = aes(sched_dep_time)) + 
+    geom_freqpoly(mapping = aes(colour = cancelled), binwidth = 1/4)
+```
+
+Ancak bu grafik harika değil çünkü iptal edilen uçuşlardan çok daha fazla iptal edilmeyen uçuş var. Bir sonraki bölümde bu karşılaştırmayı geliştirmek için bazı teknikleri inceleyeceğiz.
+
+
+### Alıştırmalar
+
+1.  Histogramdaki eksik değerlere ne olur? Çubuk grafiğindeki eksik değerlere ne olur? Neden farklılık var?
+
+1.  `mean()` ve `sum()` fonskiyonlarında `na.rm = TRUE` ne yapar?
+
+## Kovaryasyon
+
+Varyasyon bir değişken _içerisindeki_ davranışı açıklıyorsa, kovaryasyon değişkenler _arasındaki_ davranışı açıklar. **Kovaryasyon** iki veya daha fazla değişkenin değerlerinin ilişkili şekilde birlikte değişkenlik göstermesi eğilimidir. Kovaryasyonu görmenin en iyi yolu iki veya daha fazla değişken arasındaki ilişkiyi görselleştirmektir. Bunu nasıl yapacağın yine ilişkili değişkenlerin türüne bağlı olmalıdır.
+
+
+### Bir kategorik ve devamlı değişken {#cat-cont}
+
+Önceki sıklık poligonunda olduğu gibi kategorik bir değişkenle bölünen sürekli bir değişkenin dağılımını incelemeyi istemek yaygındır. Bu tür bir karşılatırma için `geom_freqpoly()` varsayılan görünümü o kadar faydalı değildir çünkü yükseklik sayı ile verilir. Yani, gruplardan biri diğerinden çok daha küçükse şekildeki farklılıkları görmek zordur. Örneğin, bir elmasın fiyatının kalitesine göre nasıl farklılık gösterdiğini araştıralım:
+
+
+```{r}
+ggplot(data = diamonds, mapping = aes(x = price)) + 
+  geom_freqpoly(mapping = aes(colour = cut), binwidth = 500)
+```
+
+Dağılımdaki farklılığı görmek zordur çünkü toplam sayı çok farklılık gösterir:
+
+
+```{r, fig.width = "50%", fig.width = 4}
+ggplot(diamonds) + 
+  geom_bar(mapping = aes(x = cut))
+```
+
+Karşılaştırmayı kolaylaştırmak için y ekseninde gösterileni değiştirmeliyiz. Sayımı göstermek yerine her sıklık poligonu altındaki alanın bir olduğu standartlaştırılmış _yoğunluğu_ göstereceğiz.
+
+
+```{r}
+ggplot(data = diamonds, mapping = aes(x = price, y = ..density..)) + 
+  geom_freqpoly(mapping = aes(colour = cut), binwidth = 500)
+```
+
+Bu grafikte şaşırtıcı birşey var - vasat elmasların (en düşük kalite) en yüksek ortalama fiyata sahip olduğu görülüyor! Ama bunun nedeni belki de sıklık poligonlarının yoğrumlanmasının biraz zor olması olabilir-bu grafikte çok şey dönüyor.
+
+Kategorik bir değişkenle bölünen sürekli bir değişkenin dağılımını göstermenin başka alternatif bir yolu kutu grafiğidir. **Kutu grafiği** istatistikçiler arasında popüler olan değer dağılımının görsel bir tür gösterimidir. Her kutu grafiği aşağıdakileri içerir:
+
+* Dağılımın, çeyrekler arası aralık (IQR) olarak bilinen bir mesafede 25 yüzdelik diliminden 75 yüzdelik dilimine uzanan bir kutu. Kutunun ortasında medyanı yani dağılımın 50 yüzdelik dilimini gösteren bir çizgi. Bu üç çizgi size dağılımın yayılışına ve dağılımın medyandan itibaren simetrik mi yoksa bir tarafa çarpık mı olduğuna dair bir his verir.
+
+* Kutunun herhangi bir kenarından 1,5 kattan fazla IQR uzağa düşen gözlemleri gösteren görsel noktalar. Bu uç noktalar sıradışıdır bu nedenle ayrı grafiğe aktarılır.
+
+* Kutunun her iki ucundan uzanan ve dağılımdaki en uzak uç değer olmayan noktaya kadar giden bir çizgi (veya bıyık)
+
+
+```{r, echo = FALSE, out.width = "100%"}
+knitr::include_graphics("images/EDA-boxplot.png")
+```
+
+ `geom_boxplot()` kullanarak kesime göre fiyat dağılımına bir bakalım:
+
+```{r fig.height = 3}
+ggplot(data = diamonds, mapping = aes(x = cut, y = price)) +
+  geom_boxplot()
+```
+
+Dağılım hakkında çok daha az bilgi görüyoruz fakat kutu grafikler çok daha kompakt bu nedenle bunları daha kolay karşılaştırabiliriz (ve bir grafiğe birden fazla sığdırabiliriz). Daha iyi kalitedeki elmasların ortalama daha ucuz olduğuna dair mantık dışı bulguyu destekler. Alıştırmalarda bunun nedenini bulmaya çalışacaksınız.
+
+`cut` (kesme) sıralı bir faktördür: vasat, iyiden daha kötü, iyi çok iyiden daha kötü, vs. Çoğu kategorik değişken böyle yerleşik bir sıraya sahip değildir. Bu yüzden daha bilgi verici bir görüntü elde etmek için bunları yeniden sıralamanız gerekebilir.  Bunu yapmanın bir yolu  `reorder()` fonksiyonudur.
+
+Örneğin, `mpg` veri setindeki `class` değişkenini alın. Otoban mesafelerinin sınıflara göre nasıl değiştiğini bilmek isteyebilirsiniz:
+
+
+```{r}
+ggplot(data = mpg, mapping = aes(x = class, y = hwy)) +
+  geom_boxplot()
+```
+
+Eğilimin daha kolay görünmesini sağlamak için `hwy`medyan değeri temelinde `class`ı (sınıf) yeniden sıralayabiliriz:
+
+```{r fig.height = 3}
+ggplot(data = mpg) +
+  geom_boxplot(mapping = aes(x = reorder(class, hwy, FUN = median), y = hwy))
+```
+
+Değişken isimleriniz uzunsa, `geom_boxplot()` 90 derece çevirirseniz daha iyi görünecektir. Bunu `coord_flip()` ile yapabilirsiniz.
+
+```{r}
+ggplot(data = mpg) +
+  geom_boxplot(mapping = aes(x = reorder(class, hwy, FUN = median), y = hwy)) +
+  coord_flip()
+```
+
+#### Alıştırmalar
+
+1.  İptal edilen ve iptal edilmeyen uçuşların kalkış zamanlarının görselleştirilmesini iyileştirmek için öğrendiklerinizi kullanın.
+
+1.  Bir elmasın fiyatını tahmin etmede elmas veri setinde hangi değişken en önemlidir? Bu değişken kesim ile nasıl korelasyon gösterir? Bu iki ilişkini kombinasyonu neden daha düşük kaliteli elmasların daha pahalı olmasına yol açıyor?
+
+1.  ggstance paketini kurun ve yatay bir kutu grafiği oluşturun.
+    Bu `coord_flip()` kullanımı ile karşılaştırıldığında nasıldır?
+
+1.  Kutu grafikleri kullanmada problem, çok daha küçük veri setleri olan bir zamanda geliştirilmiş olmasından ve kabul edilemez sayıda "uç değerler" gösterme eğiliminde olmasından kaynaklanır. Bu problemi çözmek için bir yaklaşım harf değeri grafiğidir. lvplot paketini kurun ve fiyata karşı kesim dağılımını göstermek için `geom_lv()` kullanmayı deneyin. Ne öğreniyorsunuz? Grafikleri nasıl yorumluyorsunuz?
+
+1.  Dik kesilmiş `geom_histogram()` veya renkli `geom_freqpoly()` ile `geom_violin()`i karşılaştırın. Her iki yöntemin avantaj ve dezavantajları nelerdir?
+
+1.  Küçük bir veri setiniz varsa sürekli ve kategorik değişkenleri arasındaki ilişkiyi görmek için bazen `geom_jitter()`kullanmak faydalıdır.  ggbeeswarm paketi `geom_jitter()` ile benzer bazı yöntemler sağlar. Bunları sıralayın ve her birinin ne yaptığını kısaca açıklayın.
+
+### İki kategorik değişken
+
+Kategorik değişkenler arasındaki kovaryasyonu görselleştirmek için her kombinasyon için gözlem sayısını saymalısınız. Bunu yapmanın bir yolu yerleşik `geom_count()` fonksiyonunu kullanmaktır:
+
+```{r}
+ggplot(data = diamonds) +
+  geom_count(mapping = aes(x = cut, y = color))
+```
+
+Grafikteki her dairenin boyutu her değer kombinasyonunda kaç gözlem olduğunu gösterir. Kovaryasyon spesifik x değerleri ve spesifik y değerleri arasında güçlü korelasyon olarak görünecektir.
+
+Başka bir yaklaşım dplyr ile sayısı hesaplamaktır:
+
+```{r}
+diamonds %>% 
+  count(color, cut)
+```
+
+Ardından `geom_tile()` ve dolgu estetiği (????) ile görselleştirin:
+
+```{r}
+diamonds %>% 
+  count(color, cut) %>%  
+  ggplot(mapping = aes(x = color, y = cut)) +
+    geom_tile(mapping = aes(fill = n))
+```
+
+Kategorik değişkenler sıralı değilse, ilginç desenleri daha açık bir şekilde ortaya çıkarmak için sütun ve sıraları aynı anda yeniden düzenlemek için seriation (sıralama) paketini kullanabilirsiniz. Daha geniş grafikler için interaktif grafikler oluşturan d3heatmap veya heatmaply paketlerini denemek isteyebilirsiniz.
+
+#### Alıştırmalar
+
+1.  Renk içinde kesim veya kesim içinde renk dağılımını daha açıkça göstermek için yukarıdaki sayım veri setini nasıl tekrar ölçeklendirebilirsiniz?
+
+1.  Ortalama uçuş gecikmelerinin varış yeri ve aya göre nasıl değiştiğini araştırmak için dplyr ile birlikte `geom_tile()` kullanın. Grafiğin okunmasını zorlaştıran ne? Bunu nasıl düzeltebilirsiniz?
+
+1.  Yukarıdaki örnekte `aes(x = color, y = cut)` kullanmak neden `aes(x = cut, y = color)` kullanmaktan biraz daha iyi?
+
+### İki sürekli değişken
+
+İki sürekli değişken arasındaki kovaryasyonu görselleştirmenin harika bir yolunu zaten gördünüz: `geom_point()` ile bir dağılım grafiği çizin. Noktalardan oluşan desende kovaryasyonu görebilirsiniz. Örneğin, karat boyutu ve elmas fiyatı arasındaki üssel ilişkiyi görebilirsiniz.
+
+
+```{r, dev = "png"}
+ggplot(data = diamonds) +
+  geom_point(mapping = aes(x = carat, y = price))
+```
+
+Veri setinizin boyutu arttıkça dağılım grafikleri daha az faydalı hale gelir çünkü noktalar üst üste gelmeye başlar ve birikerek sadece siyah alanlar oluşturur (yukarıdaki gibi).
+Problemi çözmenin bir yolunu zaten gördün: şeffalık eklemek için `alpha` estetiği kullanmak.
+
+```{r, dev = "png"}
+ggplot(data = diamonds) + 
+  geom_point(mapping = aes(x = carat, y = price), alpha = 1 / 100)
+```
+
+Fakat şeffaflık kullanmak çok geniş veri setleri için zorlayıcı olabilir. Başka bir çözüm kutu kullanmaktır. Daha önce bir boyutta kutulamak için `geom_histogram()` ve `geom_freqpoly()` kullandınız. Şimdi iki boyutta kutulamak için `geom_bin2d()` ve `geom_hex()`i nasıl kullanacağınızı öğreneceksiniz.
+
+`geom_bin2d()` ve `geom_hex()` koordinat düzlemini 2 boyutlu kutulara böler ve her kutuya kaç nokta düştüğünü göstermek için bir dolgu rengi kullanır.`geom_bin2d()` dikdörtgen kutular oluşturur. `geom_hex()` altıgen kutular oluşturur. `geom_hex()` kullanmak için hexbin paketini kurmanız gerekecek. 
+
+```{r, fig.asp = 1, out.width = "50%", fig.align = "default", message = FALSE}
+ggplot(data = smaller) +
+  geom_bin2d(mapping = aes(x = carat, y = price))
+
+# install.packages("hexbin")
+ggplot(data = smaller) +
+  geom_hex(mapping = aes(x = carat, y = price))
+```
+
+Başka bir seçenek bir sürekli değişkeni gruplamaktır böylece kategorik bir değişken gibi davranır. Sonra öğrendiğiniz bir kategorik ve sürekli değişken kombinasyonunu görselleştirme tekniklerinden birini kullanabilirsiniz. Örneğin `carat`ı gruplayabilirsiniz ve sonra her grup için bir kutu grafiği oluşturabilirsiniz:
+
+```{r}
+ggplot(data = smaller, mapping = aes(x = carat, y = price)) + 
+  geom_boxplot(mapping = aes(group = cut_width(carat, 0.1)))
+```
+
+Yukarıda kullanıldığı gibi `cut_width(x, width)`, `x`i genişlik `width` kutularına böler. Varsayılan durumda kutu grafikleri ne kadar gözlem olduğundan bağımsız olarak kabaca aynı görünür (uç değerlerin sayısı dışında), bu yüzden her kutu grafiğinin farklı sayıda noktayı özetlediğini söylemek zordur. Bunu göstermenin bir yolu `varwidth = TRUE` ile kutu grafiğinin genişliğini nokta sayısı ile oratılı yapmaktır.
+
+Başka bir yaklaşım her kutudaki nokta sayısını yaklaşık olarak aynı göstermektir. Bu, `cut_number()` ile yapılır:
+
+
+```{r}
+ggplot(data = smaller, mapping = aes(x = carat, y = price)) + 
+  geom_boxplot(mapping = aes(group = cut_number(carat, 20)))
+```
+
+#### Alıştırmalar
+
+1. Koşullu dağılımı kutu grafiğiyle özetlemek yerine, frekans poligonu kullanabilirsiniz. `cut_width()` veya `cut_number()` kullanırken neyi göz önünde bulundurmalısınız? Bu, `carat` ve `price` 2 boyutlu dağılımının görselleştirilmesini nasıl etkiler?
+
+1.  Fiyata göre bölünmüş olarak karat dağılımını görselleştirin.
+
+1.  Çok büyük elmasların fiyat dağılımı küçük elmaslara kıyasla nasıldır? Beklediğiniz gibi mi yoksa sizi şaşırtıyor mu?
+    
+1.  Kesim, karat ve fiyatın birlikte dağılımını görselleştirmek için öğrendiğiniz tekniklerin ikisini birleştirin.
+
+1. İki boyutlu grafikler tek boyutlu grafiklerde görünmeyen uç değerleri görünür hale getirir. Örneğin, aşağıdaki grafikteki bazı noktalar `x` ve `y` değerlerinin sıradışı bir kombinasyonuna sahiptir. Bu kombinasyon `x` ve `y` değerleri ayrı ayrı incelendiğinde normal göründüğü halde noktaları uç değer yapar.
+
+    ```{r, dev = "png"}
+    ggplot(data = diamonds) +
+      geom_point(mapping = aes(x = x, y = y)) +
+      coord_cartesian(xlim = c(4, 11), ylim = c(4, 11))
+    ```
+    
+   Neden dağılım grafiği bu durumda gruplu grafikten daha iyi bir görüntüye sahip? 
+
+## Desenler ve modeller
+
+Verilerinizdeki desenler, ilişkiler hakkında ipuçları sağlar. İki değişken arasında sistematik bir ilişki varsa veride bir desen olarak görünecektir. Bir desen farkederseniz kendinize şunları sorun:
+
++ Bu desen tesadüf eseri olabilir mi (yani, rasgele)?
+
++ Desenin dolaylı olarak gösterdiği ilişkiyi nasıl tanımlayabilirsiniz?
+
++ Desenin dolaylı olarak gösterdiği ilişki ne kadar güçlü?
+
++ İlişkiyi başka hangi değişkenler etkileyebilir?
+
++ Ayrı ayrı veri alt gruplarına bakarsan ilişki değişir mi?
+
+Old Faithful püskürme uzunluklarının, püskürmeler arasındaki bekleme süresine karşı grafiği bir desen gösterir: daha uzun bekleme süreleri daha uzun püskürmelerle ilişkili. Dağılım grafiği aynı zamanda yukarıda farkettiğimiz iki kümeyi gösterir.
+
+```{r fig.height = 2}
+ggplot(data = faithful) + 
+  geom_point(mapping = aes(x = eruptions, y = waiting))
+``` 
+
+Desenler veri bilimciler için en kullanışlı araçlardan birini sağlar çünkü kovaryasyonu gösterirler. Varyasyonun kesinsizlik oluşturan bir fenomen olduğunu düşünürseniz kovaryasyon bunu azaltn bir fenomendir. İki değişken birlikte değişkenlik gösterirse, bir değişkenin değerlerini ikincisi hakkında daha iyi tahminler yapmada kullanabilirsiniz. Kovaryasyon nedensel ilişkiye bağlıysa (özel bir durum), bir değişkenin değerini ikinci değişkenin değerini kontrol etmek için kullanabilirsiniz.
+
+Modeller verilerden desenler elde edilmesinde bir araçtır. Örneğin elmas verisini düşünün. Kesim ve fiyat arasındaki ilişkiyi anlamak zordur çünkü kesim ve karat ve karat ve fiyat sıkı ilişki içindedir. Fiyat ve karat arasındaki çok güçlü ilişkiyi ortadan kaldırmak için bir model kullanmak mümkündür. Bu şekilde geri kalan incelikleri araştırabiliriz. Aşağıdaki kod `carat`tan `price`ı tahmin eden ve ardından artık değerleri (tahmin edilen ve gerçek değer arasındaki fark) hesaplayan bir model oluşturur. Artık değerler bize karatın etkisi çıkarıldıktan sonra elmasın fiyatına bir bakış verir.
+
+```{r, dev = "png"}
+library(modelr)
+
+mod <- lm(log(price) ~ log(carat), data = diamonds)
+
+diamonds2 <- diamonds %>% 
+  add_residuals(mod) %>% 
+  mutate(resid = exp(resid))
+
+ggplot(data = diamonds2) + 
+  geom_point(mapping = aes(x = carat, y = resid))
+```
+
+Karat ve fiyat arasındaki güçlü ilişkiyi çıkardıktan sonra kesim ve fiyat arasındaki ilişkide neyi bekleyebileceğinizi görebilirsiniz: boyutlarına göre daha iyi kaliteli elmaslar daha pahalıdır.
+
+```{r}
+ggplot(data = diamonds2) + 
+  geom_boxplot(mapping = aes(x = cut, y = resid))
+```
+
+Modeller ve modelr paketinin nasıl çalıştığını kitabın son kısmında öğreneceksiniz [model](#model-intro). Modellemeyi daha sonraya bırakıyoruz çünkü veri düzenleme ve programlama araçlarınız olduktan sonra modellerin ne olduğunu ve nasıl çalıştığını anlamak en kolayı.
+
+## ggplot2 calls
+
+Bu giriş bölümlerinden sonra ggplot2 kodunun daha kısa bir ifadesine geçiş yapacağız. Şu ana kadar öğrenirken neyin faydalı olduğuna dair çok açıktık:
+
+```{r, eval = FALSE}
+ggplot(data = faithful, mapping = aes(x = eruptions)) + 
+  geom_freqpoly(binwidth = 0.25)
+```
+
+Tipik olarak, bir fonksiyona ilk veya ilk iki argüman o kadar önemlidir ki, ezbere bilmelisiniz. `ggplot()`a ilk iki argüman `data` ve `mapping`dir ve `aes()`e ilk iki argüman `x` ve `y`dir. kitabın geri kalanında bu isimleri kullanmayacağız. Bu daha az yazmayı gerektirir ve standart metin miktarını azaltarak grafikler arasında nelerin farklı olduğunu görmeyi kolaylaştırır. Bu, [functions] kısmında geri döneceğimiz çok önemli bir programalama işidir.
+
+Önceki grafikleri daha kısa yazarsak şöyle olur:
+
+```{r, eval = FALSE}
+ggplot(faithful, aes(eruptions)) + 
+  geom_freqpoly(binwidth = 0.25)
+```
+
+Bazen bir veri dönüşümü akışının sonunu grafiğe çevireceğiz.  `%>%`dan `+`a geçişe dikkat edin. Keşke bu geçiş gerekli olmasaydı ama ne yazık ki ggplot2 akış keşfedilmeden geliştirilmişti.
+
+```{r, eval = FALSE}
+diamonds %>% 
+  count(cut, clarity) %>% 
+  ggplot(aes(clarity, cut, fill = n)) + 
+    geom_tile()
+```
+
+## Daha fazla öğrenmek için
+
+ggplot2 mekanikleri hakkında daha fazla bilgi için ggplot2 kitabını edinmenizi şiddetle tavsiye ederim: <https://amzn.com/331924275X>.
+Yakın zaman önce güncellendi bu yüzden dplyr ve tidyr kodunu içeriyor ve görselleştirmenin tüm yönlerini keşfetmek için daha fazla alana sahip. Ne yazık ki bu kitap genellikle ücretsiz edinilemiyor ancak bir üniversiteye bağlı iseniz muhtemelen SpringerLink aracılığyla elektronik bir versiyonunu edinebilirsiniz.
+
+Başka bir faydalı kaynak Winston Chang'ın [_R Graphics Cookbook_](https://amzn.com/1449316956). içeriğin büyük bir kısmı <http://www.cookbook-r.com/Graphs/> adresinde bulunabilir.
+
+Aynı zamand Antony Unwin'in [_Graphical Data Analysis with R_](https://amzn.com/1498715230) tavsiye ediyorum. Bu bölümde kapsanan materyale benzer bir kitap fakat çok daha derine iniyor.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+Bu bir R Markdown belgesidir. Markdown HTML, PDF ve MS Word belgelerini yazmak için basit bir biçimlendirme dizim kuralıdır. R Markdown kullanımı hakkında ayrıntılı bilgi için <http://rmarkdown.rstudio.com adresini ziyaret edin.
+
+**Knit** butonuna tıkladığınızda belge içinde hem içeriği hem de gömülü R kodu parçasının çıktısını içeren bir belge oluşturulacaktır. R kodu parçasını şu şekilde gömebilirsiniz:
+
+```{r cars}
+summary(cars)
+```
+
+## Grafik Eklemek
+
+Aynı zamanda grafikleri gömebilirsiniz, örneğin:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Grafiği oluşturan R kodunun basılmasını önlemek için kod parçasına `echo = FALSE` parametresi eklendiğine dikkat edin.
