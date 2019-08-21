@@ -1,0 +1,617 @@
+# 23 Model Temelleri
+
+## 23.1 Giriş 
+
+Bir modelin amacı, bir veri kümesinin düşük boyutlu basit bir özetini sağlamaktır. Bu kitap kapsamında, verileri örüntülere ve rezidüellere ayırmak için modelleri kullanacağız. Güçlü örüntüler daha hassas eğilimleri gizlerler, bu nedenle bir veri kümesini anlamaya çalışırken yapıyı katmanlara ayırmak için modeller kullanırız. 
+
+Bununla birlikte, gerçek, ilginç veri kümeleri üzerinde modelleri kullanmaya başlamadan önce, modellerin çalışma temellerini anlamanız gerekir. Bu nedenle, kitabın bu bölümü eşsizdir çünkü yalnızca simüle edilmiş veri kümeleri kullanılmıştır. Bu veri kümeleri oldukça basit, hatta hiç ilginç olmayan, ancak aynı teknikleri bir sonraki bölümde gerçek verilere uygulamadan önce modellemenin özünü anlamanıza yardımcı olacaklar.
+
+Bir model iki kısımdan oluşur:
+
+1. İlk önce, elde etmek istediğiniz kalıbı kesin ve genelleyici şekilde ifade eden bir modeller ailesi tanımlayınız. Örneğin, örüntü düz bir çizgi veya kuadrat bir eğri olabilir. Model ailesi `y = a_1 * x + a_2` veya `y = a_1 * x ^ a_2` gibi bir denklem olarak ifade edilir. Burada, x ve y verilerinizden bilinen değişkenlerdir ve a_1 ile a_2, farklı örüntüleri yakalamak için değişken olabilecek parametrelerdir.
+
+1. Sonra, verilerinize ailedeki en yakın modeli bularak uygun bir model üretiyorsunuz. Bu, genelleyici model ailesini alır ve onu `y = 3 * x + 7` veya `y = 9 * x ^ 2` gibi belirli bir hale getirir. 
+
+Uygulanan bir modelin, modeller ailesinden seçilmiş en yakın model olduğunu anlamak önemlidir.  Bu, “en iyi” modele sahip olduğunuz anlamına gelir (bazı kriterlere göre); iyi bir modele sahip olduğunuz ve kesinlikle modelin "gerçek" olduğu anlamına gelmez. George Box, bu meşhur aforizmasında bunu iyi anlatıyor:
+
+> Bütün modeller yanlıştır, ancak bazıları kullanışlıdır. 
+
+Alıntının tam metnini okumaya değer:
+
+>Şu an gerçek dünyada var olan herhangi bir sistemin, basit bir modelle tam olarak sunulabilmesi oldukça dikkat çekici olurdu. Gerçi kurnazca seçilmiş parsimoni modelleri genel olarak oldukça faydalı yaklaşımlar sağlamaktadır. Örneğin bir R sabiti üzerinden "ideal" bir gaz basıncının T sıcaklık, V hacim ve P basınca bağlı olarak üretilmiş PV = RT kanunu, her hangi bir gaz için tam doğru değildir, ancak sıklıkla yararlı bir yaklaşım sunar ve dahası gaz molekülleri fiziksel davranışlarının görünümünden meydana geldiği için yapısı bilgilendiricidir. 
+>
+>Böyle bir model için "model gerçek midir?" sorusunu sormaya gerek yoktur. Eğer "gerçek", "tamamen gerçek" olmak manasında ise, cevap "Hayır" olmalıdır. İlgilenilen tek soru "model aydınlatıcı ve kullanışlı mı?" olmalıdır. 
+
+Bir modelin amacı gerçeği ortaya çıkarmak değil, yine de kullanışlı olan basit bir yaklaşımı keşfetmektir.
+
+### Ön Koşullar
+
+Bu bölümde, R temelli modelleme fonksiyonlarını çevreleyen modelr paketini, bir kanal içerisinde doğal olarak çalışmalarını sağlamak için kullanacağız. 
+
+```{r setup, message = FALSE}
+library(tidyverse)
+
+library(modelr)
+options(na.action = na.warn)
+```
+
+## Basit Bir Model
+
+Modelr paketinde yer alan “sim1” simüle veri setine  bakalım. `x` ve` y` olmak üzere iki sürekli değişken içerir. Aralarında nasıl bir ilişki olduğunu görmek için onları çizdirelim:
+
+```{r}
+ggplot(sim1, aes(x, y)) + 
+  geom_point()
+```
+
+Verilerdeki güçlü kalıbı görebilirsiniz. Bu kalıbı yakalamak ve açık hale getirmek için bir model kullanalım. Modelin temel formunu sağlamak bizim işimiz. Bu örnekte ilişki doğrusal gözükmektedir, örneğin `y = a_0 + a_1 * x`. Bu aileden hangi modellerin bir kaçını rastgele üretip ve onları verilerin üzerine yerleştirdiğimizde nasıl göründüklerini hissederek başlayalım. Bu basit örnekte, bir eğim alarak parametrelerle kesiştiren `geom_abline()`'ı kullanabilirsiniz. Daha sonra herhangi bir modelle çalışan daha genel teknikleri öğreneceğiz.
+
+```{r}
+models <- tibble(
+  a1 = runif(250, -20, 40),
+  a2 = runif(250, -5, 5)
+)
+
+ggplot(sim1, aes(x, y)) + 
+  geom_abline(aes(intercept = a1, slope = a2), data = models, alpha = 1/4) +
+  geom_point() 
+```
+
+Bu grafik üzerinde 250 model bulunuyor, ama birçoğu gerçekten kötü görünüyor! İyi bir model verilere "yakın"" olandır görüşümüzü destekler nitelikte iyi bir model bulmalıyız. Veri ile model arasındaki mesafeyi ölçecek bir yola ihtiyacımız var. Sonrasında bu verilerden en küçük mesafeyle modeli oluşturan  `a_0` ve `a_1` değerlerini bulup modele uyarlayabiliriz. 
+
+Aşağıdaki diyagramdaki gibi her nokta ve model arasındaki dikey mesafeyi bulmak kolay bir başlangıç olacaktır. (Tek tek mesafeleri görebilmeniz için x değerlerini biraz kaydırdığımı unutmayın.)
+
+```{r, echo = FALSE}
+dist1 <- sim1 %>% 
+  mutate(
+    dodge = rep(c(-1, 0, 1) / 20, 10),
+    x1 = x + dodge,
+    pred = 7 + x1 * 1.5
+  )
+ggplot(dist1, aes(x1, y)) + 
+  geom_abline(intercept = 7, slope = 1.5, colour = "grey40") +
+  geom_point(colour = "grey40") +
+  geom_linerange(aes(ymin = y, ymax = pred), colour = "#3366FF") 
+```
+
+Bu mesafe, sadece model tarafından verilen y değeri (tahmin) ile verideki gerçek y değeri (yanıt) arasındaki farktır.
+
+Bu mesafeyi hesaplamak için önce model ailemizi R fonksiyonuna dönüştürüyoruz. Bu, model parametrelerini ve verileri girdi olarak alır ve model tarafından çıktı olarak öngörülen değerleri verir:
+
+```{r}
+model1 <- function(a, data) {
+  a[1] + data$x * a[2]
+}
+
+model1(c(7, 1.5), sim1)
+```
+
+Sonrasında, öngörülen ve gerçek değerler arasındaki toplam mesafeyi hesaplayacak bir yola ihtiyacımız var.  Başka bir deyişle, yukarıdaki grafik 30 farklı mesafeyi göstermektedir: Bunu tek bir sayıya nasıl indirebiliriz?
+
+İstatistiklerde bunu yapmanın yaygın bir yolu "kök-ortalama-kare sapma" kullanmaktır. Bu mesafe, burada değinmeyeceğimiz birçok çekici matematiksel özelliğe sahiptir. Şimdilik sadece benim sözüme güvenin!
+
+```{r}
+measure_distance <- function(mod, data) {
+  diff <- data$y - model1(mod, data)
+  sqrt(mean(diff ^ 2))
+}
+measure_distance(c(7, 1.5), sim1)
+```
+
+Şimdi yukarıda tanımlanan tüm modellerin mesafesini hesaplamak için purrr'ı kullanabiliriz. Mesafe fonksiyonumuz, uzunluğu iki olan sayısal vektör şeklinde bir model beklediğinden, yardımcı bir fonksiyona ihtiyacımız var. 
+
+```{r}
+sim1_dist <- function(a1, a2) {
+  measure_distance(c(a1, a2), sim1)
+}
+
+models <- models %>% 
+  mutate(dist = purrr::map2_dbl(a1, a2, sim1_dist))
+models
+```
+
+Ardından, veriler üzerine en iyi 10 modeli yerleştirelim. Modelleri `-dist` kullanarak renklendirdim: en iyi modellerin (örn; en kısa mesafede olanların) en parlak renkler ile gösterilmeisini sağlamanın kolay bir yoludur.  
+
+```{r}
+ggplot(sim1, aes(x, y)) + 
+  geom_point(size = 2, colour = "grey30") + 
+  geom_abline(
+    aes(intercept = a1, slope = a2, colour = -dist), 
+    data = filter(models, rank(dist) <= 10)
+  )
+```
+
+Ayrıca bu modelleri gözlemler olarak düşünebilir ve `a1` ile `a2` arasındaki dağılım grafiğini tekrar `-dist` ile renklendirerek görselleştirebiliriz. Artık modelin verilere karşılık nasıl geldiğini doğrudan göremiyoruz, ancak birçok modeli tek seferde görebiliyoruz. Yine, bu kez altlarına kırmızı daireler çizerek en iyi 10 modeli vurguladım.
+
+
+```{r}
+ggplot(models, aes(a1, a2)) +
+  geom_point(data = filter(models, rank(dist) <= 10), size = 4, colour = "red") +
+  geom_point(aes(colour = -dist))
+```
+
+Pek çok rastgele model denemek yerine, daha sistematik olabilir ve eşit aralıklarla yerleştirilmiş bir nokta ızgarası oluşturabiliriz (buna ızgara arama yöntemi denmektedir). Yukarıdaki grafikte en iyi modellerin olduğu yere bakarak ızgaraya ait parametreleri kabaca ele aldım. 
+
+```{r}
+grid <- expand.grid(
+  a1 = seq(-5, 20, length = 25),
+  a2 = seq(1, 3, length = 25)
+  ) %>% 
+  mutate(dist = purrr::map2_dbl(a1, a2, sim1_dist))
+
+grid %>% 
+  ggplot(aes(a1, a2)) +
+  geom_point(data = filter(grid, rank(dist) <= 10), size = 4, colour = "red") +
+  geom_point(aes(colour = -dist)) 
+```
+
+En iyi 10 modeli orijinal veriler üzerine yerleştirdiğinizde, hepsi oldukça iyi görünüyor:
+
+```{r}
+ggplot(sim1, aes(x, y)) + 
+  geom_point(size = 2, colour = "grey30") + 
+  geom_abline(
+    aes(intercept = a1, slope = a2, colour = -dist), 
+    data = filter(grid, rank(dist) <= 10)
+  )
+```
+
+Izagarayı giderek daha ince hale getirerek en iyi modelin üzerine denk gelecek şekilde daraltmayı düşünebilirsiniz. Ancak bu problemi çözmenin daha iyi bir yolu var: Newton-Raphson araştırması denilen sayısal bir küçültme aracı. Newton-Raphson'un yaklaşımı oldukça basittir: bir başlangıç noktası seçip en dik eğim için çevresine bakmalısınız. Daha sonra o eğimden biraz aşağı doğru kayın ve bunu daha fazla aşağıya inemeyeceğiniz seviyeye gelene kadar tekrar edin. R'da bunu `optim()` ile yapabiliriz: 
+
+```{r}
+best <- optim(c(0, 0), measure_distance, data = sim1)
+best$par
+
+ggplot(sim1, aes(x, y)) + 
+  geom_point(size = 2, colour = "grey30") + 
+  geom_abline(intercept = best$par[1], slope = best$par[2])
+```
+
+`optim()`'in nasıl çalıştığıyla ilgili detaylara fazla takılmayın. Burada önemli olan yaklaşımdır. Bir model ile veri kümesi arasındaki mesafeyi tanımlayan bir işleve sahipseniz, modelin parametrelerini değiştirerek bu mesafeyi en aza indirebilen bir algoritma varsa, en iyi modeli bulabilirsiniz demektir. Bu yaklaşım ile ilgili en güzel şey, bir denklem için yazabileceğiniz herhangi bir model ailesi için uygulanabilir olmasıdır.
+
+Çok daha geniş bir ailenin özel bir durumundan dolayı bu model için kullanabileceğiniz bir yaklaşım daha var: doğrusal modelleme. Doğrusal bir model genel olarak `y = a_1 + a_2 * x_1 + a_3 * x_2 + ... + a_n * x_(n - 1)` şeklinde ifade edilebilir. Dolayısıyla bu basit model, n'nin 2 ve `x_1`'in `x` olduğu genel doğrusal modele eşdeğerdir. R'da özellikle `lm()` adı verilen doğrusal modellerin uyarlanması için özel olarak dizayn edilmiş bir araç mavcuttur. `lm()` model ailesini belirtmenin özel bir yöntemine sahiptir: formüller. Formüller `y ~ x` gibi görünür; `lm (), y = a_1 + a_2 * x` gibi bir fonksiyona dönüştürülmektedir. Modele uygulayabilir ve çıktısına bakabiliriz:
+
+```{r}
+sim1_mod <- lm(y ~ x, data = sim1)
+coef(sim1_mod)
+```
+
+Bunlar `optim()` ile aldığımız değerlerin aynısıdır! Perdenin arkasında `lm()`,  `optim()`'i kullanmamaktadır, ancak doğrusal modellerin matematiksel yapısından faydalanmaktadır. `lm()` karmaşık bir algoritma ile geometri, matematik ve doğrusal cebir arasındaki bazı ilişkileri kullanarak en karmaşık modeli tek bir adımda bulabilmektedir. Bu yaklaşım hem daha hızlıdır, hem de kesinlikle tasarruf sağlar.  
+
+### 23.2.1 Uygulamalar
+
+1. Doğrusal modelin bir dezavantajı, alışılmadık değerlere duyarlı olmasıdır, çünkü mesafe karesi şeklinde ifade edilmektedir. Aşağıda simüle edilmiş verilere doğrusal bir model uyarlayarak sonuçları görselleştiriniz. Farklı simüle veri kümeleri oluşturmak için modeli birkaç kez yeniden çalıştırın. Model hakkında dikkatinizi ne çekmektedir?
+
+    ```{r}
+    sim1a <- tibble(
+      x = rep(1:10, each = 3),
+      y = x * 1.5 + 6 + rt(length(x), df = 2)
+    )
+    ```
+    
+1. Doğrusal modelleri daha tutarlu hale getirmenin bir yolu, farklı bir mesafe ölçümü kullanmaktır. Örneğin, kök-ortalama-kare mesafe yerine, ortalama-mutlak mesafeyi kullanabilirsiniz:
+
+    ```{r}
+    measure_distance <- function(mod, data) {
+      diff <- data$y - model1(mod, data)
+      mean(abs(diff))
+    }
+    ```
+    
+    Bu modeli yukarıdaki verilere uydurmak için `optim ()` yöntemini kullanın ve doğrusal modelle karşılaştırın.
+1. Sayısal optimizasyon gerçekleştirme konusundaki zorluklardan biri, yalnızca bir lokal optimum bulmanın garanti olmasıdır. Bunun gibi üç parametreli bir modeli optimize etmedeki problem nedir?
+
+    ```{r}
+    model1 <- function(a, data) {
+      a[1] + data$x * a[2] + a[3]
+    }
+    ```
+    
+## Modellerin Görselleştirilmesi
+
+Yukarıdaki gibi basit modeller için, model ailesini ve kullanılan katsayıları dikkatlice inceleyerek modelin hangi kalıba uyguğunu kavrayabilirsiniz. Eğer sadece modelleme üzerine bir istatistik dersi almak isterseniz, çok fazla zaman harcamanız gerekecektir. Ne var ki, burada farklı bir yol izleyeceğiz. Tahminlerine bakarak bir modeli anlamaya odaklanacağız. Bu durum bize büyük bir avantaj sunmaktadır: Tahmine dayalı her türlü model, tahminde bulunur (aksi halde ne kullanılıdı?). Bu sebeple, her tür tahmine dayalı bir modeli anlamak için aynı teknikleri kullanabiliriz. 
+
+Tahmin değerlerini veriden çıkardıktan sonra geriye kalan ki onlara rezidüel (artakalan) diyoruz, modelin neyi yakalamadığını görmek açısından faydalı olacaktır. Rezidüeller güçlüdür çünkü dikkat çekici örüntüleri ortadan kaldırarak modelleri kullanmamızı ve böylece daha hassas eğilimler yakalamamızı sağlar. 
+
+### Yordayıcılar
+
+Bir modele ait yordayıcıları görselleştirmek için, verilerimizin bulunduğu bölgeyi kapsayan eşit aralıklı bir değerler ızgarası oluşturarak işe başlamalıyız. Bunu yapmanın en kolay yolu `modelr :: data_grid ()` kullanmaktır. İlk argüman bir veri çerçevesidir, sonraki her argüman için benzersiz değişkenleri bulur ve ardından tüm kombinasyonları oluşturur:
+
+```{r}
+grid <- sim1 %>% 
+  data_grid(x) 
+grid
+```
+
+(Modelimize daha fazla değişken eklemeye başladığımızda bu daha ilginç hale gelecektir.)
+
+Ardından yordayıcı değişkenleri ekleyelim. Veri çerçevesi ve modeli elde etmeye yarayan `modelr::add_predictions()`'ı kullanacağız. Modelden elde edilen yordayıcıları veri çerçevesi içerisinde yeni bir sütuna ekleyeceğiz: 
+
+```{r}
+grid <- grid %>% 
+  add_predictions(sim1_mod) 
+grid
+```
+
+(Bu fonksiyonu, orjinal veri kümenize yordayıcılar eklemek için de kullanabilirsiniz.)
+
+Devamında, yordayıcıları çizdiriyoruz. Tüm bu ekstra işleri sadece `geom_abline()` kullanmak varken neden yaptığımızı merak edebilirsiniz. Ancak bu yaklaşımın avantajı, en basitinden en karmaşığına kadar R'deki herhangi bir modelle çalışacak olmasıdır. Yalnızca görselleştirme becerilerinizle sınırlısınız. Daha karmaşık model türlerinin nasıl görselleştirileceği hakkında daha fazla fikir için <http://vita.had.co.nz/papers/model-vis.html> adresini ziyaret edebilirsiniz. 
+
+```{r}
+ggplot(sim1, aes(x)) +
+  geom_point(aes(y = y)) +
+  geom_line(aes(y = pred), data = grid, colour = "red", size = 1)
+```
+
+### 23.3.2. Rezidüeller
+
+Yordayıcıların diğer yüzü rezidüellerdir. Yordayıcılar, modelin elde ettiği kalıbı bize söylerken, rezidüeller de modelin neyi kaçırdığını bize söylerler. Rezidüeller sadece yukarıda hesapladığımız gözlemlenen ve öngörülen değerler arasındaki mesafelerdir.
+
+Aynı `add_predictions()`'da olduğu gibi, `add_residuals()` ile veriye rezidüeller eklenebilir. Ancak ne var ki orjinal veri kümesini kullandığımızı ve onun üretilmiş bir ızgara sistemi olmadığını unutmamalısınız. Bunun nedeni, rezidüelleri hesaplamak için gerçek y değerlerine ihtiyacımız bulunmaktadır.
+
+```{r}
+sim1 <- sim1 %>% 
+  add_residuals(sim1_mod)
+sim1
+```
+
+Rezidüellerin model hakkında bize neler söylediğini anlamanın birkaç farklı yolu vardır. Bunlardan bir tanesi, rezidüellerin yayılımını anlamamıza yardımcı olacak bir frekans poligonu çizmektir:
+
+```{r}
+ggplot(sim1, aes(resid)) + 
+  geom_freqpoly(binwidth = 0.5)
+```
+
+Bu, modelin kalitesini kalibre etmenize yardımcı olur: gözlemlenen değerlerden yordayıcılar ne kadar uzakta? Rezidüellerin ortalamasının daima 0 olacağını unutmayın.
+
+Çoğunlukla, orjinal yordayıcılar yerine rezidüelleri kullanarak grafikleri oluşturmak isteyeceksiniz. Bir sonraki bölümde bundan fazlaca göreceksiniz. 
+
+```{r}
+ggplot(sim1, aes(x, resid)) + 
+  geom_ref_line(h = 0) +
+  geom_point() 
+```
+
+Bu rastgele parazitliğe benziyor, sanırım modelimiz veri kümesindeki örüntüleri elde etmek için iyi bir iş çıkardı. 
+
+### 23.3.3 Uygulamalar
+
+1. Düz bir hat uygulamak için `lm()` kullanmak yerine, yumuşak bir eğri için `loess()` de kullanabilirsiniz. Model uygulama, ızgara oluşturma, yordayıcılar ve `sim1`'in görselleştirilmesi için `lm()` yerine `loess()` kullanarak işlemi tekrarlayınız. `geom_smooth()`'a kıyasla sonuçlar nasıldır?
+
+1. `add_predictions()`, `gather_predictions()` ve `spread_predictions()` ile eşleştirilmiştir. Bu üç fonksiyon birbirinden nasıl farklılık gösterir?
+
+1. `Geom_ref_line ()`'nın görevi nedir? Hangi paket içerisinde yer alır? Niçin rezidüelleri gösteren grafiklerde referans çizgisini göstermek faydalı ve önemlidir?
+
+1. Neden mutlak rezidüellerin frekans poligonlarına bakmak isteyebilirsiniz? İşlenmemiş rezidüeller üzerinde çalışmanın artıları ve eksileri nelerdir?
+
+## 23.4 Formüller ve Model Aileleri
+
+Daha önce `facet_wrap()` ve `facet_grid()` kullanırken formülleri gördünüz. R'da, formüller "özel davranış" sergileme imkanı sunarlar. Doğrudan değişkenlerin değerlerini değerlendirmek yerine onları, fonksiyon tarafından yorumlanabilecekleri şekliyle elde tutarlar. 
+
+R'daki modelleme fonksiyonlarının bir çoğu, formüllerden fonksiyonlara doğru standart bir dönüşüm kullanırlar. Zaten daha önce basit bir dönüşüm görmüştünüz: `y ~ x`, `y = a_1 + a_2 * x`'e çevrilmişti. R'ın gerçekte ne yaptığını görmek istiyorsanız, `model_matrix ()` işlevini kullanabilirsiniz. O bir veri çerçevesi ve bir formül alarak model denklemini tanımlayan bir tibble döndürür: çıktıdaki her sütun modeldeki bir katsayı ile ilişkilendirilir, fonksiyon her zaman `y = a_1 * out1 + a_2 * out_2` şeklindedir. En basit `y ~ x1` durumu için bu bize ilginç bir şey sunmaktadır:
+
+```{r}
+df <- tribble(
+  ~y, ~x1, ~x2,
+  4, 2, 5,
+  5, 1, 6
+)
+model_matrix(df, y ~ x1)
+```
+
+R'ın kesişimi modele ekleme yöntemi, yalnızca bunlarla dolu bir sütuna sahip olmasından ileri gelmektedir. Varsayılan olarak R her zaman bu sütunu ekleyecektir. Şayet istemiyorsanız açıkca `-1` olarak ifade etmeniz gerekmektedir:
+
+```{r}
+model_matrix(df, y ~ x1 - 1)
+```
+
+Modele daha fazla değişken eklediğinizde, model matrisi sürpsiz olmayacak şekilde büyüyecektir:  
+
+```{r}
+model_matrix(df, y ~ x1 + x2)
+```
+
+Bu formül gösterimi bazen "Wilkinson-Rogers notasyonu" şeklinde adlandırılır ve başlangıçta _Varyans Analizi için Faktöryel Modellerin Sembolik Tanımı_ bölümünde G. N. Wilkinson ve C. E. Rogers <https://www.jstor.org/stable/2346786> tarafından açıklanmıştır. Modelleme cebirinin tüm ayrıntılarını anlamak istiyorsanız, orijinal makaleyi ayrıntılı incelemeye değer.
+
+Aşağıdaki bölümlerde, bu formül gösteriminin kategorik değişkenler, etkileşimler ve dönüşümler için nasıl çalıştığı açıklanmaktadır.
+
+## Kategorik Değişkenler
+
+Yordayıcı sürekli olduğunda bir formülden bir fonksiyon üretmek kolaydır, ancak yordayıcı kategorik olduğunda işler biraz daha karmaşık hale gelir. Cinsiyetin ki, erkek ya da kadın olabilir, `y~cinsiyet` şeklinde bir formül olduğunu düşünün. Cinsiyet bir sayı olmadığı için `y = x_0 + x_1 * cinsiyet` gibi bir formüle dönüştürmek mantıklı değildir - sonuçta cinsiyetleri çarpamazsınız! Bunun yerine, R'ın yaptığı şey onu `y = x_0 + x_1 * cinsiyet_erkek`'e dönüştürmektir, elbette eğer cinsiyet erkek ise `cinsiyet_erkek` değeri birdir, değilse sıfır olacaktır:
+
+```{r}
+df <- tribble(
+  ~ cinsiyet, ~ yanit,
+  "erkek", 1,
+  "kadın", 2,
+  "erkek", 1
+)
+
+model_matrix(df, yanit ~ cinsiyet)
+```
+
+R'ın neden `cinsiyetkadın` sütunu oluşturmadığını merak etmiş olabilirsiniz. Buradaki sorun, diğer sütunlara dayanarak tam olarak tahmin edilebilir bir sütun oluşturmaktır (örn; cinsiyetkadın = 1 - cinsiyeterkek). Ne yazık ki, bunun neden bir problem olduğunun tam detayları bu kitabın kapsamı dışındadır, fakat temelde çok esnek bir model ailesi oluşturmaktadır ve verilere eşit derecede yakın olan sonsuz sayıda model üretilecektir. 
+
+Neyse ki, yordayıcı değişkenlerin görselleştirilmesi üzerine odaklanırsanız, kesin parametreleştirme konusunda endişelenmenize gerek yoktur. Bunu somutlaştırmak için bazı verilere ve modellere bakalım. İşte modelr'den `sim2` veri kümesi:
+
+```{r}
+ggplot(sim2) + 
+  geom_point(aes(x, y))
+```
+
+Bir model uygulayabilir ve yordayıcılar üretebiliriz:
+
+```{r}
+mod2 <- lm(y ~ x, data = sim2)
+
+grid <- sim2 %>% 
+  data_grid(x) %>% 
+  add_predictions(mod2)
+grid
+```
+
+Etkisel olarak, kategorik x değerine sahip bir model, her kategori için ortalama değerini öngörecektir. (Neden? Çünkü ortalama, kök-ortalama-kare uzaklığını minimize edecektir.) Yordayıcıları orjinal verilerin üstüne yerleştirirsek bunu görmek kolay olacaktır: 
+
+```{r}
+ggplot(sim2, aes(x)) + 
+  geom_point(aes(y = y)) +
+  geom_point(data = grid, aes(y = pred), colour = "red", size = 4)
+```
+
+Gözlemleyemediğiniz seviyeler hakkında tahminlerde bulunamazsınız. Bazen bunu kazara yaparsınız diye bu hata mesajını hatırlıyor olmanız faydanıza olacaktır: 
+
+```{r, error = TRUE}
+tibble(x = "e") %>% 
+  add_predictions(mod2)
+```
+
+### 23.4.2. Etkileşimler (sürekli ve kategorik)
+
+Sürekli ve kategorik bir değişkeni birleştirdiğinizde ne olur? `sim3` hem kategorik, hem de sürekli bir yordayıcı içermektedir. Basit bir grafik ile görselleştirebiliriz:
+
+```{r}
+ggplot(sim3, aes(x1, y)) + 
+  geom_point(aes(colour = x2))
+```
+
+Bu verilere uyarlayabileceğiniz iki olası model bulunmaktadır: 
+
+```{r}
+mod1 <- lm(y ~ x1 + x2, data = sim3)
+mod2 <- lm(y ~ x1 * x2, data = sim3)
+```
+
+Değişkenleri `+` ile eklediğinizde, model her bir efekti diğerlerinden bağımsız olarak tahmin eder. `*` ile sözde etkileşim dediğimiz şekilde uyarlamak da mümkündür. Örneğin, `y ~ x1 * x2`, `y = a_0 + a_1 * x1 + a_2 * x2 + a_12 * x1 * x2`'ye çevrilir. Ne zaman `*` kullanırsanız, hem etkileşimin hem de bileşenlerin modele dahil edildiğine dikkat edin.
+
+Bu modelleri görselleştirmek için iki yeni numaraya ihtiyacımız var:
+
+1. İki yordayıcımız bulunmaktadır, bu yüzden her iki değişkene de `data_grid()` uygulamamız gerekiyor. Bu tüm `x1` ve `x2`'ye ait tüm benzersiz değerleri bulur ve ardından tüm kombinasyonları oluşturur. 
+
+1. Her iki modelden de aynı anda yordayıcılar üretmek için, her yordayıcıyı satır olarak ekleyen `gather_predictions ()` yöntemini kullanabiliriz. `gather_predictions ()`'nin tamamlayıcısı, her bir yordayıcıyı yeni bir sütuna ekleyen `spread_predictions ()`' dır.
+
+Birlikte bize bunu verirler: 
+
+```{r}
+grid <- sim3 %>% 
+  data_grid(x1, x2) %>% 
+  gather_predictions(mod1, mod2)
+grid
+```
+
+Her iki modelin sonuçlarını fasetleyerek tek bir grafik üzerinde görselleştirebiliriz:
+
+```{r}
+ggplot(sim3, aes(x1, y, colour = x2)) + 
+  geom_point() + 
+  geom_line(data = grid, aes(y = pred)) + 
+  facet_wrap(~ model)
+```
+
+`+` kullanan modelin her doğru için aynı eğime sahip ancak farklı etkileşimler olduklarına dikkat ediniz. `*` kullanan model, her bir doğru için farklı bir eğime ve etkileşime sahiptir. 
+
+Bu veriler için hangi model daha iyidir? Rezidüellere bakabiliriz. Burada hem model, hem de `x2` tarafından fasetlenmiş durumdayım, çünkü her gruba ait kalıbı görmek daha kolay.
+
+```{r}
+sim3 <- sim3 %>% 
+  gather_residuals(mod1, mod2)
+
+ggplot(sim3, aes(x1, resid, colour = x2)) + 
+  geom_point() + 
+  facet_grid(model ~ x2)
+```
+
+
+`mod2` açısından rezidüellerde çok belirgin olmayan bir örüntü görülmektedir. `mod1` açısından rezidüeller `b`'de modelin bazı örüntüleri açıkca kaçırdığını ancak yine de `c` ve `d`'de örüntülerin olduğunu göstermektedir. `mod1` veya `mod2`'nin hangisinin daha iyi olduğunu söylemenin kesin bir yolu olup olmadığını merak edebilirsiniz. Vardır, ancak çok fazla matematiksel altyapı gerektirmektedir ve gerçekten şu an konumuz bu değil. Burada, modelin ilgilendiğimiz kalıbı yakalayıp yakalamadığına dair kalitatif bir değerlendirme yapmak istiyoruz.
+
+### 23.4.3 Etkileşimler (iki sürekli)
+
+İki sürekli değişken için eşdeğer modele bakalım. Başlangıçta işler önceki örnekle neredeyse aynı şekilde devam eder:
+
+```{r}
+mod1 <- lm(y ~ x1 + x2, data = sim4)
+mod2 <- lm(y ~ x1 * x2, data = sim4)
+
+grid <- sim4 %>% 
+  data_grid(
+    x1 = seq_range(x1, 5), 
+    x2 = seq_range(x2, 5) 
+  ) %>% 
+  gather_predictions(mod1, mod2)
+grid
+```
+
+`data_grid()` içinde `seq_range()` kullanımına dikkat edin. Her seferinde benzersiz `x` değerini kullanmak yerine, minimum ve maksimum sayılar arasında düzenli aralıklarla beş değerlik bir ızgara kullanacağım. Muhtemelen burada çok önemli değil, ancak genel olarak yararlı bir tekniktir. `seq_range()` için iki tane daha faydalı argüman bulunmaktadır:
+
+*   `pretty = TRUE`, "hoş" bir sekans yaratacaktır, yani insan gözüne hoş görünen birşey diyebiliriz. Çıktı tabloları üretmek istiyorsanız bu yöntem kullanışlıdır: 
+
+    ```{r}
+    seq_range(c(0.0123, 0.923423), n = 5)
+    seq_range(c(0.0123, 0.923423), n = 5, pretty = TRUE)
+    ```
+
+*   `trim = 0.1`, kuyruk değerlerinin %10'nunu keser. Değişkenler uzun kuyruklu bir dağılıma sahipse ve merkeze yakın değerler oluşturmaya odaklanmak istiyorsanız, bu yöntem kullanışlıdır:
+
+    ```{r}
+    x1 <- rcauchy(100)
+    seq_range(x1, n = 5)
+    seq_range(x1, n = 5, trim = 0.10)
+    seq_range(x1, n = 5, trim = 0.25)
+    seq_range(x1, n = 5, trim = 0.50)
+    ```
+    
+*   `expand = 0.1`, bir anlamda, `trim()`'in tam tersi şekilde, aralığı %10 genişletir.
+
+    ```{r}
+    x2 <- c(0, 1)
+    seq_range(x2, n = 5)
+    seq_range(x2, n = 5, expand = 0.10)
+    seq_range(x2, n = 5, expand = 0.25)
+    seq_range(x2, n = 5, expand = 0.50)
+    ```
+    
+Şimdi bu modeli deneyelim ve görselleştirelim. İki sürekli yordayıcımız var, böylece modeli bir 3B yüzey gibi hayal edebilirsiniz. `geom_tile()` kullanarak şunu gösterebiliriz:
+
+```{r}
+ggplot(grid, aes(x1, x2)) + 
+  geom_tile(aes(fill = pred)) + 
+  facet_wrap(~ model)
+```
+
+Bu durum, modellerin çok farklı olduğunu göstermiyor! Ancak bu kısmen bir yanılsamadır: gözlerimiz ve beyinlerimiz renk tonlarını doğru şekilde karşılaştırmakta çok iyi değillerdir. Yüzeye üstten bakmak yerine, her iki taraftan da birden çok dilim göstererek bakabiliriz:
+
+```{r, asp = 1/2}
+ggplot(grid, aes(x1, pred, colour = x2, group = x2)) + 
+  geom_line() +
+  facet_wrap(~ model)
+
+ggplot(grid, aes(x2, pred, colour = x1, group = x1)) + 
+  geom_line() +
+  facet_wrap(~ model)
+```
+
+Bu, iki sürekli değişken arasındaki etkileşimin temelde kategorik ve sürekli bir değişkenle aynı şekilde çalıştığını gösterir. Etkileşimlerden biri sabit bir denge olmadığını söylüyor: `y`'yi tahmin etmek için aynı anda hem `x1` hem de `x2` değerlerini göz önünde bulundurmanız gerekir.
+
+Sadece iki değişkenle bile, başarılı bir görsellik yakalamak zordur. Ancak bunun sebepleri mevcuttur: Üç veya daha fazla değişkenin aynı anda nasıl etkileşime girdiğini anlamanın kolay olacağı elbette beklenemez! Fakat yine de biraz tasarruf ettik, çünkü keşfetmek için modeller kullanıyoruz ve modelinizi zaman içinde kademeli olarak geliştirebilirsiniz. Modelin mükemmel olması gerekmiyor, yalnızca verileriniz hakkında biraz daha bilgi vermesi, yardımcı olması gerekiyor.
+
+`mod2`'nin `mod1`'den daha iyisini yapıp yapmadığını anlamak için rezidüelleri incelemek üzere biraz zaman harcadım. Çok az da olsa, sanırım öyle. Uygulamalar kısmında üzerinde çalışmak için fırsatınız olacak.
+
+### 23.4.4. Dönüşümler
+
+Model formülü içinde de dönüşümler gerçekleştirebilirsiniz. Örneğin, `log(y) ~ sqrt(x1) + x2`, `log(y) = a_1 + a_2 * sqrt(x1) + a_3 * x2`'ye dönüştürülebilir. Dönüşüm `+`, `*`, `^` veya `-` içeriyorsa, onu `I()` içine almanız gerekir. Böylece R, modelin teknik özelliklerinin bir parçası gibi davranmaz. Örneğin `y ~ x + I(x ^ 2)`, `y = a_1 + a_2 * x + a_3 * x^2`'ye çevrilir. Eğer `I()`'yı unutur ve `y ~ x ^ 2 + x` şeklinde belirtirseniz, R `y ~ x * x + x`'i hesaplar. `x * x`, `x`'in kendiyle etkileşimi demektir ki bu da `x` ile aynı demektir. R, gereksiz değişkenleri otomatik olarak işleme almaz, böylece `x+x`, `x` olur, yani `y ~ x ^ 2 + x`, `y = a_1 + a_2 * x` fonskiyonunu belirtmektedir. Muhtemelen istediğiniz bu olmasa gerek!
+
+Yine de, modelinizin ne yaptığı hakkında kafanız karışırsa, tam olarak hangi `lm()` denkleminin uygun olduğunu görmek için `model_matrix()` yöntemini kullanabilirsiniz:
+
+```{r}
+df <- tribble(
+  ~y, ~x,
+   1,  1,
+   2,  2, 
+   3,  3
+)
+model_matrix(df, y ~ x^2 + x)
+model_matrix(df, y ~ I(x^2) + x)
+```
+ 
+Dönüşümler kullanışlıdır, çünkü doğrusal olmayan fonksiyonlara benzetmek için de kullanabilirsiniz. Eğer matematik dersi almışsanız, Taylor'un teoremini duymuş olma ihtimaliniz vardır ki, sonsuz miktarda polinomla herhangi bir düzgün fonksiyona yaklaşabilirsiniz. Bu, `y = a_1 + a_2 * x + a_3 * x^2 + a_4 * x ^ 3` gibi bir denklemi kullanarak keyfi bir şekilde düzgün bir fonksiyona yakınlaşmak için polinom işlevini kullanabileceğiniz anlamına gelmektedir. Bu diziyi elle yazmak sıkıcı olacağından, R yardımcı bir fonksiyon sağlar: `poly()`:
+
+```{r}
+model_matrix(df, y ~ poly(x, 2))
+```
+
+Bununla beraber, `poly()`'nin kullanımıyla ilgili büyük bir sıkıntı vardır: veri aralığının dışında, polinomlar hızla pozitif ya da negatif sonsuzluğa kaçarlar. Diğer bir güvenli alternatif doğal yiv kullanmaktır, `splines::ns()`.
+
+```{r}
+library(splines)
+model_matrix(df, y ~ ns(x, 2))
+```
+
+Doğrusal olmayan bir fonksiyon üzerinde çalışırken yaklaşık olarak nasıl göründüğünü görelim:
+
+```{r}
+sim5 <- tibble(
+  x = seq(0, 3.5 * pi, length = 50),
+  y = 4 * sin(x) + rnorm(length(x))
+)
+ggplot(sim5, aes(x, y)) +
+  geom_point()
+```
+
+Bu verilere, beş model uygulayacağım. 
+
+```{r}
+mod1 <- lm(y ~ ns(x, 1), data = sim5)
+mod2 <- lm(y ~ ns(x, 2), data = sim5)
+mod3 <- lm(y ~ ns(x, 3), data = sim5)
+mod4 <- lm(y ~ ns(x, 4), data = sim5)
+mod5 <- lm(y ~ ns(x, 5), data = sim5)
+grid <- sim5 %>% 
+  data_grid(x = seq_range(x, n = 50, expand = 0.1)) %>% 
+  gather_predictions(mod1, mod2, mod3, mod4, mod5, .pred = "y")
+ggplot(sim5, aes(x, y)) + 
+  geom_point() +
+  geom_line(data = grid, colour = "red") +
+  facet_wrap(~ model)
+```
+
+Veri aralığının dışında kalan değerin açıkça kötü olduğuna dikkat edin. Bu, bir fonksiyona polinom ile yaklaşmanın olumsuz yanıdır. Ancak bu, her model için gerçekten bir problemdir: Model asla, veri aralığının dışına çıkmaya başladığınızda, bunun doğru olup olmadığını söyleyemez. Teori ve bilime güvenmelisiniz.
+
+### 23.4.5. Uygulamalar
+
+1. Kesişimsiz bir model kullanarak `sim2` analizini tekrarlarsanız ne olur. Model denklemi nasıl olur? Yordamlara ne olur?
+
+1. `sim3` ve `sim4`'e uyguladığım modeller için oluşturulan denklemleri `model_matrix()` kullanarak açıklayın. Neden `*` kesişim için iyi bir kısayoldur?
+
+1. Temel ilkeleri kullanarak, aşağıdaki iki modeldeki formülleri fonksiyonlara dönüştürün.  (İpucu: kategorik değişkeni 0-1 değişkene dönüştürerek başlayın.)
+
+    ```{r, eval = FALSE}
+    mod1 <- lm(y ~ x1 + x2, data = sim3)
+    mod2 <- lm(y ~ x1 * x2, data = sim3)
+    ```
+    
+1. `mod1` ve `mod2`'den hangisi `sim4` için daha iyidir? `mod2`'nin örüntüleri ortadan kaldırmak için biraz daha iyi bir iş çıkardığını düşünüyorum, ancak çok hassas şekilde. Görüşümü destekleyen bir grafik çizdirebilir misiniz?
+
+## 23.5 Kayıp Değerler
+
+Kayıp değerler açıkça değişkenler arasındaki ilişki hakkında herhangi bir bilgi iletemez, bu nedenle modelleme fonksiyonları kayıp değerler içeren satırları yok sayar. R varsayılan olarak uyarı vermeden bu işlemi gerçekleştirir, ancak seçeneklere göre (na.action = na.warn) (önkoşullarda çalıştırın), bir uyarı almanız sağlanabilir.
+
+```{r}
+df <- tribble(
+  ~x, ~y,
+  1, 2.2,
+  2, NA,
+  3, 3.5,
+  4, 8.3,
+  NA, 10
+)
+mod <- lm(y ~ x, data = df)
+```
+
+Uyarıyı engellemek için, `na.action = na.exclude` şeklinde ayarlamalısınız. 
+
+```{r}
+mod <- lm(y ~ x, data = df, na.action = na.exclude)
+```
+
+`nobs()` ile kullanılan gözlem sayılarını görebilirsiniz:
+
+```{r}
+nobs(mod)
+```
+
+## 23.6 Diğer Model Aileleri
+
+Bu bölüm özellikle `y = a_1 * x1 + a_2 * x2 + ... + a_n * xn` formunun ilişkisini varsayan doğrusal modeller sınıfına odaklanmıştır. İlaveten, doğrusal modeller rezidüellerin normal dağılım gösterdikleri varsayarlar ki bunun hakkında henüz konuşmadık. Doğrusal modeli çeşitli ilginç şekillerde genişleten çok sayıda model sınıfı vardır. Onlardan bazıları:
+
+* __Genelleştirilmiş Doğrusal Modeller___, örn; `stats::glm()`. Doğrusal modeller, tepkinin sürekli olduğunu ve hatanın normal bir dağılıma sahip olduğunu varsaymaktadır. Genelleştirilmiş doğrusal modeller, sürekli olmayan tepkileri (örneğin ikili veri veya sayıları) içerecek şekilde doğrusal modelleri genişletir. İstatistiksel olabilirlik fikrine dayanan bir mesafe ölçümü tanımlayarak çalışırlar.
+
+* __Genelleştirilmiş Doğrusal Modeller___, örn; `mgcv::gam()`. Genelleştirilmiş doğrusal modeller ile keyfi olarak düzgün fonksiyonların birlikte çalışmasını sağlar. 
+
+* __Cezalı Doğrusal Modeller__, örn; `glmnet::glmnet()`. Karmaşık modellerin cezalandırıldığı uzaklığa bir ceza terimi ekler (parametre vektörü ile orijin arasındaki mesafe ile tanımlandığı şekilde). Bu, aynı popülasyondaki yeni veri kümeleri için daha iyi genelleştirme modelleri yapma eğilimindedir.
+
+
+* __Kuvvetli Doğrusal Modeller__, örn; `MASS:rlm()`. Çok uzakta olan noktaların ağırlığını aşağı çekmek için aradaki mesafeyi kısaltır. Aykırı değerler olmadığında çok işe yaramasa da, bu onları aykırı değerlere karşı daha az hassas hale getirir. 
+
+* __Ağaçlar___, örn; `rpart::rpart()`. Doğrusal modellerden tamamen farklı bir şekilde problemi ele alırlar. Verilere aşamalı olarak daha küçük parçalara bölerek, parçalar halinde sabit modele uyarlanırlar. Ağaçlar kendi başlarına çok etkili değillerdir, ancak, __rastgele ormanlar__ gibi modeller (örn; `randomForest::randomForest()`) veya __gradyan artırma makinaları__ (`xgboost::xgboost`) tarafından toplu olarak kullanıldığında çok güçlüdürler.
+
+Bu modellerin hepsi programlama açısından benzer şekilde çalışmaktadır. Doğrusal modellerde ustalaştığınızda, benzeri diğer model sınıflarının mekaniklerinde ustalaşmayı da kolay bulabilirsiniz. Yetenekli bir modelci olmak bazı iyi genel prensiplerin ve büyük bir teknik araç kutusuna sahip olmak anlamına gelmektedir.  Artık bazı genel araçları ve kullanışlı bir model sınıfını öğrendiğinize göre, diğer kaynaklardan daha fazla sınıf öğrenebilir ve devam edebilirsiniz.
+
