@@ -1,0 +1,578 @@
+# Düzenli veri 
+
+## Giriş
+
+> “Mutlu aileler birbirlerine benzerler, her mutsuz ailenin ise kendince
+> bir mutsuzluğu vardır.” –– Leo Tolstoy
+
+> "Düzenli veri grupları birbirlerine benzerler ancak her düzensiz veri grubunun kendince bir
+> düzensizliği vardır.” –– Hadley Wickham
+
+Bu bölümde, R verilerinizi __düzenli veri__ (tidy data) adı verilen yöntem ile nasıl tutarlı bir şekilde düzenleyebileceğinizi öğreneceksiniz. Verileri bu biçime getirmek biraz ön çalışma gerektiriyor ancak bu çalışma uzun vadede karşılığını verecektir. Düzenli bir veriniz ve tidyverse’deki paketler ile sizlere sunulmuş araçlar elinizin altında olduğunda, verilerinizi bir gösterimden diğer bir gösterime dönüştürmek için daha az zaman harcayacaksınız ve analitik sorgulamalarınız için daha fazla zamanınız olacak.
+
+Bu bölüm, veri düzenlemeye ve __tidyr__ paketi ile birlikte gelen araçlara ilişkin pratik bir giriş niteliğindedir. Eğer altında yatan teori ile ilgili daha fazla bilgi sahibi olmak isterseniz, Journal of Statistical Software’de yayımlanmış *Düzenli Veri* (Tidy Data) adlı makaleyi sevebilirsiniz.
+<http://www.jstatsoft.org/v59/i10/paper>. 
+
+### Ön koşullar
+
+Bu bölümde dağınık veri gruplarınızı düzenlemenize yardımcı olmak için birçok aracın bulunduğu,  tidyverse’ün temel öğelerinden biri olan tidyr paketine yoğunlaşacağız.
+
+```{r setup, message = FALSE}
+library(tidyverse)
+```
+
+## Düzenli veri 
+
+Aynı veri birden fazla yöntem ile ifade edilebilir. Aşağıdaki 4 örnekte de görülebileceği gibi her bir veri grubu *ülke* (country), *yıl* (year), *nüfus* (population) ve *vakalar* (cases) olmak üzere 4 değişkeni gösteriyor ancak değerler her birinde farklı şekilde oluşturulmuş.
+
+```{r}
+table1
+table2
+table3
+
+# Spread across two tibbles
+table4a  # cases
+table4b  # population
+```
+
+Aynı verinin sadece farklı şekildeki gösterimleri olsalar da kullanımları aynı derecede kolay değildir. Tek bir veri grubu yani düzenli veri ile tidyverse içinde çalışmak çok daha kolay olacaktır.
+
+Bir veri grubunu düzenli hale getirmenin birbiri ile bağlantılı üç kuralı vardır.
+1. Her bir değişkenin kendine ait sütunu olmalı
+2. Her bir gözlemin kendine ait bir satırı olmalı
+3. Her bir değerin kendine ait bir hücresi olmalı
+
+
+Bu kuralların gösterimi Figür \@ref(fig:tidy-structure) gibidir.
+
+```{r tidy-structure, echo = FALSE, out.width = "100%", fig.cap = "Değişkenler sütunlarda, gözlemler satırlarda ve her bir değer kendi hücresinde. Bu üç kural uygulandığında bir veri grubu düzenli olacaktır."}
+knitr::include_graphics("images/tidy-1.png")
+```
+
+Bu üç kuraldan sadece ikisini yerine getirmek olanaksız olduğundan bu kurallar birbiri ile karşılıklı bir ilişki içindedirler. Bu ilişki daha da kolay ve pratik olan uygulamalara yol açar.
+
+1. Her bir veri grubunu bir tibble’a yerleştir.
+2. Her bir değişkeni bir sütuna yerleştir.
+
+Bu örnekte sadece `tablo1` düzenlidir çünkü her bir değişkenin kendine ait bir sütununun bulunduğu tek gösterimdir.
+
+Neden verilerinizin düzenli olduğundan emin olmalısınız? İki ana faydası olacaktır:
+
+1.  Verileri saklarken tek bir tutarlı yol seçmenin genel bir faydası olacaktır. 
+    Tutarlı bir veri yapısının temelinde bir istikrar olacağından bu şekildeki 
+    veriler ile çalışan araçları öğrenmek daha kolay olacaktır.
+    
+2.  Değişkenleri sütunlara yerleştirmenin bir avantajı da R’nin vektörel doğasının 
+    parlamasını sağlamasıdır. [mutate](#mutate-funs) ve [summary](#summary-funs)
+    fonksiyonlarında öğrendiğiniz gibi, birçok dahili R fonksiyonu değerlerin 
+    vektörleri ile çalışır. Bu da düzenli verilerin dönüştürülmesini özellikle 
+    doğal hissettirir.
+
+dplyr, ggplot2 ve tidyverse’deki tüm diğer paketler düzenli veri ile çalışmak üzere tasarlanmıştır. İşte `tablo1` ile nasıl çalışabileceğinizi gösteren bir kaç ufak örnek.
+
+```{r, out.width = "50%"}
+# Compute rate per 10,000
+table1 %>% 
+  mutate(rate = cases / population * 10000)
+
+# Compute cases per year
+table1 %>% 
+  count(year, wt = cases)
+
+# Visualise changes over time
+library(ggplot2)
+ggplot(table1, aes(year, cases)) + 
+  geom_line(aes(group = country), colour = "grey50") + 
+  geom_point(aes(colour = country))
+```
+
+### Alıştırmalar
+
+1.   Kesir kullanarak değişkenlerin ve gözlemlerin her bir örnek 
+     tabloda nasıl organize edildiğini tarif ediniz.
+
+2.  `tablo2`, `tablo4a` ve `tablo4b` için `oranı` (rate) hesaplayınız. 
+    4 işlem gerçekleştirmeniz gerekecektir:
+    
+    1. TB vakalarının (cases) sayısını her bir ülke (country) 
+    ve yıl (year) için çekiniz.
+    2. Buna karşılık gelen nüfusu (population) her bir ülke (country) 
+    ve yıl (year) için çekiniz.
+    3. Vakaları (cases) nüfusa (population) bölüp 10000 ile çarpınız.
+    4. Uygun bir yerde bu hesaplamayı depolayınız.
+    
+    Üzerinde çalışması en kolay gösterim hangisi? En zoru hangisi? Neden?
+    
+3.  `Tablo1` yerine `tablo2`’yi kullanarak vaka sayısının zaman içindeki 
+     değişimini gösteren grafiği tekrar çiziniz. Yapmanız gereken 
+     ilk şey nedir?
+
+## Yayma ve toparlama
+
+Düzenli verinin prensipleri o kadar aşikar ki acaba düzenli olmayan bir veri grubu ile karşılaşacak mıyım diye düşünebilirsiniz. Ancak maalesef karşılaşacağınız birçok veri 
+düzensiz olacaktır. Bunun iki temel nedeni:
+
+1.  Birçok kişi düzenli verinin prensiplerine aşina olmamakla birlikte, _uzun_ bir 
+    süre veriler üstünde çalışmadığınız takdirde düzenli veriyi çıkarsamak sizin 
+    için zor olacaktır.
+    
+2.  Veriler genellikle analizdense başka bir kullanımı kolaylaştırmak için, mesela 
+    veri girişinin en kolay şekilde gerçekleştirilebilmesi için düzenlenmiştir.
+    
+Bu demek oluyor ki birçok analiz için biraz düzenleme yapmanız gerekecektir. İlk aşama her zaman değişkenlerin ve gözlemlerin neler olduğunu anlamaktır. Bazen bu kolay olsa da, kimi zaman veriyi en başta oluşturan kişilere danışmanız gerekir. 
+
+İkinci aşama ise yaygın iki sorundan birini çözmek olacaktır:
+
+1. Bir değişken birden fazla sütuna yayılmış olabilir.
+
+2. Bir gözlem birden fazla satıra dağılmış olabilir.
+
+Genellikle bir veri grubunda bu sorunlardan sadece biri olur. Eğer her iki sorundan da muzdarip ise gerçekten şanssızsınız demektir! Bu sorunları çözmek için tidyr’daki en önemli fonksiyonlardan `gather()` ve `spread()` fonskiyonlarına ihtiyacınız olacak.
+
+### Toparlama 
+
+Bir veri grubunda bazı sütun adlarının değişken isimleri yerine değişkenin _değerleri_ olması yaygın bir problemdir. `Tablo4a`’yı ele alalım: `1999` ve `2000` sütun adları `yıl` (year) değişkeninin değerlerini temsilen kullanılmıştır ve her bir satır bir yerine iki gözlemi belirtmektedir.
+
+```{r}
+table4a
+```
+
+Böyle bir veri grubunu düzenlemek için bu sütunları yeni bir çift değişken altında __toparlamalıyız__. Bu işlemi açıklamak için üç parametreye ihtiyacımız var:
+
+* Değişkenleri göstermek yerine değerleri gösteren sütunlar. Bu örnekte `1999` 
+  ve `2000` sütunlarıdır.
+  
+* Sütun adlarını ortaya çıkaran değişkenin ismi. Ben buna `key` diyorum ve 
+  bu örnekte `yıl` (year) değişkenidir.
+  
+* Değerleri birçok hücreye dağılmış olan değişkenin ismi. Ben buna `value` 
+  diyorum ve bu örnekte `vakaların` (cases) sayısıdır.
+
+Bu parametreler ile `gather()` fonksiyonunu çağırabiliriz.
+
+```{r}
+table4a %>% 
+  gather(`1999`, `2000`, key = "year", value = "cases")
+```
+
+The columns to gather are specified with `dplyr::select()` style notation. Burada sadece iki kolon olduğundan onları ayrı ayrı listeleyeceğiz. “1999” ve “2000” sözdizimsel adlar olmadığından (çünkü bir harf ile başlamıyorlar) üst tırnak içine almamız gerektiğini not edelim. Sütunları seçmenin diğer yolları hakkında hafızanızı tazelemek için [select](#select) bölümüne gidiniz.
+
+```{r tidy-gather, echo = FALSE, out.width = "100%", fig.cap = "`Tablo4`’u düzenli bir biçime toparlamak."}
+knitr::include_graphics("images/tidy-9.png")
+```
+
+Sonuç olarak toparladığımız sütunlar düşerken `key` ve `value` olan yeni sütunlar elde ediyoruz. Ancak orjinal değişkenler arasındaki ilişki korunmuş oluyor. Bunun gösterimi Figür \@ref(fig:tidy-gather)’de görülebilir. `Tablo4b`’yi düzenlemek için de benzer bir şekilde `gather()` fonksiyonunu kullanabiliriz. 
+
+Tek fark değişkenlerin hücrelerdeki değerleri olacaktır:
+
+```{r}
+table4b %>% 
+  gather(`1999`, `2000`, key = "year", value = "population")
+```
+
+`Tablo4a` ve `tablo4b`’nin düzenli hallerini tek bir tibble’da birleştirmek için relational data bölümünde öğreneceğiniz üzere `dplyr::left_join()` kullanmamız gerekir.
+
+```{r}
+tidy4a <- table4a %>% 
+  gather(`1999`, `2000`, key = "year", value = "cases")
+tidy4b <- table4b %>% 
+  gather(`1999`, `2000`, key = "year", value = "population")
+left_join(tidy4a, tidy4b)
+```
+
+### Yayma
+
+Yayma toparlamanın tam tersidir. Bir gözlem birden fazla satıra dağılmış ise kullanılır. `Tablo2`’yi örnek alalım: her bir yıl için bir ülkeye ait gözlemler iki satıra dağılmış durumdalar.
+
+```{r}
+table2
+```
+
+Bunu düzenlemek için öncelikle gösterimi `gather()`’da yaptığımıza benzer bir şekilde analiz etmeliyiz. Ancak bu sefer sadece iki parametreye ihtiyacımız var:
+
+* `Key` sütunu, yani değişkenlerin isimlerinin bulunduğu sütun. 
+   Bu örnekte `type`.
+   
+*  `Value` sütunu, yani birden fazla değişkenin değerlerinin bulunduğu sütun. 
+    Bu örnekte `count`.
+
+Bunu anladığımızda Figür \@ref(fig:tidy-spread)’de gösterimini bulabileceğiniz ve aşağıda programlanabilir bir şekilde gösterilmiş olan `spread()` fonksiyonunu kullanabiliriz.
+
+```{r}
+table2 %>%
+    spread(key = type, value = count)
+```
+
+```{r tidy-spread, echo = FALSE, out.width = "100%", fig.cap = "`Tablo2`’yi yaymak onu düzenli hale getirir"}
+knitr::include_graphics("images/tidy-8.png")
+```
+
+Ortak `key` ve `value` parametrelerinden de tahmin edilebileceği üzere `spread()` ve
+`gather()` birbirini tamamlayıcı niteliktedirler. `gather()` geniş tabloları daraltıp uzatırken, `spread()` uzun tabloları kısaltıp genişletir.
+
+### Alıştırmalar
+
+1.  Neden `gather()` ve `spread()` mükemmel bir simetriye 
+    sahip değildirler? 
+    Aşağıdaki örneği dikkatlice inceleyiniz:
+    
+    ```{r, eval = FALSE}
+    stocks <- tibble(
+      year   = c(2015, 2015, 2016, 2016),
+      half  = c(   1,    2,     1,    2),
+      return = c(1.88, 0.59, 0.92, 0.17)
+    )
+    stocks %>% 
+      spread(year, return) %>% 
+      gather("year", "return", `2015`:`2016`)
+    ```
+    
+    (İpucu: değişkenlerin türlerine dikkat ediniz ve sütun _isimlerini_ düşününüz.)
+
+    Hem `spread()` hem de `gather()`'in `convert` parametreleri vardır. Bu ne işe yarar?
+
+2.  Bu kod neden sonuç vermiyor?
+
+    ```{r, error = TRUE}
+    table4a %>% 
+      gather(1999, 2000, key = "year", value = "cases")
+    ```
+
+3.   Bu tibble’ı yayma işlemi neden başarısızlıkla sonuçlanıyor? Bu problemi 
+     düzeltmek için nasıl bir sütun eklemelisiniz?
+
+    ```{r}
+    people <- tribble(
+      ~name,             ~key,    ~value,
+      #-----------------|--------|------
+      "Phillip Woods",   "age",       45,
+      "Phillip Woods",   "height",   186,
+      "Phillip Woods",   "age",       50,
+      "Jessica Cordero", "age",       37,
+      "Jessica Cordero", "height",   156
+    )
+    ```
+
+4.  Aşağıdaki basit tibble’ı düzenleyiniz. Verileri yaymaya veya toparlamaya
+    ihtiyaç var mı? Değişkenler nelerdir?
+
+    ```{r}
+    preg <- tribble(
+      ~pregnant, ~male, ~female,
+      "yes",     NA,    10,
+      "no",      20,    12
+    )
+    ```
+
+## Ayırma ve birleştirme
+
+Şu ana kadar `tablo2` ve `tablo4`’ü nasıl düzenleyebileceğinizi öğrendiniz ancak `tablo3`’ü öğrenmediniz. `Tablo3`’ün farklı bir sorunu var: elimizde iki değişkeni (`cases` ve `population`) içeren bir sütun (`rate`) var. Bu sorunu çözmek için `separate()` fonksiyonuna ihtiyacımız olacak. Ayrıca tek bir değişken birden fazla sütuna dağılmış ise kullanacağınız `separate()` fonksiyonunun tamamlayıcısı olan `ünite()` fonksiyonunu da öğreneceksiniz.
+
+### Ayırma
+
+`separate()` nerede bir ayırıcı karakter kullanılmış ise oradan ayırmak koşulu ile tek bir sütunu birden fazla sütuna böler. `Tablo3`’ü ele alalım:
+
+```{r}
+table3
+```
+
+Oran (`rate`) sütunu hem vaka (`cases`) hem de nüfus (`population`) değişkenlerini içeriyor ve onu iki farklı değişkene ayırmamız gerekiyor. Figür \@ref(fig:tidy-separate) ve aşağıdaki kodda gösterildiği üzere `separate()` fonksiyonu ayrılması istenen sütunun ismini ve ayrılacağında alacağı sütun isimlerini içerir.
+
+```{r}
+table3 %>% 
+  separate(rate, into = c("cases", "population"))
+```
+
+```{r tidy-separate, echo = FALSE, out.width = "75%", fig.cap = "`Tablo3`’ü ayırmak onu düzenli hale getirir."}
+knitr::include_graphics("images/tidy-17.png")
+```
+
+Aksi belirtilmediği takdirde `separate()` alfanumerik bir karakter (rakam veya harf harici bir karakter) ile karşılaştığında değerleri ayırır. Örneğin yukarıdaki kodda `separate()` `oran` (rate) sütünündaki değerleri taksim işaretinin olduğu yerden ayıracaktır. Eğer sütunu ayırmak istediğiniz belirli bir karakter varsa bu karakteri `sep` parametresinde onaylayabilirsiniz. Mesela yukarıdaki kod aşağıdaki gibi tekrar yazılabilir:
+
+```{r eval = FALSE}
+table3 %>% 
+  separate(rate, into = c("cases", "population"), sep = "/")
+```
+
+(Formally, `sep` is a regular expression, which you'll learn more about in [strings].)
+
+Sütunların türüne dikkatlice bakıltığınızda `vakalar`'ın (cases) ve `populasyon`'un (population) karakter cinsinden olduklarını fark edeceksiniz. `separate()` fonksiyonunun olağan davranışı sütunun türünü değiştirmemesidir. Ancak bu örnekte sütunların içerikleri rakam olduklarından bu davranış pek işimize yaramaz. `separate()` fonksiyonundan `convert = TRUE`'yu kullanarak türleri çevirmesini isteyebiliriz:
+
+```{r}
+table3 %>% 
+  separate(rate, into = c("cases", "population"), convert = TRUE)
+```
+
+Ayrıca `sep` parametresine tamsayı vektörü de atayabilirsiniz. `separate()` bu tamsayı ile hangi pozisyondan bölmesi gerektiğini çıkaracaktır. 1’den başlayan pozitif değerler dizinin en solundan, -1’den başlayan negatif değerler ise dizinin en sağından başlayacaktır. Dizileri ayırmak için tamsayı kullanıldığında `sep`'in uzunluğu `into`'nun içindeki isimlerin sayısından bir eksik olmalıdır.
+
+Bu ayarlamayı her bir yılın (year) son iki hanesini ayırmak için kullanabilirsiniz. Veriyi daha düzensiz bir hale getirmekle birlikte, az sonra sizin de göreceğiniz gibi bazı durumlarda işe yarayabilir.
+
+```{r}
+table3 %>% 
+  separate(year, into = c("century", "year"), sep = 2)
+```
+
+### Birleştirme
+
+`unite()`, `separate()` fonksiyonunun tersidir: birden fazla sütunu tek bir sütunda toplar. `separate()`'den daha az ihtiyacınız olacaktır ancak aklınızın bir köşesinde bulunması işinize yarayacaktır.
+
+```{r tidy-unite, echo = FALSE, out.width = "75%", fig.cap = "`Tablo5`’i birleştirmek onu düzenli hale getirir"}
+knitr::include_graphics("images/tidy-18.png")
+```
+
+Bir önceki örnekte oluşturduğumuz *asır* (century) ve *yıl* (year) sütunlarını tekrar birleştirmek için `unite()` fonksiyonunu kullanabiliriz. O verileri `tidyr::table5`'de kaydedilmiş olarak bulabilirsiniz. `unite()` bir veri çerçevesini, yaratılacak yeni değişkenin ismini ve birleştirilecek sütunları `dplyr::select()` biçiminde tanımlandığı gibi alır:
+
+```{r}
+table5 %>% 
+  unite(new, century, year)
+```
+
+Bu durumda `sep` parametresini de kullanmalıyız. Aksi belirtilmediği takdirde ayrı sütunlardan gelen değerlerin arasına bir alt çizgi (`_`) koyulacaktır. Burada herhangi bir ayraç istemediğimiz için `““` kullanıyoruz:
+
+```{r}
+table5 %>% 
+  unite(new, century, year, sep = "")
+```
+
+### Alıştırmalar
+
+1.  `extra` ve `fill` parametreleri `separate()` fonksiyonunda ne 
+     işe yararlar? Aşağıdaki iki veri grubu ile farklı seçenekleri 
+     deneyiniz.
+  
+    ```{r, eval = FALSE}
+    tibble(x = c("a,b,c", "d,e,f,g", "h,i,j")) %>% 
+      separate(x, c("one", "two", "three"))
+    
+    tibble(x = c("a,b,c", "d,e", "f,g,i")) %>% 
+      separate(x, c("one", "two", "three"))
+    ```
+2.  Hem `unite()` hem de `separate()`'in  remove parametresi vardır. 
+    Ne işe yarar? Neden ona `FALSE` koyarsınız?
+
+3.  `separate()` ve `extract()` fonksiyonlarını kıyaslayıp karşılaştırınız. 
+     Neden ayırmanın 3 farklı çeşidi (pozisyona göre ayırmak, ayraca göre 
+     ayırmak ve gruplara ayırmak) varken birleştirmenin tek bir çeşidi vardır?
+
+## Eksik değerler
+
+Bir veri grubunun gösterimini değiştirmek eksik değerler ile ilgili ince bir tarafı ortaya çıkarır. Şaşırtıcı bir şekilde, bir değer iki olası şekilde eksik olabilir.
+
+* __Belirgin__, yani `NA` işaretli.
+* __Gizli__, yani veride bulunmayarak.
+
+Bu fikri basit bir veri grubu ile örneklendirelim:
+
+```{r}
+stocks <- tibble(
+  year   = c(2015, 2015, 2015, 2015, 2016, 2016, 2016),
+  qtr    = c(   1,    2,    3,    4,    2,    3,    4),
+  return = c(1.88, 0.59, 0.35,   NA, 0.92, 0.17, 2.66)
+)
+```
+
+Bu veri grubunda eksik olan iki değer vardır:
+
+* 2015'in dördüncü çeyreğinin hasılatı (return) belirgin bir şekilde 
+  eksiktir çünkü o değerin olması gereken hücre `NA` ibaresini 
+  içermektedir.
+
+* 2016'nın ilk çeyreğinin hasılatı gizli bir seilde eksiktir çünkü bu 
+  veri gurubunda böyle bir veriye rastlanmamaktadır.
+  
+Bir Zen deyişi ile aradaki farkı anlamaya çalışalım: eksikliği belirgin olan bir değerin yokluğu mevcuttur, gizli bir eksik değerin ise varlığı yoktur.
+
+Bir veri grubunun gösterim şekli gizli eksik bir değeri belirgin yapabilir. Mesela sütunlara yılları koyarak gizli eksik değeri belirgin hale getirebiliriz:
+
+```{r}
+stocks %>% 
+  spread(year, return)
+```
+
+Verinin farklı gösterimlerinde belirgin şekilde eksik olan değerler önemli değil iseler `gather()` fonksiyonuna` na.rm = TRUE` koyarak belirgin eksik değerleri gizleyebilirsiniz.
+
+```{r}
+stocks %>% 
+  spread(year, return) %>% 
+  gather(year, return, `2015`:`2016`, na.rm = TRUE)
+```
+
+Düzenli veride eksik değerleri belirgin hale getirmeye yarayan bir başka önemli araç ise `complete()` fonksiyonudur:
+
+
+```{r}
+stocks %>% 
+  complete(year, qtr)
+```
+
+`complete()` sütunları alır ve benzersiz tüm kombinasyonları bulur ve gerekli gördüğü yerleri belirgin `NA` ile doldurarak orjinal veri grubunun tüm değerleri içermesini garantiler.
+
+Eksik değerler ile çalışırken bilmeniz gereken önemli başka bir araç daha vardır. Bazen bir veri kaynağının başlıca amacı veri girişi ise eksik değerler bir önceki değerin devrettiğinin göstergesidir:
+
+```{r}
+treatment <- tribble(
+  ~ person,           ~ treatment, ~response,
+  "Derrick Whitmore", 1,           7,
+  NA,                 2,           10,
+  NA,                 3,           9,
+  "Katherine Burke",  1,           4
+)
+```
+
+`fill()` ile eksik değerleri doldurabilirsiniz. Bir sütundaki eksik değerlerin yerine eksik olmayan en son değeri yerleştirir (buna son gözlemin devretmesi de denir).
+
+```{r}
+treatment %>% 
+  fill(person)
+```
+
+### Alıştırmalar
+
+1.  `fill` parametresini `spread()` ve `complete()` ile kıyaslayıp karşılaştırınız.
+
+2.  What does the direction argument to `fill()` do?
+
+## Vaka analizi 
+
+Bölümü bitirirken öğrendiğiniz her şeyi toparlayıp gerçekçi bir veri düzenleme sorununu ele alalım.  `tidyr::who` veri grubu yıla (year), ülkeye (country), yaşa (age), cinsiyete (gender) ve teşhis metoduna (diagnosis) göre ayrılmış tüberküloz (TB) vakalarını (cases) içermektedir. Veri *2014 Dünya Sağlık Örgütü Küresel Tüberküloz Raporu*’ndan (2014 World Health Organization Global Tuberculosis Report) alınmıştır. Veriye <http://www.who.int/tb/country/data/download/en/> linkinden ulaşabilirsiniz. 
+
+Bir epidemiolojik bilgi zenginliği olmasına rağmen bu verinin üzerinde çalışmak sağlanmış olduğu şekliyle zorlu olacaktır:
+
+```{r}
+who
+```
+
+Bu veri grubu gerçek hayatta karşımıza çıkabilecek tipik bir örnektir. Lüzumsuz sütunlar, garip değişken kodları ve birçok eksik değer içerir. Uzun lafın kısası `who` darmadağındır ve düzenlemek için birden fazla adıma ihtiyacımız olacak. dplyr gibi tidyr da her bir fonksiyonun bir tek şeyi iyi yapması üzerine tasarlanmıştır. Bu da demektir ki gerçek hayatta karşılaştığınız durumlarda genellikle birden fazla eylemi bir veri hattında dizmelisiniz. 
+
+Çoğu zaman en iyi başlangıç noktası değişken olmayan sütunları bir araya getirmektir. Bakalım elimizde neler var:
+
+* Görünen o ki `country` , `iso2` ve `iso3` ülkeyi belirten gereksiz yere 
+  kullanılmış üç farklı değişken.
+  
+* Açıkça görülüyor ki `year` da bir değişken.
+
+* Şu an için diğer sütunların neler olduğunu bilemiyoruz ancak değişken 
+  adlarının yapılarına bakıldığında (`new_sp_m014` , `new_ep_m014` , 
+  `new_ep_f014`) bunların büyük ihtimalle değişken değil, değer oldukları 
+  düşünülebilir.
+
+`new_sp_m014` başlayarak `newrel_f65`'e kadar tüm sütunları toplamamız gerekiyor. Bu değerlerin neyi temsil ettiklerini daha bilmiyoruz, o nedenle onlara `key` gibi genel bir ad verelim. Vakaların sayısını gösteren hücreleri bildiğimiz için `cases` değişkenini kullanalım. Güncel gösterimde eksik olan birçok değer olduğundan şimdilik `na.rm` kullanalım ki mevcut değerlere odaklanabilelim.
+
+```{r}
+who1 <- who %>% 
+  gather(new_sp_m014:newrel_f65, key = "key", value = "cases", na.rm = TRUE)
+who1
+```
+
+Yeni yarattığımız `key` sütunundaki değerleri sayarak bu değerlerin yapılarına ilişkin bazı ipuçları elde edebiliriz:
+
+```{r}
+who1 %>% 
+  count(key)
+```
+
+Kuşkusuz ki biraz kafa yorarak ve deneme yanılma ile bunu kendiniz de çözümleyebilirdiniz ama neyse ki veri sözlüğü elimizde ve bize şunları söylüyor:
+
+1.  Her sütunun ilk üç harfi o sütunda yeni bir TB vakası mı yoksa eski 
+    bir TB vakası mı olduğunu belirtir. Bu veri grubunda her sütun yeni 
+    vakaları içeriyor.
+    
+2.  Sonraki iki harf TB’un cinsini tanımlar:
+
+    *   `rel` nükseden vakaları temsilen
+    *   `ep` akciğer dışı tüberküloz vakalarını temsilen
+    *    `sn` akciğer simiri ile teşhis edilemeyen akciğer tüberkülozu 
+         vakalarını temsilen (smear negative)
+    *    `sp` akciğer simiri ile teşhis edilebilen akciğer tüberkülozu 
+         vakalarını temsilen (smear positive)
+         
+3.   Altıncı harf TB hastalarının cinsiyetini belirtir. Veri grubu, 
+     vakaları erkekler (`m`) ve kadınlar (`f`) olarak gruplamıştır.
+
+4.    Kalan rakamlar yaş gruplarını belirtirler. Veri grubu, vakaları 
+      7 farklı yaş grubuna ayırmıştır:
+    
+    * 014 = 0 – 14 yaşları arasında
+    * 1524 = 15 – 24 yaşları arasında
+    * 2534 = 25 – 34 yaşları arasında
+    * 3544 = 35 – 44 yaşları arasında
+    * 4554 = 45 – 54 yaşları arasında
+    * 5564 = 55 – 64 yaşları arasında
+    * 65 = 65 ve üstü
+ 
+Sütun isimlerinde ufak bir düzeltme yapmamız gerekiyor: ne yazık ki isimler biraz tutarsız çünkü elimizde `new_rel` yerine `newrel` var (bunu fark etmek biraz zor ama düzeltmezseniz takip eden aşamalarda hata uyarısı alırız). `str_replace()` komutunu “Strings” bölümünde öğreneceksiniz ancak temel fikir oldukça basit: “newrel” karakterini “new_rel” ile değiştir. Böylece tüm değişkenlerin isimleri tutarlı olacaktır.
+
+```{r}
+who2 <- who1 %>% 
+  mutate(key = stringr::str_replace(key, "newrel", "new_rel"))
+who2
+```
+
+`separate()` komutunu kullanarak iki aşamada her koddaki değerleri ayırabiliriz. İlk aşama kodları her bir alt çizgiden bölecek.
+
+```{r}
+who3 <- who2 %>% 
+  separate(key, c("new", "type", "sexage"), sep = "_")
+who3
+```
+
+Ayrıca `new` sütununu sabit olduğu için bu veri grubundan çıkarabiliriz. Hazır sütun çıkarmaya başlamışken `iso2` ve `iso3`'u de gereksiz oldukları için çıkarabiliriz.
+
+```{r}
+who3 %>% 
+  count(new)
+who4 <- who3 %>% 
+  select(-new, -iso2, -iso3)
+```
+
+Sırada `sexage`'i `sex` ve `age` olarak ilk karakterden sonra bölmek geliyor:
+
+```{r}
+who5 <- who4 %>% 
+  separate(sexage, c("sex", "age"), sep = 1)
+who5
+```
+
+`who` veri grubu artık düzenli! 
+
+Size bu kodu her bir geçici sonucu yeni bir değişkene atayarak adım adım gösterdim. Genelde interaktif bir şekilde çalışırken böyle yapmak yerine aşama aşama karmaşık bir veri yolu kurarsınız.
+
+```{r, results = "hide"}
+who %>%
+  gather(key, value, new_sp_m014:newrel_f65, na.rm = TRUE) %>% 
+  mutate(key = stringr::str_replace(key, "newrel", "new_rel")) %>%
+  separate(key, c("new", "var", "sexage")) %>% 
+  select(-new, -iso2, -iso3) %>% 
+  separate(sexage, c("sex", "age"), sep = 1)
+```
+
+### Alıştırmalar
+
+1.  Bu vaka analizinde doğru değerlere sahip olduğumuzu kontrol etmeyi 
+    kolaylaştırmak adına `na.rm = TRUE` olarak belirledim. Bu akla yatkın 
+    mıdır? Bu veri grubunda eksik değerlerin nasıl gösterildiğini düşünün. 
+    Gizli eksik değerler var mıdır? `NA` ve sıfır arasındaki fark nedir?
+
+2.  `mutate()` adımını ihmal etseydiniz ne olurdu? 
+    (`mutate(key = stringr::str_replace(key, "newrel", "new_rel"))`)
+
+3.   `iso2` ve `iso3` ‘ün `country` ile aynı olan gereksiz değişkenler 
+     olduklarını iddia ettim. Bu iddiayı doğrulayınız.
+
+4.  Her bir ülke, yıl ve cinsiyet için toplam tüberküloz (TB) vakalarının
+    sayısını hesaplayınız. Verinin bilgilendirici bir görselini yaratınız.
+
+## Düzensiz veri 
+
+Bir sonraki konuya geçmeden önce kısaca düzensiz veriden de bahsetmekte yarar var. Bu bölümde düzensiz veriye atıfta bulunurken alçaltıcı bir terim olan “darmadağın”ı kullanmıştım. Bu, durumu aşırı basitleştirmektir: düzenli olmayan ancak işe yarar ve sağlam zeminli birçok veri yapısı bulunmaktadır. Farklı veri yapılarını kullanmak için iki temel neden vardır:
+
+* Alternatif gösterimlerin performans ve boyut bakımından azımsanamayacak 
+  avantajları olabilir.
+
+* Özelleşmiş meslek dalları, verileri muhafaza etmek için düzenli verinin 
+  kurallarına aykırı olsa dahi kendilerine ait metotlar geliştirmiş olabilirler.
+  
+Bu iki nedenden dolayı tibble’dan veya veri çerçevesinden farklı bir şeye ihtiyacınız olabilir. Eğer veriniz gözlemlerden ve değişkenlerden oluşan bir dikdörtgenin içine doğal bir şekilde yerleşiyorsa, bence düzenli veri ilk seçeneğiniz olmalıdır. Ancak farklı yapılardaki verileri kullanmak için iyi nedenler olabilir ve düzenli veri tek seçeneğiniz olmamalıdır. 
+
+Eğer düzensiz veri hakkında daha fazla bilgi sahibi olmak isterseniz Jeff Leek tarafından hazırlanmış bu düşünceli blog paylaşımını şiddetle tavsiye ederim:
+<http://simplystatistics.org/2016/02/17/non-tidy-data/>
