@@ -1,0 +1,411 @@
+# 24 Model Geliştirme
+
+## 24.1 Giriş
+
+Bir önceki bölümde doğrusal modellerin nasıl çalıştığını ve bir modelin verileriniz hakkında size neler ifade ettiğini anlamanız için bazı temel araçları öğrendiniz. Önceki bölüm, simüle edilmiş veri setlerine odaklanmaktaydı. Bu bölüm, verileri anlamanızda size yardımcı olacak bir modeli nasıl geliştirebileceğinizi gösteren gerçek verilere odaklanacaktır. 
+
+Verilerinizi, kalıplara ve rezidüellere ayıran bir model üzerine düşünebiliyor olmanızdan faydalanacağız. Görselleştirme yoluyla kalıpları bulacağız, sonra onları bir model ile kesin ve somut hale getireceğiz. Sonrasında işlemi tekrarlayacağız, ancak eski yanıt değişkenini modeldeki rezidüeller ile değiştirmeliyiz. Amaç, kafanızı veri içerisindeki örtük bilgilerden çıkartarak, nicel bir modeldeki açık bilgilere yöneltmektir. Bu hem yeni alanların uygulanmasını, hem de başkalarının kullanımını kolaylaştıracaktır. 
+
+Bu, çok büyük ve karmaşık veri setleri için oldukça fazla iş yükü demektir. Kesinlikle alternatif yaklaşımlar mevcuttur - daha fazla makina öğrenimi yaklaşımı, modelin öngörü kabiliyetine basitçe odaklanabilir. Bu yaklaşımlar kara kutular üretme eğilimindedir: Model, tahmin üretmede çok iyi bir iş çıkarabilir, ancak siz nedenini bilmiyor olabilirsiniz. Bu tamamen makul bir yaklaşımdır, ancak bu durum sizin gerçek dünya bilginizi modele uygulamanızı zorlaştırmaktadır. Bu da, sırayla temel değişiklikler olarak, modelin uzun vadede çalışmaya devam edip etmeyeceğini belirlemekte güçlük çıkartmaktadır. Çoğu gerçek model için, bu yaklaşımın bir kombinasyonunu ve daha klasik bir otomatik yaklaşımı kullanmanızı bekliyorum. 
+
+Ne zaman duracağınızı bilmek güçtür. Modelinizin ne kadar iyi olduğunu ve daha fazla emek harcamınızın mümkün olmadığını anlamanız gerekir. Reddit kullanıcısı Broseidon241'den gelen bu alıntıyı özellikle beğendim:
+
+> Uzun zaman önce sanat dersinde öğretmenim bana şöyle demişti “Bir sanatçının bir eseri ne zaman bitirdiğini bilmesi gerekir. Bir şeyi mükemmel haline getiremezsiniz - o halde bitirin. Eğer beğenmediyseniz, tekrar yapın. Aksi takdirde yeni bir şeye başlayın". Hayatımın ilerleyen döneminde şöyle bir şey işittim “Kötü bir terzi birçok hata yapar. İyi bir terzi bu hataları düzeltmek için çok çalışır. Harika bir terzi, giysiyi atmaktan ve yeniden başlamaktan korkmaz. ” <br><br>
+-Broseidon241, https://www.reddit.com/r/datascience/comments/4irajq
+
+### 24.1.1 Ön Koşullar
+
+Önceki bölümdekiyle aynı araçları kullanacağız, ancak bazı gerçek veri setleri ekleyerek: ggplot2'den `diamonds` ve nycflights13'den `flights`. Ayrıca tarih/saat ile ilgili çalışmak için `flights` içinde yer alan lubridate paketine ihtiyacımız olacak.  
+
+```{r setup, message = FALSE}
+library(tidyverse)
+library(modelr)
+options(na.action = na.warn)
+library(nycflights13)
+library(lubridate)
+```
+
+## 24.2 Neden Düşük Kalite Elmaslar Daha Pahalıdır?
+Önceki bölümlerde, elmasların kalitesi ve fiyatı arasında şaşırtıcı bir ilişki olduğunu gördük: düşük kalite elmaslar (kötü kesim, kötü renk ve düşük netlik) daha yüksek fiyat demekti.
+
+```{r dev = "png"}
+ggplot(diamonds, aes(cut, price)) + geom_boxplot()
+ggplot(diamonds, aes(color, price)) + geom_boxplot()
+ggplot(diamonds, aes(clarity, price)) + geom_boxplot()
+```
+
+En kötü elmas renginin J (hafif sarı) ve en kötü netliğin I1 (çıplak gözle görülebilen kapanımlar) olduğunu unutmayın.
+
+### 24.2.1 Fiyat ve Karat
+
+Düşük kalitedeki elmasların fiyatları daha yüksektir, çünkü önemli bir şaşırtıcı değişken vardır: elmasın ağırlığı (`karat`). Elmasın ağırlığı, elmasın fiyatını belirlemek için en önemli tek faktördür ve düşük kaliteli elmaslar daha büyük olma eğilimindedir. 
+
+```{r}
+ggplot(diamonds, aes(carat, price)) + 
+  geom_hex(bins = 50)
+```
+
+
+Bir elmasın `karat` etkisini ayrı turarak, diğer niteliklerinin nispi fiyatı nasıl etkilediğini bir model üzerine yerleştirerek görmeyi kolaylaştırabiliriz. Ama önce elmas veri setine bir kaç ince ayar yaparak çalışmayı daha kolay hale getirelim. 
+
+1. 2,5 karattan küçük elmaslara odaklanın (verilerin %99.7'si).
+1. Karat ve fiyat değişkenlerine log-dönüşümü uygulayın.
+
+```{r}
+diamonds2 <- diamonds %>% 
+  filter(carat <= 2.5) %>% 
+  mutate(lprice = log2(price), lcarat = log2(carat))
+```
+
+Birlikte, bu değişiklikler `karat` ve `fiyat` arasındaki ilişkiyi görmeyi kolaylaştırmaktadır:
+
+```{r}
+ggplot(diamonds2, aes(lcarat, lprice)) + 
+  geom_hex(bins = 50)
+```
+
+Log-dönüşümü burada özellikle kullanışlıdır, çünkü kalıbı doğrusal hale getirir ve doğrusal bir şekli çalışmak en kolay olanıdır. Bir sonraki adıma geçelim ve bu güçlü doğrusal kalıbı kaldıralım. Öncelikle bir model uygulayarak kalıbı belirgin hale getirelim: 
+
+```{r}
+mod_diamond <- lm(lprice ~ lcarat, data = diamonds2)
+```
+
+Sonra modelin bize verilerle ilgili neler söylediğine bakalım. Log dönüşümü geri alarak, tahminleri geri dönüştürdüğüme dikkat edin, böylece ham verilerdeki tahminleri üst üste yerleştirebilirim:
+
+```{r}
+grid <- diamonds2 %>% 
+  data_grid(carat = seq_range(carat, 20)) %>% 
+  mutate(lcarat = log2(carat)) %>% 
+  add_predictions(mod_diamond, "lprice") %>% 
+  mutate(price = 2 ^ lprice)
+ggplot(diamonds2, aes(carat, price)) + 
+  geom_hex(bins = 50) + 
+  geom_line(data = grid, colour = "red", size = 1)
+```
+
+Bu bize verilerimizle ilgili ilginç bir şey anlatıyor. Eğer modelimize inanıyorsak, o halde büyük elmaslar beklenenden daha ucuzdur. Bunun sebebi muhtemelen bu veri setindeki hiç bir elmasın 19000 $'dan daha yüksek bir fiyatta olmaması anlamına gelir. 
+
+Artık, güçlü doğrusal deseni başarıyla ortadan kaldırdığımızı doğrulayan rezidüellere bakabiliriz: 
+
+```{r}
+diamonds2 <- diamonds2 %>% 
+  add_residuals(mod_diamond, "lresid")
+
+ggplot(diamonds2, aes(lcarat, lresid)) + 
+  geom_hex(bins = 50)
+```
+
+En önemlisi, artık `fiyat` yerine bu rezidüellerimizi kullanarak bizi motive eden plotlarımızı tekrar yapabiliriz. 
+
+```{r dev = "png"}
+ggplot(diamonds2, aes(cut, lresid)) + geom_boxplot()
+ggplot(diamonds2, aes(color, lresid)) + geom_boxplot()
+ggplot(diamonds2, aes(clarity, lresid)) + geom_boxplot()
+```
+
+Artık beklediğimiz ilişkiyi görüyoruz: elmasın kalitesi arttıkça, buna göre fiyatı da artmaktadır. `Y` eksenini yorumlamak için, rezidüellerin bize ne söylediğini ve hangi ölçekte oldukları üzerine düşünmemiz gerekir. Rezidüelin -1 olması `lprice`'ın sadece ağırlığına dayanan bir tahminden 1 birim daha düşük olduğunu gösterir. $2^{-1}$, 1/2'dir. Dolayısıyla, -1 değerinde olan noktalar beklenen fiyatın yarısı iken, 1 değeri olan rezidüeller öngörülen fiyatın iki katıdır.  
+
+### Daha Karmaşık Bir Model
+
+Eğer istersek, modelimizi geliştirmeye devam edebilir, model içerisinde gözlemlediğimiz etkileri ortadan kaldırarak, onları daha görünür hale getirebiliriz. Örneğin, `renk/color`, `kesim/cut` ve `berraklık/clarity` kriterlerini model içerisine dahil ederek, böylelikle bu üç kategorik değişkenlşerin etkilerini ortaya çıkartabiliriz. 
+
+```{r}
+mod_diamond2 <- lm(lprice ~ lcarat + color + cut + clarity, data = diamonds2)
+```
+
+Bu model şu anda dört prediktör içermektedir, bu sebeple görselleştirmesi zorlaşmaktadır. Neyse ki, hali hazırda şu an hepsi birbirinden bağımsız durumdalar, bu da onları ayrı ayrı dört alana yerleştirebileceğimiz anlamına gelir. 
+
+```{r}
+grid <- diamonds2 %>% 
+  data_grid(cut, .model = mod_diamond2) %>% 
+  add_predictions(mod_diamond2)
+grid
+ggplot(grid, aes(cut, pred)) + 
+  geom_point()
+```
+
+Model, açıkça sağlamadığınız değişkenlere ihtiyaç duyuyorsa, `data_grid()` bunları otomatik olarak "tipik" değerlerle doldurur. Sürekli değişkenler için ortanca değer ve kategorik değişkenler için ise en yaygın değeri kullanır (veya bir bağlantı varsa değerleri).
+
+```{r}
+diamonds2 <- diamonds2 %>% 
+  add_residuals(mod_diamond2, "lresid2")
+ggplot(diamonds2, aes(lcarat, lresid2)) + 
+  geom_hex(bins = 50)
+```
+
+Bu grafik oldukça büyük rezidüelleri olan bazı elmasların var olduğunu göstermektedir - hatırlayın 2'lik bir rezidüel, elmasın beklediğimiz fiyatının 4 katı olduğunu göstermektedir. 
+
+```{r}
+diamonds2 %>% 
+  filter(abs(lresid2) > 1) %>% 
+  add_predictions(mod_diamond2) %>% 
+  mutate(pred = round(2 ^ pred)) %>% 
+  select(price, pred, carat:table, x:z) %>% 
+  arrange(price)
+```
+
+Bu noktada gerçekten bana hiçbir şey ifade etmiyor, ancak bunun modelimizle ilgili bir sorun olup olmadığını veya verilerde hata olup olmadığını düşünerek zaman harcamakta fayda var. Verilerde hatalar varsa, yanlış fiyatlandırılmış elmasları satın almak için bir fırsat olabilir.
+
+### Uygulamalar
+
+1. `lcarat` vs. `lprice` grafiğinde açık renkli bazı dikey çizgiler mevcut. Neyi temsil etmektedirler?
+
+1. Eğer  `log(price) = a_0 + a_1 * log(carat)` ise,  `/fiyat/price` ve `karat/carat` arasındaki ilişki hakkında ne söylüyor demektir?
+
+1. Çok yüksek ve çok düşük rezidüellere sahip olan elmasları çıkartın. Bu elmaslarla ilgili olağandışı bir şey var mı? Özellikle kötü mü veya iyi mi, yoksa fiyatlandırmada hata olduğunu mu düşünüyorsunuz?
+
+1. Son model `mod_diamond2`, elmas fiyatlarının tahmininde iyi bir iş çıkardı mı? Elmas satın alıyor olsaydınız, ne kadar harcamanız gerektiğini söylediğinde güvenir miydiniz?
+
+## Günlük Uçuş Sayılarını Ne Etkiler?
+
+İlk bakışta bir veri seti için nispeten daha kolay görünen, benzer bir işlemle çalışmaya başlayalım: New York şehrinden (NYC) kalkan uçuşların günlük sayısı. Bu gerçekten küçük bir veri kümesidir --- sadece 365 satır ve 2 sütun --- ve tamamen herşeyi ortaya çıkaran bir model ile sonlandırmayacağız ancak göreceğiniz üzere süreçte izleyeceğimiz adımlar bize veriyi daha iyi anlamamızı sağlayacak. Günlük uçuş sayısı sayarak ve ggplot2 ile görselleştirerek başlayalım. 
+
+```{r}
+daily <- flights %>% 
+  mutate(date = make_date(year, month, day)) %>% 
+  group_by(date) %>% 
+  summarise(n = n())
+daily
+ggplot(daily, aes(date, n)) + 
+  geom_line()
+```
+
+### Haftanın Günü
+
+Uzun vadeli eğilimi anlamak güçtür, çünkü hassas ayrıntıları baskılayan haftanın en yoğun günü etkisi vardır. Uçuş numaralarının haftanın gününe göre dağılımına bakarak başlayalım:
+
+```{r}
+daily <- daily %>% 
+  mutate(wday = wday(date, label = TRUE))
+ggplot(daily, aes(wday, n)) + 
+  geom_boxplot()
+```
+
+Çoğu seyahat iş için olduğundan, hafta sonları daha az uçuş vardır. Etkisi özellikle Cumartesi günleri ortaya çıkmaktadır: Bazen Pazartesi sabahı toplantısı için Pazar gününden ayrılmanız gerekebilir, ancak aileniz ile evde vakit geçirebilecekken Cumartesi günü ayrılmak çok nadirdir. 
+
+Bu ilişkiyi kaldırmanın bir yolu da bir model kullanmaktır. İlk olarak, modeli yerleştiririz ve orjinal veriler üzerine tahminleri bindirerek gösteririz: 
+
+```{r}
+mod <- lm(n ~ wday, data = daily)
+
+grid <- daily %>% 
+  data_grid(wday) %>% 
+  add_predictions(mod, "n")
+
+ggplot(daily, aes(wday, n)) + 
+  geom_boxplot() +
+  geom_point(data = grid, colour = "red", size = 4)
+```
+
+Devamında, hesaplama yapıyor ve rezidüelleri görselleştiriyoruz. 
+
+```{r}
+daily <- daily %>% 
+  add_residuals(mod)
+
+daily %>% 
+  ggplot(aes(date, resid)) + 
+  geom_ref_line(h = 0) + 
+  geom_line()
+```
+
+Y eksenindeki değişime dikkat edin: artık haftanın gününe göre beklenen uçuş sayısından sapmayı görüyoruz. Bu grafik kullanışlıdır, çünkü haftanın büyük gününe ait etkinin çoğunu kaldırdığımızdan, kalan daha hassas dağılımların bazılarını görebiliriz:
+
+1. Modelimiz Haziran ayından itibaren başarısız gözüküyor: Hala modelimizin yakalayamadığı güçlü ve düzenli şekli görebilirsiniz. Haftanın her bir günü için bir plot ile beraber bir hat çizdirmek sebebi görmemizi kolaylaştırır:
+
+```{r}
+    ggplot(daily, aes(date, resid, colour = wday)) + 
+      geom_ref_line(h = 0) + 
+      geom_line()
+    ```
+    
+Modelimiz  Cumartesi günü yapılan uçuşların sayısını doğru olarak tahmin edememektedir: Yaz aylarında beklediğimizden daha fazla uçuş varken, Güz döneminde daha azdır. Bir sonraki bölümde bu düzeni yakalamak için daha iyi nasıl yapabileceğimizi göreceğiz.
+    
+2. Beklenenden çok daha az sayıda uçuş olan birkaç gün var: 
+
+```{r}
+    daily %>% 
+      filter(resid < -100)
+    ```
+    
+Amerikalıların resmi tatillerine aşina iseniz, 4 Temmuz Şükran Günü ve Noel'i görebilirsiniz. Elbette resmi tatillere örtüşmeyen bazı durumlar da mevcuttur. Alıştırmaların birinde bunlar üzerine çalışacaksınız. 
+
+3. Tüm bir yıl boyunca biraz daha uzun vadeli bir eğilim var gibi görünmektedir. Bu eğilimi `geom_smooth()` ile vurgulayabiliriz. 
+
+```{r}
+    daily %>% 
+      ggplot(aes(date, resid)) + 
+      geom_ref_line(h = 0) + 
+      geom_line(colour = "grey50") + 
+      geom_smooth(se = FALSE, span = 0.20)
+    ```
+    
+Ocak (ve Aralık) aylarında daha az iken, yazları (Mayıs-Eylül) daha fazla uçuş yapılmaktadır.  Bu örnekle nicel olarak fazla bir şey yapamayız, çünkü sadece bir yıllık veriye sahibiz. Fakat potansiyel açıklamalar üzerine beyin fırtınası yapmak adına alan bilgilerimizi kullanabiliriz.
+
+### Mevsimsel Cumartesi Ektisi
+
+Öncelikle Cumartesi günü yapılan uçuş sayısını doğru tahmin edemememizle başa çıkalım. Başlamak için iyi bir nokta, Cumartesi günlerine odaklanarak ham sayılara geri dönmektir:
+
+```{r}
+daily %>% 
+  
+  filter(wday == "Cts") %>% 
+  ggplot(aes(date, n)) + 
+    geom_point() + 
+    geom_line() +
+    scale_x_date(NULL, date_breaks = "1 month", date_labels = "%b")
+```
+
+(Verileri ve enterpolasyonun ne olduğunu daha net göstermek için hem noktaları hem de çizgileri kullandım.)
+
+Bu dağılımın yaz tatillerinden kaynaklandığına şüpheleniyorum: çoğu insan yaz aylarında tatile gidiyor ve insanlar Cumartesi günleri tatil için seyahat etmeyi umursamıyorlar. Bu grafiğe bakacak olursak, yaz tatillerinin Haziran ayının başından Ağustos ayının sonlarına kadar olduğunu tahmin edebiliriz. Bu, devletin [okul programına](http://schools.nyc.gov/Calendar/2013-2014+School+Year+Calendars.htm) oldukça uyuyor: 2013 yılında yaz tatili 26 Haziran - 9 Eylül tarihleri arasındaydı.  
+
+İlkbahardaki Cumartesi uçuşları neden Sonbahardan daha fazladır? Bazı Amerikalı arkadaşlarıma sordum ve onlar uzun süren Şükran Günü ve Noel tatili nedeniyle Güz döneminde aile tatillerini planlamanın daha az yaygın olduğunu belirttiler. Kesin olarak kabul edecek verimiz yok, ancak makul bir çalışma hipotezi gibi görülüyor. 
+
+Okul ile ilgili üç durumu kapsayan bir "terim" değişkeni oluşturalım ve çalışmamızı bir grafik ile kontrol edelim. 
+
+```{r}
+term <- function(date) {
+  cut(date, 
+    breaks = ymd(20130101, 20130605, 20130825, 20140101),
+    labels = c("bahar", "yaz", "sonbahar") 
+  )
+}
+daily <- daily %>% 
+  mutate(term = term(date)) 
+daily %>% 
+  filter(wday == "Cts") %>% 
+  ggplot(aes(date, n, colour = term)) +
+  geom_point(alpha = 1/3) + 
+  geom_line() +
+  scale_x_date(NULL, date_breaks = "1 month", date_labels = "%b")
+```
+    
+(Grafikte güzel aralıklar elde edebilmek için tarihleri manuel olarak ayarladım. İşlevinizin ne yapıtığını anlamanıza yardımcı olacak bir görselleştirme kullanmak, oldukça güçlü ve genel bir tekniktir.)  
+
+Bu yeni değişkenin haftanın diğer günlerini nasıl etkilediğini görmek faydalı olacaktır:
+
+```{r}
+daily %>% 
+  ggplot(aes(wday, n, colour = term)) +
+    geom_boxplot()
+```
+
+Terimler arasında önemli farklılıklar var gibi gözüküyor, bu nedenle her terimi haftanın ayrı bir gününe yerleştirmek makuldur. Bu, modelimizi geliştirir, ancak umduğumuz kadar değil:
+
+```{r}
+mod1 <- lm(n ~ wday, data = daily)
+mod2 <- lm(n ~ wday * term, data = daily)
+
+daily %>% 
+  gather_residuals(without_term = mod1, with_term = mod2) %>% 
+  ggplot(aes(date, resid, colour = model)) +
+    geom_line(alpha = 0.75)
+```
+
+Modelimizden ham verilere ilişkin öngörüleri, üst üste bindirerek sorunu görebiliriz:
+
+```{r}
+grid <- daily %>% 
+  data_grid(wday, term) %>% 
+  add_predictions(mod2, "n")
+
+ggplot(daily, aes(wday, n)) +
+  geom_boxplot() + 
+  geom_point(data = grid, colour = "red") + 
+  facet_wrap(~ term)
+```
+
+Modelimiz _ortalama_ etkiyi bulmakta, ancak çok fazla aykırı değere sahibiz, bu nedenle ortalama tipik değerden çok uzak olma eğilimindedir. Aykırı değerlerin etkisine karşılık dayanıklı bir model kullanarak bu sorunu hafifletebiliriz: `MASS::rlm()`. Bu durum aykırı değerlerin tahminlerimiz üzerine olan etkisini büyük ölçüde azaltacaktır ve haftanın gününü örneğini kaldırmak için iyi bir iş çıkaran bir model sunar.
+
+```{r, warn = FALSE}
+mod3 <- MASS::rlm(n ~ wday * term, data = daily)
+
+daily %>% 
+  add_residuals(mod3, "resid") %>% 
+  ggplot(aes(date, resid)) + 
+  geom_hline(yintercept = 0, size = 2, colour = "white") + 
+  geom_line()
+```
+
+Uzun vadeli eğilim ile pozitif ve negatif aykırı değerleri görmek artık çok daha kolay.
+
+### Hesaplanan Değişkenler
+
+Eğer birçok model ve görselleştirme ile uğraşıyorsanız, oluşturulan değişkenleri bir fonksiyon içerisinde toplamak iyi bir fikirdir, böylece farklı yerlerde farklı trasnformasyonların kazara uygulanma şansını ortadan kaldırmış olursunuz. Örneğin, şu şekilde bir şey yazabiliriz:
+
+```{r}
+compute_vars <- function(data) {
+  data %>% 
+    mutate(
+      term = term(date), 
+      wday = wday(date, label = TRUE)
+    )
+}
+```
+
+Başka bir seçene de transformasyonları doğrudan model formülü içerisine koymaktır: 
+
+```{r}
+wday2 <- function(x) wday(x, label = TRUE)
+mod3 <- lm(n ~ wday2(date) * term(date), data = daily)
+```
+
+Her iki yaklaşım da makuldur. Şayet çalışmanızı kontrol etmek veya görsel amaçlı kullanmak istiyorsanız, transforme edilmiş değişkeni görünür kılmak kullanışlıdır. Ancak, birden çok sütun döndüren transformasyonları (spline'lar gibi) kolayca kullanamazsınız. Model fonksiyonu içerisine transformasyonları dahil etmek, birçok veri kümesiyle çalışırken işinizi nispeten kolaylaştırır çünkü modelin kendi içerisinde mevcuttur. 
+
+### Yılın Zamanı: Alternatif bir yaklaşım
+
+Önceki bölümde, modeli geliştirmek için alan bilgimizi (ABD okulllarının seyahatleri nasıl etkilediği) kullandık. Bilgimizi açıkca model üzerinde kullanmanın bir alternatifi, verilere daha fazla ifade imkanı tanımaktır. Daha esnek bir model kullanabilir ve ilgilendiğimiz tasarımı yakalamasına izin verebiliriz. Basit bir lineer eğilim yeterli değildir, bu nedenle doğal bir eğri kullanmayı deneyerek tüm yıla uygun eğim uydurabiliriz. 
+
+```{r}
+library(splines)
+mod <- MASS::rlm(n ~ wday * ns(date, 5), data = daily)
+daily %>% 
+  data_grid(wday, date = seq_range(date, n = 13)) %>% 
+  add_predictions(mod) %>% 
+  ggplot(aes(date, pred, colour = wday)) + 
+    geom_line() +
+    geom_point()
+```
+
+Cumartesi uçuşlarının sayısında güçlü bir işaret görüyoruz. Bu bize güven vermektedir. Çünkü ham verilerde de bu şekli gördük. Aynı sonuçları farklı yaklaşımlardan alıyor olmanız iyi bir işarettir. 
+
+### Uygulamalar
+
+1. Google'da araştırma becerilenizie kullanrak 20 Ocak, 26 Mayıs ve 1 Eylül'de neden beklenenden daha az uçuş olduğunu beyin fırtınası yapınız. (İpucu: Hepsi aynı açıklamaya sahip.) Bu günler başka bir yıla nasıl genelleştirilir?
+
+1. Yüksek pozitif rezidüelleri olan bu üç gün neyi temsil eder? 
+Bu günler başka bir yıla nasıl genelleştirilir?
+
+    ```{r}
+    daily %>% 
+      top_n(3, resid)
+    ```
+
+1. `wday` değişkenini terimlere ayıran yeni bir değişken oluşturun, ancak sadece Cumartesileri için, örneğin `Perş`, `Cum`, fakat `Cts-yaz`, `Cts-bahar`, `Cts-sonbahar` şeklinde olsun. Bu model `wday` ve `terim`'in her bir kombinasyonunu içeren model ile nasıl karşılaştırılır? 
+
+1. Cumartesiler için bir terim, resmi tatiller ve haftanın günlerini birleştiren yeni bir `wday` değişkeni oluşturun. Bu modelin rezidüelleri nasıl gözükür?
+
+1. Aya göre değişen bir haftanın gününe uygularsanız nasıl etkilenir? (örneğin, `n~wday*ay`)? Bu neden pek yardımcı olmaz?
+
+1. `n~wday + ns(date,5)` şeklinde bir model nasıl görünmesini beklersiniz? Veriler hakkındaki neyi bildiğinizi bilmenin, neden bu kadar etkili olmayacağını umuyorsunuz?
+
+1. Pazar gününden ayrılan insanların daha çok Pazartesi günü için iş seyahati yaptıklarının muhtemel olduğunu varsaydık. Zaman ve mesafeye bağlı olarak nasıl ayrım gösterdiğini görerek bu hipotezi ortaya koyun: eğer doğruya, Pazar akşamı uçuşlarının daha uzaktaki yerlere olduğunu görmeyi beklersiniz. 
+
+1. Cumartesi ve Pazar günlerinin grafikte ayrı uçlarda olması biraz sinir bozucu. Faktör seviyelerini ayarlamak için ufak bir fonksiyon yazın ki böylece hafta Pazartesi ile başlasın. 
+
+## Modeller Hakkında Daha Fazla Öğrenin
+
+Biz sadece modellemenin yüzeyine ufak bir çentik attık, ancak umarım kendi veri analizlerinizi geliştirmek için kullanabileceğiniz bazı basit, ancak genel amaçlı araçlar elde etmişsinizdir. Kolay başlamak da hiç bir sorun yoktur! Gördüğünüz gibi, çok basit modeller bile değişkenler arasındaki etkileşimi azaltma yeteneğinizde çarpıcı bir fark yaratabilir.
+
+Bu modelleme ile ilgili bölümler, kitabın geri kalanına göre daha çok sabit fikirler içermektedir.  Modellemeye, diğerlerinden biraz farklı bir bakış açısıyla yaklaşıyorum ve buna ayırabildiğim nispeten az yer var. Sadece modelleme aslında kendi üzerine bir kitabı hak ediyor, bu yüzden bu üç kitaptan en az birini okumanızı şiddetle tavsiye ederim: 
+
+* *Statistical Modeling: A Fresh Approach* Yazar: Danny Kaplan,
+  <http://www.mosaic-web.org/go/StatisticalModeling/>. Bu kitap, sezginizi, matematiksel araçlarınızı ve R becerilerinize paralel olarak geliştirdiğiniz modellemeye nazik bir giriş sağlar. Kitap, güncel ve veri bilimi ile ilgili bir müfredat sağlayarak, geleneksel bir “istatistiğe giriş” dersinin yerini alımaktadır.
+  
+* *An Introduction to Statistical Learning* Yazarlar: Gareth James, Daniela Witten, 
+  Trevor Hastie, ve Robert Tibshirani, <http://www-bcf.usc.edu/~gareth/ISL/> 
+  (çevrimiçi ücretsiz olarak ulaşılabilir). Bu kitap istatistiksel öğrenme olarak bilinen güncel modelleme teknikleri ailesini topluca sunmaktadır. Modellerin arkasında yatan matematiği daha derinden kavramak için, Trevor Hastie, Robert Tibshirani ve  Jerome Friedman tarafından yazılmış bir klasik olan *Elements of Statistical Learning* <https://web.stanford.edu/~hastie/Papers/ESLII.pdf> okuyun (bu kaynağa da çevrimiçi ücretsiz ulaşılabilir).
+
+* *Applied Predictive Modeling* Yazarlar: Max Kuhn and Kjell Johnson. Bu kitap __caret__ paketiyle ilgili uygulamaları içerir. Gerçek hayata dair modelleri yordamlama zorluklarıyla ilgili pratik araçlar sağlar.
+  <http://appliedpredictivemodeling.com>. 

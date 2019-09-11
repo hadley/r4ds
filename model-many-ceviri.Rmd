@@ -1,0 +1,703 @@
+---
+title: "Untitled"
+author: "Ortac Cetintas"
+---
+
+# Many models
+# Birçok Model
+
+## Introduction
+## Giriş
+
+In this chapter you're going to learn three powerful ideas that help you to work with large numbers of models with ease:
+Bu bölümde çok sayıda model ile kolaylıkla çalışmanıza yardımcı olacak üç etkili fikri öğreneceksiniz:
+1.  Using many simple models to better understand complex datasets.
+1.  Karmaşık veri setlerini daha iyi anlamak için birçok basit model kullanmak.
+
+1.  Using list-columns to store arbitrary data structures in a data frame.
+1.  Rastgele veri yapılarını bir veri çerçevesinde depolamak için liste-sütunlarını kullanmak.
+
+1.  For example, this will allow you to have a column that contains linear 
+    models.
+1.  Örneğin, bu, doğrusal modeller içeren bir sütuna sahip olmanızı sağlar.
+
+1.  Using the __broom__ package, by David Robinson, to turn models into tidy 
+    data. This is a powerful technique for working with large numbers of models
+    because once you have tidy data, you can apply all of the techniques that 
+    you've learned about earlier in the book.
+1.  David robinson tarafından oluşturulan __broom__ paketi, modelleri düzenli verilere dönüştürmek için kullanılır. Bu, çok sayıda modelle çalışmak için güçlü bir tekniktir, çünkü düzenli verileriniz olduğunda, kitapta daha önce öğrendiğiniz tüm teknikleri uygulayabilirsiniz.
+
+We'll start by diving into a motivating example using data about life expectancy around the world. It's a small dataset but it illustrates how important modelling can be for improving your visualisations. We'll use a large number of simple models to partition out some of the strongest signals so we can see the subtler signals that remain. We'll also see how model summaries can help us pick out outliers and unusual trends.
+Dünya çapındaki ortalama yaşam süresi hakkındaki veriyi kullanan motive edici bir örneğe dalarak başlayacağız. Bu küçük bir veri kümesidir ancak görselleştirmelerinizi geliştirmek için modellemenin ne kadar önemli olabileceğini göstermektedir.En güçlü sinyallerden bazılarını ayırmak için çok sayıda basit model kullanacağız, böylece geriye kalan daha ince sinyalleri görebiliriz. Ayrıca model özetlerinin aykırı ve sıra dışı eğilimleri seçmemize nasıl yardımcı olabileceğini de göreceğiz.
+
+The following sections will dive into more detail about the individual techniques:
+Aşağıdaki bölümler, bireysel teknikler hakkında daha detaylı olarak ele alacaktır:
+
+1. In [list-columns], you'll learn more about the list-column data structure,
+   and why it's valid to put lists in data frames.
+1. [Liste sütunları] 'nda, liste sütunu veri yapısı ve listeleri veri çerçevelerine koymanın neden geçerli olduğu hakkında daha fazla bilgi edineceksiniz.
+
+1. In [creating list-columns], you'll learn the three main ways in which you'll
+   create list-columns.
+1. [Liste sütunları oluşturma]'da, liste sütunları oluşturduğunuz üç ana yolu öğreneceksiniz.
+
+1. In [simplifying list-columns] you'll learn how to convert list-columns back
+   to regular atomic vectors (or sets of atomic vectors) so you can work
+   with them more easily.
+1. [Liste sütunları sadeleştirme]'de liste sütunlarını normal atomik vektörlere (ya da atomik vektör setlerine) nasıl dönüştüreceğimizi öğreneceksiniz, böylece onlarla daha kolay çalışabilirsiniz.
+   
+1. In [making tidy data with broom], you'll learn about the full set of tools
+   provided by broom, and see how they can be applied to other types of 
+   data structure.
+1. [broom ile düzenli veri yapma]'da broom tarafından sağlanan tüm araçlar hakkında bilgi edineceksiniz ve ve diğer veri yapıları tiplerine nasıl uygulanabileceklerini görün. 
+
+This chapter is somewhat aspirational: if this book is your first introduction to R, this chapter is likely to be a struggle. It requires you have to deeply internalised ideas about modelling, data structures, and iteration. So don't worry if you don't get it --- just put this chapter aside for a few months, and come back when you want to stretch your brain.
+Bu bölüm biraz ilham verici: Eğer bu kitap sizin R'ye ilk girişiniz ise bu bölüm size biraz mücadele gibi gözükebilir. Modelleme, veri yapıları ve tekrarlamalar hakkında derinlemesine içselleştirilmiş bilgiye sahip olmanız gerekiyor. Bu nedenle eğer anlamadıysanız endişelenmeyin--sadece bu bölümü birkaç aylığına bir kenara koyun ve beyin jimnastiği yapmanız gerektiğinde geri dönün.
+
+### Prerequisites
+### Önkoşullar
+
+Working with many models requires many of the packages of the tidyverse (for data exploration, wrangling, and programming) and modelr to facilitate modelling.
+Birçok modelle çalışmak, modellemeyi kolaylaştırmak için tidyverse (veri keşfi, tartışma ve programlama için) ve modelr'nin birçok  paketini gerektirir.
+
+```{r setup, message = FALSE}
+library(modelr)
+library(tidyverse)
+```
+
+## gapminder
+
+To motivate the power of many simple models, we're going to look into the "gapminder" data. This data was popularised by Hans Rosling, a Swedish doctor and statistician. If you've never heard of him, stop reading this chapter right now and go watch one of his videos! He is a fantastic data presenter and illustrates how you can use data to present a compelling story. A good place to start is this short video filmed in conjunction with the BBC: <https://www.youtube.com/watch?v=jbkSRLYSojo>.
+Bazı basit modellerin gücünü motive etmek için "gapminder" verisini gözden geçireceğiz. Bu veri İsveçli bir doktor ve istatistikçi olan Hans Rosling tarafından popüler hale getirilmiştir. Eğer adını hiç duymadıysanız, bu bölümü okumayı hemen bırakın ve videolarından birini izleyin! O harika bir veri sunucusudur ve zorlu bir hikaye sunmak için verileri nasıl kullanabileceğinizi gösterir.  BBC ile birlikte çekilen bu kısa video, başlamak için iyi bir yer:
+<https://www.youtube.com/watch?v=jbkSRLYSojo>.
+
+The gapminder data summarises the progression of countries over time, looking at statistics like life expectancy and GDP. The data is easy to access in R, thanks to Jenny Bryan who created the gapminder package:
+Gapminder verisi, ortalama yaşam süresi ve GSYİH gibi istatistiklere bakarak ülkelerin zaman içindeki ilerlemesini özetlemektedir.
+
+```{r}
+library(gapminder)
+gapminder
+```
+
+In this case study, we're going to focus on just three variables to answer the question "How does life expectancy (`lifeExp`) change over time (`year`) for each country (`country`)?". A good place to start is with a plot:
+Bu örnek olayda, "Ortalama yaşam süresi(`lifeExp`) zaman içerisinde (`year`) her ülke için (`country`) nasıl değişir?" sorusunu cevaplamak için sadece üç değişkene odaklanacağız. Başlamak için iyi bir yer bir plot ile:
+
+```{r}
+gapminder %>% 
+  ggplot(aes(year, lifeExp, group = country)) +
+    geom_line(alpha = 1/3)
+```
+
+This is a small dataset: it only has ~1,700 observations and 3 variables. But it's still hard to see what's going on! Overall, it looks like life expectancy has been steadily improving. However, if you look closely, you might notice some countries that don't follow this pattern. How can we make those countries easier to see?
+Bu küçük bir veriseti: sadece ~1,700 gözlem ve 3 değişkene sahip. Fakat neler olup bittiğini görmek hala zor! Genel olarak, ortalama yaşam süresi istikrarlı bir şekilde iyileşiyor gibi görünüyor. Ancak daha yakından bakarsak bazı ülkelerin bu örüntüyü takip etmediğinin farkına varabiliriz. Peki bu ülkelerin daha kolay görünmesini nasıl sağlayabiliriz?
+
+One way is to use the same approach as in the last chapter: there's a strong signal (overall linear growth) that makes it hard to see subtler trends. We'll tease these factors apart by fitting a model with a linear trend. The model captures steady growth over time, and the residuals will show what's left.
+Bir yol, son bölümde olduğu gibi aynı yaklaşımı kullanmaktır: Daha ince eğilimleri görmeyi zorlaştıran güçlü bir sinyal (genel doğrusal büyüme) var. Doğrusal eğilime sahip bir modele uyarak bu faktörleri ayıracağız. Model zamanla istikrarlı bir şekilde büyür ve artıklar bize geriye kalanları gösterecektir.
+
+You already know how to do that if we had a single country:
+Eğer elimizde tek bir ülke var ise bunu nasıl yapacağımızı zaten biliyoruz:
+
+```{r, out.width = "33%", fig.asp = 1, fig.width = 3, fig.align='default'}
+nz <- filter(gapminder, country == "New Zealand")
+nz %>% 
+  ggplot(aes(year, lifeExp)) + 
+  geom_line() + 
+  ggtitle("Full data = ")
+
+nz_mod <- lm(lifeExp ~ year, data = nz)
+nz %>% 
+  add_predictions(nz_mod) %>%
+  ggplot(aes(year, pred)) + 
+  geom_line() + 
+  ggtitle("Linear trend + ")
+
+nz %>% 
+  add_residuals(nz_mod) %>% 
+  ggplot(aes(year, resid)) + 
+  geom_hline(yintercept = 0, colour = "white", size = 3) + 
+  geom_line() + 
+  ggtitle("Remaining pattern")
+```
+
+How can we easily fit that model to every country?
+Bu modeli her ülkeye kolayca nasıl uydurabiliriz?
+
+### Nested data
+### İç içe veri
+
+You could imagine copy and pasting that code multiple times; but you've already learned a better way! Extract out the common code with a function and repeat using a map function from purrr. This problem is structured a little differently to what you've seen before. Instead of repeating an action for each variable, we want to repeat an action for each country, a subset of rows. To do that, we need a new data structure: the __nested data frame__. To create a nested data frame we start with a grouped data frame, and "nest" it:
+Bu kodu birden çok defa kopyalayıp yapıştırmayı düşünebilirsiniz; ama zaten daha iyi bir yol öğrendin! Ortak kodu bir işlevle çıkarın ve purrr'daki bir harita işlevini kullanarak tekrarlayın. Bu problem daha önce gördüğünüzden biraz farklı şekilde yapılandırılmıştır. Her değişken için bir işlemi tekrarlamak yerine her ülke için bir işlemi tekrarlamak istiyoruz, bir satır alt kümesi. Bunu yapmak için, yeni bir veri yapısına ihtiyacımız var: __nested data frame__. İç içe veri çerçevesi oluşturmak için bir gruplanmış veri çerçevesi ile başlıyoruz ve iç içe hale getiriyoruz:     
+
+```{r}
+by_country <- gapminder %>% 
+  group_by(country, continent) %>% 
+  nest()
+
+by_country
+```
+
+(I'm cheating a little by grouping on both `continent` and `country`. Given `country`, `continent` is fixed, so this doesn't add any more groups, but it's an easy way to carry an extra variable along for the ride.)
+(`continent` ve `country`'yi birlikte gruplayarak biraz hile yapıyorum. Verilen `continent`, `country` sabittir, bu nedenle daha fazla grup eklenmiyor fakat işlem boyunca bir ekstra değişken taşımak kolay bir yol.)
+
+This creates a data frame that has one row per group (per country), and a rather unusual column: `data`. `data` is a list of data frames (or tibbles, to be precise).  This seems like a crazy idea: we have a data frame with a column that is a list of other data frames! I'll explain shortly why I think this is a good idea.
+Bu, grup başına bir satır (ülke başına) ve sıra dışı bir sütuna sahip bir veri çerçevesi oluşturur: `data`. `data` data çerçevelerinin bir listesidir (kesin konuşmak gerekirse ya da tibbles). Bu çılgın bir fikir gibi görünüyor: Diğer veri çerçevelerinin bir listesi olan bir sütunu olan bir veri çerçevesine sahibiz! Bunun neden iyi bir fikir olduğunu kısaca açıklayacağım.
+
+The `data` column is a little tricky to look at because it's a moderately complicated list, and we're still working on good tools to explore these objects. Unfortunately using `str()` is not recommended as it will often produce very long output. But if you pluck out a single element from the `data` column you'll see that it contains all the data for that country (in this case, Afghanistan).
+`data` sütunu bakmak için biraz aldatıcıdır çünkü kısmen karmaşık bir liste ve hala bu nesneleri keşfetmek için iyi araçlar üzerinde çalışıyoruz. Ne yazık ki `str()`'yi kullanmak her zaman çok uzun çıktılar meydana getireceği için önerilmez. Ancak `data` sütunundan tek bir öğe çıkarırsanız, o ülke için tüm verilerini içerdiğini göreceksiniz (bu örnekte Afganistan).  
+
+```{r}
+by_country$data[[1]]
+```
+
+Note the difference between a standard grouped data frame and a nested data frame: in a grouped data frame, each row is an observation; in a nested data frame, each row is a group. Another way to think about a nested dataset is we now have a meta-observation: a row that represents the complete time course for a country, rather than a single point in time.
+Bir standart gruplanmış veri çerçevesi ve bir iç içe veri çerçevesi arasındaki farkı not edin: bir gruplanmış veri çerçevesinde her satır bir gözlem; bir iç içe veri çerçevesinde her satır bir gruptur. İç içe bir veri kümesi hakkında düşünmenin bir başka yolu, artık bir meta-gözlemimiz var: bir ülke için zaman içinde bir noktadan ziyade tüm süreci temsil eden bir satır.
+
+### List-columns
+### liste-sütunları
+
+Now that we have our nested data frame, we're in a good position to fit some models. We have a model-fitting function:
+Şimdi iç içe geçmiş veri çerçevemize sahip olduğumuza göre, bazı modellere uyacak kadar iyi bir konumdayız. Modele uygun bir fonksiyonumuz var:
+
+```{r}
+country_model <- function(df) {
+  lm(lifeExp ~ year, data = df)
+}
+```
+
+And we want to apply it to every data frame. The data frames are in a list, so we can use `purrr::map()` to apply `country_model` to each element:
+Ve bunu her veri çerçevesine uygulamak istiyoruz. Veri çerçeveleri listede var, o yüzden `country_model`'i her elemente uygulamak için `purrr::map()`'i kullanabiliriz.  
+
+```{r}
+models <- map(by_country$data, country_model)
+```
+
+However, rather than leaving the list of models as a free-floating object, I think it's better to store it as a column in the `by_country` data frame. Storing related objects in columns is a key part of the value of data frames, and why I think list-columns are such a good idea. In the course of working with these countries, we are going to have lots of lists where we have one element per country. So why not store them all together in one data frame?
+Ancak, modeller listesini serbest kayan bir nesne olarak bırakmak yerine, `by_country` veri çerçevesinde bir sütun olarak saklamanın daha iyi olacağını düşünüyorum. İlgili nesneleri sütunlarda saklamak, veri çerçevelerinin değerinin önemli bir parçasıdır ve bu yüzden liste sütunlarının bu kadar iyi bir fikir olduğunu düşünüyorum. Bu ülkelerle çalışma sürecinde, her ülkede bir elementin bulunduğu birçok listemiz olacak. Peki neden hepsini bir veri çerçevesinde saklamıyorsunuz?
+
+In other words, instead of creating a new object in the global environment, we're going to create a new variable in the `by_country` data frame. That's a job for `dplyr::mutate()`:
+Başka bir deyişle, küresel ortamda yeni bir nesne oluşturmak yerine `by_country` veri çerçevesinde yeni bir değişken yaratacağız. Bu `dplyr::mutate()`'in işi:  
+
+```{r}
+by_country <- by_country %>% 
+  mutate(model = map(data, country_model))
+by_country
+```
+
+This has a big advantage: because all the related objects are stored together, you don't need to manually keep them in sync when you filter or arrange. The semantics of the data frame takes care of that for you:
+Bunun büyük bir avantajı var: çünkü ilgili tüm nesneler bir arada saklandığından, filtrelerken veya düzenlerken bunları el ile senkronize etmenize gerek kalmaz. Veri çerçevesinin anlambilimi sizin için bunu önemser:
+
+```{r}
+by_country %>% 
+  filter(continent == "Europe")
+by_country %>% 
+  arrange(continent, country)
+```
+
+If your list of data frames and list of models were separate objects, you have to remember that whenever you re-order or subset one vector, you need to re-order or subset all the others in order to keep them in sync. If you forget, your code will continue to work, but it will give the wrong answer!
+Veri çerçeveleri listeniz ve model listeniz ayrı nesneler ise, bir vektörü ne zaman yeniden sıralar ya da altküme ayarlarsanız, bunları senkronize tutmak yerine diğerlerini tekrar sıralamanız ya da alt kümelemeniz gerektiğini unutmayın. If you forget, your code will continue to work, but it will give the wrong answer!
+
+### Unnesting
+### iç içelikten kurtarma
+
+Previously we computed the residuals of a single model with a single dataset. Now we have 142 data frames and 142 models. To compute the residuals, we need to call `add_residuals()` with each model-data pair:
+Daha önce, tek bir modelin kalıntılarını tek bir veri setiyle hesapladık. Şimdi 142 veri çerçevemiz ve 142 modelimiz var. Artıkları hesaplamak için, her model-veri çifti ile birlikte 'add_residuals () `'ı çağırmamız gerekir: 
+
+```{r}
+by_country <- by_country %>% 
+  mutate(
+    resids = map2(data, model, add_residuals)
+  )
+by_country
+```
+
+But how you can plot a list of data frames? Instead of struggling to answer that question, let's turn the list of data frames back into a regular data frame. Previously we used `nest()` to turn a regular data frame into an nested data frame, and now we do the opposite with `unnest()`:
+Ancak, veri çerçevelerinin bir listesini nasıl çizebilirsiniz? Bu soruyu cevaplamak ile uğraşmak yerine veri çerçeveleri listesini düzenli veri çerçevesine geri çevirelim. Daha önce düzenli bir veri çerçevesini iç içe bir veri çerçevesine dönüştürmek için `nest ()`'i kullanıyorduk ve şimdi tam  tersini `unnest()` ile yapıyoruz.
+
+```{r}
+resids <- unnest(by_country, resids)
+resids
+```
+
+Note that each regular column is repeated one for each row in the nested column.
+Her normal sütunun iç içe sütundaki her satır için bir kez tekrarlandığını unutmayın.
+
+Now we have regular data frame, we can plot the residuals:
+Şimdi düzenli bir veri çerçevesine sahibiz, artıkları çizebiliriz:
+
+```{r}
+resids %>% 
+  ggplot(aes(year, resid)) +
+    geom_line(aes(group = country), alpha = 1 / 3) + 
+    geom_smooth(se = FALSE)
+
+```
+
+Facetting by continent is particularly revealing:
+Kıtaya göre ayırmak özellikle açıklayıcıdır:
+
+```{r}
+resids %>% 
+  ggplot(aes(year, resid, group = country)) +
+    geom_line(alpha = 1 / 3) + 
+    facet_wrap(~continent)
+```
+
+It looks like we've missed some mild patterns. There's also something interesting going on in Africa: we see some very large residuals which suggests our model isn't fitting so well there. We'll explore that more in the next section, attacking it from a slightly different angle.
+Görünüşe göre bazı hafif kalıpları kaçırdık. Afrika'da da ilginç şeyler oluyor: modelimizin o kadar iyi uymadığını gösteren çok büyük bazı kalıntıları görüyoruz. Bunu, bir sonraki bölümde biraz daha farklı bir açıdan atağa geçerek daha fazlasını keşfedeceğiz.
+
+### Model quality
+### Model kalitesi
+
+Instead of looking at the residuals from the model, we could look at some general measurements of model quality. You learned how to compute some specific measures in the previous chapter. Here we'll show a different approach using the broom package. The broom package provides a general set of functions to turn models into tidy data. Here we'll use `broom::glance()` to extract some model quality metrics. If we apply it to a model, we get a data frame with a single row:
+Modelden kalanlara bakmak yerine, model kalitesinin bazı genel ölçümlerine bakabiliriz. Önceki bölümde bazı özel ölçümlerin nasıl hesaplanacağını öğrendiniz. Burada broom paketini kullanarak farklı bir yaklaşım göstereceğiz. broom paketi, modelleri düzenli veriye dönüştürmek için genel bir işlevler kümesi sağlar. Burada bazı model kalitesi ölçümlerini çıkarmak için `broom :: glance ()`'i kullanacağız. Eğer bunu  bir modele uygularsak, tek satırlı bir veri çerçevesi elde ederiz:
+
+```{r}
+broom::glance(nz_mod)
+```
+
+We can use `mutate()` and `unnest()` to create a data frame with a row for each country:
+Her ülke için bir satır ile veri çerçevesi oluşturmak için `mutate ()` ve `unnest ()`'i  kullanabiliriz:
+
+```{r}
+by_country %>% 
+  mutate(glance = map(model, broom::glance)) %>% 
+  unnest(glance)
+```
+
+This isn't quite the output we want, because it still includes all the list columns. This is default behaviour when `unnest()` works on single row data frames. To suppress these columns we use `.drop = TRUE`:
+Bu tam olarak istediğimiz çıktı değil çünkü hala tüm liste sütunlarını içeriyor. Bu, `unnest()`'in tek satır veri çerçeveleri üzerinde çalıştığı zamanki varsayılan davranışıdır. Bu sütunları gizlemek için `.drop = TRUE` kullanıyoruz:  
+
+```{r}
+glance <- by_country %>% 
+  mutate(glance = map(model, broom::glance)) %>% 
+  unnest(glance, .drop = TRUE)
+glance
+```
+
+(Pay attention to the variables that aren't printed: there's a lot of useful stuff there.)
+(Basılmayan değişkenlere dikkat edin: orada birçok faydalı şey var.)
+
+With this data frame in hand, we can start to look for models that don't fit well:
+Elimizdeki bu veri çerçevesi ile uygun olmayan modelleri aramaya başlayabiliriz:
+
+```{r}
+glance %>% 
+  arrange(r.squared)
+```
+
+The worst models all appear to be in Africa. Let's double check that with a plot. Here we have a relatively small number of observations and a discrete variable, so `geom_jitter()` is effective:
+En kötü modellerin hepsi Afrika'da görünüyor. Bunu bir çizim ile iki kez kontrol edelim. Burada nispeten az sayıda gözlem ve ayrık değişken var, bu nedenle `geom_jitter () 'etkilidir:
+
+```{r}
+glance %>% 
+  ggplot(aes(continent, r.squared)) + 
+    geom_jitter(width = 0.5)
+```
+
+We could pull out the countries with particularly bad $R^2$ and plot the data:
+Özellikle $R^2$ ile kötü ülkeleri çekip verileri çizebiliriz:
+
+```{r}
+bad_fit <- filter(glance, r.squared < 0.25)
+
+gapminder %>% 
+  semi_join(bad_fit, by = "country") %>% 
+  ggplot(aes(year, lifeExp, colour = country)) +
+    geom_line()
+```
+
+We see two main effects here: the tragedies of the HIV/AIDS epidemic and the Rwandan genocide.
+Burada iki ana etki görüyoruz: HIV / AIDS salgınının trajedileri ve Ruanda soykırımı.
+
+### Exercises
+### Alıştırmalar
+
+1.  A linear trend seems to be slightly too simple for the overall trend.
+    Can you do better with a quadratic polynomial? How can you interpret
+    the coefficients of the quadratic? (Hint you might want to transform
+    `year` so that it has mean zero.)
+1. Doğrusal bir eğilim, genel eğilim için biraz fazla basit görünmektedir. İkinci dereceden bir polinomla daha iyisini yapabilir misiniz? Kuadratik katsayıları nasıl yorumlayabilirsiniz? (İpucu  değiştirmek isteyebilirsiniz `year` böylece bu sıfır anlamına gelir.)
+    
+
+1.  Explore other methods for visualising the distribution of $R^2$ per
+    continent. You might want to try the ggbeeswarm package, which provides 
+    similar methods for avoiding overlaps as jitter, but uses deterministic
+    methods.
+1. Kıta başına $R^2$ dağılımını görselleştirmek için diğer yöntemleri keşfedin. jitter gibi çakışmalardan kaçınmak için benzer yöntemler sağlayan, ancak deterministik yöntemler kullanan ggbeeswarm paketini denemek isteyebilirsiniz.
+
+1.  To create the last plot (showing the data for the countries with the
+    worst model fits), we needed two steps: we created a data frame with
+    one row per country and then semi-joined it to the original dataset.
+    It's possible to avoid this join if we use `unnest()` instead of 
+    `unnest(.drop = TRUE)`. How?
+1. Son çizimi oluşturmak için (en kötü modele uyan ülkelerin verilerini gösteren) iki adıma ihtiyacımız var: Ülke başına bir satır ile bir veri çerçevesi oluşturduk ve daha sonra kısmen orijinal veri setine kattık. Eğer `unnest(.drop = TRUE)` yerine `unnest()` kullanırsak bunu önlemek mümkündür. Nasıl?
+
+## List-columns
+## Liste-sütunları
+
+Now that you've seen a basic workflow for managing many models, let's dive back into some of the details. In this section, we'll explore the list-column data structure in a little more detail. It's only recently that I've really appreciated the idea of the list-column. List-columns are implicit in the definition of the data frame: a data frame is a named list of equal length vectors. A list is a vector, so it's always been legitimate to use a list as a column of a data frame. However, base R doesn't make it easy to create list-columns, and `data.frame()` treats a list as a list of columns:.
+Artık birçok modeli yönetmek için temel bir iş akışı gördüğünüze göre, ayrıntılardan bazılarına geri dönelim. Bu bölümde, liste-sütunu veri yapısını biraz daha detaylı inceleyeceğiz. Sadece son zamanlarda liste-sütunu fikrini gerçekten takdir ettim. Liste sütunları veri çerçevesinin tanımında gizlidir: bir veri çerçevesi eşit uzunluklu vektörlerin adlandırılmış bir listesidir. Bir liste bir vektördür, bu yüzden bir listeyi veri çerçevesinin bir sütunu olarak kullanmak her zaman mantıklı olmuştur. Bununla birlikte, temel R liste sütunları oluşturmayı kolaylaştırmaz ve `data.frame ()` bir listeyi bir sütun listesi olarak değerlendirir.
+
+```{r}
+data.frame(x = list(1:3, 3:5))
+```
+
+You can prevent `data.frame()` from doing this with `I()`, but the result doesn't print particularly well:
+`Data.frame ()`'in `ı ()` ile bunu yapmasını engelleyebilirsiniz, ancak sonuç özellikle iyi yazdırılmaz:
+
+```{r}
+data.frame(
+  x = I(list(1:3, 3:5)), 
+  y = c("1, 2", "3, 4, 5")
+)
+```
+
+Tibble alleviates this problem by being lazier (`tibble()` doesn't modify its inputs) and by providing a better print method:
+Tibble, bu sorunu tembellik yaparak (`tibble ()` girişlerini değiştirmez) ve daha iyi bir baskı yöntemi sağlayarak azaltır:
+
+```{r}
+tibble(
+  x = list(1:3, 3:5), 
+  y = c("1, 2", "3, 4, 5")
+)
+```
+
+It's even easier with `tribble()` as it can automatically work out that you need a list:
+Tribble () `ile daha da kolay, çünkü bir listeye ihtiyacınız olduğunu otomatik olarak çözebilir:
+
+```{r}
+tribble(
+   ~x, ~y,
+  1:3, "1, 2",
+  3:5, "3, 4, 5"
+)
+```
+
+List-columns are often most useful as intermediate data structure. They're hard to work with directly, because most R functions work with atomic vectors or data frames, but the advantage of keeping related items together in a data frame is worth a little hassle.
+Liste sütunları genellikle ara veri yapısı olarak en kullanışlıdır. Doğrudan çalışmak zordur, çünkü çoğu R fonksiyonu atom vektörleri veya veri çerçeveleri ile çalışır, ancak ilgili öğeleri bir veri çerçevesinde bir arada tutmanın avantajı biraz zahmete değer.
+
+Generally there are three parts of an effective list-column pipeline:
+Genellikle etkili bir liste-sütun veri hattının üç bölümü vardır:
+
+1.  You create the list-column using one of `nest()`, `summarise()` + `list()`,
+    or `mutate()` + a map function, as described in [Creating list-columns].
+1. [Liste sütunları oluşturma] bölümünde açıklandığı gibi, nest () `,` summarize () `+` list () `veya` mutate () `+ bir harita işlevini kullanarak liste sütununu oluşturun.
+
+1.  You create other intermediate list-columns by transforming existing
+    list columns with `map()`, `map2()` or `pmap()`. For example, 
+    in the case study above, we created a list-column of models by transforming
+    a list-column of data frames.
+1. Mevcut liste sütunlarını `map ()`, `map2 ()` veya `pmap ()` ile dönüştürerek başka ara liste sütunları oluşturabilirsiniz.
+    
+1.  You simplify the list-column back down to a data frame or atomic vector,
+    as described in [Simplifying list-columns].
+1. Liste-sütununu [Liste-sütunlarını basitleştirme] bölümünde açıklandığı şekilde bir veri çerçevesine veya atomik vektöre indirgeyin.
+
+
+## Creating list-columns
+## Liste-sütunları oluşturma
+
+Typically, you won't create list-columns with `tibble()`. Instead, you'll create them from regular columns, using one of three methods:
+Genellikle, tibble () `ile liste sütunları oluşturmazsınız. Bunun yerine, bu üç yöntemden birini kullanarak normal sütunlardan oluşturacaksınız: 
+
+1.  With `tidyr::nest()` to convert a grouped data frame into a nested data 
+    frame where you have list-column of data frames.
+1. Gruplandırılmış bir veri çerçevesini, veri çerçevelerinin liste sütununu içeren yuvalanmış bir veri çerçevesine dönüştürmek için `tidyr :: nest ()` ile.
+
+1.  With `mutate()` and vectorised functions that return a list.
+. `mutate ()` ve bir liste döndüren vektörize işlevleri ile.
+
+1.  With `summarise()` and summary functions that return multiple results. 
+1. `summarize ()` ve birden fazla sonuç veren özet fonksiyonlar ile.
+
+Alternatively, you might create them from a named list, using `tibble::enframe()`.
+Alternatif olarak, bunları `tibble :: enframe ()` kullanarak adlandırılmış bir listeden oluşturabilirsiniz.
+
+Generally, when creating list-columns, you should make sure they're homogeneous: each element should contain the same type of thing. There are no checks to make sure this is true, but if you use purrr and remember what you've learned about type-stable functions, you should find it happens naturally.
+Genel olarak, liste sütunları oluştururken, homojen olduklarından emin olmalısınız: her öğe aynı türde bir şey içermelidir. Bunun doğru olduğundan emin olmak için herhangi bir kontrol yoktur, ancak purrr kullanıyorsanız ve tür-kararlı işlevler hakkında ne öğrendiğinizi hatırlıyorsanız, bunun doğal olduğunu görmelisiniz.
+
+### With nesting
+### İç içe koyma ile
+
+`nest()` creates a nested data frame, which is a data frame with a list-column of data frames. In a nested data frame each row is a meta-observation: the other columns give variables that define the observation (like country and continent above), and the list-column of data frames gives the individual observations that make up the meta-observation.
+`nest ()` veri çerçevelerinin bir liste sütununu içeren bir veri çerçevesi olan iç içe bir veri çerçevesi oluşturur. İç içe bir veri çerçevesinde, her satır bir meta-gözlemdir: Diğer sütunlar, gözlemi tanımlayan değişkenleri (yukarıdaki ülke ve kıta gibi) verir ve veri çerçevelerinin liste-sütunu meta-gözlemi oluşturan bireysel gözlemleri verir.
+
+There are two ways to use `nest()`. So far you've seen how to use it with a grouped data frame. When applied to a grouped data frame, `nest()` keeps the grouping columns as is, and bundles everything else into the list-column:
+`nest()` kullanmak için iki yol var. Şimdiye kadar gruplandırılmış bir veri çerçevesi ile nasıl kullanılacağını gördünüz. Gruplandırılmış bir veri çerçevesine uygulandığında, `nest()` gruplama sütunlarını olduğu gibi tutar ve listedeki her şeyi bir araya getirir:
+
+```{r}
+gapminder %>% 
+  group_by(country, continent) %>% 
+  nest()
+```
+
+You can also use it on an ungrouped data frame, specifying which columns you want to nest:
+İç içe olmasını istediğiniz sütunları belirterek, gruplandırılmamış bir veri çerçevesinde de kullanabilirsiniz:
+
+```{r}
+gapminder %>% 
+  nest(year:gdpPercap)
+```
+
+### From vectorised functions
+### Vektörize fonksiyonlardan
+
+Some useful functions take an atomic vector and return a list. For example, in [strings] you learned about `stringr::str_split()` which takes a character vector and returns a list of character vectors. If you use that inside mutate, you'll get a list-column:
+Some useful functions take an atomic vector and return a list. Örneğin, [dizgiler] 'de bir karakter vektörünü alan ve karakter vektörlerinin bir listesini döndüren `stringr :: str_split ()` hakkında bir şey öğrendiniz. Bunu mutate içinde kullanırsanız, bir liste-sütunu elde edersiniz:
+
+```{r}
+df <- tribble(
+  ~x1,
+  "a,b,c", 
+  "d,e,f,g"
+) 
+
+df %>% 
+  mutate(x2 = stringr::str_split(x1, ","))
+```
+
+`unnest()` knows how to handle these lists of vectors:
+`unnest()` bu vektör listelerinin nasıl kullanılacağını bilir:
+
+```{r}
+df %>% 
+  mutate(x2 = stringr::str_split(x1, ",")) %>% 
+  unnest()
+```
+
+(If you find yourself using this pattern a lot, make sure to check out `tidyr::separate_rows()` which is a wrapper around this common pattern).
+(Kendinizi bu kalıbı çok kullanırken bulursanız, bu ortak kalıp etrafındaki bir örtü olan `tidyr :: separa_rows ()` ı kontrol ettiğinizden emin olun).
+
+Another example of this pattern is using the `map()`, `map2()`, `pmap()` from purrr. For example, we could take the final example from [Invoking different functions] and rewrite it to use `mutate()`:
+Bu kalıbın bir başka örneği purrr'dan `map ()`, `map2 ()`, `pmap ()` kullanmaktır. Örneğin, son örneği [Invoking different functions] 'dan alabilir ve `mutate ()` kullanmak için yeniden yazabiliriz:
+
+```{r}
+sim <- tribble(
+  ~f,      ~params,
+  "runif", list(min = -1, max = 1),
+  "rnorm", list(sd = 5),
+  "rpois", list(lambda = 10)
+)
+
+sim %>%
+  mutate(sims = invoke_map(f, params, n = 10))
+```
+
+Note that technically `sim` isn't homogeneous because it contains both double and integer vectors. However, this is unlikely to cause many problems since integers and doubles are both numeric vectors.
+Teknik olarak “sim”'in homojen olmadığını unutmayın, çünkü hem çift hem de tam sayı vektörleri içerir. Bununla birlikte, tamsayıların ve çiftlerin her ikisinin de sayısal vektörler olması nedeniyle, bunun birçok soruna yol açma olasılığı yoktur.
+
+### From multivalued summaries
+### Çok değerli özetlerden
+
+One restriction of `summarise()` is that it only works with summary functions that return a single value. That means that you can't use it with functions like `quantile()` that return a vector of arbitrary length:
+Summarize () işlevinin bir kısıtlaması, yalnızca tek bir değer döndüren özet işlevleriyle çalıştığıdır. Bu, keyfi uzunluktaki bir vektör döndüren `quantile () 'gibi işlevlerle kullanamayacağınız anlamına gelir:
+
+```{r, error = TRUE}
+mtcars %>% 
+  group_by(cyl) %>% 
+  summarise(q = quantile(mpg))
+```
+
+You can however, wrap the result in a list! This obeys the contract of `summarise()`, because each summary is now a list (a vector) of length 1.
+Ancak sonucu bir listeye sarabilirsiniz! Bu, 'summarize ()' sözleşmesine uymaktadır, çünkü her özet artık 1 uzunluğunun bir listesidir (bir vektör).
+
+```{r}
+mtcars %>% 
+  group_by(cyl) %>% 
+  summarise(q = list(quantile(mpg)))
+```
+
+To make useful results with unnest, you'll also need to capture the probabilities:
+Unnest ile yararlı sonuçlar elde etmek için olasılıkları da yakalamanız gerekir:
+
+```{r}
+probs <- c(0.01, 0.25, 0.5, 0.75, 0.99)
+mtcars %>% 
+  group_by(cyl) %>% 
+  summarise(p = list(probs), q = list(quantile(mpg, probs))) %>% 
+  unnest()
+```
+
+### From a named list
+### Adlandırılmış bir listeden
+
+Data frames with list-columns provide a solution to a common problem: what do you do if you want to iterate over both the contents of a list and its elements? Instead of trying to jam everything into one object, it's often easier to make a data frame: one column can contain the elements, and one column can contain the list.  An easy way to create such a data frame from a list is `tibble::enframe()`.
+Liste-sütunlarına sahip veri çerçeveleri, ortak bir soruna çözüm sunar: Hem listenin içeriği hem de öğeleri üzerinde yineleme yapmak istiyorsanız ne yaparsınız? Her şeyi tek bir nesneye sıkıştırmaya çalışmak yerine, veri çerçevesi oluşturmak genellikle daha kolaydır: bir sütun elemanları içerebilir ve bir sütun listeyi içerebilir. Listeden böyle bir veri çerçevesi oluşturmanın kolay bir yolu `tibble :: enframe ()` dir.
+
+```{r}
+x <- list(
+  a = 1:5,
+  b = 3:4, 
+  c = 5:6
+) 
+
+df <- enframe(x)
+df
+```
+
+The advantage of this structure is that it generalises in a straightforward way - names are useful if you have character vector of metadata, but don't help if you have other types of data, or multiple vectors.
+Bu yapının avantajı, basit bir şekilde genelleşmesidir; isimler, meta veri karakter vektörüne sahipseniz kullanışlıdır, ancak başka tür veri veya çoklu vektör varsa, yardımcı olmaz.
+
+Now if you want to iterate over names and values in parallel, you can use `map2()`:
+Now if you want to iterate over names and values in parallel, you can use `map2()`:
+
+```{r}
+df %>% 
+  mutate(
+    smry = map2_chr(name, value, ~ stringr::str_c(.x, ": ", .y[1]))
+  )
+```
+
+### Exercises
+### Alıştırmalar
+
+1.  List all the functions that you can think of that take a atomic vector and 
+    return a list.
+1. Atomik bir vektör alarak aklınıza gelebilecek tüm fonksiyonları listeleyin ve bir listeye dönün.
+    
+1.  Brainstorm useful summary functions that, like `quantile()`, return
+    multiple values.
+1. Brainstorm, 'quantile ()' gibi birden fazla değeri döndüren yararlı özet işlevdir.
+    
+1.  What's missing in the following data frame? How does `quantile()` return
+    that missing piece? Why isn't that helpful here?
+1. Aşağıdaki veri çerçevesinde eksik olan nedir? Quantile () `bu eksik parçayı nasıl döndürür? Bu neden burada yardımcı olmuyor?
+
+    ```{r}
+    mtcars %>% 
+      group_by(cyl) %>% 
+      summarise(q = list(quantile(mpg))) %>% 
+      unnest()
+    ```
+
+1.  What does this code do? Why might might it be useful?
+1.  Bu kod ne yapar? Neden faydalı olabilir?
+
+    ```{r, eval = FALSE}
+    mtcars %>% 
+      group_by(cyl) %>% 
+      summarise_each(funs(list))
+    ```
+
+## Simplifying list-columns
+## Liste-sütunlarını basitleştirme
+
+To apply the techniques of data manipulation and visualisation you've learned in this book, you'll need to simplify the list-column back to a regular column (an atomic vector), or set of columns. The technique you'll use to collapse back down to a simpler structure depends on whether you want a single value per element, or multiple values:
+Bu kitapta öğrendiğiniz veri işleme ve görselleştirme tekniklerini uygulamak için, liste sütununu normal bir sütuna (bir atomik vektör) veya sütun kümesine basitleştirmeniz gerekir. Daha basit bir yapıya geri daraltmak için kullanacağınız teknik, element başına tek bir değer mi yoksa birden çok değer mi istediğinize bağlıdır:
+
+1.  If you want a single value, use `mutate()` with `map_lgl()`, 
+    `map_int()`, `map_dbl()`, and `map_chr()` to create an atomic vector.
+1. Tek bir değer istiyorsanız, `mutate ()`'i, `map_lgl ()` ile kullanın, atomik bir vektör oluşturmak için ise map_int (), map_dbl (), ve map_chr ().
+    
+1.  If you want many values, use `unnest()` to convert list-columns back
+    to regular columns, repeating the rows as many times as necessary.
+1. Çok sayıda değer istiyorsanız, liste-sütunlarını normal sütunlara geri dönüştürmek için `unnest ()` kullanın ve satırları gerektiği kadar tekrarlayın.
+
+These are described in more detail below.
+Bunlar aşağıda daha ayrıntılı olarak açıklanmaktadır.
+
+### List to vector
+### Listeden vektöre
+
+If you can reduce your list column to an atomic vector then it will be a regular column. For example, you can always summarise an object with its type and length, so this code will work regardless of what sort of list-column you have:
+Liste sütununuzu bir atomik vektöre indirgeyebilirseniz normal bir sütun olacaktır. Örneğin, bir nesneyi türüne ve uzunluğuna göre her zaman özetleyebilirsiniz; bu nedenle, bu kod, hangi tür liste-sütunu olduğuna bakılmaksızın çalışacaktır: 
+
+```{r}
+df <- tribble(
+  ~x,
+  letters[1:5],
+  1:3,
+  runif(5)
+)
+  
+df %>% mutate(
+  type = map_chr(x, typeof),
+  length = map_int(x, length)
+)
+```
+
+This is the same basic information that you get from the default tbl print method, but now you can use it for filtering. This is a useful technique if you have a heterogeneous list, and want to filter out the parts aren't working for you.
+Bu, varsayılan tbl yazdırma yönteminden edindiğiniz temel bilgilerdir, ancak şimdi filtrelemek için kullanabilirsiniz. Heterojen bir listeniz varsa ve sizin için çalışmayan kısımları filtrelemek istiyorsanız bu yararlı bir tekniktir.
+
+Don't forget about the `map_*()` shortcuts - you can use `map_chr(x, "apple")` to extract the string stored in `apple` for each element of `x`. This is useful for pulling apart nested lists into regular columns. Use the `.null` argument to provide a value to use if the element is missing (instead of returning `NULL`):
+`Map _ * ()` kısayollarını unutma - her 'x` elemanı için' apple` içinde depolanan dizgiyi çıkarmak için `map_chr (x," apple ")` kullanabilirsiniz. Bu, iç içe listeleri düzenli sütunlara ayırmak için kullanışlıdır. Eğer öğe eksikse kullanılacak bir değer sağlamak için `.null` argümanını kullanın (`NULL` döndürmek yerine):
+
+```{r}
+df <- tribble(
+  ~x,
+  list(a = 1, b = 2),
+  list(a = 2, c = 4)
+)
+df %>% mutate(
+  a = map_dbl(x, "a"),
+  b = map_dbl(x, "b", .null = NA_real_)
+)
+```
+
+### Unnesting
+### İç içelikten kurtarma
+
+`unnest()` works by repeating the regular columns once for each element of the list-column. For example, in the following very simple example we repeat the first row 4 times (because there the first element of `y` has length four), and the second row once:
+`unnest()`, liste sütununun her bir öğesi için normal sütunları bir kez tekrarlayarak çalışır. Örneğin, aşağıdaki çok basit örnekte ilk satırı 4 kez tekrar ediyoruz (çünkü `y` nin ilk öğesinin uzunluğu 4'dür) ve ikinci satırı bir kez:
+
+```{r}
+tibble(x = 1:2, y = list(1:4, 1)) %>% unnest(y)
+```
+
+This means that you can't simultaneously unnest two columns that contain different number of elements:
+Bu farklı sayıda öğe içeren iki sütunu aynı anda iç içelikten kurtaramayacağımız anlamına geliyor:
+
+```{r, error = TRUE}
+# Ok, because y and z have the same number of elements in
+# every row
+df1 <- tribble(
+  ~x, ~y,           ~z,
+   1, c("a", "b"), 1:2,
+   2, "c",           3
+)
+df1
+df1 %>% unnest(y, z)
+
+# Doesn't work because y and z have different number of elements
+df2 <- tribble(
+  ~x, ~y,           ~z,
+   1, "a",         1:2,  
+   2, c("b", "c"),   3
+)
+df2
+df2 %>% unnest(y, z)
+```
+
+The same principle applies when unnesting list-columns of data frames. You can unnest multiple list-cols as long as all the data frames in each row have the same number of rows.
+Bu prensip veri çerçevelerinin liste-sütunlarını iç içelikten kurtarırken uygulanır. Her satırdaki tüm veri çerçeveleri aynı sayıda satıra sahip olduğu sürece çoklu liste-sütunlarını iç içelikten kurtarabiliriz.
+
+### Exercises
+### Alıştırmalar
+
+1.  Why might the `lengths()` function be useful for creating atomic
+    vector columns from list-columns?
+1.  Neden `length ()` işlevi liste-sütunlarından atomik vektör sütunlar oluşturmak için faydalı olabilir?
+    
+1.  List the most common types of vector found in a data frame. What makes
+    lists different?
+1.  Veri çerçevesinde bulunan en yaygın vektör türlerini listeleyin. Listeleri farklı yapan nedir?
+
+## Making tidy data with broom
+## broom ile düzenli veri oluşturma
+
+The broom package provides three general tools for turning models into tidy data frames:
+broom paketi, modelleri düzenli veri çerçevelerine dönüştürmek için üç genel araç sunar:
+
+1.  `broom::glance(model)` returns a row for each model. Each column gives a 
+    model summary: either a measure of model quality, or complexity, or a 
+    combination of the two.
+1. `broom :: glance (model)` her model için bir satır döndürür. Her sütun bir model özeti verir: bir model kalitesi ölçüsü veya karmaşıklık veya ikisinin bir kombinasyonu.
+   
+1.  `broom::tidy(model)` returns a row for each coefficient in the model. Each 
+    column gives information about the estimate or its variability.
+1. `broom :: tidy (model)`, modeldeki her katsayı için bir satır döndürür. Her sütun, tahmin veya değişkenliği hakkında bilgi verir.
+    
+1.  `broom::augment(model, data)` returns a row for each row in `data`, adding
+    extra values like residuals, and influence statistics.
+1. `broom::augment(model, data)` veri içindeki her satır için bir satır döndürür, artıklar gibi ekstra değerler ekler ve istatistikleri etkiler.
+
