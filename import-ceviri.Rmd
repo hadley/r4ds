@@ -1,0 +1,672 @@
+# Veri aktarımı
+
+## Giriş
+
+R tarafından sağlanan verilerle çalışmak veri biliminin araçlarını öğrenmek için harika bir yol olsa da, belli bir noktada öğrenmeyi bırakıp kendi verinizle çalışmak isteyeceksiniz. Bu bölümde "plain-text rectangular" dosyaları R'ye nasıl aktaracağımızı öğreneceğiz. Bu bölümde veri aktarımını yüzeysel olarak inceleyeceğiz, fakat çoğu prensip farklı veri formatları için de kullanılabilecek. Bitirirken diğer veri türleri için yararlı birkaç pakete de değineceğiz.
+
+### Önkoşullar
+
+Bu bölümde düz formattaki dosyaları tidyverse'ün temel öğelerinden biri olan __readr__ paketiyle R'ye nasıl yükleyeceğinizi öğreneceksiniz.
+
+```{r setup, message = FALSE}
+library(tidyverse)
+```
+
+## Başlarken
+
+readr fonksiyonlarının çoğu düz formattaki dosyaları veri tablolarına çevirmekle alakalıdır:
+
+* `read_csv()` virgülle ayrılmış dosyaları, `read_csv2()` noktalı virgülle
+   ayrılmış dosyaları (virgülün ondalık basamakları ayırmak için
+   kullanıldığı ülkelerde yaygın),`read_tsv()` sekmeyle ayrılmış dosyaları,
+   `read_delim()` ise başka herhangi bir şekilde ayrılmış tüm dosyaları
+   açmak için kullanılır.
+
+* `read_fwf()` sabit genişlikteki dosyaları açmak için kullanılır. Bu
+  alanları genişliklerine göre `fwf_widths()` komutuyla ya da  
+  pozisyonlarına göre `fwf_positions()` komutuyla ayarlayabilirsiniz.
+  `read_table()` sabit genişlikli dosyalar grubuna giren, sütunların beyaz
+  alanla ayrılmış yaygın bir türünü açmak için kullanılır.
+ 
+* `read_log()` Apache türü log dosyalarını okutmak için kullanılır. (Yine
+   de [webreadr](https://github.com/İronholds/webreadr) paketine de bir göz
+   atın, bu paket `read_log()` komutuna ek olarak yazılmıştır ve pek çok
+   yararlı araç sunar.)
+  
+Bu fonksiyonların hepsi benzer bir sözdizimine sahiptir. Bir kere birine hakim olduğunuzda, diğerlerini kolaylıkla kullanabilirsiniz. Bu bölümün geri kalanında, `read_csv()` komutuna odaklanacağız. csv dosya formatı en çok kullanılan formatlardan biri olmakla beraber, bir kere `read_csv()` komutunu öğrendiğinizde, size readr paketinin diğer tüm komutlarını kolaylıkla uygulayabileceğiniz bir bilgi kazandırmış olacak.
+
+`read_csv()` komutunun ilk değişkeni en önemli olanıdır: okutulacak dosyanın bilgisayardaki yeri.
+
+```{r, message = TRUE}
+heights <- read_csv("data/heights.csv")
+```
+
+`read_csv()` komutunu yürüttüğünüzde, her bir sütunun adını ve türünü veren bir çıktı alacaksınız. Bu readr komutunun önemli bir özelliği ve bu konuya tekrar geri döneceğiz [parsing a file].
+
+Bu komut ile R'de kendi csv dosyanızı da yaratabilirsiniz. Bu özellik readr ile alıştırma yapmak ya da başkaları tarafından tekrarlanabilecek örnekler yaratmak açısından faydalı olacaktır:
+
+```{r}
+read_csv("a,b,c
+1,2,3
+4,5,6")
+```
+
+Her iki durumda da `read_csv()` verinin ilk satırını sütun isimleri olarak kullanır ki bu özellik oldukça yaygın bir formattır. Komutun bu özelliğini daha detaylı ayarlamak isteyebileceğiniz iki durum söz konusu olabilir:
+
+1.  Bazen dosyanın başında çok fazla bir veri bulunmayabilir. Bu satırları
+    `skip = n` şeklinde tanımlayarak, ilk `n` adet satırı üzerinde
+    çalışacağınız veriden çıkarabilirsiniz; ya da `comment = "#"` şeklinde
+    tanımlayarak bu örnekte `#` ile başlayan bütün satırları veriden
+    çıkarabilirsiniz.
+
+
+    ```{r}
+    read_csv("The first line of metadata
+      The second line of metadata
+      x,y,z
+      1,2,3", skip = 2)
+    
+    read_csv("# A comment I want to skip
+      x,y,z
+      1,2,3", comment = "#")
+    ```
+
+2.  Veride sütunların isimleri olmayabilir. Bu durumda `col_names = FALSE`
+    şeklinde bir tanımlamayla `read_csv()` fonksiyonuna ilk satırı başlık
+    olarak kullanmamasını, bunun yerine sütunları `X1`den `Xn`e kadar 
+    adlandırmasını söyleyebilirsiniz:
+
+    ```{r}
+    read_csv("1,2,3\n4,5,6", col_names = FALSE)
+    ```
+      
+    (`"\n"` yeni satırlar eklemek için çok kullanışlı bir kısayol. Bunu ve     veride tanıtılması           gereken belirsizliklerle başa çıkmaya         yarayan benzer fonksiyonları ilerileyen kısımlarda daha       detaylı      öğreneksiniz [string basics].)
+
+    Alternatif olarak `col_names` kullanarak bir karakter vektörü yaratıp,     sütun isimlerini istediğiniz şekilde isimlendirebilirsiniz:
+    
+    ```{r}
+    read_csv("1,2,3\n4,5,6", col_names = c("x", "y", "z"))
+    ```
+
+Sıklıkla ayarlanması gereken diğer bir seçenek ise `na`: bu seçenek dosyanızdaki eksik verileri belirlemek için kullanılmış değerleri belirler:
+
+```{r}
+read_csv("a,b,c\n1,2,.", na = ".")
+```
+
+Buraya kadar CSV dosyalarını okuturken karşılacağınız durumlar için bilmeniz gerekenlerin yaklaşık %75'ini öğrendiniz. Ayrıca şimdiye kadar öğrendiklerinizi kolaylıkla uyarlayarak sekmeyle ayrılmış dosyaları okutmak için olan `read_tsv()` ve belli aralıklarla ayrılmış dosyaları okutmak için olan `read_fwf()` fonskiyonlarını da kullanabilirsiniz. Daha zorlayıcı dosyaları R'ye okutmak için, readr ile sütunların nasıl ayrıştırıldığını ve R vektörlerine dönüştürüldüklerini öğrenmeniz gerekecek.
+
+### Temel R'ye kıyasla
+
+Daha önce R ile çalıştıysanız, neden `read.csv()` fonksiyonunu kullanmadığımızı merak ediyor olabilirsiniz. readr fonksiyonlarını temel R fonksiyonlarına tercih etmemizin  birkaç iyi neden var:
+
+* readr fonksiyonları temel R'nin karşılık gelen fonksiyonlarından genel
+  olarak çok daha hızlılar (10 kat). Uzun süren işlerde bir ilerleme
+  çubuğu olur, böylece işin ne aşamada olduğunu takip edebilirsiniz. Eğer
+  `data.table::fread()` fonksiyonunu kullanarak temel fonksiyonların ne
+  kadar zaman aldığını görebilirsiniz. Bu fonksiyon tidyverse içerisinde  
+  çok verimli olmasa da, oldukça hızlı çalışacaktır.
+
+* readr fonksiyonları tibble formatlarını kullandığı için, karakter
+  vektörlerini faktörlere çevirmezler, satır adlarını kullanmazlar ya da
+  sütun adlarını bir formattan diğerine dönüştürmezler. Bunlar temel R
+  fonksiyonlarının sıklıkla yarattığı sorunların temel nedenleridir.
+  
+* readr fonksiyonlarının tekrarlanması çok daha kolaydır. Temel R
+  fonskiyonları işletim sisteminden ve çalışma ortamındaki değişkenlerden
+  kaynaklanan bazı ayarları devralır. Bu yüzden de sizin 
+  bilgisayarınızda çalışan bir kod, başka birinin bilgisayarında   
+  çalışmayabilir.
+
+### Alıştırmalar
+
+1.  Alanların "|" ile ayrıldığı bir dosyayı R'ye okutmak için hangi    
+    fonksiyonu kullanırdınız?
+
+2.  `read_csv()` ve `read_tsv()` fonksiyonlarında `file`, `skip`, ve   
+    `comment` değişkenleri dışında başka hangi ortak değişkenler vardır?
+
+3.  `read_fwf()` foksiyonunun en önemli değişkenleri nelerdir?
+
+4.  Bazeb CSV dosyalarındaki diziler virgül içerebilir. Bu durumun bir 
+    sorun yaratmaması için dizilerin `"` ya da `'` ile tırnak içine   
+    alınması gerekir. Genelde`read_csv()` tırnak işareti olarak `"`   
+    kullanır, eğer bunu değiştirmek istiyorsanız `read_delim()`  
+    fonksiyonunu kullanmanız gerekir. Böyle bir durumda, aşağıdaki metni  
+    bir veri tablosu olarak okutmak için fonksiyonun hangi değişkenlerini      belirtmeniz gerekir? 
+
+    ```{r, eval = FALSE}
+    "x,y\n1,'a,b'"
+    ```
+    
+5.  Aşağıda verilen her bir CSV dosyasında neyin sorun yarattığını 
+    belirleyin. Kodu yürüttüğünüzde ne görüyorsunuz?
+    
+    ```{r, eval = FALSE}
+    read_csv("a,b\n1,2,3\n4,5,6")
+    read_csv("a,b,c\n1,2\n1,2,3,4")
+    read_csv("a,b\n\"1")
+    read_csv("a,b\n1,2\na,b")
+    read_csv("a;b\n1;3")
+    ```
+
+## Bir vektörün çözümlenmesi
+
+readr'ın dosyaları nasıl okuduğunun detaylarına girmeden önce, yolumuzu biraz uzatıp `parse_*()` fonksiyonlarından bahsetmemiz gerekiyor. Bu fonksiyonlar karakter vektörlerini daha özelleşmiş olan mantıksal, sayısal ya da tarihsel vektörlere çevirebiliyorlar:
+
+```{r}
+str(parse_logical(c("TRUE", "FALSE", "NA")))
+str(parse_integer(c("1", "2", "3")))
+str(parse_date(c("2010-01-01", "1979-10-14")))
+```
+
+Bu fonksiyonlar kendi başlarına yararlı oldukları gibi, readr'ın da önemli yapıtaşlarını oluşturuyorlar. Bu bölümde her bir parser fonksiyonunun nasıl çalıştığını öğrendikten sonra, bir sonraki bölümde hepsinin bir araya gelerek bir dosyayı nasıl ayrıştırdığını göreceğiz.
+
+tidyverse'deki tüm fonksiyonlar gibi, `parse_*()` fonksiyonları da birbirine benzer bir yapıdadırlar: ilk değişken çözümlenecek bir karakter vektörü, ve `na` eksik olarak değerlendirilmesi gereken dizileri belirleyen bir değerdir:
+
+```{r}
+parse_integer(c("1", "231", ".", "456"), na = ".")
+```
+
+Çözümleme gerçekleştirilemezse, uyarı bildirimi alırsınız:
+
+```{r}
+x <- parse_integer(c("123", "345", "abc", "123.45"))
+```
+
+Bu bildirimler işlem sonucunda gördüğünüz çıktıda bulunmaz:
+
+```{r}
+x
+```
+
+Eğer çok fazla çözümleme hatası varsa, `problems()` fonksiyonunu kullanarak hataların tümüne ulaşmanız gerekecektir. Ve bu fonksiyon dplyr ile üzerinde çalışabileceğiniz bir tibble çıktısı verir.
+
+```{r}
+problems(x)
+```
+
+Çözümleme fonksiyonlarını kullanmak, daha çok nelerin ulaşılabilir olduğunu bilmek ve farklı tiplerdeki girdilerle nasıl çalışılabileceğini öğrenmekle ilgili. 
+
+Özellikle, 8 önemli parser fonksiyonu var: 
+
+1.  `parse_logical()` ve `parse_inteğer()` sırasıyla mantıksal ve sayısal 
+    vektörleri çözümlemede kullanılır. Temelde bu çözümleme 
+    fonksiyonlarıyla ters gidebilecek hiç birşey yok, o yüzden bu
+    fonksiyonları daha detaylı açıklamayacağım.
+    
+2.  `parse_double()` sabit bir sayı çözümleyici, `parse_number()` ise 
+    daha esnek bir sayı çözümleyici. Bu fonksiyonlar düşündüğünüzden daha
+    karmaşıklar, bunun en onemli nedeni Dünya'nın farklı yerlerinde 
+    sayıların farklı şekillerde yazılması.
+    
+3.  `parse_character()` o kadar basit görünüyor ki kullanmaya ihtiyaç  
+     olmayacağını düşünebilirsiniz. Fakat,bu fonksiyonu oldukça
+     önemli hale getiren bir pürüz var: karakter kodlaması.
+
+4.  `parse_factor()` faktörleri yaratmak için kullanılır. Faktörler, R'nin      kategorik değişkenleri sabit ve belirli değerler olarak temsil etme   
+     şeklidir.
+
+5.  `parse_datetime()`, `parse_date()`, ve `parse_time()` tarih ve zamanla 
+    ilgili pek çok özelliği çözümlemenizi mümkün kılıyor. Tarihleri  
+    yazmanın pek çok farklı şekli olduğu için bu çözümlemeler çözümlemeler
+    içinde en zor olanları. 
+
+İlerleyen kisimlarda bu parser fonksiyonlarını daha detaylı açıklayacağım.
+
+### Sayılar
+
+Sayıları çözümlemek çok kolay gibi gözükse de,bu çözümlemeler genel olarak üç durumdan ötürü karmaşıklaştırabiliyor:
+
+1. İnsanlar Dünya'nın farklı yerlerinde sayıları farklı şekillerde
+   yazıyorlar. Örneğin, bazı ülkelerde `.` kesirli sayılarda kesme işareti
+   olarak kullanılırken diğer ülkelerde bunun için `,` kullanılıyor.
+   
+2. Sayılar genelde onlara eşlik eden başka karakterlerle kullanılabiliyorlar;
+   örneğin, "$1000" ya da "10%".
+   
+3. Sayılar okunmalarını kolaylaştırmak için bazı gruplayıcı karakterler
+   içerebiliyorlar (örneğin "1,000,000") ve Dünya çapında bu gruplama
+   karakterleri değişkenlik gösteriyor. 
+
+İlk sorunla başa çıkmak için readr'nin "locale" denilen kavramını kullanmak gerekiyor. "locale" seçeneği "parsing" (çözümleme) seçeneğini yerine göre tanımlamaya yarıyor. Sayıları çözümlerken en önemli karakter, ondalıkları belirlemek için kullanılan işaret. Ondalıkları ayrımada varyasılan değer olan `.` işaretini tekrardan tanımlayabilirsiniz. Bunun için yeni bir "locale" yaratıp `decimal_mark` argümanını tekrardan tanımlamanız gerekir.
+
+```{r}
+parse_double("1.23")
+parse_double("1,23", locale = locale(decimal_mark = ","))
+```
+
+readr'nin varolan "locale"  seçeneği ABD eksenli, çünkü genellikle R'nin kendisi ABD eksenli (örneğin, Temel R dokümantasyonu Amerikan İngilizcesiyle yazılmıştır). Alternatif olarak işletim sisteminizin varsayılan değerlerini tahmin etmeye çalışabilirsiniz. Bu yöntem, doğru bir şekilde yapması zor olduğu gibi, daha da önemlisi, kodunuzu kırılganlaşmasına neden olacaktır. Yani kodunuz sizin bilgisayarınızda çalışmasına rağmen, kodunuzu başka bir ülkedeki meslektaşınıza mail attığınızda çalışmayabilir.
+
+`parse_number()` fonksiyonu ikinci problemle ilgili olarak devreye giriyor. Bu fonksiyon sayıdan önce ve sonra gelen, ve sayısal olmayan karakterleri görmezden geliyor. Bu fonksiyon özellikle para birimleri ve yüzdelikler söz konusu olduğunda kullanışlı bir hale geliyor. Aynı zamanda bu fonksiyonu yazıların içine gömülü sayıları çekip çıkarmak için de kullanabilirsiniz.
+
+```{r}
+parse_number("$100")
+parse_number("20%")
+parse_number("It cost $123.45")
+```
+
+Son olarak, `parse_number()` fonksiyonu "grouping mark" argümanını görmezden geleceği için, üçüncü problemle başa çıkmak için `parse_number()` ve "locale" seçeneklerinin birleşimini kullanabilirsiniz:
+
+```{r}
+# Amerika'da kullanılan
+parse_number("$123,456,789")
+
+# Avrupa'nın pek çok yerinde kullanılan
+parse_number("123.456.789", locale = locale(grouping_mark = "."))
+
+# İsviçre'de kullanılan
+parse_number("123'456'789", locale = locale(grouping_mark = "'"))
+```
+
+### Diziler {#readr-strings}
+
+`parse_character()` fonksiyonu oldukça basit görünse de, ne yazık ki hayat o kadar da basit değil. Aynı diziyi temsil edebilecek pek çok gösterim mevcut. Bunun tam olarak ne olduğunu anlayabilmek için, bilgisayarların dizileri nasıl tanımladığının detaylarına inmemiz gerekiyor. R'de, `charToRaw()` fonksiyonunu kullanarak dizilerin altında yatan detayları öğrenebilirsiniz:
+
+```{r}
+charToRaw("Hadley")
+```
+
+Bu örnekte her onaltılık sayı bir bilgiyi barındıyor: `48` H harfini, `61` a harfini, vb. Bu onaltılık düzendeki sayılardan karakterlere eşleştirme yapmaya şifreleme deniyor, ve bu örnekteki şifrelemenin adı ASCII (the __American__ Standard Code for Information Interchange). Dolayısıyle ASCII İngilizce karakterleri temsil etmek için oldukça iyi bir şifreleme yöntemi.
+
+İngilizce dışındaki diğer diller söz konusu olduğunda işler biraz karışıyor. Programlamanın yeni dönemlerinde, İngilizce olmayan karakterleri şifremelemek için ve bilmeniz gereken şifreyi ve değerleri doğru bir şekilde yorumlayabilmek için kullanılabilecek pek çok yöntem vardı. Örneğin, en yaygın iki şifreleme yönteminde biri Latin1 (ya da ISO-8859-1, Batı Avrupa dilleri için) and Latin2 (ya da İSO-8859-2, Doğu Avrupa dilleri için). In Latin1, the byte `b1` is "±", but in Latin2, it's "ą"! Neyse ki, bugün tek bir standart sistem neredeye her yerde kullanılabiliyor: UTF-8. UTF-8 insanlar tarafından kullanılan nerdeyse her karakteri hatta pek çok ekstra sembolü (emoji gibi!) şifreleyebilir.
+
+readr her yerde UTF-8 kullanır: datanızın UTF-8 ile şifrelendiğini varsayar, ve datanızı tekrar yazarken de UTF-8 kullanır. Bu durum her ne kadar kullanışlı olsa da, UTF-8 şifrelemesinden anlamayan eski yazılımlarda sorunlara yol açaktır. Eğer bu başınıza gelirse, R'ye okuttuğunuz dizi, garip bir çıktı verecektir. Bazen bir iki karakter, bazen de dizinin tamamı anlaşılmaz bir hal alacaktır. Örneğin:
+
+```{r}
+x1 <- "El Ni\xf1o was particularly bad this year"
+x2 <- "\x82\xb1\x82\xf1\x82\xc9\x82\xbf\x82\xcd"
+
+x1
+x2
+```
+
+Bu sorunu çözmek için şifreleme yöntemini `parse_character()` fonksiyonuyla belirlemeniz gerekir:
+
+```{r}
+parse_character(x1, locale = locale(encoding = "Latin1"))
+parse_character(x2, locale = locale(encoding = "Shift-JIS"))
+```
+
+Peki, doğru şifrelemeyi nasıl bulabilirsiniz? Eğer şanslıysanız, şifreleme bilgisi verinizin dokümantasyonunda verilecektir. Maalesef, bu oldukça nadir bir durum, bu yüzden de readr `guess_encoding()` fonksiyonunu verinizin şifreleme yöntemini bulabilmeniz için size sunuyor. Bu fonksiyon kusursuz değil ve çok fazla yazı olan dosyalar (bu dosyanın tam tersi) için ise yararıyor. Yine de makul bir başlangıç diyebiliriz. Doğru olanı bulabilmek için bir kaç farklı şifrelemeyi denemeniz gerekeceğini şimdiden gözönünde bulundurun.
+
+```{r}
+guess_encoding(charToRaw(x1))
+guess_encoding(charToRaw(x2))
+```
+
+`guess_encoding()` fonksiyonunun ilk argümanı ya bir dosyaya giden yol ya da bu örnekte de olduğu gibi ham bir vektör (diziler, zaten R'deyse kullanışlı) olabilir.
+
+Şifrelemeler oldukça karmaşık ve içeriği zengin bir konu, ben burada konuyu sadece çok yüzeysel bir şekilde ele aldım. Eğer bu konu hakkında daha fazla bilgi almak isterseniz,  bu kaynaktan daha detaylı açıklamaları okumanızı tavsiye ederim: <http://kunststube.net/encoding/>.
+
+### Faktörler {#readr-factors}
+
+Belli olası değerler alabilen kategorik değişkenleri temsil etmek için R faktörleri kullanır. `parse_factor()` fonksiyonuna bilinen değerler alabilen bir vektörü verirseniz, ne zaman beklenmeyen bir değerle karşılaşırsa uyarı mesajı verecektir.
+
+```{r}
+fruit <- c("apple", "banana")
+parse_factor(c("apple", "banana", "bananana"), levels = fruit)
+```
+
+Fakat eğer pek çok problemli girdide bulunursanız, bu durumda vektörleri karakter vektörleri olarak bırakmanız ve [diziler] ve [faktörler] kısımlarında öğreneceğiniz araçları kullanmanız çoğu zaman daha kolay olacaktır. 
+
+### Tarihler, tarih-zamanlar, ve zamanlar  {#readr-datetimes}
+
+İstediğiniz şeye bağlı olarak varolan üç çözümleyiciden birini seçebilirsiniz; tarih (1970-01-01'den beri olan günlerin sayısı), tarih-zaman (1970-01-01 gece yarısından itibaren olan saniyelerin sayısı) ya da zaman (gece yarısından itibaren olan saniyelerin sayısı). 
+
+Ek olarak argümanlar kullanmadığınızda:
+
+*   `parse_datetime()` bir ISO8601 tarih-zaman bilgisi ister. ISO8601 uluslarası bir
+    standarttır, ve tarihi büyükten küçüğe doğru sıralar: yıl, ay, gün, saat, dakika
+    ve saniye.
+    
+    ```{r}
+    parse_datetime("2010-10-01T2010")
+    # Eğer zaman bilgisini kaldırırsanız, gece yarısı zaman olarak kabul edilir.
+    parse_datetime("20101010")
+    ```
+    
+    Bu en önemli tarih/zaman standartıdır. Eğer tarihlerle ve zamanlarla 
+    sıklıkla çalışıyorsanız, şunu okumanızı tavsiye ederim:
+    <https://en.wikipedia.org/wiki/ISO_8601>
+    
+*   `parse_date()` 4 haneli bir yıl bilgisi ister. Yıl, `-` ya da `/`, ay, `-` 
+    ya da `/`, ve gün:
+    
+    ```{r}
+    parse_date("2010-10-01")
+    ```
+
+*   `parse_time()` saat bilgisi ister. Saat, `:`, dakika, isteğe bağlı olarak `:`,
+    saniye, ve yine isteğe bağlı olarak am/pm belirteci:
+  
+    ```{r}
+    library(hms)
+    parse_time("01:10 am")
+    parse_time("20:10:01")
+    ```
+    
+    Temel R'de zaman verişi için kurulmuş çok iyi bir sistem yok,
+    Bu yüzden hms paketinin sunduğu seçeneği kullanıyoruz.
+
+Eğer bu varolan kaynaklar işinize yaramazsa, kendi tarih-zaman verinizi destekleyecek `format` şeklini aşağıdaki parçalardan inşa edebilirsiniz:
+
+Yıl
+: `%Y` (4 haneli). 
+: `%y` (2 haneli); 00-69 -> 2000-2069, 70-99 -> 1970-1999.
+
+Ay
+: `%m` (2 haneli).
+: `%b` (kısaltılmış isim, mesela "Jan").
+: `%B` (tam isim, "January").
+
+Gün
+: `%d` (2 haneli).
+: `%e` (tercihe bağlı takip eden boşluk).
+
+Zaman
+: `%H` 0-23 saat.
+: `%İ` 0-12,`%p` ile birlikte kullanmak şartıyla.
+: `%p` AM/PM belirteci.
+: `%M` dakikalar.
+: `%S` tamsayı saniyeler.
+: `%OS`saniyeler. 
+: `%Z` Zaman dilimi (isimler  gibi, mesela `America/Chicago`). Kısaltmaların   
+       farkında olun: Eğer Amerikansanız, "EST" doğuya ait bir standart olmadığını,
+       Kanada'da kullanıldığını ve orada yaz saati uygulaması olmadığını unutmayın. 
+       [zaman dilimi] konusuna tekrar döneceğiz.
+: `%z` (UTC karşılığı, örneğin: `+0800`). 
+
+Hanesizler
+: `%.` hanesiz bir karakteri atlar.
+: `%*` herhangi bir sayıdaki hanesiz karakterilerin tümünü atlar.
+
+Doğru formatı bulmanın en iyi yolu karakter vektörü olarak birkaç örnek yaratıp, çözümleyici fonksiyonlardan biriyle deneme yapmak. Örneğin:
+
+```{r}
+parse_date("01/02/15", "%m/%d/%y")
+parse_date("01/02/15", "%d/%m/%y")
+parse_date("01/02/15", "%y/%m/%d")
+```
+
+Eğer İngilizce olmayan ay isimleriyle `%b` ya da `%B` kullanıyorsanız, `lang` argümanını `locale()` fonksiyonunda belirtmeniz gerekir.
+`date_names_langs()`fonksiyonu için kayıtlı dillerin listesine bakabilirsiniz ya da eğer sizin diliniz henüz eklenmemişse, `date_names()` fonksiyonunu
+kullanarak kendi dilinizi ekleyebilirsiniz.
+
+```{r}
+parse_date("1 janvier 2015", "%d %B %Y", locale = locale("fr"))
+```
+
+### Alıştırmalar
+
+1.  `locale()` ile ilgili en önemli argümanlar nelerdir? 
+
+2.  `decimal_mark` ve `grouping_mark` argümanlarını aynı karakter
+    için kullanmak istediğinizde ne oluyor? `decimal_mark` 
+    argümanını "," olarak tanımladığınızda, varolan `grouping_mark` 
+    değerine ne oluyor? `grouping_mark` argümanını "." olarak 
+    tanımladığınızda, varolan `decimal_mark` değerine ne oluyor? 
+
+3.  `locale()` ile ilgili olan `date_format` ve `time_format` 
+    seçeneklerinden bahsetmedim. Bu argümanlar ne işe yarıyorlar? 
+    Yararlı olabileceklerini gösteren birer örnek verin.
+
+4.  Eğer ABD dışında yaşıyorsanız, en sık kullandığınız dosya 
+    tipleri için gerekli ayarları içeren yeni bir "locale" yaratın.
+    
+5.  `read_csv()` ile `read_csv2()` arasındaki fark nedir?
+    
+6.  Avrupa'da en çok kullanılan şifreleme sistemleri nelerdir? Asya'da 
+    en çok kullanılan şifreleme sistemleri nelerdir? Biraz
+    internet araştırması yapın.
+
+7.  Aşağıdaki tarihleri ve zamanları çözümlemek için gerekli doğru 
+    formattaki dizileri oluşturun:
+    
+    ```{r}
+    d1 <- "January 1, 2010"
+    d2 <- "2015-Mar-07"
+    d3 <- "06-Jun-2017"
+    d4 <- c("August 19 (2015)", "July 1 (2015)")
+    d5 <- "12/30/14" # Dec 30, 2014
+    t1 <- "1705"
+    t2 <- "11:15:10.12 PM"
+    ```
+
+## Bir dosyayı çözümlemek
+
+Bir vektörü çözümlemeyi öğrendiğinize göre, şimdi başa dönüp readr'nin bir dosyayı nasıl çözümlediğini inceleyebiliriz. Bu kısımda öğreneceğiniz iki yeni konu var: 
+
+1. readr nasıl otomatik olarak her bir sütunun içeriğini tahmin edebiliyor?
+2. readr'nin varolan özellikleri nasıl değiştirebilirsiniz?
+
+### Strateji
+
+readr, bir tür kesitirmeler yoluyla her sütunun içeriğini tanımlayabiliyor: ilk 1000 satırı okuyor ve bazı kestirme (orta derecede tutucu) yöntemleriyle sütunları tanımlayabiliyor. Bu süreci bir karakter vektörü için `guess_parser()` kullanmaya benzetebilirsiniz. `guess_parser()` readr'nin en iyi tahminini yaparken,  `parse_guess()` bu tahmini sütunları çözümlemek için kullanıyor:
+
+```{r}
+guess_parser("2010-10-01")
+guess_parser("15:01")
+guess_parser(c("TRUE", "FALSE"))
+guess_parser(c("1", "5", "9"))
+guess_parser(c("12,352,561"))
+
+str(parse_guess("2010-10-10"))
+```
+
+Kestirmeler aşağıdaki önermeleri tek tek deniyor ve eşleşme bulduğu zaman duruyor:
+
+* logical: sadece "F", "T", "FALSE", ya da "TRUE" içerir.
+* integer: sadece sayısal karakterileri (ve `-`) içerir.
+* double: sadece geçerli çiftleri (`4.5e-5` gibi sayılar da dahil) içerir.
+* number: sadece grup işaretleri olan geçerli çiftleri içerir.
+* time: varolan `time_format` eşleşmesi içerir.
+* date: varolan `date_format` eşleşmesi içerir.
+* date-time: herhangi bir ISO8601 zamanı içerir.
+
+Eğer bu kurallardan hiçbiri uygulanamazsa, o zaman o sütun bir vektör dizisi olarak bırakılır.
+
+### Problemler
+
+İki temel sorundan ötürü, bu varolan kestirme kuralları büyük dosyalar için her zaman ise yaramaz:
+
+1.  İlk 1000 satır özel bir durumda olabilir ve bu nedenle de readr'nin tahmin 
+    ettiği veri tipi, dosyanın geri kalanı için tam anlamıyla genellenemeyebilir. 
+    Örneğin, bir sütunun ilk 1000 satırındaki çiftler sadece sayısal değerleri 
+    içeriyor olabilir.
+
+2.  Bir sütun bir sürü eksik değer içeriyor olabilir. Eğer ilk 1000
+    satır sadece `NA` içeriyorsa, readr bu sütunun bir karakter vektörü 
+    olduğunu tahmin edecektir. Ve eğer siz bu sütunu karakterden daha farklı 
+    bir şekilde çözümlemek isterseniz bu bir problem yaratır.
+
+readr'nin içerdiği bir CSV dosyası bu sorunların ikisine de örnek teşkil ediyor:
+
+```{r}
+challenge <- read_csv(readr_example("challenge.csv"))
+```
+
+(Paketin içinde bulunan dosyalardan birini bulmak için `readr_example()` kullanımını aklınızda bulundurun)
+
+Bu fonksiyonun iki çıktısı var: sütun özelliği ilk 1000 satıra bakılarak elde edilen sonuç ve ilk beş çözümleme hatası. `problems()` fonksiyonuyla özel olarak bu hatalara bakmak her zaman faydalı olur, böylece durumu daha derinlemesine inceleyebilirsiniz:
+
+```{r}
+problems(challenge)
+```
+
+Sütun sütun hiçbir sorun kalmayana kadar bu şekilde çalışmak iyi bir strateji. Bu örnekte `x` sütünüyla ilgili olarak pek çok çözümleme problemi olduğunu görüyoruz; mesela sayısal değerlerden sonra gelen karakterler. Bu da çift çözümleme kullanmamız gerektiğini işaret ediyor.
+
+Düzeltmek için, sütun bilgilerini ilk çağrınızın içine kopyalayıp yapıştırarak işe başlayabilirsiniz:
+
+```{r, eval = FALSE}
+challenge <- read_csv(
+  readr_example("challenge.csv"), 
+  col_types = cols(
+    x = col_integer(),
+    y = col_character()
+  )
+)
+```
+
+Daha sonra da `x` sütunun tipini değiştirin:
+
+```{r}
+challenge <- read_csv(
+  readr_example("challenge.csv"), 
+  col_types = cols(
+    x = col_double(),
+    y = col_character()
+  )
+)
+```
+
+Böylece ilk sorunu ortadan kaldırmış oldunuz, ama eğer son birkaç satıra bakarsak tarihlerin karakter vektörü olarak tanımlandığını görüyoruz:
+
+```{r}
+tail(challenge)
+```
+
+Bunu da `y` sütununun, bir tarih sütunu olduğunu belirterek çözebilirsiniz:
+
+```{r}
+challenge <- read_csv(
+  readr_example("challenge.csv"), 
+  col_types = cols(
+    x = col_double(),
+    y = col_date()
+  )
+)
+tail(challenge)
+```
+
+Her `parse_xyz()` fonksiyounu kendisine karşılık gelen bir `col_xyz()` fonksiyonuna sahiptir. `parse_xyz()` fonksiyonunu çoktan R'de bulunan bir karakter vektörü verisi için, `col_xyz()` fonksiyonunu ise readr'ye veriyi nasıl yüklemesini istediğinizi söylemek için kullanabilirsiniz.
+
+Bunlara ek olarak readr'nin çıktısını kullanan `col_types` fonksiyonunu şiddetle tavsiye ederim. Bu fonksiyon tutarlı ve tekrarlanabilir bir veri aktarma kodunuz olmasını sağlayacaktır. Eğer veri aktarımını varolan ayarlarla kullanmaya devam ederseniz ve veriniz değişirse, readr bu veriyi yine de okumaya devam edcektir. Eğer bu konuda daha katı olmak istiyorsanız, `stop_for_problems()` fonksiyonunu kullanın: çözümleme hataları olduğunda bu fonksiyon kodunuzu durduracak ve bir hata mesajı göstericektir.
+
+### Diğer stratejiler
+
+Dosyaları çözümlemenize yardımcı olacak birkaç başka strateji daha var:
+
+*   Bir önceki örnekte biraz şanssızdık: eğer varolan ayarlardaki seçenekten bir 
+    satır daha fazla veriye bakabilseydik, tek seferde dosyayı çözümleyebilecektik:
+   
+    ```{r}
+    challenge2 <- read_csv(readr_example("challenge.csv"), guess_max = 1001)
+    challenge2
+    ```
+
+*   Bazı durumlarda eğer tüm sütunları karakter vektörü olarak tanımlarsanız, 
+    sorunları çözmesi daha kolay olabiliyor: 
+   
+    ```{r}
+    challenge2 <- read_csv(readr_example("challenge.csv"), 
+      col_types = cols(.default = col_character())
+    )
+    ```
+    
+    Bu strateji, özellikle veri tablolarında karakter sütunlarının çözümlemesini 
+    yapmak için kullanılan `type_convert()` ile birlikte kullanıldığında    
+    çok işe yarıyor.
+
+    ```{r}
+    df <- tribble(
+      ~x,  ~y,
+      "1", "1.21",
+      "2", "2.32",
+      "3", "4.56"
+    )
+    df
+    
+   # Sütun tiplerine göz atın
+    type_convert(df)
+    ```
+    
+*   Eğer çok büyük bir dosya açıyorsanız, `n_max` argümanını 10,000 
+    ya da 100,000 gibi daha küçük bir sayıya ayarlamak isteyebilirsiniz. 
+    Böylece hem ortak problemleri ortadan kaldırabilirsiniz hem de 
+    iterasyonları hızlandırırsınız. 
+
+*   Eğer daha büyük çözümleme sorunları yaşıyorsanız, bazen `read_lines()` 
+    kullanarak dosyayı satırlardan oluşan bir karakter vektörüyle açmak 
+    daha kolay olabilir. Hatta `read_file()` fonksiyonunu kullanıp tek 
+    satırlık bir karakter vektörüyle de dosyayı açabilirsiniz. Daha ilginç 
+    formatları çözümlemek için öğreneceğiniz dizi çözümleme yöntemlerini
+    bu yönteme ek olarak kullanabilirsiniz. 
+
+## Dosya yazdırma
+
+readr veriyi yazdırmak için kullanılan iki çok yararlı fonksiyon içeriyor: `write_csv()` ve `write_tsv()`. Bu iki fonksiyon da çıktı dosyalarının tekrar ve doğru bir şekilde açılma şansını aşağıdaki yöntemlerle oldukça artırıyorlar:
+
+* Dizileri her zaman UTF-8 şeklinde şifrelerler.
+
+* Tarihleri ve tarih-zamanları ISO8601 formatıyla kaydederler. 
+  Böylece bu dosyalar başka herhangi bir yerde de açılabilirler.
+
+Eğer bir csv dosyasını Excel'e aktarmak istiyorsanız, `write_excel_csv()` fonksiyonunu kullanın --- bu fonksiyon dosyanın başlangıcında özel bir karakter kullanarak ("byte order mark") Excel'e dosyada UTF-8 şifrelenme formatının kullanıldığını söylüyor.
+
+En önemli argümanlar `x` (kaydedilecek veri tablosu), ve `path` (dosyanın nereye kaydedileceği). Ayrıca eksik değerlerin nasıl `na` olarak yazılacağını ve bu değerlerin varolan dosyaya eklenip eklenmemesini de belirtebilirsiniz.
+
+```{r, eval = FALSE}
+write_csv(challenge, "challenge.csv")
+```
+
+Veri tipi bilgisinin, dosya csv'ye kaydedilirken kaybolacağını unutmayın:
+
+```{r, warning = FALSE}
+challenge
+write_csv(challenge, "challenge-2.csv")
+read_csv("challenge-2.csv")
+```
+
+Bu durum CSV dosyalarını bir miktar güvenilmez hale getiriyor --- dosyayı her yüklediğinizde sütun tipini yeniden yaratmanız gerekecek. Bunu önlemenin iki yolu var:
+
+1.  `write_rds()` ve `read_rds()` temel `readRDS()` ve `saveRDS()` 
+    fonksiyonlarına eşdeğerler. Bu fonksiyonlar veriyi R'nin RDS 
+    denilen binary formatında saklarlar:
+    
+    ```{r}
+    write_rds(challenge, "challenge.rds")
+    read_rds("challenge.rds")
+    ```
+  
+2.  feather paketi farklı programlama dilleri arasında
+    paylaşılabilecek bir hızlı binary dosya formatı uygular:
+    
+    ```{r, eval = FALSE}
+    library(feather)
+    write_feather(challenge, "challenge.feather")
+    read_feather("challenge.feather")
+    #> # A tibble: 2,000 x 2
+    #>       x      y
+    #>   <dbl> <date>
+    #> 1   404   <NA>
+    #> 2  4172   <NA>
+    #> 3  3004   <NA>
+    #> 4   787   <NA>
+    #> 5    37   <NA>
+    #> 6  2332   <NA>
+    #> # ... with 1,994 more rows
+    ```
+
+Feather, RDS'den daha hızlı olma eğilimindedir ve R dışında da kullanılabilir. RDS liste-sütunlarını (bunu [many models] kısmında öğreneceksiniz) kullanır; feather halihazırda bunu yapamaz.
+
+```{r, include = FALSE}
+file.remove("challenge-2.csv")
+file.remove("challenge.rds")
+```
+
+## Diğer veri tıpleri
+
+Diğer veri tiplerini R'de açmak için biz aşağıdaki tidyverse paketlerini tavsiye ediyoruz. Bu paketler mükemmel olmasalar da, iyi bir başlangıç olarak düşünülebilir. "rectangular" veriler için:
+
+* __haven__  SPSS, Stata, and SAS dosylarını açar.
+
+* __readxl__ excel dosyalarını (hem `.xls` hem de `.xlsx`) açar.
+
+* __DBI__, along with a database specific backend (örneğin __RMySQL__, 
+  __RSQLite__, __RPostgreSQL__, vb.) allows you to run SQL queries against a 
+  database and return a data frame.
+
+Hiyerarşik veriler için:  json __jsonlite__ (Jeroen Ooms), XML içinse __xml2__ kullanın. Jenny Bryan'ın mükemmel örneklerine buradan bakabilirsiniz  <https://jennybc.github.iö/purrr-tutorial/>.
+
+Diğer dosya tipleri için, [R data import/export manual](https://cran.r-project.org/doç/manuals/r-release/R-data.html) ve [__rio__](https://github.com/leeper/rio) paketini inceleyin.
