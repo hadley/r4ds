@@ -1,0 +1,595 @@
+---
+title: "communicate-plots-ceviri"
+author: "Nurbahar Usta"
+date: "30 09 2019"
+output: html_document
+---
+
+*ceviri: "Anıl Bahar"
+
+# İletişim için grafikler
+
+## Giriş
+
+[Keşfedici veri analizinde], plotları _keşif_ için nasıl araç olarak kullanacağımızı öğrendiniz. Keşfedici grafikler yaptığınızda, --bakmadan önce bile-- plotun hangi değişkenleri göstereceğini bilirsiniz. Yaptığınız her plotu bir amaçla yapıyorsunuz hızlıca bakabilir ve bir sonraki grafiğe geçebilirsiniz. Birçok analiz sürecinde birçoğunu da hemen kenara atacağınız onlarca hatta yüzlerce grafikler üreteceksiniz. 
+
+Artık verilerinizi anladığınıza göre, anlayışınızı başkalarına _iletmeniz_ gerekir. Hedef kitleniz geçmiş bilgilerinizi paylaşmayacak ve verilere derinden yatırım yapılmayacaktır. Başkalarının hızlı bir şekilde verinin iyi bir zihinsel modelini oluşturmasına yardımcı olmak için, plotlarınızı mümkün olduğu kadar açıklayıcı hale getirmek için büyük çaba harcamanız gerekecektir. Bu bölümde, ggplot2'nin size sağladığı araçlardan bazılarını öğreneceksiniz.
+
+Bu bölümde iyi grafikler oluşturmak için ihtiyacınız olan araçlara değinilecektir. Ne istediğinizi bildiğinizi ve nasıl yapmanız gerektiğinizi bildiğinizi düşünüyorum. Bu nedenle, bu bölümü iyi bir genel görselleştirme kitabıyla eşleştirmenizi öneririm. Özellikle Albert Cairo'dan [_The Truthful Art_](https://amzn.com/0321934075) adlı kitabı seviyorum. Görselleştirme oluşturmanın mekaniklerini öğretmiyor ancak bunun yerine etkili grafikler oluşturmak için nasıl düşünmeniz gerektiğine odaklanıyor.
+
+### Önkoşullar
+Bu bölümde birkez daha ggplot2’ye odaklanacağız. Ayırca biraz veri manipülasyonu için dplyr’e ve __ggrepel__ ve __viridis__ dahil olmak üzere birkaç ggplot2 eklenti paketlerinden yararlanacağız. Bu uzantıları buraya yüklemek yerine, :: gösterimini kullanarak işlevlerini açıkça gösterereceğiz. Bu hangi fonksiyonların ggplot2 içinde yüklü olduğunu ve hangilerinin 
+diğer paketlerden geldiğini görmemize yardımcı olacaktır. Eğer bu paketleri henüz yüklemediyseniz `install.packages()` komutuyla yüklemeniz gerektiğini unutmayınız. 
+
+```{r, message = FALSE}
+library(tidyverse)
+```
+
+## Etiket
+
+Keşfedici grafikleri açıklayıcı grafiklere çevirirken en kolayı işe iyi etiketlerle başlamaktır. Etiketleri `labs()` fonksiyonuyla eklersiniz. Plot başlığı eklerken bir örnek:
+
+```{r, message = FALSE}
+ggplot(mpg, aes(displ, hwy)) +
+  geom_point(aes(color = class)) +
+  geom_smooth(se = FALSE) +
+  labs(title = "Yakıt verimi genellikle motor büyüklüğüyle azalır")
+```
+
+Plot başlığının amacı ana bulguyu özetlemektir. Plotu tanımlayan başlıklardan kaçının ör.
+Motor parça değişimi ile yakıt ekonomisini karşılaştıran bir dağılım grafiği. 
+
+Daha fazla metin eklemek isterseniz ggplot2 2.2.0 ve üst sürümlerinde (bu kitabı okuduğunuzda kullanılabilir durumda olacaktır)  içerisinde ekleyebileceğiniz 2 ayrı kullanışlı etiket var :
+
+*   `subtitle` başlığın altına daha küçük bir fontla açıklayıcı notlar ekler.
+
+*   `caption` şekilin sağ altına metin ekler, genellikle verinin kaynağını betimler.
+
+```{r, message = FALSE}
+ggplot(mpg, aes(displ, hwy)) +
+  geom_point(aes(color = class)) +
+  geom_smooth(se = FALSE) +
+  labs(
+    title = "Yakıt verimi genellikle motor büyüklüğüyle azalır",
+    subtitle = "İki koltuklu spor araçlar hafif olmasıyla bir istisnadır",
+    caption = "Veri fueleconomy.gov adresinden alınmıştır"
+  )
+```
+
+Ayrıca `labs()` fonksiyonunu eksen ve gösterge başlıklarını değiştirmek için kullanabilrisiniz. Genellikle kısa değişken isimlerini daha detaylı açıklamalarla değiştirmek ve birimleri dahil etmek iyi bir fikirdir. 
+
+```{r, message = FALSE}
+ggplot(mpg, aes(displ, hwy)) +
+  geom_point(aes(colour = class)) +
+  geom_smooth(se = FALSE) +
+  labs(
+    x = "Motor değişimi (L)",
+    y = "Karayolu yakıt ekonomisi (mpg)",
+    colour = "Araba tipi"
+  )
+```
+
+Matematiksel denklemleri metin dizileri kullanmak mümkündür.  Sadece `""` yerine `quote()` kullanın ve `?plotmath` içerisindeki seçenekleri okuyun:
+
+```{r, fig.asp = 1, out.width = "50%", fig.width = 3}
+df <- tibble(
+  x = runif(10),
+  y = runif(10)
+)
+ggplot(df, aes(x, y)) +
+  geom_point() +
+  labs(
+    x = quote(sum(x[i] ^ 2, i == 1, n)),
+    y = quote(alpha + beta + frac(delta, theta))
+  )
+```
+
+### Egzersizler
+
+1.  Yakıt ekonomisi üzerine özelleştirilmiş `title`, `subtitle`, `caption`, `x`, `y`, and `colour` etiketleriyle bir plot yaratın.
+
+1.   `geom_smooth()` fonksiyonu bir bakıma biraz yanıltıcı olabiliyor çünkü `hwy` geniş motorlar için hafif spor arabalarının
+eklenmesiyle yukarı eğrilmiş. Modelleme araçlarınızı, modelinizi uydurmak ve daha iyi bir model oluşturmak için kullanın.
+
+1.  Bir ay önce yarattığınız açıklayıcı grafiği ele alın ve bilgilendirici başlıklar ekleyerek diğerleri için daha anlaşılır yapın.
+
+## Ek açıklamalar
+
+Plotunuzun ana bileşenlerini etiketlemenin yanı sıra, genellikle bireysel gözlemleri ya da gözlem gruplarını etiketlemek de kullanışlıdır. Elinizin altındaki ilk araç `geom_text()` olacaktır.`geom_text()` , `geom_point()` ile benzerlik gösterse de ayrıca aesthetic: `label` (etiketlerine) sahiptir. Bu da metinsel etiketleri plotunuza eklemenize olanak sağlamaktadır.
+
+Etiketlerin 2 muhtemel kaynağı vardır. Birincisi etiketleri getiren bir tibble’a sahip olmak. Alttaki plot o kadar da kullanışlı değil, ama kullanışlı bir yaklaşımı görselleştirip: her sınıfın en verimli arabalarını dplyr ile getirip, plot üzerinde etiketliyor:
+
+```{r}
+best_in_class <- mpg %>%
+  group_by(class) %>%
+  filter(row_number(desc(hwy)) == 1)
+
+ggplot(mpg, aes(displ, hwy)) +
+  geom_point(aes(colour = class)) +
+  geom_text(aes(label = model), data = best_in_class)
+```
+
+Bunu okumak etiketler birbirinin üzerine bindiği için biraz zorlaşıyor. `geom_label()` ile metin arkasına dikdörtgen çizerek biraz iyileştirme yapabiliriz. Ayrıca biz `nudge_y` parametresi kullanarak etiketleri biraz yukarı alarak ilgili noktara taşıyoruz.
+
+```{r}
+ggplot(mpg, aes(displ, hwy)) +
+  geom_point(aes(colour = class)) +
+  geom_label(aes(label = model), data = best_in_class, nudge_y = 2, alpha = 0.5)
+```
+
+Bu biraz yardımcı olsa da sol üst köşeye yakından bakarsanız iki etiketin üst üste bindiğini göreceksiniz. Bu genellikle en iyi arabalar için anayolda kat edilen mesafe ve yerine geçme compact ve subcompact kategorilerin aslında aynı olmamasından kaynaklanmaktadır. Her etikete aynı dönüştürmeyi uygulayarak bunları düzeltmeniz mümkün değildir. Bunun yerine Kamil Slowikowski tarafından yazılmış __ggrepel__ paketini kullanabiliriz. Bu kullanışlı paket, otomatik olarak etiketleri düzenleyerek üst üste binmelerini engeller:
+
+```{r}
+ggplot(mpg, aes(displ, hwy)) +
+  geom_point(aes(colour = class)) +
+  geom_point(size = 3, shape = 1, data = best_in_class) +
+  ggrepel::geom_label_repel(aes(label = model), data = best_in_class)
+```
+
+Burada kullanılan diğer kullanışlı tekniğe dikkat edin: Etiketlediğim noktaları vurgulamak için ikinci bir büyük, içi boş noktalı bir katman ekledim.
+
+Bazen plotta doğrudan yerleştirilmiş göstergedeki etiketleri değiştirmek için aynı şekilde yararlanabilirsiniz. Bu plot için mükemmel olmasa da çok da kötü sayılmaz. (`theme(legend.position = "none"`) göstergeyi kapatır – bunun hakkında daha sonra kısaca konuşacağız.)
+
+```{r}
+class_avg <- mpg %>%
+  group_by(class) %>%
+  summarise(
+    displ = median(displ),
+    hwy = median(hwy)
+  )
+
+ggplot(mpg, aes(displ, hwy, colour = class)) +
+  ggrepel::geom_label_repel(aes(label = class),
+    data = class_avg,
+    size = 6,
+    label.size = 0,
+    segment.color = NA
+  ) +
+  geom_point() +
+  theme(legend.position = "none")
+```
+
+Alternatif olarak plota sade bir katman eklemek isteyebilirsiniz ancak yinede veri tabakası(frame) yaratmak zorundasınız. Sıklıkla plotun köşelerini etiketlemek istersiniz, böylelikle yeni bir veri katmanı yaratıp `summarise()` kullanarak x ve y’nin maksimum değerlerini hesaplarız.
+
+```{r}
+label <- mpg %>%
+  summarise(
+    displ = max(displ),
+    hwy = max(hwy),
+    label = "Increasing engine size is \nrelated to decreasing fuel economy."
+  )
+
+ggplot(mpg, aes(displ, hwy)) +
+  geom_point() +
+  geom_text(aes(label = label), data = label, vjust = "top", hjust = "right")
+```
+
+Eğer metini plotun tam sınırlarına koymak istiyorsanız, `+Inf` ve `-Inf` komutlarını kullanabilirsiniz. Artık `mpg`nin pozisyonlarını hesaplamadığımız için`tibble()` komutu kullanarak veri katmanı yaratabilirsiniz:
+
+```{r}
+label <- tibble(
+  displ = Inf,
+  hwy = Inf,
+  label = "Increasing engine size is \nrelated to decreasing fuel economy."
+)
+
+ggplot(mpg, aes(displ, hwy)) +
+  geom_point() +
+  geom_text(aes(label = label), data = label, vjust = "top", hjust = "right")
+```
+
+Bu örneklerde ben `“/n”` kullanarak manuel olarak etiketleri bozup çizgiye çevirdim. Bir başka yaklaşım `stringr::str_wrap()` kullnarak otomatik olarak çizgi başına istediğiniz sayıda karakterlere göre çizgi durakları ekler.
+
+```{r}
+"Artan motor büyüklüğü azalan yakıt ekonomisiyle ilgilidir." %>%
+  stringr::str_wrap(width = 40) %>%
+  writeLines()
+```
+
+Etiketlerin düzenini kontrol etmek için `hjust` ve `vjust` kullamına dikkat edin. Şekil \@ref(fig:just) tüm 9 kombinasyonu göstermektedir. 
+
+```{r just, echo = FALSE, fig.cap = "`hjust` ve `vjust` için olası tüm dokuz kombinasyon.", fig.asp = 0.5, fig.width = 4.5, out.width = "60%"}
+vjust <- c(bottom = 0, center = 0.5, top = 1)
+hjust <- c(left = 0, center = 0.5, right = 1)
+
+df <- tidyr::crossing(hj = names(hjust), vj = names(vjust)) %>%
+  mutate(
+    y = vjust[vj],
+    x = hjust[hj],
+    label = paste0("hjust = '", hj, "'\n", "vjust = '", vj, "'")
+  )
+
+ggplot(df, aes(x, y)) +
+  geom_point(colour = "grey70", size = 5) +
+  geom_point(size = 0.5, colour = "red") +
+  geom_text(aes(label = label, hjust = hj, vjust = vj), size = 4) +
+  labs(x = NULL, y = NULL) 
+```
+
+`geom_text()` komutuna ek olarak ggplot2 içerisinde birçok başka geom komutları da plotunuzu notlar eklemek için yardımcı olabilir. İşte birkaç fikir:
+
+*   `geom_hline()` ve `geom_vline` kodlarını kullanarak referans çizgiler ekleyebilirsiniz. Ben sıkça (`size = 2`) yaparak
+    çizgileri kalın ve, (`colour = white`) ile beyaz yaparım ve altlarına ana veri katmanı çizerim. Bu da dikkati veri
+    üzerinden kaçırmadan görünmesini kolaylaştırır.
+    
+*   Önemli noktalara `geom_rect()` koduyla dikdörtgen çizebilirsiniz. Dikdörtgenin sınırları aesthetics, `xmin`,
+    `xmax`,`ymin`, `ymax` ile belirlenmektedir.
+
+*   `geom_segment()` komutunu kullanrak `arrow` argümanıyla ok kullanarak bir noktaya dikkat çekebilirsiniz. Aesthetics `x`
+    ve `y` kullarak başlangıç konumunu ve `xend` ve `yend` kullanarak da bitiş konumunu belirleyebilirsiniz. 
+
+Tek sınır sizin hayalgücünüzdür (ayrıca ek açıklamaları yerleştirirken, estetik olarak tatmin edici sonuç alana kadar ki sabrınız!)
+
+### Egzersizler
+
+1.  `geom_text()` ile sonsuz pozisyona plotun dört köşesine metin yerleştirmek için kullanabilirsiniz
+
+1.  Dökümanları `annotate()` ile okuyabilirsiniz. 
+    Tibble yaratmadan plota nasıl metin etiketi ekleyebilirsiniz?
+
+1.  `geom_text()` ile yaratılmış etiketlerin bölümlemeyle ilişkilisi nasıldır ? Sadece bir bölüme nasıl etiket
+    ekleyebilirsiniz. Her bölüme nasıl farklı etiketler koyabilirsiniz. (İpucu: verinizin vurgulamayı düşünün)
+
+1.  Hangi argümanlarla arkaplan kutusunun görünüşünü `geom_label()` ile kontrol edebilirsiniz?
+
+1.  `arrow()` için dört argüman nedir? Nasıl çalışırlar? Birçok plot yaratarak en önemli seçenekleri gösterin.
+
+## Ölçekler
+
+Plotlarınızı iletişim adına güzelleştirmek için üçüncü yol ölçekleri ayarlamaktır. Ölçekler veri değerlerinden algılayabileceğiniz şeylerin haritalandırmasını kontrol eder. Ggplot2 normalde ölçekleri sizin için ekler. Örneğin, siz bunu yazdığınızda:
+
+```{r default-scales, fig.show = "hide"}
+ggplot(mpg, aes(displ, hwy)) +
+  geom_point(aes(colour = class))
+```
+
+ggplot2 otomatik olarak varsayılan ölçekleri arkaplanda eklemektedir:
+
+```{r, fig.show = "hide"}
+ggplot(mpg, aes(displ, hwy)) +
+  geom_point(aes(colour = class)) +
+  scale_x_continuous() +
+  scale_y_continuous() +
+  scale_colour_discrete()
+```
+
+Ölçeklerde isimlendirme kuralı: `scale_` estetik ismiyle takip edilir, sonra `_`, sonra da ölçeğin adı sırasıyla olmaktadır.
+Vasrayılan ölçekler, ayarlandıkları değişkenlerin tiplerine göre isimlendirilmektedir: devamlı, kesikli, tarihsaat, ya da tarih. Altta öğreneceğiniz varsayılan olmayan birçok ölçek göreceksiniz. 
+
+Varsayılan ölçekler geniş aralıkta iyi işler yapabilmek için dikkatlice seçilmektedir. Yinede iki nedenden varsayılan ayarları değiştirmek isteyebilirsiniz:
+
+*   Bazı parametrelere bağlı varsayılan ölçekleri değiştirmek isteyebilirsiniz. 
+    Bu size eksenler üzerindeki durakları değiştirmek ya da gösterge üzerindeki 
+    anahtar etiketleri değiştirmek gibi olanaklar sağlar.
+    
+*   Ölçeği topyekün değiştirmek isteyebilrisiniz ya da tamamen farklı bir 
+    algoritma kullanabilirsiniz. Sıklkla siz varsayılandan daha iyi yaparsınız 
+    çünkü verinizi en iyi siz biliyorsunuz.
+
+### Eksen tikleri ve gösterge anahtarları
+
+Göstergede tiklerin görünüşünü etkileyen İki temel argüman var onlarda `breaks`(duraklar) ve `labels` (etiketlerdir). Duraklar tiklerin pozisyonlarını ya da anahtarlarla ilişkili değerleri korumaktadır. Etiketler ise tik ve anahtarla ilişkili her bir metni kontrol etmektedir. `breaks`(Durakları) kullanmanın en yaygın yolu ise varsayılan seçimleri değiştirmektir:
+
+```{r}
+ggplot(mpg, aes(displ, hwy)) +
+  geom_point() +
+  scale_y_continuous(breaks = seq(15, 40, by = 5))
+```
+
+Etiketleri (`labels`) aynı yolla kullanabilirsiniz ( bir vektör karakteri duraklarla (`breaks`) aynı büyüklüktedir) ama siz `NULL` ayarlayıp etiketleri baskılayadabilirsiniz.
+
+```{r}
+ggplot(mpg, aes(displ, hwy)) +
+  geom_point() +
+  scale_x_continuous(labels = NULL) +
+  scale_y_continuous(labels = NULL)
+```
+
+Durakları ve etiketleri (`breaks` ve `labels`) göstergeyi kontrol etmek için kullanabilirsiniz. Genel olarak gösterge ve eksenler __rehber__ olarak isimledirilmektedir. Eksenler x ve y aesthetics; göstergeler ise diğer her şey için kullanılmaktadır.
+
+`breaks` (Durakların) kullanım alanlarının bir diğer alanı ise daha az veri noktanız varsa ve tam olarak gözlemlerin olduğu yeri vurgulamak istiyorsanız olur. Örneğin bu plotu alın her bir Amerika Birleşik Devleti başkanlarının başlangıç ve son dönemlerini ele almaktadır.
+
+```{r}
+presidential %>%
+  mutate(id = 33 + row_number()) %>%
+  ggplot(aes(start, id)) +
+    geom_point() +
+    geom_segment(aes(xend = end, yend = id)) +
+    scale_x_date(NULL, breaks = presidential$start, date_labels = "'%y")
+```
+
+Tarihler ve tarih saat ölçekleri için özelleşmiş durak ve etiketlerinin biraz farklılaştığına dikkat edin:
+
+* `date_labels`, `parse_datetime()` ile aynı formda özel bir biçimlendirmeye uğramıştır. 
+
+* `date_breaks` (burada gösterilmiyor) “2 gün” “1 ay” gibi dizi almaktadır.
+
+### Gösterge arayüzü
+
+Genelde  `breaks` and `labels` (durakları ve etiketleri) eksenleri makaslamak için kullanacaksınız. Genellikle ger ikiside göstergeler için çalışsa da diğer birkaç tanesi kullanabilmek için bazı teknikerle ihtiyaç duymaktadır.
+
+Göstergenin genel yerini kontrol etmek için `theme()` ayarını kullanmalısınız. Bu bölümün sonunda temalara geleceğiz ama kısaca plotun veri dışı kısımlarını kontrol etmektedir. Tema ayarlarından `legend.position` göstergenin nereye çizileceğini kontrol etmektedir:
+
+```{r fig.asp = 1, fig.align = "default", out.width = "50%", fig.width = 4}
+base <- ggplot(mpg, aes(displ, hwy)) +
+  geom_point(aes(colour = class))
+
+base + theme(legend.position = "left")
+base + theme(legend.position = "top")
+base + theme(legend.position = "bottom")
+base + theme(legend.position = "right") # the default
+```
+
+`legend.position = "none"` kodunu kullanarak göstergenin görünmesini baskılayabilirisiniz.
+
+Herbir göstergenin görünüşünü `guides()` ve `guide_legend()` ya da `guide_colourbar()` komutlarını kullanarak kontrol edebilirsiniz. Sıradaki örnekte ise iki önemli ayarı göstermektedir: göstergenin `nrow` ile kullandığı sütun sayısını kontrol ederek sütun sayısını değiştirebilir, aestheticlerden birini geçersiz kılarak noktaları büyük yapabilrisiniz. Bu özellikle düşük `alpha` kullandıysanız birçok noktayı plot üzerinde gösterebilmeniz açısından kullanışlı olmaktadır.
+
+```{r}
+ggplot(mpg, aes(displ, hwy)) +
+  geom_point(aes(colour = class)) +
+  geom_smooth(se = FALSE) +
+  theme(legend.position = "bottom") +
+  guides(colour = guide_legend(nrow = 1, override.aes = list(size = 4)))
+```
+
+### Ölçeği değiştirmek
+
+Detaylar üzerinde birazcık oynamak yerine ölçeği topyekün değiştirebilirsiniz. Değiştirmek isteyebileceğiniz muhtmelen iki ölçek tipi: devamlı ölçekler ve renk ölçekleridir. Neyse ki aynı koşullar diğer estetiklere uygulanabilmektedir, böylece pozisyon ve renklerde ustalaştıktan sonra diğer ölçek değişimlerini hızlıca öğrenebilirsiniz.
+
+Değişkenlerinizin dönüşümlerini plota dökmek oldukça kullanışlıdır. Örneğin [diamond prices](diamond-prices) (elmas fiyatlarını) gördüğümüz gibi karat ile fiyat arasındaki ilişkiyi log dönüşümü uyguladığımızda görmek daha kolaydır:Değişkenlerinizin dönüşümlerini plota dökmek oldukça kullanışlıdır. Örneğin elmas fiyatlarını gördüğümüz gibi `carat` (karat) ve `price` (fiyat) arasındaki ilişkiyi log dönüşümü uyguladığımızda görmek daha kolaydır:
+
+```{r, fig.align = "default", out.width = "50%"}
+ggplot(diamonds, aes(carat, price)) +
+  geom_bin2d()
+
+ggplot(diamonds, aes(log10(carat), log10(price))) +
+  geom_bin2d()
+```
+
+Yinede dönüşümlerin dezavantajı plota müdehale etmenin zorlaşması. aesthetic haritalandırması üzerinde dönüşüm yapmaktansa, ölçek üzerinde yapabiliriz. Orijinal veri ölçeği üzerinde etiketlenmiş eksenler dışında görsel olarak tamamen aynı gözükmektedir
+
+```{r}
+ggplot(diamonds, aes(carat, price)) +
+  geom_bin2d() + 
+  scale_x_log10() + 
+  scale_y_log10()
+```
+
+Sıklıkla değşitirilen bir diğer ölçek ise renklerdir. Varsayılan kategorisel ölçek, renkleri renk çarkı üzerinde eşit aralıklarla seçmektedir. kullanşlı alternatifler ColorBrewer renk körlüğünün yargın tipi görülen insanların çalışabilmesi için de uygun şekilde ayarlanmıştır. İki plotta benzer görülmektedir ancak gölgelerdeki kırmızı ve yeşil noktalar krımızı-yeşil renk körü insanlar tarafından bile seçilebilmektedir.
+
+```{r, fig.align = "default", out.width = "50%"}
+ggplot(mpg, aes(displ, hwy)) +
+  geom_point(aes(color = drv))
+
+ggplot(mpg, aes(displ, hwy)) +
+  geom_point(aes(color = drv)) +
+  scale_colour_brewer(palette = "Set1")
+```
+
+Teknikleri basitleştirmeyi unutmayınız. Eğer az sayıda renk varsa ağdalı şekiller ekleyebilirsiniz. Bu ayrıca plotun siyah beyaz olsa da yorumlanabilmesine olanak sağlar.
+
+```{r}
+ggplot(mpg, aes(displ, hwy)) +
+  geom_point(aes(color = drv, shape = drv)) +
+  scale_colour_brewer(palette = "Set1")
+```
+
+ColorBrewer ölçeklerine <http://colorbrewer2.org/> adresinden ulaşabilirsiniz ve Erich Neuwirth tarafından __RColorBrewer__ paketi ile R üzerinde kullanıma açılmıştır. Şekil \@ref(fig:brewer) tüm paletlerin tüm listesini göstermektedir. Ardışık (üst) ve ayrık (alt) paletler genellikle koşulsuz(kategorik) değerlerin sıralanmasında ya da bir "ortancaya" sahip olmak için kullanılmaktadır. Bu genellikle `cut()` kodunu kullandıysanız ve devamlı değerlerden koşulsuz(kategorik) değerler oluşturmaya çalıştıysanız olmaktadır.
+
+```{r brewer, fig.asp = 2.5, echo = FALSE, fig.cap = "All ColourBrewer scales."}
+par(mar = c(0, 3, 0, 0))
+RColorBrewer::display.brewer.all()
+```
+
+Değerler ve renkler arasından önceden belirlenmiş haritalandırma yapacaksanız, `scale_colour_manual()` kodunu kullanın. Örneğin parti- başkanlık haritasını renklendirmek istiyorsak, Cumhuriyetçiler için kırmızı, Demktoratlar için de mavi kullanmalıyız:
+
+```{r}
+presidential %>%
+  mutate(id = 33 + row_number()) %>%
+  ggplot(aes(start, id, colour = party)) +
+    geom_point() +
+    geom_segment(aes(xend = end, yend = id)) +
+    scale_colour_manual(values = c(Republican = "red", Democratic = "blue"))
+```
+
+Örneğin devamlı renkler için, gömülü `scale_colour_gradient()` ya da `scale_fill_gradient()` kodlarını kullanabilirsiniz. Eğer ayrılan ölçeğe sahipseniz, `scale_colour_gradient2()` kodunu kullanabilirsiniz. Bu size negatif ve pozitif değerlere karşılık farklı renklerle renklendirme sağlamaktadır. 
+Bu bazen ortalamanın altında ve üstündeki noktaları ayrıştırmak istiyorsanız kullanışlı olmaktadır.
+
+Bir alternatif de __viridis__ paketiyle gelen `scale_colour_viridis()` kodudur. Kategorik ColorBrewer ölçeklerinin devamlı analog versiyonudur. Yaratıcıları Nathaniel Smith ve Stéfan van der Walt devamlı renk şemasını güzel algısal özelliklerle şekillendirmişlerdir. İşte viridis vignette ait bir örnek.
+
+```{r, fig.align = "default", fig.asp = 1, out.width = "50%", fig.width = 4}
+df <- tibble(
+  x = rnorm(10000),
+  y = rnorm(10000)
+)
+ggplot(df, aes(x, y)) +
+  geom_hex() +
+  coord_fixed()
+
+ggplot(df, aes(x, y)) +
+  geom_hex() +
+  viridis::scale_fill_viridis() +
+  coord_fixed()
+```
+
+Farkındaysanız tüm renk ölçekleri `scale_colour_x()` and `scale_fill_x()` olmak üzere `colour` ve `fill` aesthetics için iki çeşitte gelmektedir (tüm renkölçekleri UK ve US hecelemeleri için uygundur).
+
+### Egzersizler
+
+1.  Alttaki kod neden varsayılan ölçeğe üstün gelmemektedir?
+
+    ```{r fig.show = "hide"}
+    ggplot(df, aes(x, y)) +
+      geom_hex() +
+      scale_colour_gradient(low = "white", high = "red") +
+      coord_fixed()
+    ```
+
+1.  Tüm ölçeklerin ilk argümanı nedir? `labs()` koduna kıyasla nasıldır?
+
+1.  Başkanlık koşullarının görünüşünü değiştirin:
+
+    1. Yukarda gösterilen iki değişkenin birleştirilmesi.
+    1. Y ekseninin görünüşünün iyileştirilmesi.
+    1. Her dönemin başkanların isimlerinin etiketlendirilmesi.
+    1. Plot etiketlerine bilgi eklenmesi.
+    1. Her dört yıla bir durak eklenmesi (göründüğünden daha zordur).
+
+1.  `override.aes` kullanarak göstergenin alındtaki plotta kolay görünmesini sağlayın.
+
+    ```{r, dev = "png", out.width = "50%"}
+    ggplot(diamonds, aes(carat, price)) +
+      geom_point(aes(colour = cut), alpha = 1/20)
+    ```
+
+## Yakınlaştırma
+
+Plot limitini kontrol etmek için üç yol vardır:
+
+1. Hangi verinin plot iin uyarlanacağı
+1. Her ölçeğin sınırlarının belirlenmesi
+1. `coord_cartesian()` içerisinde `xlim` ve `ylim` ayarlanması.
+
+Plotun belli bölgesine yakınlaştırmak için genellikle en iyi yol `coord_carttesian()` kullanmaktan geçer. Alttaki iki plotu karşılaştırın:
+
+```{r out.width = "50%", fig.align = "default", message = FALSE}
+ggplot(mpg, mapping = aes(displ, hwy)) +
+  geom_point(aes(color = class)) +
+  geom_smooth() +
+  coord_cartesian(xlim = c(5, 7), ylim = c(10, 30))
+
+mpg %>%
+  filter(displ >= 5, displ <= 7, hwy >= 10, hwy <= 30) %>%
+  ggplot(aes(displ, hwy)) +
+  geom_point(aes(color = class)) +
+  geom_smooth()
+```
+
+Her bir ölçeğin `limits` (sınırlarını) belirleyebilirsiniz. Sınırları kısaltmak basitçe verinizin subsetini(altkümesini) yapmaya eşdeğerdir. Eğer sınırları _genişletmek_ isterseniz daha kullanışlıdır, örneğin farklı plotlar boyunca ölçekleri eşleştirmek. Örneğin iki sınıf arabayı alırsak ve plotlarını ayrı ayrı çizersek 3 farklı ölçekte polıtları karşılaştırmak zor olacaktır ( x ekseni ve y ekseni ve renk estetiği) farklı aralıklara sahiptir
+
+```{r out.width = "50%", fig.align = "default", fig.width = 4}
+suv <- mpg %>% filter(class == "suv")
+compact <- mpg %>% filter(class == "compact")
+
+ggplot(suv, aes(displ, hwy, colour = drv)) +
+  geom_point()
+
+ggplot(compact, aes(displ, hwy, colour = drv)) +
+  geom_point()
+```
+
+Bu sorunu aşmanın bir yolu da farklı plotların ölçeklerini paylaştırmaktır, tüm verinin `limits` (sınırlarıyla) ölçeklerin çalıştırılması.
+
+```{r out.width = "50%", fig.align = "default", fig.width = 4}
+x_scale <- scale_x_continuous(limits = range(mpg$displ))
+y_scale <- scale_y_continuous(limits = range(mpg$hwy))
+col_scale <- scale_colour_discrete(limits = unique(mpg$drv))
+
+ggplot(suv, aes(displ, hwy, colour = drv)) +
+  geom_point() +
+  x_scale +
+  y_scale +
+  col_scale
+
+ggplot(compact, aes(displ, hwy, colour = drv)) +
+  geom_point() +
+  x_scale +
+  y_scale +
+  col_scale
+```
+
+Bu özel durumda faceting'i basitçe kullanmış olabilirsiniz, ancak bu teknik, örneğin, bir raporun birçok sayfasına yayılarak plot koymak istiyorsanız, genel olarak daha kullanışlıdır.
+
+## Temalar
+
+Nihayet, plotunuzun veri dışı öğelerini bir temayla birlikte özelleştirebilirsiniz:
+
+```{r, message = FALSE}
+ggplot(mpg, aes(displ, hwy)) +
+  geom_point(aes(color = class)) +
+  geom_smooth(se = FALSE) +
+  theme_bw()
+```
+
+ggplot2 Şekil \@ref(fig:themes)’te gösterildiği gibi sekiz temayı varsayılan olarak içinde barındırmaktadır. Birçoğu Jeffrey Arnold tarafından yazılmış __ggthemes__ (<https://github.com/jrnold/ggthemes>) gibi paketlerle eklenti olarak dahil edilmiştir.
+
+```{r themes, echo = FALSE, fig.cap = "The eight themes built-in to ggplot2."}
+knitr::include_graphics("images/visualization-themes.png")
+```
+
+Birçok insan varsayılan temanın neden gri bir arka plana sahip olduğunu merak ediyor. Bu kasıtlı bir seçimdi çünkü grid çizgilerini görünür hale getirirken verileri ileri götürmeye devam ettirir. Beyaz grid çizgileri görülebilir haldedir(bu konum kararlarına önemli ölçüde yardımcı olduğu için önemlidir), ancak görsel olarak etkileri çok az ve bunları kolayca düzeltebiliriz. Gri arka plan, plota metne benzer bir tipografik(baskı) rengi verir ve grafiklerin parlak beyaz arka planla belgenin akışına atlamadan uymasını sağlamaktadır. Son olarak, gri arka plan, plotun tek bir görsel varlık olarak algılanmasını sağlayan kesintisiz bir renk alanı oluşturur.
+
+Ayrıca, y ekseni için kullanılan fontun boyutu ve rengi gibi, her temanın ayrı bileşenlerini kontrol etmek de mümkündür. Ne yazık ki, bu ayrıntı seviyesi bu kitabın kapsamı dışındadır, bu nedenle tüm detaylar için [ggplot2 kitabını](https://amzn.com/331924275X) okumanızda yarar var. Belirli bir şirket veya dergi stili ile eşleşmeye çalışıyorsanız, kendi temalarınızı da oluşturabilirsiniz
+
+## Plotlarınızı kaydetme
+
+R üzerinden plotlarınızı almanızın ve son yazınıza aktarmanın iki ana yolu vardır: `ggsave()` ve knitr. `ggsave()` en son plotunuzu bilgisayarınıza kaydeder :
+
+```{r, fig.show = "none"}
+ggplot(mpg, aes(displ, hwy)) + geom_point()
+ggsave("my-plot.pdf")
+```
+```{r, include = FALSE}
+file.remove("my-plot.pdf")
+```
+
+Eğer `width` and `height` (Genişliği ve yüksekliği) belirtmezseniz geçerli çizim aygıtının boyutlarından alınacaktır. Çoğaltılabilir kod için bunları belirtmek istersiniz.
+
+Ancak, genel olarak, son raporlarınızı R Markdown kullanarak bir araya getirmeniz gerektiğini düşünüyorum, böylece grafikler hakkındaki bilmeniz gereken önemli kod öbeklerinin seçeneklerine odaklanmak istiyorum. `ggsave()` hakkında detaylı bilgiye döküman üzerinden ulaşabilirsiniz
+
+### Şekil boyutlandırma
+
+R Markdown'da grafiklerin en büyük zorluğu şekillerinizini doğru boyut ve büyüklüklere getirmektir. Şekil büyüklüğü ayarlamada beş ana seçenek vardır: `fig.width`, `fig.height`, `fig.asp`, `out.width` ve `out.height`. Resim büyüklüğünü ayarlamak sadece iki büyükülük olmasından (R tarafından oluşturulan şeklin büyüklüğü ve çıktı belgesine eklendiği büyüklük) dolayı zordur.
+
+Ben neredeyse her zaman beş seçenekten sadece üçünü kullandım:
+
+* Estetik olarak en hoş bulduğum plotların tutarlı bir genişliğe sahiplerdir. 
+  Bunu desteklemek için, varsayılan ayarları `fig.width = 6` (6 ") 
+  ve `fig.asp = 0.618` (altın oran)'ı ayarladım. 
+  Sonra herbir parçada sadece `fig.asp`'i ayarlarım.
+
+* Çıktı boyutunu `out.width` ile kontrol ediyorum ve satır genişliğinin yüzdesine
+  ayarlıyorum. Varsayılan olarak `out.width = "70%"` ve `fig.align = "center"` 
+  ayarlarını yapıyorum. Bu, plotların çok fazla yer kaplamadan rahat bir alan kalmasını
+  sağlamaktadır.
+
+* Tek bir satıra birden çok grafik koymak için, out.width değerini iki plot için `%50`,
+  3 plot için `%33` veya 4 plot için `%25` olarak, `fig.align = "default"` olarak
+  ayarlayın. Neyi göstermeye çalıştığıma bağlı olarak (örneğin verileri gösterme veya 
+  plot değişkenleri gösterme), ayrıca aşağıda konuşulduğu gibi `fig.width`’ide 
+  uygun şekilde ayarlayacağım.
+
+Eğer plotunuzdaki metni okumakta zorlandığınızı farkederseniz, inc.width için ayarlama yapmanız gerekir. Eğer `fig.width` son dökümanda işlenmiş şekil büyüklüğünden büyükse, metin çok küçük olacaktır; eğer `fig.width` küçük olursa, metin çok büyük olacaktır.
+Nihai genişlikle `fig.width` arasındaki doğru orantıyı bulabilmek için sıklıkla deneme yapmanız gereklidir. Prensibi görselleştirmek için, aşağıdaki üç plot `fig.width`’i sırasıyla 4, 6 ve 8 olarak ayarlanmıştır.
+
+```{r, include = FALSE}
+plot <- ggplot(mpg, aes(displ, hwy)) + geom_point()
+```
+```{r, fig.width = 4, echo = FALSE}
+plot
+```
+```{r, fig.width = 6, echo = FALSE}
+plot
+```
+```{r, fig.width = 8, echo = FALSE}
+plot
+```
+
+Yazı tipi büyüklüğünün tüm şekilleriniz arasında aynı olduğundan emin olmak istiyorsanız, ne zaman `out.width` ile ayarlama yaparsanız `fig.width` için de varsayılan out.width oranını koruyarak bir ayaralama yapmanız gerekmektedir. Örneğin varsayılan `fig.width` 6 ve out.width 0.7 ise `out.width=”50%”` ayarlarsanız `fig.width` için de 4.3 (6*0.5/0.7) şeklinde bir ayarlama yapmanız gerekmektedir.
+
+### Diğer önemli ayarlar
+
+Bu kitapta yaptığım gibi kodunuzla ve metninizle uğraştığınız zaman, size `fig.show = "hold"` ayarlamasını yapmanızı tavsiye ederim böylelikle plotlarınız kodunuzda sonra gösterilir. Bu size büyük kod bloklarını ve açıklamalarını bırakmanızı sağlamaktadır.
+
+Plota açıklama eklemek için `fig.cap` kullanın. R markdown içerisinde bu inline’dan “floating”e geçmesine olanak sağlar. 
+
+Eğer PDF çıktısı üretiyorsanız varsayılan grafik tipi PDFtir. Bu iyi bir varsayılandır çünkü PDF dosyaları yüksek kalitede vector grafikleridir. Buna rağmen eğer binlerce nokta gösteriyorsanız oldukça geniş ve yavaş plotlar üretir. Bu durumda, `dev=”png”` ayarlayıp  PNG dosyalarını zorla kullanabilirsiniz. Onlar bir miktar düşük kalitede olsada daha derlitopludur.
+
+Rutin olarak kod chunkları etiketlemeseniz de şekil oluşturduğunuz kod chunklarını isimlendirmek iyi bir fikirdir. Chunk etiketi eskiden bilgisayarınzda dosya isminin yaratılmasını da sağladığı için plotlarınızı bulup seçmek ve bazı durumlarda tekrar kullanmayı kolaylaştırmaktadır (örneğin bir plotu hızlıca emaile ya twitter’a eklemek isterseniz).
+
+## Daha fazlasını öğrenmek
+
+ggplot2’yi öğrenmenin gelmiş geçmiş en iyi yeri [_ggplot2: Elegant graphics for data analysis_](https://amzn.com/331924275X) kitabıdır. Birçok örneği içinde barındırır ve oldukça teornin derinlerine inerek, her bir parçayı bütünsel yaklaşarak pratik problemleri nasıl çözebileceğinizi gösterir. Ne yazık ki bu kitap ücrestiz olarak erişime açık değildir yinede kaynak koduna <https://github.com/hadley/ggplot2-book> adresinden ulaşabilirsiniz.
+
+ggplot eklentileri için de bir diğer kaynağa <http://www.ggplot2-exts.org/> adresinden ulaşabilirsiniz. Bu sitede ggplot2’yi geomlar ve ölçekler bağlamında geliştirmeniz için birçok paketin bulunuğu bir listeye sahiptir. Eğer ggplot2 konusunda zor görünen şeyler varsa başlamak için en uygun yerdir.
+
