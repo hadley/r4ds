@@ -1,3 +1,8 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
 # Tidy data
 
 ## Introduction
@@ -103,7 +108,7 @@ ggplot(table1, aes(year, cases)) +
 1.  Recreate the plot showing change in cases over time using `table2`
     instead of `table1`. What do you need to do first?
 
-## Spreading and gathering
+## Pivoting
 
 The principles of tidy data seem so obvious that you might wonder if you'll ever encounter a dataset that isn't tidy. Unfortunately, however, most data that you will encounter will be untidy. There are two main reasons:
 
@@ -120,89 +125,93 @@ The second step is to resolve one of two common problems:
 
 1. One observation might be scattered across multiple rows.
 
-Typically a dataset will only suffer from one of these problems; it'll only suffer from both if you're really unlucky! To fix these problems, you'll need the two most important functions in tidyr: `gather()` and `spread()`.
+Typically a dataset will only suffer from one of these problems; it'll only suffer from both if you're really unlucky! To fix these problems, you'll need the two most important functions in tidyr: `pivot_longer()` and `pivot_wider()`.
 
-### Gathering
+### Longer
 
-A common problem is a dataset where some of the column names are not names of variables, but _values_ of a variable. Take `table4a`: the column names `1999` and `2000` represent values of the `year` variable, and each row represents two observations, not one.
+A common problem is a dataset where some of the column names are not names of variables, but _values_ of a variable. Take `table4a`: the column names `1999` and `2000` represent values of the `year` variable, the values in the `1999` and `2000` columns represent values of the `cases` variable, and each row represents two observations, not one.
 
 ```{r}
 table4a
 ```
 
-To tidy a dataset like this, we need to __gather__ those columns into a new pair of variables. To describe that operation we need three parameters:
+To tidy a dataset like this, we need to __pivot__ the offending columns into a new pair of variables. To describe that operation we need three parameters:
 
-* The set of columns that represent values, not variables. In this example, 
+* The set of columns whose names are values, not variables. In this example, 
   those are the columns `1999` and `2000`.
 
-* The name of the variable whose values form the column names. I call that
-  the `key`, and here it is `year`.
+* The name of the variable to move the column names to. Here it is `year`.
 
-* The name of the variable whose values are spread over the cells. I call 
-  that `value`, and here it's the number of `cases`.
+* The name of the variable to move the column values to. Here it's `cases`.
   
-Together those parameters generate the call to `gather()`:
+Together those parameters generate the call to `pivot_longer()`:
 
 ```{r}
 table4a %>% 
-  gather(`1999`, `2000`, key = "year", value = "cases")
+  pivot_longer(c(`1999`, `2000`), names_to = "year", values_to = "cases")
 ```
 
-The columns to gather are specified with `dplyr::select()` style notation. Here there are only two columns, so we list them individually. Note that "1999" and "2000" are non-syntactic names (because they don't start with a letter) so we have to surround them in backticks. To refresh your memory of the other ways to select columns, see [select](#select).
+`year` and `cases` do not exist in `table4a` so we put their names in quotes.
 
-```{r tidy-gather, echo = FALSE, out.width = "100%", fig.cap = "Gathering `table4` into a tidy form."}
+The columns to pivot are specified with `dplyr::select()` style notation. Here there are only two columns, so we list them individually. Note that "1999" and "2000" are non-syntactic names (because they don't start with a letter) so we have to surround them in backticks. To refresh your memory of the other ways to select columns, see [select](#select).
+
+`year` and `cases` do not exist in `table4a` so we put their names in quotes.
+
+```{r tidy-gather, echo = FALSE, out.width = "100%", fig.cap = "Pivoting `table4` into a longer, tidy form."}
 knitr::include_graphics("images/tidy-9.png")
 ```
 
-In the final result, the gathered columns are dropped, and we get new `key` and `value` columns. Otherwise, the relationships between the original variables are preserved. Visually, this is shown in Figure \@ref(fig:tidy-gather). We can use `gather()` to tidy `table4b` in a similar fashion. The only difference is the variable stored in the cell values:
+In the final result, the pivoted columns are dropped, and we get new `year` and `cases` columns. Otherwise, the relationships between the original variables are preserved. Visually, this is shown in Figure \@ref(fig:tidy-gather). 
+
+`pivot_longer()` makes datasets longer by increasing the number of rows and decreasing the number of columns. I don’t believe it makes sense to describe a dataset as being in “long form”. Length is a relative term, and you can only say (e.g.) that dataset A is longer than dataset B.
+
+We can use `pivot_longer()` to tidy `table4b` in a similar fashion. The only difference is the variable stored in the cell values:
 
 ```{r}
 table4b %>% 
-  gather(`1999`, `2000`, key = "year", value = "population")
+  pivot_longer(c(`1999`, `2000`), names_to = "year", values_to = "population")
 ```
 
 To combine the tidied versions of `table4a` and `table4b` into a single tibble, we need to use `dplyr::left_join()`, which you'll learn about in [relational data].
 
 ```{r}
 tidy4a <- table4a %>% 
-  gather(`1999`, `2000`, key = "year", value = "cases")
+  pivot_longer(c(`1999`, `2000`), names_to = "year", values_to = "cases")
 tidy4b <- table4b %>% 
-  gather(`1999`, `2000`, key = "year", value = "population")
+  pivot_longer(c(`1999`, `2000`), names_to = "year", values_to = "population")
 left_join(tidy4a, tidy4b)
 ```
 
-### Spreading
+### Wider
 
-Spreading is the opposite of gathering. You use it when an observation is scattered across multiple rows. For example, take `table2`: an observation is a country in a year, but each observation is spread across two rows.
+`pivot_wider()` is the opposite of `pivot_longer()`. You use it when an observation is scattered across multiple rows. For example, take `table2`: an observation is a country in a year, but each observation is spread across two rows.
 
 ```{r}
 table2
 ```
 
-To tidy this up, we first analyse the representation in similar way to `gather()`. This time, however, we only need two parameters:
+To tidy this up, we first analyse the representation in similar way to `pivot_longer()`. This time, however, we only need two parameters:
 
-* The column that contains variable names, the `key` column. Here, it's 
-  `type`.
+* The column to take variable names from. Here, it's `type`.
 
-* The column that contains values from multiple variables, the `value`
-  column. Here it's `count`.
+* The column to take values from. Here it's `count`.
 
-Once we've figured that out, we can use `spread()`, as shown programmatically below, and visually in Figure \@ref(fig:tidy-spread).
+Once we've figured that out, we can use `pivot_wider()`, as shown programmatically below, and visually in Figure \@ref(fig:tidy-spread).
 
 ```{r}
 table2 %>%
-    spread(key = type, value = count)
+    pivot_wider(names_from = type, values_from = count)
 ```
 
 ```{r tidy-spread, echo = FALSE, out.width = "100%", fig.cap = "Spreading `table2` makes it tidy"}
 knitr::include_graphics("images/tidy-8.png")
 ```
 
-As you might have guessed from the common `key` and `value` arguments, `spread()` and `gather()` are complements. `gather()` makes wide tables narrower and longer; `spread()` makes long tables shorter and wider.
+As you might have guessed from their names, `pivot_wider()` and `pivot_longer()` are complements. `pivot_longer()` makes wide tables narrower and longer; `pivot_wider()` makes long tables shorter and wider.
 
 ### Exercises
 
-1.  Why are `gather()` and `spread()` not perfectly symmetrical?  
+1.  Why are `pivot_longer()` and `pivot_wider()` not perfectly symmetrical?  
     Carefully consider the following example:
     
     ```{r, eval = FALSE}
@@ -212,28 +221,28 @@ As you might have guessed from the common `key` and `value` arguments, `spread()
       return = c(1.88, 0.59, 0.92, 0.17)
     )
     stocks %>% 
-      spread(year, return) %>% 
-      gather("year", "return", `2015`:`2016`)
+      pivot_wider(names_from = year, values_from = return) %>% 
+      pivot_longer(`2015`:`2016`, names_to = "year", values_to = "return")
     ```
     
     (Hint: look at the variable types and think about column _names_.)
     
-    Both `spread()` and `gather()` have a `convert` argument. What does it 
-    do?
+    `pivot_longer()` has a `names_ptype` argument, e.g. 
+    `names_ptype = list(year = double())`. What does it do?
 
 1.  Why does this code fail?
 
     ```{r, error = TRUE}
     table4a %>% 
-      gather(1999, 2000, key = "year", value = "cases")
+      pivot_longer(c(1999, 2000), names_to = "year", values_to = "cases")
     ```
 
-1.  Why does spreading this tibble fail? How could you add a new column to fix
-    the problem?
+1.  What would happen if you widen this table? Why? How could you add a 
+    new column to uniquely identify each value?
 
     ```{r}
     people <- tribble(
-      ~name,             ~key,    ~value,
+      ~name,             ~names,  ~values,
       #-----------------|--------|------
       "Phillip Woods",   "age",       45,
       "Phillip Woods",   "height",   186,
@@ -243,7 +252,7 @@ As you might have guessed from the common `key` and `value` arguments, `spread()
     )
     ```
 
-1.  Tidy the simple tibble below. Do you need to spread or gather it?
+1.  Tidy the simple tibble below. Do you need to make it wider or longer?
     What are the variables?
 
     ```{r}
@@ -375,15 +384,20 @@ The way that a dataset is represented can make implicit values explicit. For exa
 
 ```{r}
 stocks %>% 
-  spread(year, return)
+  pivot_wider(names_from = year, values_from = return)
 ```
 
-Because these explicit missing values may not be important in other representations of the data, you can set `na.rm = TRUE` in `gather()` to turn explicit missing values implicit:
+Because these explicit missing values may not be important in other representations of the data, you can set `values_drop_na = TRUE` in `pivot_longer()` to turn explicit missing values implicit:
 
 ```{r}
 stocks %>% 
-  spread(year, return) %>% 
-  gather(year, return, `2015`:`2016`, na.rm = TRUE)
+  pivot_wider(names_from = year, values_from = return) %>% 
+  pivot_longer(
+    cols = c(`2015`, `2016`), 
+    names_to = "year", 
+    values_to = "return", 
+    values_drop_na = TRUE
+  )
 ```
 
 Another important tool for making missing values explicit in tidy data is `complete()`:
@@ -416,7 +430,7 @@ treatment %>%
 
 ### Exercises
 
-1.  Compare and contrast the `fill` arguments to `spread()` and `complete()`. 
+1.  Compare and contrast the `fill` arguments to `pivot_wider()` and `complete()`. 
 
 1.  What does the direction argument to `fill()` do?
 
@@ -447,7 +461,12 @@ So we need to gather together all the columns from `new_sp_m014` to `newrel_f65`
 
 ```{r}
 who1 <- who %>% 
-  gather(new_sp_m014:newrel_f65, key = "key", value = "cases", na.rm = TRUE)
+  pivot_longer(
+    cols = new_sp_m014:newrel_f65, 
+    names_to = "key", 
+    values_to = "cases", 
+    values_drop_na = TRUE
+  )
 who1
 ```
 
@@ -491,7 +510,7 @@ We need to make a minor fix to the format of the column names: unfortunately the
 
 ```{r}
 who2 <- who1 %>% 
-  mutate(key = stringr::str_replace(key, "newrel", "new_rel"))
+  mutate(names_from = stringr::str_replace(key, "newrel", "new_rel"))
 who2
 ```
 
@@ -526,8 +545,15 @@ I've shown you the code a piece at a time, assigning each interim result to a ne
 
 ```{r, results = "hide"}
 who %>%
-  gather(key, value, new_sp_m014:newrel_f65, na.rm = TRUE) %>% 
-  mutate(key = stringr::str_replace(key, "newrel", "new_rel")) %>%
+  pivot_longer(
+    cols = new_sp_m014:newrel_f65, 
+    names_to = "key", 
+    values_to = "cases", 
+    values_drop_na = TRUE
+  ) %>% 
+  mutate(
+    key = stringr::str_replace(key, "newrel", "new_rel")
+  ) %>%
   separate(key, c("new", "var", "sexage")) %>% 
   select(-new, -iso2, -iso3) %>% 
   separate(sexage, c("sex", "age"), sep = 1)
@@ -535,13 +561,13 @@ who %>%
 
 ### Exercises
 
-1.  In this case study I set `na.rm = TRUE` just to make it easier to
+1.  In this case study I set `values_drop_na = TRUE` just to make it easier to
     check that we had the correct values. Is this reasonable? Think about
     how missing values are represented in this dataset. Are there implicit
     missing values? What's the difference between an `NA` and zero? 
 
 1.  What happens if you neglect the `mutate()` step?
-    (`mutate(key = stringr::str_replace(key, "newrel", "new_rel"))`)
+    (`mutate(names_from = stringr::str_replace(key, "newrel", "new_rel"))`)
 
 1.  I claimed that `iso2` and `iso3` were redundant with `country`. 
     Confirm this claim.
