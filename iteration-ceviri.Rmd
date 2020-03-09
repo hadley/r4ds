@@ -1,0 +1,1000 @@
+---
+title: "iteration-ceviri"
+author: "Nurbahar Usta"
+date: "29 09 2019"
+output: html_document
+---
+# Iterasyonlar
+
+## Giriş
+
+[Fonksiyonlar]da, kodunuzdaki tekrarları azaltmak için kopyala-yapıştır yapmak yerine, fonksiyonları kullanmanın ne kadar önemli olduğunu konuşmuştuk. Kod tekrarlarını azaltmanın üç ana faydası vardır:
+
+1.  Kodunuzun amacını görmek daha kolaydır, çünkü gözleriniz farklı kodlara 
+    odaklanır, sürekli aynı kalanlara değil.
+    
+2.  Gerek duyduğunuz değişiklikleri yapmak daha kolaydır. Gereksinimleriniz değiştikçe,
+    kodu kopyaladığınız ve yapıştırdığınız her yeri değiştirmeyi hatırlamak yerine 
+    yalnızca bir yerde değişiklikler yapmanız yeterlidir.
+    
+3.  Her kod daha fazla işlemi kapsayacak şekilde kullanıldığı için, hata alma olasılığınız azalır.
+
+
+Kod tekrarlarını azaltmanın bir yolu fonksiyonlardır; kodunuzdaki tekrarlanan örüntüleri tanımlar ve bunları bağımsız parçalar olarak yazarsınız, böylece başka yerlerde kullanımları ya da güncellenmeleri kolaylaşır. Diğer yol ise __iterasyonlar__ olarak geçer. Farklı sütunlar ya da farklı veri setleri gibi birden fazla girdiye, aynı işlemleri uygulamanızı kolaylaştırır. 
+Bu bölümde iki önemli iterasyon paradigmasını öğreneceksiniz: emirli programlama ve fonksiyonel programlama. Emirli Programlamada (EP), while ve for döngüleri gibi araçlarınız vardır, ve başlangıç için harikadırlar çünkü iterasyonu çok net hale getirirler, ne olduğu çok açıktır. Diğer taraftan, for döngülerinde laf kalabalığı vardır ve her döngü için bazı "bookkeeping kod"ları sürekli tekrarlamayı gerektirir. Fonksiyonel programlama (FP) bu kopyalanmış kodu ayıklamak için araçlar sunar, "böylece her ortak for döngüsü kodu kendi fonksiyonunu alır"(?). FP sözlüğüne hakim olduğunuzda, birçok yaygın iterasyon problemini daha az kodla, daha kolay ve daha az hatayla çözebilirsiniz.
+
+### Ön koşullar
+
+Temel R tarafından sağlanan for döngülerinde ustalaşınca, tidyverse'in paketlerinden biri olan purrr ile birlikte gelen bazı güçlü programlama araçlarını öğreneceksiniz.
+
+```{r setup, message = FALSE}
+library(tidyverse)
+```
+
+## For döngüleri
+
+Basit bir tibble'ımız olsun:
+
+```{r}
+df <- tibble(
+  a = rnorm(10),
+  b = rnorm(10),
+  c = rnorm(10),
+  d = rnorm(10)
+)
+```
+
+Her sütunun ortalamasını hesaplamak istiyoruz. Bunu kopyala-yapıştır ile yapabilirsiniz: 
+
+```{r}
+median(df$a)
+median(df$b)
+median(df$c)
+median(df$d)
+```
+
+Fakat bu temel kuralımıza aykırıdır: asla iki defadan fazla kopyalayıp yapıştırma. Onun yerine, for döngüsü kullanabiliriz:
+
+```{r}
+output <- vector("double", ncol(df))  # 1. output
+for (i in seq_along(df)) {            # 2. sequence
+  output[[i]] <- median(df[[i]])      # 3. body
+}
+output
+```
+
+Her döngünün üç bileşeni vardır:
+
+1.  __çıktı__: `output <- vector("double", length(x))`. 
+    Döngüyü başlatmadan önce, her zaman çıktı için yeterli alan ayırmanız gerekir.
+    Bu, verimlilik için çok önemlidir: eğer her for döngünüzü her iterasyonda (örneğin) `c ()`'yi 
+    kullanarak büyütürseniz for döngünüz çok yavaş olacaktır.
+    
+    
+    Belirli bir uzunlukta boş bir vektör oluşturmanın genel yolu `vector ()` fonksiyonudur. 
+    İki argümanı vardır: vektör tipi ("logical", 
+    "integer", "double", "character", etc) ve vektör uzunluğu. 
+
+2.  __dizi__: `i in seq_along(df)`. Bu, döngüye neyin gireceğini belirler:
+    for döngüsünün her çalışması `i` yi` seq_along (df) `den farklı bir değere atar. 
+    `i` yi "O" gibi bir zamir olarak düşünmek faydalı olabilir. 
+    
+    Daha önce `seq_along ()` u görmemiş olabilirsiniz. Bu, tanıdık `1: length (l)` nin
+    güvenli bir versiyonudur, önemli bir farkla: sıfır uzunluklu bir vektörünüz varsa, 
+    `seq_along ()` doğru olanı yapar:
+
+    ```{r}
+    y <- vector("double", 0)
+    seq_along(y)
+    1:length(y)
+    ```
+    
+    Muhtemelen kasıtlı olarak sıfır uzunluklu bir vektör oluşturmazsınız, ancak kazayla 
+    oluşmaları kolaydır. `Seq_along (x)` yerine `1: length (x)` kullanırsanız, kafa karıştırıcı
+    bir hata mesajı alabilirsiniz.
+
+    
+3.  __gövde__: `output[[i]] <- median(df[[i]])`. İşi yapan kod budur.
+    Her seferinde “i” için farklı bir değerde tekrar tekrar çalıştırılır.
+    İlk iterasyon, ilk girdiyi çalıştıracak `output[[1]] <- median(df[[1]])`, 
+    ikinci iterasyon `output[[2]] <- median(df[[2]])` i, ve böyle devam edecektir.
+
+For döngüsü için hepsi bu kadar! Şimdi aşağıdaki alıştırmaları kullanarak bazı temel (ve çok da temel olmayan) for döngüleri oluşturmak için iyi bir zaman. Daha sonra for döngüsünün, pratikte ortaya çıkacak bazı sorunları çözmenize yardımcı olacak farklı varyasyonlarına geçeceğiz.
+
+### Alıştırmalar
+
+1.  Aşağıdakiler için döngü yazınız:
+
+    1. `mtcars` verisindeki tüm sütunların ortalamasını bulunuz.
+    2. `nycflights13::flights` verisindeki her sütunun veri tipini bulunuz.
+    3. `iris` verisinin sütunlarındaki "benzersiz değerlerin" sayısını hesaplayın.
+    4.  $\mu = -10$, $0$, $10$, and $100$ değerlerini içeren 10 tane rnorm (normal dağılıma sahip 
+        rasgele sayılar seçimi) üretin.
+    
+    Döngüleri yazmaya başlamadan önce __output__, __sequence__, ve __body__ 'leri düşünün.
+
+2.  Vektörlerle çalışan mevcut fonksiyonlardan yararlanarak aşağıdaki örneklerin her birinde for döngüsünü
+    kaldırın:
+    
+    ```{r, eval = FALSE}
+    out <- ""
+    for (x in letters) {
+      out <- stringr::str_c(out, x)
+    }
+    
+    x <- sample(100)
+    sd <- 0
+    for (i in seq_along(x)) {
+      sd <- sd + (x[i] - mean(x)) ^ 2
+    }
+    sd <- sqrt(sd / (length(x) - 1))
+    
+    x <- runif(100)
+    out <- vector("numeric", length(x))
+    out[1] <- x[1]
+    for (i in 2:length(x)) {
+      out[i] <- out[i - 1] + x[i]
+    }
+    ```
+
+3.  Fonksiyon yazma ve for döngüsü oluşturma becerilerinizi birleştirin:
+
+    1.`print()` kullanarak, bir çocuk şarkısı olan 
+      "Alice the camel"ın sözlerini `yazdıran` bir for döngüsü oluşturun.
+
+    2. Convert the nursery rhyme "ten in the bed" to a function. Generalise 
+       it to any number of people in any sleeping structure.
+
+    3. Convert the song "99 bottles of beer on the wall" to a function.
+       Generalise to any number of any vessel containing any liquid on 
+       any surface.
+
+4.  It's common to see for loops that don't preallocate the output and instead
+    increase the length of a vector at each step:
+    
+    ```{r, eval = FALSE}
+    output <- vector("integer", 0)
+    for (i in seq_along(x)) {
+      output <- c(output, lengths(x[[i]]))
+    }
+    output
+    ```
+    
+    How does this affect performance? Design and execute an experiment.
+
+## For döngüsü varyasyonları
+
+For döngüsünün temellerini özümsedikten sonra, bazı varyasyonlarından haberdar olmakta fayda var. Bu varyasyonlar, tekrarlamayı nasıl yaptığınız fark etmeksizin önemlidir, yani her yöntemde işinize yarayabilirler. Bu nedenle bir sonraki bölümde öğreneceğiniz FP yöntemlerine hakim olduktan sonra da, bu varyasyonları unutmayın!
+
+
+For döngüsünün ana temasında dört varyasyon vardır:
+
+1.  Yeni bir nesne oluşturmak yerine mevcut bir nesneyi değiştirmek.
+2.  İndeksler yerine isimler veya değerleri döngüye sokmak.
+3.  Bilinmeyen uzunluktaki çıktıları kontrol altında tutmak.
+4.  Bilinmeyen uzunluktaki dizileri kontrol altında tutmak.
+
+### Mevcut bir nesneyi değiştirmek
+
+Bazen varolan bir nesneyi değiştirmek için bir for döngüsü kullanmak istersiniz. Örneğin, [fonksiyonlar]daki alıştırmamızı hatırla. Bir veri çerçevesindeki her sütunu yeniden ölçeklendirmek istedik:
+
+```{r}
+df <- tibble(
+  a = rnorm(10),
+  b = rnorm(10),
+  c = rnorm(10),
+  d = rnorm(10)
+)
+rescale01 <- function(x) {
+  rng <- range(x, na.rm = TRUE)
+  (x - rng[1]) / (rng[2] - rng[1])
+}
+
+df$a <- rescale01(df$a)
+df$b <- rescale01(df$b)
+df$c <- rescale01(df$c)
+df$d <- rescale01(df$d)
+```
+
+Bunu, bir for döngüsü ile çözmek için üç bileşeni tekrar düşünelim:
+
+1.  __çıktı__: çıktımız zaten var --- girdi ile aynı!
+
+2.  __dizi__: veri çerçevesini sütunlar listesi olarak düşünebiliriz, dolayısıyla
+    her sütunu `seq_along(df)` ile yineleyebiliriz.
+
+3.  __gövde__: `rescale01()` uygulayın.
+
+Yani:
+
+```{r}
+for (i in seq_along(df)) {
+  df[[i]] <- rescale01(df[[i]])
+}
+```
+
+Genellikle bu tür bir döngü ile bir liste veya veri çerçecesini düzenlersiniz, bu yüzden `[[` kullanmayı unutmayın: `[` değil.Tüm döngülerimde `[[` kullandığımı fark etmiş olabilirsiniz : Bence atomik vektörler için bile `[[` kullanmak daha iyi çünkü bu açıkça tek bir elemanla çalışmak istediğimi gösteriyor.
+
+### Döngü Örüntüleri
+
+Bir vektör üzerinde döngü oluşturmanın üç temel yolu vardır. Şimdiye kadar size en genel olanı gösterdim: sayısal indislerin üzerinden `for (i seq_along (xs))` ile döngü oluşturmak ve bir değeri `x[[i]]` ile elde etmek . Farkı iki form daha var:
+
+1.  Elemanlar üzerinden döngü oluşturmak: `for (x in xs)`. Bu, yalnızca yan etkilerle
+    ilgileniyorsanız kullanışlı bir yöntemdir. Örneğin grafik çizmek ya da çıktıyı dosyaya
+    kaydetmek; çünkü çıktıyı verimli bir şekilde kaydetmek çok zordur. 
+
+2.  İsimler üzerinden döngü oluşturmak: `for (nm in names(xs))`. Bu size, bir değere `x [[nm]]`
+    ile erişmek için kullanabileceğiniz bir isim verir. Bu, isimleri bir grafik başlığında
+    ya da dosya isimlendirmede kullanacağınız zaman kullanışlıdır. İsimlerden oluşan bir 
+    çıktınız varsa, sonuç vektörünü şöyle adlandırdığınızdan emin olun:
+    
+    ```{r, eval = FALSE}
+    results <- vector("list", length(x))
+    names(results) <- names(x)
+    ```
+
+Sayısal indislerle yineleme en genel kullanılan formdur, çünkü bir pozisyon girdiğinizde 
+(`x[[i]]` kullanarak), o pozisyonun hem ismini hem de sayısal değerini elde edebilirsiniz.
+
+```{r, eval = FALSE}
+for (i in seq_along(x)) {
+  name <- names(x)[[i]]
+  value <- x[[i]]
+}
+```
+
+### Bilinmeyen Çıktı Uzunluğı
+
+Bazen çıktınızın uzunluğunun ne olacağını önceden bilemeyebilirsiniz. Örneğin, rastgele uzunluklardaki bazı rasgele vektörleri simüle etmek istediğinizi düşünün. Vektörleri giderek büyüterek bu sorunu çözme eğiliminde olabilirsiniz:
+
+```{r}
+means <- c(0, 1, 2)
+
+output <- double()
+for (i in seq_along(means)) {
+  n <- sample(100, 1)
+  output <- c(output, rnorm(n, means[[i]]))
+}
+str(output)
+```
+
+Ancak bu çok verimli bir yol değildir; çünkü her yinelemede, R tüm verileri önceki yinelemelerden kopyalamak zorundadır.Teknik terimlerle "kuadratik" ($ O (n ^ 2) $) bir davranış elde edersiniz; bu, üç öğeye sahip bir döngünün hesaplama süresinin, bir öğeye sahip formundan dokuz ($3^2$) kat daha uzun süreceği anlamına gelir. (???)
+
+Daha iyi bir çözüm: Sonuçları bir listeye kaydetmek ve daha sonra döngü tamamlandığında tek bir vektör halinde birleştirmek.
+
+```{r}
+out <- vector("list", length(means))
+for (i in seq_along(means)) {
+  n <- sample(100, 1)
+  out[[i]] <- rnorm(n, means[[i]])
+}
+str(out)
+str(unlist(out))
+```
+
+Burada bir vektör listesini tek bir vektöre çevirmek için `unlist ()` kullandım. Daha kurallı bir kullanım: `purrr::flatten_dbl()` --- eğer girdi "double" listesi değilse hata mesajı verecektir.
+
+Bu örüntü başka yerlerde de oluşur:
+
+1.  Uzun bir "string" oluşturuyorsunuzdur. Her bir tekrarı öncekiyle birlikte 
+    bir araya getirmek için 'paste ()' kullanmak yerine, çıktıyı bir karakter vektörüne
+    kaydedin ve ardından bu vektörü 'paste (output, collapse = "") `ile tek bir "string"de
+    birleştirin.
+   
+2.  Büyük bir veri çerçevesi oluşturuyorsunuzdur. Her tekrarı sırayla `rbind ()` ile
+    birleştirmek yerine, çıktıyı bir listeye kaydedin, ardından çıktıyı tek bir veri
+    çerçevesinde birleştirmek için `dplyr :: bind_rows (output)` kullanın.
+
+Bu örüntüye dikkat edin. Gördüğünüz yerde, daha karmaşık bir sonuç nesnesine geçin ve sonunda nesneleri tek bir adımda birleştirin.
+
+### Bilinmeyen Dizi Uzunluğu
+
+Bazen girdi dizisinin ne kadar süre koşacağını (çalışacağını?) bilmezsiniz. Simülasyon uygulamalarında bu çok yaygındır. Örneğin, dizinizi art arda üç tura elde edene kadar tekrarlamak istersiniz. for döngüsü ile bu tip bir iterasyon yapamazsınız. for yerine, while döngüsünü kullanabilirsiniz. while döngüsü for döngüsünden daha basittir çünkü yalnızca iki bileşeni vardır, koşul ve gövde: 
+
+```{r, eval = FALSE}
+while (kosul) {
+  # gövde
+}
+```
+
+Ayrıca, bir while döngüsü bir for döngüsünden daha geneldir, çünkü herhangi bir for döngüsünü bir while döngüsü olarak yeniden yazabilirsiniz, ancak her while döngüsünü for döngüsü olarak yeniden yazamazsınız:
+
+```{r, eval = FALSE}
+for (i in seq_along(x)) {
+  # gövde
+}
+
+# while kullanarak aynı döngü
+i <- 1
+while (i <= length(x)) {
+  # gövde
+  i <- i + 1 
+}
+```
+
+İşte üç kez art arda tura almak için bir seferde kaç deneme yapmamız gerektiğini bulmak için kullanabileceğimiz bir while döngüsü
+
+
+```{r}
+flip <- function() sample(c("T", "H"), 1)
+
+flips <- 0
+nheads <- 0
+
+while (nheads < 3) {
+  if (flip() == "H") {
+    nheads <- nheads + 1
+  } else {
+    nheads <- 0
+  }
+  flips <- flips + 1
+}
+flips
+```
+
+while döngülerinden çok kısaca bahsettim, çünkü ben çok nadir kullanıyorum. En yaygın kullanımları simülasyonlardır, ve simülasyonlar da bu kitabın kapsamı dışında. Yine de, tekrarlama sayısı belli olmayan durumlara karşı önceden hazılıklı olmanız için varlıklarından haberdar olmak iyidir.
+
+### Alıştırmalar
+
+1.  Bir dosyada okumak istediğiniz csv dosyalarının olduğunu düşünün.
+    Bir vektörde de adresleri var, 
+    `files <- dir("data/", pattern = "\\.csv$", full.names = TRUE)`, ve siz
+    her birini `read_csv()` kullanarak okumak istiyorsunuz. tüm okuduğunuz csv dosyalarını
+    bir veri çerçevesinde toplayan bir for döngüsü yazın. 
+
+2.  Eğer `x`in ismleri yoksa ve `for (nm in names(x))`  kullanırsanız ne olur?
+    Ya sadece bazı elemanlar isimlendirilmişse? Ya isimler özgün değilse (aynı 
+    isimli dosyalar varsa)?
+
+3.  Veri çerçevesindeki her nümerik sütunun ortalamasını yazdıran bir fonksiyon 
+    oluşturun. Örneğin, `show_mean(iris)` şöyle yazdırır:
+    
+    ```{r, eval = FALSE}
+    show_mean(iris)
+    #> Sepal.Length: 5.84
+    #> Sepal.Width:  3.06
+    #> Petal.Length: 3.76
+    #> Petal.Width:  1.20
+    ```
+    
+    (Ekstra zorluk: değişken isimleri farklı uzunlukta olduğu halde, hangi fonksiyonu
+    kullanırsam numaraların düzgün sıralandığından emin olabilirim?)
+
+4.  Bu kod ne yapar? Nasıl çalışır?
+
+    ```{r, eval = FALSE}
+    trans <- list( 
+      disp = function(x) x * 0.0163871,
+      am = function(x) {
+        factor(x, labels = c("auto", "manual"))
+      }
+    )
+    for (var in names(trans)) {
+      mtcars[[var]] <- trans[[var]](mtcars[[var]])
+    }
+    ```
+
+## For Döngüleri vs. Fonksiyonellikler(?)
+
+for döngüleri R için, diğer programlama dillerinde olduğu kadar önemli değildir çünkü R fonksiyonel bir dildir. Bu, döngüleri fonksiyonlar içinde derlemenin ve döngüyü direkt olarak kullanmak yerine fonksiyonu çağırmanın mümkün olduğu anlamına gelir.
+
+Bunun neden önemli olduğunu anlamak için (tekrar) bu basit veri çerçevesini düşünün:
+
+```{r}
+df <- tibble(
+  a = rnorm(10),
+  b = rnorm(10),
+  c = rnorm(10),
+  d = rnorm(10)
+)
+```
+
+Her sütunun ortalamasını hesaplamak istediğinizi düşünün. Bunu for döngüsü kullanarak yapabilirsiniz:
+
+```{r}
+output <- vector("double", length(df))
+for (i in seq_along(df)) {
+  output[[i]] <- mean(df[[i]])
+}
+output
+```
+
+Sonra, her sütunun ortalamasını hesaplama işlemini sık sık tekrar etmek isteyeceğinizi fark ediyorsunuz. Bu durumda, döngünüzü bir fonksiyonun içine yazın:
+
+```{r}
+col_mean <- function(df) {
+  output <- vector("double", length(df))
+  for (i in seq_along(df)) {
+    output[i] <- mean(df[[i]])
+  }
+  output
+}
+```
+
+Daha sonra, median ve standart sapma hesaplayabilmenin de faydalı olabileceğini düşünüyorsunuz. Önceden yazdığınız `col_mean()` fonksiyonunu kopyalayıp yapıştırın ve  `mean()` komutunu, `median()` ve `sd()` ile değiştirin:
+
+```{r}
+col_median <- function(df) {
+  output <- vector("double", length(df))
+  for (i in seq_along(df)) {
+    output[i] <- median(df[[i]])
+  }
+  output
+}
+col_sd <- function(df) {
+  output <- vector("double", length(df))
+  for (i in seq_along(df)) {
+    output[i] <- sd(df[[i]])
+  }
+  output
+}
+```
+
+O, o! Bu kodu iki kez kopyala-yapıştı yaptınız, yani bu işlemleri nasıl genelleştirebileceğinizi düşünme zamanı! Bu kodun büyük bir kısmının for döngüsünün birbirinin aynı tekrarlı kısımları olduğuna dikkat edin. Burada, fonksiyonlar arasında farklı olan tek kısmı (`mean()`, `median()`, `sd()`) görmek zor olabilir.
+
+Şöyle bir fonksiyon seti görseniz ne yapardınız:
+
+```{r}
+f1 <- function(x) abs(x - mean(x)) ^ 1
+f2 <- function(x) abs(x - mean(x)) ^ 2
+f3 <- function(x) abs(x - mean(x)) ^ 3
+```
+
+Umarım, çok fazla tekrarlama olduğunu ve hepsini tek bir argümanda toplamanın mümkün olduğunu fark etmişsinizdir:
+
+```{r}
+f <- function(x, i) abs(x - mean(x)) ^ i
+```
+
+Hata ihtimalini azalttınız (çünkü ilk halinin 1/3i kadar kodunuz var), ve karşılaşacağınız yeni durumlar karşısında genelleştirmeyi kolaylaştırdınız. 
+
+Yukarıdaki işlemin aynısını `col_mean()`, `col_median()` ve `col_sd()` ile de yapabiliriz. Fonksiyona, her sütuna uygulamasını sağlayacak bir argüman ekleyin:  
+
+```{r}
+col_summary <- function(df, fun) {
+  out <- vector("double", length(df))
+  for (i in seq_along(df)) {
+    out[i] <- fun(df[[i]])
+  }
+  out
+}
+col_summary(df, median)
+col_summary(df, mean)
+```
+
+Bir fonksiyonu başka fonksiyona aktarma fikri son derece etkili bir fikirdir ve R'ı işlevsel bir programlama dili yapan davranışlardan biridir. Bu fikre alışmanız biraz vaktinizi alabilir ama ayrıdığınız vaktin karşılığını alırsınız. Bölümün geri kalanında, __purrr__ paketini nasıl kullanacağınızı öğreneceksiniz. Bu pakette, döngüler için birçok yaygın sorunu ortadan kaldıran fonksiyonlar vardır. Temel R'daki apply fonksiyon ailesi de (`apply()`, `lapply()`, `tapply()`, etc) benzer sorunları çözer, fakar purr biraz daha tutarlıdır dolayısıyla öğrenmesi de daha kolaydır.
+
+for döngüleri yerine purr fonksiyonlarını kullanmanın amacı yaygın liste manipülasyonu zorluklarını bağımsız parçalara bölmenize izin vermesidir.
+
+1. Bir listenin tek bir elemanına ait bir problemi nasıl çözersiniz? 
+   Elemanın problemini çözdüğünüzde purr çözümünüzü listedeki tüm elemanlara
+   uygular.
+
+2. Karmaşık bir problemi çözerken, çözümü küçük bir adımı çözüme doğru ilerletmenize izin 
+   veren bayt (bite) büyüklüğünde parçalara nasıl ayırabilirsiniz?? 
+   purr, pipe'ınızla birlikte kullanabileceğiniz birçok küçük parça elde edersiniz.
+
+Bu yaklaşım (yapı?) birçok yeni problemi çözmenizi kolaylaştırır. Ayrıca, eski kodunuzu sonradan okuduğunuzda eski sorunlarınızda uyguladığınız çözümlerini anlamanızı da kolaylaştırır.
+
+### Alıştırmalar
+
+1.  `apply()` için yazılmış dökümanı okuyun. 2. durumda hangi iki döngü genelleştirme yapar?
+
+2.  `col_summary()` 'yi sadece nümerik sütunlarda çalışacak şekilde uyarlayın. Verinizdeki her
+    sayısal sütunu  TRUE mantıksal (logical) vektörüne dönüştüren `is_numeric()` fonksiyonu
+    ile başlayabilirsiniz.
+    
+
+## Map fonksiyonları 
+
+Vektörler üzerindeki döngü işlemlerinde, vektörün her elemanına bir işlem uygulayıp sonuçları kaydetmek o kadar yaygın kullanılır ki, purr paketinde bunları sizin için yapan bir fonskiyon ailesi vardır. Her tür çıktı için bir fonksiyon bulunur:
+
+* `map()`     liste oluşturur.
+* `map_lgl()` mantıksal vektör oluşturur.
+* `map_int()` tamsayı vektör oluşturur.
+* `map_dbl()` "double" vektör oluşturur.
+* `map_chr()` karakter vektörü oluşturur.
+
+Her fonskiyon bir vektörü girdi olarak alır, fonksiyonu her elemana uygular ve aynı uzunluğa ve aynı isimlere sahip yeni bir vektöre dönüştürür. Vektörün türü de kullandığınız map fonksiyonundaki son-ek ile belirlenir.
+
+Bu fonksiyonları kullanmaya alıştığınızda, iterasyon problemlerini çözmenin çok daha kısa zamanlar aldığını göreceksiniz. Fakat map fonksiyonu yerine for loop kullanırken kendinizi kötü hissetmemelisiniz. map fonksiyonları soyutlaştırma kulesinin bir basamağıdır, ve nasıl çalıştkıklarını anlamanız uzun süre alabilir. Önemli olan üzerinde çalıştığınız problemi çözmenizdir,  The important thing is that you solve the problem that you're working on, not write en kısa, özlü ve zarif kodu yazmanız değil (kesinlikle ulaşmak istediğiniz nokta olsa da!)
+
+Bazı insanlar size, çok yavaş oldukları için for döngülerinden kaçınmanızı söyleyecekler. Yanılıyorlar! (Ya da en azından eskide kalmışlar, for döngüleri yıllardır yavaş değil). `map()` gibi fonksiyonları kullanmanın başlıca faydası netliktir, hız değil: kodunuzu yazmayı ve okumayı kolaylaştırırlar. 
+
+Bu fonksiyonları son for döngüsündeki hesaplamaların aynısını yapmak için kullanabiliriz. Bu fonksiyonlar "double" olarak çıktı verirler, o yüzden `map_dbl()` kullanmalıyız:
+
+```{r}
+map_dbl(df, mean)
+map_dbl(df, median)
+map_dbl(df, sd)
+```
+
+for loop ile karşılaştırıldığında burada odak gerçekleştirilen işlemdedir (örneğin `mean()`, `median()`, `sd()`), her elementi depolamak için gerekli döngü işlemleri değil. pipe kullandığımızda bunu açıkça görürüz: :
+
+```{r}
+df %>% map_dbl(mean)
+df %>% map_dbl(median)
+df %>% map_dbl(sd)
+```
+
+`map_*()` ve `col_summary()` arasında bazı farklar vardır:
+
+*   Tüm purrr fonksiyonları C temellidir. Bu, okunabilirlik açısından fonksiyonları 
+    daha hızlı hale getirir.
+    
+*   İkinci argüman, .f, uygulanacak işlev, bir formül, bir karakter vektörü veya 
+    bir tamsayı vektörü olabilir. Bir sonraki bölümde bu kullanışlı kısayolları 
+    öğreneceksiniz.
+    
+*   `map _ * ()`, her bir seferinde .f`ye ek argümanları iletmek 
+    için ... ([nokta nokta nokta]) kullanır:
+
+    ```{r}
+    map_dbl(df, mean, trim = 0.5)
+    ```
+
+*   map fonksiyonları ayrıca isimleri de korur:
+
+    ```{r}
+    z <- list(x = 1:3, y = 4:5)
+    map_int(z, length)
+    ```
+
+### Kısayollar
+
+`.f` ile, kod yazmaktan biraz zaman kazanmanız için kullanabileceğiniz birkaç kısayol vardır. Bir veri setindeki her gruba uygulamak istediğiniz bir lineer model olduğunu düşünün. Aşağıdaki kolay örnek, 'mtcars' veri setini üç parçaya ayırır (her bir silindir değeri için bir tane) ve her bir parçaya aynı lineer modele uyar:
+
+```{r}
+models <- mtcars %>% 
+  split(.$cyl) %>% 
+  map(function(df) lm(mpg ~ wt, data = df))
+```
+
+R'da anonim bir fonksiyon yazmak için gerekli kod oldukça kalabalık. purr bunun için uygun bir kısayol sağlar: tek-taraflı formül.
+
+```{r}
+models <- mtcars %>% 
+  split(.$cyl) %>% 
+  map(~lm(mpg ~ wt, data = .))
+```
+
+Burada `.` 'yı tanımlayıcı olarak kullandım: nokta, o anda geçerli olan liste elemanını belirtir, aynı for döngüsünde `i`'nin yaptığı gibi. 
+
+Birçok modele aynı anda bakarsınız ve $R^2$ gibi özet istatistik görmek istersiniz. Bunun için önce `summary()`'yi çalıştırmamız ve daha sonra `r.squared` isimli bileşenini çekmemiz gerekir. "We could do that using the shorthand for anonymous functions"???:
+
+```{r}
+models %>% 
+  map(summary) %>% 
+  map_dbl(~.$r.squared)
+```
+
+Veriden ismi olan bileşenleri çekmek çok yaygın bir işlemdir, bu yüzden purr daha da kısa bir kısayol sağlar:"string" kullanabilirsiniz.
+
+```{r}
+models %>% 
+  map(summary) %>% 
+  map_dbl("r.squared")
+```
+
+Ayrıca, bir yerdeki (pozisyondaki?) elemanları seçmek için sayı da kullanabilirsiniz.
+
+```{r}
+x <- list(list(1, 2, 3), list(4, 5, 6), list(7, 8, 9))
+x %>% map_dbl(2)
+```
+
+### Temel R
+  
+Temel R'da apply fonksiyon ailesini kullanmaya alışkınsanız, purr fonksiyonlarındaki bazı benzerlikleri fark etmişsinizdir.
+
+*   `lapply()` temelde `map()` ile aynıdır, yalnızca `map()` purr'daki diğer
+    tüm fonksiyonlarla daha uyumludur, ve `.f` için kısayollar 
+    kullanabilirsiniz.
+
+*   Temel `sapply()`, `lapply()`'ın sonuçlarını otomatik olarak basitleştirir.
+    Bu interaktif işler için önemlidir fakat sorunlu bir fonksiyondur çünkü 
+    ne tip bir çıktı alacağınızı asla bilemezsiniz.
+    
+    ```{r}
+    x1 <- list(
+      c(0.27, 0.37, 0.57, 0.91, 0.20),
+      c(0.90, 0.94, 0.66, 0.63, 0.06), 
+      c(0.21, 0.18, 0.69, 0.38, 0.77)
+    )
+    x2 <- list(
+      c(0.50, 0.72, 0.99, 0.38, 0.78), 
+      c(0.93, 0.21, 0.65, 0.13, 0.27), 
+      c(0.39, 0.01, 0.38, 0.87, 0.34)
+    )
+    
+    threshold <- function(x, cutoff = 0.8) x[x > cutoff]
+    x1 %>% sapply(threshold) %>% str()
+    x2 %>% sapply(threshold) %>% str()
+    ```
+
+*   `vapply()`, `sapply()`'ın güvenli alternatifidir çünkü tipi tanımlayan bir
+    argüman eklersiniz. `vapply()` ile ilgili tek problem çok fazla yazı
+    gerektirmesidir: `vapply(df, is.numeric, logical(1))`, 
+    `map_lgl(df, is.numeric)` ile denktir. `vapply()`'ın purr'un map
+    fonksiyonlarına göre bir avantajı matrisler de üretebilmesidir, map
+    fonksiyonları yalnızca vektör üretir.
+    
+
+Burada purrr fonksiyonlarına odaklandım çünkü daha tutarlı isimleri ve argümanları, faydalı kısayolları var ve ???in the future will provide easy parallelism and progress bars.?? ?
+
+### Alıştırmalar
+
+1.  Aşağıdaki işlemleri yapacak map fonksiyonları kullanın:
+
+    1. `mtcars` verisinde her sütunun ortalamasını hesaplayın.
+    2. `nycflights13::flights` verisindeki her sütunun veri tipini bulun.
+    3. `iris` verisinin her sütunundaki eşsiz değerlerin (uniq values) sayısını hesaplayın.
+    4. Hepsi için 10 Generate 10 random normals for each of $\mu = -10$, $0$, $10$, and $100$.
+
+2.  Bir veri çerçevesinin her sütunu için, o sütunun faktör olup olmadığını belirten 
+    tek bir vektörü nasıl oluşturursunuz? 
+
+3.  map fonksiyonlarını liste olmayan vektörler üzerinde kullandığınızda ne olur?
+    `map(1:5, runif)` ne yapar? Niçin?
+    
+4.  `map(-2:2, rnorm, n = 5)` ne yapar? Niçin?
+    `map_dbl(-2:2, rnorm, n = 5)` ne yapar? Niçin?
+
+5.  `map(x, function(df) lm(mpg ~ wt, data = df))`'i anonim fonksiyondan arındırarak 
+    yeniden yazın. 
+
+##  Yanlışlarla baş etmek
+
+Birden fazla işlemi tekrar etmek için map fonksyonları kullanırken, bu işlemlerden birinin yanlış olma ihtimali çok yüksektir. Bu durumlarda, bir hata mesajı alırsınız fakat çıktı alamazsınız. Bu sinir bozucudur: neden tek bir yanlış diğer tüm doğru sonuçlara erişmenize engel olur? Tek bir çürük elmanın bütün çuvalı mahvetmeyeceğinden nasıl emin olursunuz?
+
+Bu bölümde, yanlışlarla baş etmek için kullanabileceğiniz yen bir fonksiyon öğreneceksiniz: `safely()`. `safely()` bir adıldır: yani bir fonksiyonu (bir adı) alır ve modifiye bir versiyonunu çıktı olarak verir. Bu durumda, modifiye fonksiyon asla hata vermez. Onun yerine her zaman iki elemanlı bir liste çıktısı oluşturur:
+
+1. `result` orjinal sonucunuzdur. Eğer hata varsa `NULL` olur.
+
+2. `error` hata objesidr. Eğer işlemleriniz başarılıysa `NULL` olur.
+
+(Temel R'daki `try()` fonksiyonuna aşina olabilirsiniz. Benzer fonksiyonlardır, but because it sometimes returns the original result and it sometimes returns an error object it's more difficult to work with.)
+
+Let's illustrate this with a simple example: `log()`:
+
+```{r}
+safe_log <- safely(log)
+str(safe_log(10))
+str(safe_log("a"))
+```
+
+Fonksiyon başarılı bir şekilde çalıştığında, `result` elemanı sonuçları içerir ve hata elemanı olan  `error` , `NULL` olarak gözükür. Fonksiyon başarısız olduğunda ise; sonuçları içeren eleman `result`, `NULL` olur ve `error` elemanı, hataları içeren bir obje içerir. 
+
+
+`safely()` map ile birlikte çalışmak üzere tasarlanmıştır:
+
+```{r}
+x <- list(1, 10, "a")
+y <- x %>% map(safely(log))
+str(y)
+```
+
+İki listeyle çalışırsak bu daha kolay olur: biri tüm hatalar için, diğeri tüm çıktılar için. `purrr::transpose()` ile bunu elde etmek kolaydır:
+
+```{r}
+y <- y %>% transpose()
+str(y)
+```
+
+Hatalarla nasıl baş edeceğiniz size kalmış, fakat It's up to you how to deal with the errors, fakat genellikle ya `y`'nin hata olduğu durumda `x`'in değerine bakacaksınız, ya da `y`'nin değerleri ile çalışacaksınız: 
+
+```{r}
+is_ok <- y$error %>% map_lgl(is_null)
+x[!is_ok]
+y$result[is_ok] %>% flatten_dbl()
+```
+
+Purrr iki kullanışlı argüman daha sunar: 
+
+* `safely()` gibi, `possibly()` de her zaman çalışır.`safely()`'den daha
+  sadedir, çünkü bir hata olduğunda geri dönmesi için varsayılan bir değer
+  atarsınız.
+    
+    ```{r}
+    x <- list(1, 10, "a")
+    x %>% map_dbl(possibly(log, NA_real_))
+    ```
+    
+*   `quietly()`, `safely()`'ye benzer bir performansla çalışır, fakat 
+  hataları göstermek yerine yazdırılan sonucu, mesajları ve uyarıları
+  gösterir.
+
+    
+    ```{r}
+    x <- list(1, -1)
+    x %>% map(quietly(log)) %>% str()
+    ```
+
+## Çoklu Argümanlarla Çalışmak
+
+Şimdiye kadar, tekli girdilerle çalıştık. Fakat sıklıkla paralel olarak itere etmek istediğiniz çoklu-ilişkili girdileriniz olur. Bu `map2()` ve `pmap()` fonksiyonlarının görevidir. Örneğin, farklı ortalama değerlere sahip (mean) rasgele normal dağılımlar (random normals) simüle etmek istiyorsunuz. Bunu `map()` ile nasıl yapacağınızı biliyorsunuz:
+
+```{r}
+mu <- list(5, 10, -3)
+mu %>% 
+  map(rnorm, n = 5) %>% 
+  str()
+```
+
+Ya standart sapmaları da farklı isterseniz? Bunu yapmanın bir yolu indisler üzerinde itere edip, sonuçları ortalamaların ve standart sapmaların vektörüne atamak: 
+
+
+```{r}
+sigma <- list(1, 5, 10)
+seq_along(mu) %>% 
+  map(~rnorm(5, mu[[.]], sigma[[.]])) %>% 
+  str()
+```
+
+Fakat bu, kodunuzun niyetini bulanıklaştırır. Bunun yerine, iki vektör üzerinde paralel olarak iterasyon yapan `map2()`'yi kullanabiliriz:
+
+```{r}
+map2(mu, sigma, rnorm, n = 5) %>% str()
+```
+
+`map2()` bu fonksiyon çağrıları serisini oluşturur: 
+
+```{r, echo = FALSE}
+knitr::include_graphics("diagrams/lists-map2.png")
+```
+
+
+Her fonksiyon çağrısında değişen argümanların fonksiyondan _önce_ geldiğine, her fonksiyonda aynı olan argümanların ise fonksiyondan _sonra_ geldiğine dikkat edin.
+
+ 
+`map()`, `map2()` aynı `map()`gibi, for döngülerinin derleyicisidir: 
+
+
+```{r}
+map2 <- function(x, y, f, ...) {
+  out <- vector("list", length(x))
+  for (i in seq_along(x)) {
+    out[[i]] <- f(x[[i]], y[[i]], ...)
+  }
+  out
+}
+```
+
+`map3()`, `map4()`, `map5()`, `map6()` vb. fonksiyonlar da düşünebilirsiniz, fakat işler çabucak can sıkıcı bir hal alabilir. Bunun yerine, purrr bir argüman listesini girdi olarak alan `pmap()` fonksiyonunu sunar. Bu fonksiyonu hem ortalamanın hem standart sapmanın hem de örnek sayısının farklı olmasını istediğiniz durumlarda kullanabilirsiniz:
+
+```{r}
+n <- list(1, 3, 5)
+args1 <- list(n, mu, sigma)
+args1 %>%
+  pmap(rnorm) %>% 
+  str()
+```
+
+That looks like:
+
+```{r, echo = FALSE}
+knitr::include_graphics("diagrams/lists-pmap-unnamed.png")
+```
+
+Eğer liste elemanlarını isimlendirmezseniz, `pmap()` konumsal eşleme yapacaktır. Bu biraz hassas bir durumdur, kodunuzun okunmasını zorlaştırır, bu yüzden argümanları isimlendirmek daha iyidir:
+
+```{r, eval = FALSE}
+args2 <- list(mean = mu, sd = sigma, n = n)
+args2 %>% 
+  pmap(rnorm) %>% 
+  str()
+```
+
+Bu, daha uzun fakat daha güvenlidir:
+
+```{r, echo = FALSE}
+knitr::include_graphics("diagrams/lists-pmap-named.png")
+```
+
+Argümanların hepsi aynı uzunluğa sahip olduğundan, hepsini bir veri çerçevesinde depolamak mantıklıdır: 
+
+```{r}
+params <- tribble(
+  ~mean, ~sd, ~n,
+    5,     1,  1,
+   10,     5,  3,
+   -3,    10,  5
+)
+params %>% 
+  pmap(rnorm)
+```
+
+Kodunuz karmaşıklaştığı anda veri çerçevesinin iyi bir yaklaşım olduğunu düşünüyorum çünkü her sütunun bir adının olmasını ve tüm sütunlarda aynı uzunlukta olmasını garantiler.
+
+### Diğer Fonksiyonları Çağırmak
+
+Karmaşıklığı artırmak için bir adım daha var - fonksiyonun argümanlarını değiştirebildiğiniz gibi, fonksiyonun kendisini de değiştirebilirsiniz:
+
+```{r}
+f <- c("runif", "rnorm", "rpois")
+param <- list(
+  list(min = -1, max = 1), 
+  list(sd = 5), 
+  list(lambda = 10)
+)
+```
+
+Bununla başa çıkabilmek için `invoke_map()`'i kullanabilirsiniz:
+
+```{r}
+invoke_map(f, param, n = 5) %>% str()
+```
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/lists-invoke.png")
+```
+
+İlk argüman bir fonksiyon listesi ya da fonksiyonların isimlerinin karakter vektörüdür. İkinci argüman her fonksiyon için değişen argümanların listesinin listesidir. Sonraki argümanlar her fonksiyona aktarılır. 
+
+Tekrar edelim, bu eşleşen çiftleri oluşturmayı biraz daha kolaylaştırmak için `tribble ()` kullanabilirsiniz:
+
+```{r, eval = FALSE}
+sim <- tribble(
+  ~f,      ~params,
+  "runif", list(min = -1, max = 1),
+  "rnorm", list(sd = 5),
+  "rpois", list(lambda = 10)
+)
+sim %>% 
+  mutate(sim = invoke_map(f, params, n = 10))
+```
+
+## Walk {#walk}
+
+Walk, bir fonskiyonu sonuç değerlerinden ziyade yan etkileri için çağırmak istediğinizde kullanabileceğiniz bir map'dir. Bunu genellikle ekrandan çıktı almak veya dosyaları diske kaydetmek istediğiniz için yaparsınız - önemli olan, sonuç değeri değil eylemdir. İşte çok basit bir örnek:
+
+```{r}
+x <- list(1, "a", 3)
+
+x %>% 
+  walk(print)
+```
+
+`walk()`, `walk2()` ya da  `pwalk()` ile kıyaslandığında o kadar kullanışlı değildir. Örneğin, grafiklerden oluşan bir listeniz ve dosya isimlerinden oluşan bir vektörünüz varsa, her dosyayı diskte belirtilen konuma kaydetmek için `pwalk()` kullanabilirsiniz:
+
+
+```{r, eval = FALSE}
+library(ggplot2)
+plots <- mtcars %>% 
+  split(.$cyl) %>% 
+  map(~ggplot(., aes(mpg, wt)) + geom_point())
+paths <- stringr::str_c(names(plots), ".pdf")
+
+pwalk(list(paths, plots), ggsave, path = tempdir())
+```
+
+`walk()`, `walk2()` ve `pwalk()` hepsi görünmez `.x` sonucu verir. Bu özellikleriyle kod hatlarının ortasında (pipeline) kullanılmaya uygundurlar. 
+
+## for Döngülerinin Diğer Örüntüleri
+
+Purr, diğer for döngüsü tiplerini özetleyen bir dizi başka fonksiyon sağlar. Bunları map fonskiyonlarından daha seyrek kullanacaksınız, ama bilmekte fayda var. Buradaki amaç, her bir fonksiyonu kısaca açıklamaktır, böylelikle umarız ki gelecekte benzer bir sorunla karşılaştığınızda aklınıza gelecektirler. Ardından daha fazla ayrıntı için kullanım yönergelerine bakabilirsiniz.
+
+### Predicate (Yüklem?? , Fiil?? verb. vs predicate)  Fonksiyonları
+
+Bazı fonksiyonlar tek bir `TRUE` ya da `FALSE` sonucu veren __predicate__ fonksiyonlarıyla çalışır..
+
+`keep()` ve `discard()` keep elements of the input where the predicate is `TRUE` or `FALSE` respectively: (ÇEVİREMEDİM)
+```{r}
+iris %>% 
+  keep(is.factor) %>% 
+  str()
+
+iris %>% 
+  discard(is.factor) %>% 
+  str()
+```
+
+
+`some ()` ve `every ()`, yüklemin tüm elemanlar veya bazı elemanlar için doğru olup olmadığını kontrol eder.
+
+```{r}
+x <- list(1:5, letters, list(10))
+
+x %>% 
+  some(is_character)
+
+x %>% 
+  every(is_vector)
+```
+
+`detect()` yüklemin doğru olduğu ilk elemanı bulur; `detect_index()` elemanın pozisyonunu gösterir.
+
+```{r}
+x <- sample(10)
+x
+
+x %>% 
+  detect(~ . > 5)
+
+x %>% 
+  detect_index(~ . > 5)
+```
+
+`head_while()` ve `tail_while()` yüklemin doğru olduğu durumlarda vektörün başından ve sonundan eleman alır.
+
+```{r}
+x %>% 
+  head_while(~ . > 5)
+
+x %>% 
+  tail_while(~ . > 5)
+```
+
+### Azalt ve Biriktir
+
+Bazen kompleks bir listeniz olur ve bunu tekrar eden fonksiyonlar uygulayarak basit bir listeye dönüştürmek istersiniz. Birden çok tabloya iki-tablolu dplyr fiili uygulamak istiyorsanız bu faydalıdır. Örneğin, veri çerçevelerinden oluşan bir listeniz vardır ve bunu elemanları birleştirerek tek bir veri çerçevesine dönüştürmek istersiniz.
+
+```{r}
+dfs <- list(
+  age = tibble(name = "John", age = 30),
+  sex = tibble(name = c("John", "Mary"), sex = c("M", "F")),
+  trt = tibble(name = "Mary", treatment = "A")
+)
+
+dfs %>% reduce(full_join)
+```
+
+Ya da vektörlerden oluşan bir listeniz var, ve kesişimlerini bulmak istiyorsunuz: 
+
+```{r}
+vs <- list(
+  c(1, 3, 5, 6, 10),
+  c(1, 2, 3, 7, 8, 10),
+  c(1, 2, 3, 4, 8, 9, 10)
+)
+
+vs %>% reduce(intersect)
+```
+
+Azaltma fonksiyonu "binary" (örn: iki girdisi olan bir fonksiyon) bir fonksiyonu alır , ve listede yalnızca bir eleman kalana kadar fonksiyonu listeye uygulamaya devam eder. 
+
+Biriktirmek de benzer şekilde çalışır fakat ara sonuçları da saklar. Kümülatif toplama işlemi yaparken kullanabilirsiniz:
+
+```{r}
+x <- sample(10)
+x
+x %>% accumulate(`+`)
+```
+
+### Alıştırmalar
+
+1.  for döngüsü kullanarak kendi versiyonunuz olan `every()` oluşturun.
+    `purrr::every()` 'daki `every()` ile karşılaştırın. purr'un versiyonunda yapabilip, 
+    kendi versiyonunuzda yapamadığınız ne var? 
+
+1.  Create an enhanced `col_summary()` that applies a summary function to every
+    numeric column in a data frame.
+
+1.  A possible base R equivalent of `col_summary()` is:
+
+    ```{r}
+    col_sum3 <- function(df, f) {
+      is_num <- sapply(df, is.numeric)
+      df_num <- df[, is_num]
+
+      sapply(df_num, f)
+    }
+    ```
+    
+    Aşağıdaki girdilerde gösterildiği gibi birkaç hatası var:
+    
+    ```{r, eval = FALSE}
+    df <- tibble(
+      x = 1:3, 
+      y = 3:1,
+      z = c("a", "b", "c")
+    )
+    # OK
+    col_sum3(df, mean)
+    # Sorunlu: her zaman nümerik vektör olarak sonuç vermiyor 
+    col_sum3(df[1:2], mean)
+    col_sum3(df[1], mean)
+    col_sum3(df[0], mean)
+    ```
+    
+    Hatalara sebep olan nedir?

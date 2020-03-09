@@ -1,0 +1,265 @@
+---
+title: "pipes-ceviri"
+author: "Nurbahar Usta"
+date: "29 09 2019"
+output: html_document
+---
+# Pipe Operatörü
+
+## Giriş
+
+Pipe operatörü,bir çoklu işlemler serisini ifade etmekte kullanılan çok güçlü bir araçtır. Şimdiye kadar, nasıl çalıştıklarını ya da alternatiflerin ne olduğunu bilmeden onları kullanıyordunuz. Şimdi, bu bölümde pipe operatörünü daha ayrıntılı bir şekilde keşfetme zamanı. Pipe operatörünün alternatiflerini ve birkaç kullanışlı aracı daha öğreneceksiniz.
+
+### Ön Koşullar
+
+Pipe operatörü, `%>%`, Stefan Milton Bache'ın oluşturduğu __magrittr__ paketiyle gelir. tidyverse'deki paketler operatörü `%>%` senin için otomatik olarak yükler, böylece her defasında magrittr paketini çağırmak zorunda kalmazsın. Fakat biz burada, pipe hattı oluşturmaya odaklanıyoruz ve başka bir paket yüklemiyoruz, bu yüzden burada çağıracağız.
+
+```{r setup, message = FALSE}
+library(magrittr)
+```
+
+## Pipe operatörü alternatifleri
+
+Pipe operatörünün amacı, kodu okunması ve anlaşılması kolay bir şekilde yazmanıza yardımcı olmaktır. Pipe operatörünün neden bu kadar kullanışlı olduğunu görmek için, aynı kodu yazmanın birkaç yolunu keşfedeceğiz. Foo Foo adında küçük bir tavşan hakkında bir hikaye anlatmak için kodu kullanalım:
+
+> Little bunny Foo Foo  
+> Went hopping through the forest  
+> Scooping up the field mice  
+> And bopping them on the head  
+
+Bu, el hareketlerinin eşlik ettiği popüler bir çocuk şiiridir.
+
+Küçük tavşan Foo Foo'yu temsil edecek bir obje tanımlayarak başlayacağız:
+
+```{r, eval = FALSE}
+foo_foo <- little_bunny()
+```
+
+Ve her anahtar fiil için bir fonksiyon kullanacağız: `hop()`, `scoop()`, ve `bop()`.  Bu objeyi ve bu fiilleri kullanarak, öyküyü kodda yeniden anlatmanın (en azından) dört yolu vardır:
+
+
+1. Her ara basamağı yeni obje olarak kaydet.
+2. Orjinal objenin defalarca üzerine yaz.
+3. Fonksiyonlar oluştur.
+4. Pipe operatörü kullan.
+
+Her bir yaklaşım üzerinde size kodları göstererek çalışacak, yaklaşımların avantajları ve dezavantajları hakkında konuşacağız.
+
+### Ara basamaklar
+
+En basit yaklaşım, her basamağı yeni bir obje olarak kaydetmektir:
+
+```{r, eval = FALSE}
+foo_foo_1 <- hop(foo_foo, through = forest)
+foo_foo_2 <- scoop(foo_foo_1, up = field_mice)
+foo_foo_3 <- bop(foo_foo_2, on = head)
+```
+
+Bu formun ana dezavantajı, sizi her bir ara basamağı adlandırmaya zorlamasıdır. Doğal adlar varsa, bu iyi bir fikirdir ve bunu yapmalısınız. Ancak, çoğu kez, bu örnekte olduğu gibi, doğal adlar yoktur ve adları benzersiz yapmak için sayısal son-ekler eklersiniz. Bu, iki soruna yol açar:
+
+1. Kod, önemsiz adlarla darmadağın(cluttered) olur.
+
+2. Her satırdaki son-eki dikkatlice arttırmanız gerekir. 
+
+Ne zaman böyle bir kod yazsam, bir satırda yanlış numarayı kullanırım ve 10 dakika boyunca kafamı kaşıyarak kodumda neyin yanlış gittiğini bulmaya çalışırım.
+
+Ayrıca, bu formun verinizin birçok kopyasını oluşturmasından ve çok fazla bellek kapmasından endişe duyabilirsiniz. 
+Şaşırtıcı bir şekilde, durum öyle değil. 
+Öncelikle, proaktif bir şekilde belleğiniz için endişelenmenin zamanınızı harcamanın yararlı bir yolu olmadığını unutmayın: problem olduğunda endişelenin (örn. yetersiz bellek sorunu yaşadığınızda), öncesinde değil. İkincisi, R aptal değildir ve mümkün olduğu durumlarda sütunları veri tabloları arasında paylaşacaktıracaktır. Şimdi, `ggplot2::diamonds`a yeni bir sütun eklediğimiz gerçek bir veri manipülasyonu pipe hattına bakalım:
+
+```{r}
+diamonds <- ggplot2::diamonds
+diamonds2 <- diamonds %>% 
+  dplyr::mutate(price_per_carat = price / carat)
+
+pryr::object_size(diamonds)
+pryr::object_size(diamonds2)
+pryr::object_size(diamonds, diamonds2)
+```
+
+`pryr :: object_size ()` tüm argümanların işgal ettiği hafızayı verir. Sonuçlar, ilk bakışta mantıksız görünmektedir:
+
+* `diamonds` takes up 3.46 MB,
+* `diamonds2` takes up 3.89 MB,
+* `diamonds` and `diamonds2` together take up 3.89 MB!
+
+Bu nasıl oldu?  Eh, `diamond2`nin ` diamonds` ile ortak 10 sütun vardır: tüm verileri iki kez kopyalayarak kaydetmeye gerek yok, böylece iki veri tablosu ortak değişkenlere sahip olur. Bu değişkenler, yalnızca biri üzerinde değişiklik yaptığınızda kopyalanarak kaydedilir.
+Aşağıdaki örnekte, `diamonds $ carat` içindeki tek bir değeri değiştiriyoruz. Bu, 'carat' değişkeninin artık iki veri tablosu arasında paylaşılamadığı ve bir kopyasının yapılması gerektiği anlamına gelir. İki veri tablosunun da büyüklüğü değişmemiştir, fakat toplam boyut artar:
+
+```{r}
+diamonds$carat[1] <- NA
+pryr::object_size(diamonds)
+pryr::object_size(diamonds2)
+pryr::object_size(diamonds, diamonds2)
+```
+
+
+(Burada `pryr :: object_size ()` kullandığımızı unutmayın, yerleşik `object.size ()` objesini değil. `object.size ()` yalnızca tek bir obje alır, bu yüzden verinin birden fazla obje arasında nasıl paylaşıldığını hesaplayamaz.)
+
+
+### Orjinalinin Üstüne Yaz
+
+Her adımda ara objeler oluşturmak yerine, orijinal objenin üzerine yazabiliriz:
+
+```{r, eval = FALSE}
+foo_foo <- hop(foo_foo, through = forest)
+foo_foo <- scoop(foo_foo, up = field_mice)
+foo_foo <- bop(foo_foo, on = head)
+```
+
+Bu daha az kod yazmaktır (ve daha az düşünmektir), bu nedenle hata yapma olasılığınız azalır. Ancak, iki sorun var:
+
+1.  Hata ayıklama (debugging) acı vericidir: Bir hata yaparsanız, tüm pipe hattını yeniden çalıştırmanız gerekir.
+    
+2.  Dönüştürülen objenin tekrar edilmesi (`foo_foo` objesini altı kez 
+
+
+### Fonksiyon oluşturma
+
+Başka bir yaklaşım da atama yapmayı bırakmak ve fonksiyonun birlikte çağırdığı karakter dizisini eklemektir:
+
+```{r, eval = FALSE}
+bop(
+  scoop(
+    hop(foo_foo, through = forest),
+    up = field_mice
+  ), 
+  on = head
+)
+```
+
+Buradaki dezavantaj, içeriden dışarıya, sağdan sola okumak zorunda olmanız ve argümanların birbirinden çok uzaklara dağılmasıdır. (çağrıştırmasından ötürü 
+[dagwood sandwhich](https://en.wikipedia.org/wiki/Dagwood_sandwich) problemi olarak anılır). Kısacası, bu kodu bir insanın tüketmesi zordur.
+
+### Pipe Operatörünü Kullan 
+
+Son olarak, pipe operatörünü kullanabiliriz:
+
+```{r, eval = FALSE}
+foo_foo %>%
+  hop(through = forest) %>%
+  scoop(up = field_mice) %>%
+  bop(on = head)
+```
+
+Bu benim en sevdiğim form, çünkü isimlere değil fiillere odaklanıyor. Bunu, bir dizi zorunlu işlemi gerçekleştirmeyi sağlayan bir fonksiyon serisi oluşturmak olarak değerlendirebilirsiniz. Foo Foo 'hop'lar, sonra 'scoop'lar, sonra 'bop'lar. Olumsuz yanı, tabi ki, pipe operatörüna aşina olmanız gerekliliğidir. Daha önce `%>%` yi hiç görmediyseniz, bu kodun ne yaptığı hakkında hiçbir fikriniz yoktur. Neyse ki, çoğu insan bu fikri çok çabuk kavrıyor, bu nedenle kodunuzu pipe operatörüne aşina olmayan diğer kişilerle paylaştığınızda, onlara kolayca öğretebilirsiniz.
+
+Pipe operatörü bir "sözcüksel dönüşüm" gerçekleştirerek çalışır: sahnelerin arkasında magrittr, pipe hattındaki kodu bir ara nesnenin üzerine yazarak çalışan bir formda yeniden birleştirir. Yukarıdaki gibi bir pipe hattı çalıştırdığınızda, magrittr şöyle bir şey yapar:
+
+```{r, eval = FALSE}
+my_pipe <- function(.) {
+  . <- hop(., through = forest)
+  . <- scoop(., up = field_mice)
+  bop(., on = head)
+}
+my_pipe(foo_foo)
+```
+
+Bu, pipe operatörünün iki fonksiyon sınıfı için çalışmayacağı anlamına gelir:
+
+1.  Geçerli Ortam'ı kullanan fonksiyonlar. Örneğin, `assign ()`
+    mevcut Ortam'da belirtilen isimde yeni bir değişken yaratacaktır:
+     
+    ```{r}
+    assign("x", 10)
+    x
+    
+    "x" %>% assign(100)
+    x
+    ```
+    
+    Pipe operatörü ile atamanın kullanılması işe yaramaz çünkü değişkeni '%>%' tarafından kullanılan geçici bir
+    ortama atar. Pipe operatörü atamayı kullanmak istiyorsanız, Ortam konusunda belirleyici olmalısınız:
+    
+    ```{r}
+    env <- environment()
+    "x" %>% assign(100, envir = env)
+    x
+    ```
+    
+    `get()` ve `load()`ın da içinde bulunduğu bir grup fonskiyon da aynı probleme sahiptir. 
+
+2.  Tembelce bir değerlendirme sistemi kullanan fonksiyonlar. R'da  fonksiyon, argümanları yalnızca 
+    fonksiyon onları kullandığında hesaplar, fonksiyonu çağırmadan önce değil. 
+    Pipe operatörü her elemanı sırayla hesaplar, bu yüzden güvenilmezdir (?).
+    
+    Bunun sorun olduğu durumlardan biri, hataları yakalamanıza ve çözmenize izin veren  `tryCatch()`dir. 
+    
+    ```{r, error = TRUE}
+    tryCatch(stop("!"), error = function(e) "An error")
+    
+    stop("!") %>% 
+      tryCatch(error = function(e) "An error")
+    ```
+     
+    Bu davranışa sahip nispeten geniş bir fonksiyon sınıfı vardır: `try ()`, `suppressMessages ()` ve 
+    base R'da bulunan `suppressWarnings ()`
+  
+## Pipe Operatörü Ne Zaman Kullanılmaz
+
+Pipe operatörü çok önemli bir araçtır, fakat emrinizde olan tek araç değildir ve her problemi çözmez. Pipe operatörleri, oldukça kısa bir doğrusal fonksiyon dizisini yeniden yazmak için oldukça kullanışlıdır. Aşağıdaki durumlarda başka bir araca başvurmanız gerektiğini düşünüyorum:
+
+* Diyelim ki pipe operatörleriniz ondan fazla olduğunda. Bu durumlarda, anlamlı adlara sahip
+  ara objeler oluşturun. Bu da hata ayıklamanızı kolaşyaltırır çünkü her zaman ara basamak 
+  sonuçlarını kontrol edebilecek durumda olursunuz. Aynı zamanda adlandırmayı iletişimi kolaylaştırmak 
+  niyetiyle yaptığınız için, kodunuzu da anlaşılır hale getirir. 
+  
+* Birden fazla girdiniz ya da çıktınız olduğunda. Eğer dönüştürülen birincil bir objeniz yoksa ve iki
+  ya da daha fazla obje bir araya getiriliyor, birleştiriliyorsa pipe operatörünü kullanmayın.
+
+* Kompleks bir bağımlılık yapısına sahip, yönlendirilmiş grafikler.  Pipe operatörleri temelde doğrusaldır 
+  ve pipe kullanarak kompleks ilişkilere sahip ifadeler oluşturmak, kafa karıştırıcı kod yığını oluşturacaktır.
+  
+  
+## magrittr Dışındaki Araçlar
+
+tidyverse içindeki tüm paketler otomatik olarak `%>%` operatörünü kullanılabilir duruma getirir, bu sayede normal olarak magrittr'i her seferinde çağırmazsınız. Bununla birlikte, magrittr içinde denemek isteyebileceğiniz başka faydalı araçlar da vardır:
+
+*   Karmaşık pipe hatlarıyla çalışırken, yan-etkilerini gidermek için bazı fonksiyonları
+    çağırmak öneml olabilir. Belki anlık objeleri yazdırmak, grafiğini çizmek ya da kaydetmek 
+    isteyeceksiniz. Çoğu zaman bu fonksiyonlar sonuç vermeyecek ve pipe hattını sonlandıracaktır.
+    
+    
+    Bu problem çözmek için "tee" fonksiyonundan faydalanabilirsiniz. `%T>%` aynı
+    `%>%` gibi çalışır fakat sağ-el tarafından değil, sol-el tarafından sonuçlanır.
+    "tee" deniyor, çünkü gerçekten T-şeklinde boru gibi çalışır.
+
+    ```{r}
+    rnorm(100) %>%
+      matrix(ncol = 2) %>%
+      plot() %>%
+      str()
+    
+    rnorm(100) %>%
+      matrix(ncol = 2) %T>%
+      plot() %>%
+      str()
+    ```
+
+*   Veri tablo tabanlı bir UPA (Uygulama Progralmala Arayüzü) içermeyen fonksiyonlarla çalışıyorsanız
+    (örn: bir veri tablosu olarak ya da söz konusu veri tablosu bağlamında değerlendirilecek şeklde değil de
+    bağımsız vektörlere atayarak işlem yapıyorsanız), `%$%` ifadesini kullanışlı bulabilirsiniz. 
+    Veri tablosundaki değişkenleri "patlatır", bu sayede onlara başvurabilirsiniz. Base R'daki birçok fonksiyonla
+    çalışırken kullanışlı hale gelir:
+    
+    ```{r}
+    mtcars %$%
+      cor(disp, mpg)
+    ```
+
+*   Atama için magrittr, aşağıdaki gibi kodları değiştirmenizi sağlayan `% <>%` operatörünü sağlar:
+  
+    ```{r, eval = FALSE}
+    mtcars <- mtcars %>% 
+      transform(cyl = cyl * 2)
+    ```
+    
+    ve
+     
+    ```{r, eval = FALSE}
+    mtcars %<>% transform(cyl = cyl * 2)
+    ```
+    
+    Ben bu operatörün hayranı değilim, çünkü atamanın özel bir işlem olduğunu düşünüyorum.
+    Bence, atamayı daha açık hale getirmek söz konusuysa, bir miktar veri kopyası oluşturmak (örneğin, 
+    bir objenin adını iki kez tekrarlama) sorun olmayabilir.
