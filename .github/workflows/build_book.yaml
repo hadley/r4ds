@@ -1,0 +1,75 @@
+on:
+  push:
+    branches: master
+
+name: bookdown
+
+jobs:
+  build:
+    runs-on: ubuntu-16.04
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      RSPM: https://packagemanager.rstudio.com/cran/__linux__/xenial/latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v2
+
+      - name: Setup R
+        uses: r-lib/actions/setup-r@master
+
+      - name: Get R version
+        id: get-r-version
+        run: |
+          echo "::set-output name=version::$(Rscript -e 'cat(as.character(getRversion()))')"
+        shell: bash
+
+      - name: Cache R packages
+        uses: actions/cache@v2
+        with:
+          path: ${{ env.R_LIBS_USER }}
+          key: ${{ runner.os }}-${{ steps.get-r-version.outputs.version }}-1-
+
+     - name: Install pak
+        run: |
+          install.packages("pak", repos = "https://r-lib.github.io/p/pak/dev/")
+        shell: Rscript {0}
+
+      - name: Install system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          while read -r cmd
+          do
+            eval sudo $cmd
+          done < <(Rscript -e 'writeLines(pak::local_system_requirements("ubuntu", "16.04"))')
+
+      - name: Install dependencies
+        run: |
+          pak::local_install_dev_deps()
+        shell: Rscript {0}
+
+      - name: Install pandoc and pandoc citeproc
+        run: |
+          brew install pandoc
+          brew install pandoc-citeproc
+
+      - name: Cache bookdown results
+        uses: actions/cache@v2
+        with:
+          path: _bookdown_files
+          key: bookdown-${{ hashFiles('**/*Rmd') }}
+          restore-keys: bookdown-
+
+      - name: Build site
+        run: Rscript -e 'bookdown::render_book("index.Rmd", quiet = TRUE)'
+
+      - name: Install npm
+        uses: actions/setup-node@v1
+
+      - name: Deploy to Netlify
+        # NETLIFY_AUTH_TOKEN and NETLIFY_SITE_ID added in the repo's secrets
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+        run: |
+          npm install netlify-cli -g
+          netlify deploy --prod --dir _book
