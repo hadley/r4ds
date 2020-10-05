@@ -9,3 +9,7 @@ The R packages used in this book can be installed via
 ```{r}
 devtools::install_github("hadley/r4ds")
 ```
+
+## Code of Conduct
+
+Please note that r4ds uses a [Contributor Code of Conduct](https://contributor-covenant.org/version/2/0/CODE_OF_CONDUCT.html). By contributing to this book, you agree to abide by its terms.
