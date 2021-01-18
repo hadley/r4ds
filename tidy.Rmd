@@ -123,11 +123,37 @@ Typically a dataset will only suffer from one of these problems; it'll only suff
 
 ### Longer
 
-A common problem is a dataset where some of the column names are not names of variables, but _values_ of a variable. Take `table4a`: the column names `1999` and `2000` represent values of the `year` variable, the values in the `1999` and `2000` columns represent values of the `cases` variable, and each row represents two observations, not one.
+A common problem is a dataset where some of the column names are not names of variables, but _values_ of a variable. Suppose you have your data in the following format.
 
 ```{r}
 table4a
 ```
+
+And you want to create the following visualisation where each line represents a `country`, `year` is on the x-axis, `cases` are on the y-axis, and you automatically get the legend that indicates which line represents which country.
+
+```{r tidy-pivot-longer-plot-lines, echo = FALSE}
+table4a %>%
+  pivot_longer(
+    cols = -country,
+    names_to = "year",
+    values_to = "cases"
+  ) %>%
+  ggplot(aes(x = year, y = cases, group = country, color = country, linetype = country)) +
+  geom_line()
+```
+
+It's most straight-forward to do this starting with a data frame where `country`, `year`, and `cases` are the columns and each row represents a record from a country for a particular year.
+
+```{r echo = FALSE}
+table4a %>%
+  pivot_longer(
+    cols = -country,
+    names_to = "year",
+    values_to = "cases"
+  )
+```
+
+However in `table4a` the column names `1999` and `2000` represent values of the `year` variable, the values in the `1999` and `2000` columns represent values of the `cases` variable, and each row represents two observations, not one.
 
 To tidy a dataset like this, we need to __pivot__ the offending columns into a new pair of variables. To describe that operation we need three parameters:
 
@@ -149,11 +175,16 @@ The columns to pivot are specified with `dplyr::select()` style notation. Here t
 
 `year` and `cases` do not exist in `table4a` so we put their names in quotes.
 
-```{r tidy-gather, echo = FALSE, out.width = "100%", fig.cap = "Pivoting `table4` into a longer, tidy form."}
+In the final result, the pivoted columns are dropped, and we get new `year` and `cases` columns. Otherwise, the relationships between the original variables are preserved. Visually, this is shown in Figure \@ref(fig:tidy-pivot-longer). 
+
+```{r tidy-pivot-longer, echo = FALSE, out.width = "100%", fig.cap = "Pivoting `table4a` into a \"longer\", tidy form."}
 knitr::include_graphics("images/tidy-9.png")
 ```
 
-In the final result, the pivoted columns are dropped, and we get new `year` and `cases` columns. Otherwise, the relationships between the original variables are preserved. Visually, this is shown in Figure \@ref(fig:tidy-gather). 
+Once we have our data in this longer format, we can create the visualisation that motivated this tidying exercise as follows.
+
+```{r ref.label = "tidy-pivot-longer-plot-lines"}
+```
 
 `pivot_longer()` makes datasets longer by increasing the number of rows and decreasing the number of columns. I don’t believe it makes sense to describe a dataset as being in “long form”. Length is a relative term, and you can only say (e.g.) that dataset A is longer than dataset B.
 
@@ -182,21 +213,34 @@ left_join(tidy4a, tidy4b)
 table2
 ```
 
-To tidy this up, we first analyse the representation in similar way to `pivot_longer()`. This time, however, we only need two parameters:
+Suppose you'd like to calculate the `case_rate` (number of `cases` divided by `population`) for each country in a given year, and record it as a new column, resulting in the following data frame.
+
+```{r tidy-pivot-longer-case-ratio, echo = FALSE}
+table2 %>%
+  pivot_wider(names_from = type, values_from = count) %>% 
+  mutate(case_rate = cases / population)
+```
+
+This means we need a data frame with `cases` and `population` as separate columns and in those columns each cell will hold the values of the relevant `count`s. Let's analyse the representation in similar way to `pivot_longer()`. This time, however, we only need two parameters:
 
 * The column to take variable names from. Here, it's `type`.
 
 * The column to take values from. Here it's `count`.
 
-Once we've figured that out, we can use `pivot_wider()`, as shown programmatically below, and visually in Figure \@ref(fig:tidy-spread).
+We can use `pivot_wider()`, as shown programmatically below, and visually in Figure \@ref(fig:tidy-pivot-wider).
 
 ```{r}
 table2 %>%
-    pivot_wider(names_from = type, values_from = count)
+  pivot_wider(names_from = type, values_from = count)
 ```
 
-```{r tidy-spread, echo = FALSE, out.width = "100%", fig.cap = "Pivoting `table2` into a \"wider\", tidy form."}
+```{r tidy-pivot-wider, echo = FALSE, out.width = "100%", fig.cap = "Pivoting `table2` into a \"wider\", tidy form."}
 knitr::include_graphics("images/tidy-8.png")
+```
+
+Once we have our data in this wider format, we can create the data frame that motivated this tidying exercise as follows.
+
+```{r ref.label = "tidy-pivot-longer-case-ratio"}
 ```
 
 As you might have guessed from their names, `pivot_wider()` and `pivot_longer()` are complements. `pivot_longer()` makes wide tables narrower and longer; `pivot_wider()` makes long tables shorter and wider.
@@ -209,7 +253,7 @@ As you might have guessed from their names, `pivot_wider()` and `pivot_longer()`
     ```{r, eval = FALSE}
     stocks <- tibble(
       year   = c(2015, 2015, 2016, 2016),
-      half  = c(   1,    2,     1,    2),
+      half   = c(   1,    2,     1,    2),
       return = c(1.88, 0.59, 0.92, 0.17)
     )
     stocks %>% 
@@ -235,12 +279,12 @@ As you might have guessed from their names, `pivot_wider()` and `pivot_longer()`
     ```{r}
     people <- tribble(
       ~name,             ~names,  ~values,
-      #-----------------|--------|------
-      "Phillip Woods",   "age",       45,
-      "Phillip Woods",   "height",   186,
-      "Phillip Woods",   "age",       50,
-      "Jessica Cordero", "age",       37,
-      "Jessica Cordero", "height",   156
+      #-----------------|--------|-------
+      "Phillip Woods",   "age",        45,
+      "Phillip Woods",   "height",    186,
+      "Phillip Woods",   "age",        50,
+      "Jessica Cordero", "age",        37,
+      "Jessica Cordero", "height",    156
     )
     ```
 
@@ -249,7 +293,7 @@ As you might have guessed from their names, `pivot_wider()` and `pivot_longer()`
 
     ```{r}
     preg <- tribble(
-      ~pregnant, ~male, ~female,
+      ~pregnant, ~man, ~woman,
       "yes",     NA,    10,
       "no",      20,    12
     )
@@ -274,7 +318,7 @@ table3 %>%
   separate(rate, into = c("cases", "population"))
 ```
 
-```{r tidy-separate, echo = FALSE, out.width = "75%", fig.cap = "Separating `table3` makes it tidy"}
+```{r tidy-separate, echo = FALSE, out.width = "75%", fig.cap = "Separating `rate` into `cases` and `population` to make `table3` tidy"}
 knitr::include_graphics("images/tidy-17.png")
 ```
 
@@ -296,7 +340,7 @@ table3 %>%
 
 You can also pass a vector of integers to `sep`. `separate()` will interpret the integers as positions to split at. Positive values start at 1 on the far-left of the strings; negative value start at -1 on the far-right of the strings. When using integers to separate strings, the length of `sep` should be one less than the number of names in `into`. 
 
-You can use this arrangement to separate the last two digits of each year. This make this data less tidy, but is useful in other cases, as you'll see in a little bit.
+You can use this arrangement to separate the last two digits of each year. This makes this data less tidy, but is useful in other cases, as you'll see in a little bit.
 
 ```{r}
 table3 %>% 
@@ -428,7 +472,7 @@ treatment %>%
 
 ## Case Study
 
-To finish off the chapter, let's pull together everything you've learned to tackle a realistic data tidying problem. The `tidyr::who` dataset contains tuberculosis (TB) cases broken down by year, country, age, gender, and diagnosis method. The data comes from the *2014 World Health Organization Global Tuberculosis Report*, available at <http://www.who.int/tb/country/data/download/en/>.
+To finish off the chapter, let's pull together everything you've learned to tackle a realistic data tidying problem. The `tidyr::who` dataset contains tuberculosis (TB) cases broken down by year, country, age, gender, and diagnosis method. The data comes from the *2014 World Health Organization Global Tuberculosis Report*, available at <http://www.who.int/tb/country/data/download/en>.
 
 There's a wealth of epidemiological information in this dataset, but it's challenging to work with the data in the form that it's provided:
 
@@ -469,13 +513,32 @@ who1 %>%
   count(key)
 ```
 
+Table \@ref(tab:who1-keys) provides the list of all `key`s in this dataset.
+
+```{r who1-keys, echo = FALSE}
+who1 %>% 
+  distinct(key) %>%
+  mutate(key_new = str_replace(key, "newrel", "new_rel")) %>%
+  separate(key_new, into = c("new", "type", "sexage"), sep = "_", remove = FALSE) %>%
+  arrange(type, sexage) %>%
+  select(key, type) %>%
+  group_by(type) %>%
+  mutate(id = 1:n()) %>%
+  pivot_wider(id_cols = id, names_from = type, values_from = key) %>%
+  select(rel, ep, sn, sp) %>%
+  knitr::kable(
+    col.names = c("", "", "", ""),
+    caption = "All `key`s in the `who1` data frame."
+    )
+```
+
 You might be able to parse this out by yourself with a little thought and some experimentation, but luckily we have the data dictionary handy. It tells us:
 
 1.  The first three letters of each column denote whether the column 
     contains new or old cases of TB. In this dataset, each column contains 
     new cases.
 
-1.  The next two letters describe the type of TB:
+1.  The next two or three letters describe the type of TB:
     
     *   `rel` stands for cases of relapse
     *   `ep` stands for cases of extrapulmonary TB
@@ -484,7 +547,7 @@ You might be able to parse this out by yourself with a little thought and some e
     *   `sp` stands for cases of pulmonary TB that could be diagnosed by 
         a pulmonary smear (smear positive)
 
-3.  The sixth letter gives the sex of TB patients. The dataset groups 
+3.  The next letter gives the sex of TB patients. The dataset groups 
     cases by males (`m`) and females (`f`).
 
 4.  The remaining numbers gives the age group. The dataset groups cases into 
@@ -498,7 +561,7 @@ You might be able to parse this out by yourself with a little thought and some e
     * `5564` = 55 -- 64 years old
     * `65` = 65 or older
 
-We need to make a minor fix to the format of the column names: unfortunately the names are slightly inconsistent because instead of `new_rel` we have `newrel` (it's hard to spot this here but if you don't fix it we'll get errors in subsequent steps). You'll learn about `str_replace()` in [strings], but the basic idea is pretty simple: replace the characters "newrel" with "new_rel". This makes all variable names consistent.
+We need to make a minor fix to the format of the column names: unfortunately the names are slightly inconsistent because instead of `new_rel` we have `newrel`. You'll learn about `str_replace()` in [strings], but the basic idea is pretty simple: replace the characters "newrel" with "new_rel". This makes all variable names consistent.
 
 ```{r}
 who2 <- who1 %>% 
@@ -536,7 +599,7 @@ The `who` dataset is now tidy!
 I've shown you the code a piece at a time, assigning each interim result to a new variable. This typically isn't how you'd work interactively. Instead, you'd gradually build up a complex pipe:
 
 ```{r, results = "hide"}
-who %>%
+who6 <- who %>%
   pivot_longer(
     cols = new_sp_m014:newrel_f65, 
     names_to = "key", 
@@ -549,7 +612,23 @@ who %>%
   separate(key, c("new", "var", "sexage")) %>% 
   select(-new, -iso2, -iso3) %>% 
   separate(sexage, c("sex", "age"), sep = 1)
+
+who6
 ```
+
+This tidy data frame allows us to explore the data with more ease than the original `who` dataset. For example, we can easily filter for a particular type of TB for a given country and sum over the number of cases to see how case numbers for this type of TB have evolved over the years.
+
+```{r}
+who6 %>%
+  filter(var == "sp", country == "United States of America") %>%
+  group_by(year) %>%
+  summarise(cases_total = sum(cases)) %>%
+  ggplot(aes(x = year, y = cases_total)) +
+  geom_point() +
+  geom_smooth() +
+  labs(title = "Number of smear positive pulmonary TB cases in the US")
+```
+
 
 ### Exercises
 
@@ -579,4 +658,4 @@ Before we continue on to other topics, it's worth talking briefly about non-tidy
 
 Either of these reasons means you'll need something other than a tibble (or data frame). If your data does fit naturally into a rectangular structure composed of observations and variables, I think tidy data should be your default choice. But there are good reasons to use other structures; tidy data is not the only way.
 
-If you'd like to learn more about non-tidy data, I'd highly recommend this thoughtful blog post by Jeff Leek: <http://simplystatistics.org/2016/02/17/non-tidy-data/>
+If you'd like to learn more about non-tidy data, I'd highly recommend this thoughtful blog post by Jeff Leek: <http://simplystatistics.org/2016/02/17/non-tidy-data>.
