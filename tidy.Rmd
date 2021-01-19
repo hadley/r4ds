@@ -132,15 +132,18 @@ table4a
 
 And you want to create the following visualisation where each line represents a `country`, `year` is on the x-axis, `cases` are on the y-axis, and you automatically get the legend that indicates which line represents which country.
 
-```{r tidy-pivot-longer-plot-lines, echo = FALSE}
+```{r tidy-pivot-longer-plot-lines, fig.width = 5, echo = FALSE}
 table4a %>%
   pivot_longer(
-    cols = -country,
+    cols = c(`1999`, `2000`),
     names_to = "year",
-    values_to = "cases"
+    names_transform = list(year = as.integer),
+    values_to = "cases",
   ) %>%
-  ggplot(aes(x = year, y = cases, group = country, color = country, linetype = country)) +
-  geom_line()
+  ggplot(aes(x = year, y = cases)) +
+  geom_line(aes(group = country), colour = "grey50") + 
+  geom_point(aes(colour = country, shape = country)) +
+  scale_x_continuous(breaks = c(1999, 2000))
 ```
 
 It's most straight-forward to do this starting with a data frame where `country`, `year`, and `cases` are the columns and each row represents a record from a country for a particular year.
@@ -148,8 +151,9 @@ It's most straight-forward to do this starting with a data frame where `country`
 ```{r echo = FALSE}
 table4a %>%
   pivot_longer(
-    cols = -country,
+    cols = c(`1999`, `2000`),
     names_to = "year",
+    names_transform = list(year = as.integer),
     values_to = "cases"
   )
 ```
@@ -169,17 +173,33 @@ Together those parameters generate the call to `pivot_longer()`:
 
 ```{r}
 table4a %>% 
-  pivot_longer(c(`1999`, `2000`), names_to = "year", values_to = "cases")
+  pivot_longer(
+    cols = c(`1999`, `2000`),
+    names_to = "year", 
+    values_to = "cases"
+    )
 ```
 
-The columns to pivot are specified with `dplyr::select()` style notation. Here there are only two columns, so we list them individually. Note that "1999" and "2000" are non-syntactic names (because they don't start with a letter) so we have to surround them in backticks. To refresh your memory of the other ways to select columns, see [select](#select).
+The columns to pivot are specified with `dplyr::select()` style notation in the `cols` argument. Here there are only two columns, so we list them individually. Note that "1999" and "2000" are non-syntactic names (because they don't start with a letter) so we have to surround them in backticks. To refresh your memory of the other ways to select columns, see [select](#select).
 
-`year` and `cases` do not exist in `table4a` so we put their names in quotes.
+`year` and `cases` do not exist in `table4a` so we put their names in quotes in `names_to` and `values_to` arguments, respectively.
 
 In the final result, the pivoted columns are dropped, and we get new `year` and `cases` columns. Otherwise, the relationships between the original variables are preserved. Visually, this is shown in Figure \@ref(fig:tidy-pivot-longer). 
 
 ```{r tidy-pivot-longer, echo = FALSE, out.width = "100%", fig.cap = "Pivoting `table4a` into a \"longer\", tidy form."}
 knitr::include_graphics("images/tidy-9.png")
+```
+
+There is still one issue though. Take a peek at the variable type of the `year` variable. We would expect `year` to be numeric (or specifically, we would expect it to be an integer), however it's showing up as a character. This is because the values in the `year` variable came from column headings in `table4a`. We can transform the type of this variable as we're pivoting the data using the `names_transform` argument in `pivot_longer()`. In this case we don't also need to transform the type of the `cases` variable, but if we did, we could simply add that to the list in `names_transform` as well.
+
+```{r}
+table4a %>%
+  pivot_longer(
+    cols = c(`1999`, `2000`),
+    names_to = "year",
+    names_transform = list(year = as.integer),
+    values_to = "cases"
+  )
 ```
 
 Once we have our data in this longer format, we can create the visualisation that motivated this tidying exercise as follows.
@@ -193,16 +213,31 @@ We can use `pivot_longer()` to tidy `table4b` in a similar fashion. The only dif
 
 ```{r}
 table4b %>% 
-  pivot_longer(c(`1999`, `2000`), names_to = "year", values_to = "population")
+  pivot_longer(
+    cols = c(`1999`, `2000`), 
+    names_to = "year", 
+    names_transform = list(year = as.integer),
+    values_to = "population"
+    )
 ```
 
 To combine the tidied versions of `table4a` and `table4b` into a single tibble, we need to use `dplyr::left_join()`, which you'll learn about in [relational data].
 
 ```{r}
-tidy4a <- table4a %>% 
-  pivot_longer(c(`1999`, `2000`), names_to = "year", values_to = "cases")
+tidy4a <- table4b %>% 
+  pivot_longer(
+    cols = c(`1999`, `2000`), 
+    names_to = "year", 
+    names_transform = list(year = as.integer),
+    values_to = "cases"
+    )
 tidy4b <- table4b %>% 
-  pivot_longer(c(`1999`, `2000`), names_to = "year", values_to = "population")
+  pivot_longer(
+    cols = c(`1999`, `2000`), 
+    names_to = "year", 
+    names_transform = list(year = as.integer),
+    values_to = "population"
+    )
 left_join(tidy4a, tidy4b)
 ```
 
