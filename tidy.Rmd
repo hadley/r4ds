@@ -165,9 +165,9 @@ To tidy a dataset like this, we need to __pivot__ the offending columns into a n
 * The set of columns whose names are values, not variables. In this example, 
   those are the columns `1999` and `2000`.
 
-* The name of the variable to move the column names to. Here it is `year`.
+* The name of the variable to move the column names to: `year`.
 
-* The name of the variable to move the column values to. Here it's `cases`.
+* The name of the variable to move the column values to: `cases`.
   
 Together those parameters generate the call to `pivot_longer()`:
 
@@ -180,7 +180,7 @@ table4a %>%
     )
 ```
 
-The columns to pivot are specified with `dplyr::select()` style notation in the `cols` argument. Here there are only two columns, so we list them individually. Note that "1999" and "2000" are non-syntactic names (because they don't start with a letter) so we have to surround them in backticks. To refresh your memory of the other ways to select columns, see [select](#select).
+The columns to pivot are specified with `dplyr::select()` style notation in the `cols` argument. Here there are only two columns, so we list them individually. Note that `1999` and `2000` are non-syntactic names (because they don't start with a letter) so we have to surround them in backticks. To refresh your memory of the other ways to select columns, see [select](#select).
 
 `year` and `cases` do not exist in `table4a` so we put their names in quotes in `names_to` and `values_to` arguments, respectively.
 
@@ -190,7 +190,7 @@ In the final result, the pivoted columns are dropped, and we get new `year` and 
 knitr::include_graphics("images/tidy-9.png")
 ```
 
-There is still one issue though. Take a peek at the variable type of the `year` variable. We would expect `year` to be numeric (or specifically, we would expect it to be an integer), however it's showing up as a character. This is because the values in the `year` variable came from column headings in `table4a`. We can transform the type of this variable as we're pivoting the data using the `names_transform` argument in `pivot_longer()`. In this case we don't also need to transform the type of the `cases` variable, but if we did, we could simply add that to the list in `names_transform` as well.
+There is still one issue though. Take a peek at the type of the `year` variable. We would expect `year` to be numeric (or specifically, we would expect it to be an integer), however it's showing up as a character. This is because the values in the `year` variable came from column headings in `table4a`. We can transform the type of this variable as we're pivoting the data using the `names_transform` argument in `pivot_longer()`. In this case we don't also need to transform the type of the `cases` variable, but if we did, we could simply add that to the list in `names_transform` as well.
 
 ```{r}
 table4a %>%
@@ -249,19 +249,19 @@ left_join(tidy4a, tidy4b)
 table2
 ```
 
-Suppose you'd like to calculate the `case_rate` (number of `cases` divided by `population`) for each country in a given year, and record it as a new column, resulting in the following data frame.
+Suppose you'd like to calculate the `rate` (number of `cases` divided by `population`) for each country in a given year, and record it as a new column, resulting in the following data frame.
 
-```{r tidy-pivot-longer-case-ratio, echo = FALSE}
+```{r tidy-pivot-wider-case-ratio, echo = FALSE}
 table2 %>%
   pivot_wider(names_from = type, values_from = count) %>% 
-  mutate(case_rate = cases / population)
+  mutate(rate = cases / population)
 ```
 
-This means we need a data frame with `cases` and `population` as separate columns and in those columns each cell will hold the values of the relevant `count`s. Let's analyse the representation in similar way to `pivot_longer()`. This time, however, we only need two parameters:
+This means we need a data frame with `cases` and `population` as separate columns, and in those columns, each cell will hold the values of the relevant `count`s. Let's analyse the representation in similar way to `pivot_longer()`. This time, however, we only need two parameters:
 
-* The column to take variable names from. Here, it's `type`.
+* The column to take variable names from: `type`.
 
-* The column to take values from. Here it's `count`.
+* The column to take values from: `count`.
 
 We can use `pivot_wider()`, as shown programmatically below, and visually in Figure \@ref(fig:tidy-pivot-wider).
 
@@ -276,15 +276,57 @@ knitr::include_graphics("images/tidy-8.png")
 
 Once we have our data in this wider format, we can create the data frame that motivated this tidying exercise as follows.
 
-```{r ref.label = "tidy-pivot-longer-case-ratio"}
+```{r ref.label = "tidy-pivot-wider-case-ratio"}
 ```
 
-Suppose you wanted to go one step further and widen the data to record `cases` and `population` for 1999 and 2000 in separate columns.
+Earlier we visualised case counts over the years, and this representation can be useful for visualising case rates, for example.
+
+```{r}
+table2 %>%
+  pivot_wider(names_from = type, values_from = count) %>% 
+  mutate(rate = cases / population) %>%
+  ggplot(aes(x = year, y = rate)) +
+  geom_line(aes(group = country), colour = "grey50") + 
+  geom_point(aes(colour = country, shape = country)) +
+  scale_x_continuous(breaks = c(1999, 2000))
+```
+
+Now let's go one step further and widen the data to record `cases`, `population`, and `rate` for 1999 and 2000 in separate columns, such as the following.
+
+```{r tidy-pivot-even-wider-case-ratio, echo = FALSE}
+table2 %>%
+  pivot_wider(names_from = type, values_from = count) %>%
+  mutate(rate = cases / population) %>%
+  pivot_wider(
+    names_from = year, 
+    values_from = c(cases, population, rate)
+    ) %>%
+  relocate(country, contains("1999"))
+```
+
+This representation is rarely useful for data analysis but it might be useful as the basis of a table for communication of results in a data analysis report. 
+
+To achieve this we need to add year information in column headings for `cases`, `population`, and `rate` as well as distribute the values that are currently under these three columns into six columns (two columns for each year we have data for). This is represented in Figure \@ref(fig:tidy-pivot-even-wider). 
+
+```{r tidy-pivot-even-wider, echo = FALSE, out.width = "100%", fig.cap = "Pivoting `table2` into an even \"wider\" form. Arrows for `cases` and `rate` values are omitted for clarity."}
+knitr::include_graphics("images/tidy-19.png")
+```
+
+To do so, we'll take advantage of the fact that the pivot functions can operate on multiple columns at once. The first three lines of the following code chunk is what we've already done in the previous step and we add on to the pipeline another `pivot_wider()` step where the values for the added columns come from `cases`, `population`, and `rate` and the column names are automatically suffixed with values from the `year` variable.
 
 ```{r}
 table2 %>%
   pivot_wider(names_from = type, values_from = count) %>%
-  pivot_wider(names_from = year, values_from = c(cases, population))
+  mutate(rate = cases / population) %>%
+  pivot_wider(
+    names_from = year, 
+    values_from = c(cases, population, rate)
+    ) 
+```
+
+The last step for achieving our goal is to relocate columns in the resulting data frame so columns for 1999 data come before those for 2000. We can use the `relocate()` function to move the 1999 columns ahead of the 2000 columns.
+
+```{r ref.label = "tidy-pivot-even-wider-case-ratio"}
 ```
 
 As you might have guessed from their names, `pivot_wider()` and `pivot_longer()` are complements. `pivot_longer()` makes wide tables narrower and longer; `pivot_wider()` makes long tables shorter and wider.
@@ -363,9 +405,9 @@ As you might have guessed from their names, `pivot_wider()` and `pivot_longer()`
       pivot_wider(names_from = drv, values_from = n)
     ```
 
-## Separating and uniting
+## Separating
 
-So far you've learned how to tidy `table2` and `table4`, but not `table3`. `table3` has a different problem: we have one column (`rate`) that contains two variables (`cases` and `population`). To fix this problem, we'll need the `separate()` function. You'll also learn about the complement of `separate()`: `unite()`, which you use if a single variable is spread across multiple columns.
+So far you've learned how to tidy `table2`, `table4a`, and `table4b`, but not `table3`. `table3` has a different problem: we have one column (`rate`) that contains two variables (`cases` and `population`). To fix this problem, we'll need the `separate()` function. You'll also learn about the complement of `separate()`: `unite()`, which you use if a single variable is spread across multiple columns.
 
 ### Separate
 
@@ -452,6 +494,22 @@ table5 %>%
 1.  Compare and contrast `separate()` and `extract()`.  Why are there
     three variations of separation (by position, by separator, and with
     groups), but only one unite?
+    
+1.  In the following example we're using `unite()` to create a `date` column 
+    from `month` and `day` columns. How would you achieve the same outcome 
+    using `mutate()` and `paste()` instead of unite?
+
+    ```{r, eval = FALSE}
+    events <- tribble(
+      ~month, ~day,
+      1     , 20,
+      1     , 21,
+      1     , 22
+    )
+    
+    events %>%
+      unite("date", month:day, sep = "-", remove = FALSE)
+    ```
 
 ## Missing values
 
@@ -577,23 +635,13 @@ who1 %>%
   count(key)
 ```
 
-Table \@ref(tab:who1-keys) provides the list of all `key`s in this dataset.
+A list of all `key`s in this dataset is provided below.
 
 ```{r who1-keys, echo = FALSE}
-who1 %>% 
-  distinct(key) %>%
-  mutate(key_new = str_replace(key, "newrel", "new_rel")) %>%
-  separate(key_new, into = c("new", "type", "sexage"), sep = "_", remove = FALSE) %>%
-  arrange(type, sexage) %>%
-  select(key, type) %>%
-  group_by(type) %>%
-  mutate(id = 1:n()) %>%
-  pivot_wider(id_cols = id, names_from = type, values_from = key) %>%
-  select(rel, ep, sn, sp) %>%
-  knitr::kable(
-    col.names = c("", "", "", ""),
-    caption = "All `key`s in the `who1` data frame."
-    )
+who %>% 
+  select(starts_with("new")) %>% 
+  names() %>% 
+  sort()
 ```
 
 You might be able to parse this out by yourself with a little thought and some experimentation, but luckily we have the data dictionary handy. It tells us:
