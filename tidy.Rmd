@@ -207,7 +207,7 @@ Once we have our data in this longer format, we can create the visualisation tha
 ```{r ref.label = "tidy-pivot-longer-plot-lines"}
 ```
 
-`pivot_longer()` makes datasets longer by increasing the number of rows and decreasing the number of columns. I don’t believe it makes sense to describe a dataset as being in “long form”. Length is a relative term, and you can only say (e.g.) that dataset A is longer than dataset B.
+`pivot_longer()` makes datasets longer by increasing the number of rows and decreasing the number of columns. I don't believe it makes sense to describe a dataset as being in “long form”. Length is a relative term, and you can only say (e.g.) that dataset A is longer than dataset B.
 
 We can use `pivot_longer()` to tidy `table4b` in a similar fashion. The only difference is the variable stored in the cell values:
 
@@ -602,137 +602,139 @@ There's a wealth of epidemiological information in this dataset, but it's challe
 who
 ```
 
-This is a very typical real-life example dataset. It contains redundant columns, odd variable codes, and many missing values. In short, `who` is messy, and we'll need multiple steps to tidy it. Like dplyr, tidyr is designed so that each function does one thing well. That means in real-life situations you'll usually need to string together multiple verbs into a pipeline. 
+This is a very typical real-life example dataset. It contains redundant columns, odd variable names, and many missing values. In short, the `who` dataset is messy, and we'll need to be methodical about how we tidy it. With functions like `pivot_wider()` and `pivot_longer()` this generally means an iterative approach will work well -- aim to accomplish one goal at a time, run the function and examine the resulting data frame, then go back and set more arguments of the function as needed until the resulting data frame is exactly what you need.
 
-The best place to start is almost always to gather together the columns that are not variables. Let's have a look at what we've got: 
+The best place to start is to take a good look at the variable names and determine whether they are actually variables or if they contain information that should be captured as values in a new column.
+
+```{r}
+names(who)
+```
+
 
 * It looks like `country`, `iso2`, and `iso3` are three variables that 
   redundantly specify the country.
   
-* `year` is clearly also a variable.
+* `year` is also a variable.
 
-* We don't know what all the other columns are yet, but given the structure 
-  in the variable names (e.g. `new_sp_m014`, `new_ep_m014`, `new_ep_f014`) 
-  these are likely to be values, not variables.
+* The first three letters of the variables `new_sp_m014` through `newrel_f65` 
+  denote whether the column contains new or old cases of TB. In this dataset, 
+  each column contains new cases, so we don't really need this information to be 
+  captured in a variable. The remaining characters in encode three variables in 
+  their names. You might be able to parse this out by yourself with a little thought 
+  and some experimentation, but luckily we have the data dictionary handy. It tells us:
 
-So we need to gather together all the columns from `new_sp_m014` to `newrel_f65`. We don't know what those values represent yet, so we'll give them the generic name `"key"`. We know the cells represent the count of cases, so we'll use the variable `cases`. There are a lot of missing values in the current representation, so for now we'll use `values_drop_na` just so we can focus on the values that are present.
+  1.  The next two or three letters describe the diagnosis of TB:
+      
+      *   `rel` stands for cases of relapse
+      *   `ep` stands for cases of extrapulmonary TB
+      *   `sn` stands for cases of pulmonary TB that could not be diagnosed by 
+          a pulmonary smear (smear negative)
+      *   `sp` stands for cases of pulmonary TB that could be diagnosed by 
+          a pulmonary smear (smear positive)
+
+  1.  The next letter gives the sex of TB patients. The dataset groups 
+      cases by males (`m`) and females (`f`).
+
+  1.  The remaining numbers gives the age group. The dataset groups cases into 
+      seven age groups:
+      
+      * `014` = 0 -- 14 years old
+      * `1524` = 15 -- 24 years old
+      * `2534` = 25 -- 34 years old
+      * `3544` = 35 -- 44 years old
+      * `4554` = 45 -- 54 years old
+      * `5564` = 55 -- 64 years old
+      * `65` = 65 or older
+
+We can break these variables up by specifying multiple column names in `names_to` and then either providing `names_pattern` to specify how we want to break them up with a regular expression containing groups (defined by `()`) and it puts each group in a column. You'll learn more about regular expressions in [strings], but the basic idea is that in a variable name like `new_sp_m014`, we want to capture `sp`, `m`, and `014` as separate groups, so we can think about this variable's name as `new_(sp)_(m)(014)`. In constructing the appropriate regular expression we need to keep in mind a few messy features of these variable names:
+
+*  Some of the variables start with `new_` while some of them start with `new` without an underscore separating it from the diagnosis.
+*  The diagnoses and the age groups are indicated by varying numbers of characters (e.g. `sp` vs. `rel` and `014` vs. `4554`.)
+
+The regular expression that will capture all of these inconsistencies and extract the three groups of information we need is `new_?(.*)_(.)(.*)`.
 
 ```{r}
-who1 <- who %>% 
+who %>% 
   pivot_longer(
-    cols = new_sp_m014:newrel_f65, 
-    names_to = "key", 
-    values_to = "cases", 
+    cols = new_sp_m014:newrel_f65,
+    names_to = c("diagnosis", "gender", "age"),
+    names_pattern = "new_?(.*)_(.)(.*)",
+    values_to = "cases"
+  )
+```
+
+This looks pretty good for a first pass, but there are some improvements we can make. First, we're seeing lots of `NA`s in the `cases` column. We can drop these observations by setting `values_drop_na` to `TRUE`.
+
+```{r}
+who %>% 
+  pivot_longer(
+    cols = new_sp_m014:newrel_f65,
+    names_to = c("diagnosis", "gender", "age"),
+    names_pattern = "new_?(.*)_(.)(.*)",
+    values_to = "cases",
     values_drop_na = TRUE
   )
-who1
 ```
 
-We can get some hint of the structure of the values in the new `key` column by counting them:
+Second, `diagnosis` and `gender` are characters by default, however it's a good idea to convert them to factors since they are categorical variables with a known set of values. We'll use the `parse_factor()` function from readr to make the conversion in the `names_transform` argument of `pivot_longer()`. 
 
 ```{r}
-who1 %>% 
-  count(key)
-```
-
-A list of all `key`s in this dataset is provided below.
-
-```{r who1-keys, echo = FALSE}
 who %>% 
-  select(starts_with("new")) %>% 
-  names() %>% 
-  sort()
-```
-
-You might be able to parse this out by yourself with a little thought and some experimentation, but luckily we have the data dictionary handy. It tells us:
-
-1.  The first three letters of each column denote whether the column 
-    contains new or old cases of TB. In this dataset, each column contains 
-    new cases.
-
-1.  The next two or three letters describe the type of TB:
-    
-    *   `rel` stands for cases of relapse
-    *   `ep` stands for cases of extrapulmonary TB
-    *   `sn` stands for cases of pulmonary TB that could not be diagnosed by 
-        a pulmonary smear (smear negative)
-    *   `sp` stands for cases of pulmonary TB that could be diagnosed by 
-        a pulmonary smear (smear positive)
-
-3.  The next letter gives the sex of TB patients. The dataset groups 
-    cases by males (`m`) and females (`f`).
-
-4.  The remaining numbers gives the age group. The dataset groups cases into 
-    seven age groups:
-    
-    * `014` = 0 -- 14 years old
-    * `1524` = 15 -- 24 years old
-    * `2534` = 25 -- 34 years old
-    * `3544` = 35 -- 44 years old
-    * `4554` = 45 -- 54 years old
-    * `5564` = 55 -- 64 years old
-    * `65` = 65 or older
-
-We need to make a minor fix to the format of the column names: unfortunately the names are slightly inconsistent because instead of `new_rel` we have `newrel`. You'll learn about `str_replace()` in [strings], but the basic idea is pretty simple: replace the characters "newrel" with "new_rel". This makes all variable names consistent.
-
-```{r}
-who2 <- who1 %>% 
-  mutate(key = stringr::str_replace(key, "newrel", "new_rel"))
-who2
-```
-
-We can separate the values in each code with two passes of `separate()`. The first pass will split the codes at each underscore.
-
-```{r}
-who3 <- who2 %>% 
-  separate(key, c("new", "type", "sexage"), sep = "_")
-who3
-```
-
-Then we might as well drop the `new` column because it's constant in this dataset. While we're dropping columns, let's also drop `iso2` and `iso3` since they're redundant.
-
-```{r}
-who3 %>% 
-  count(new)
-who4 <- who3 %>% 
-  select(-new, -iso2, -iso3)
-```
-
-Next we'll separate `sexage` into `sex` and `age` by splitting after the first character:
-
-```{r}
-who5 <- who4 %>% 
-  separate(sexage, c("sex", "age"), sep = 1)
-who5
-```
-
-The `who` dataset is now tidy!
-
-I've shown you the code a piece at a time, assigning each interim result to a new variable. This typically isn't how you'd work interactively. Instead, you'd gradually build up a complex pipe:
-
-```{r, results = "hide"}
-who6 <- who %>%
   pivot_longer(
-    cols = new_sp_m014:newrel_f65, 
-    names_to = "key", 
-    values_to = "cases", 
+    cols = new_sp_m014:newrel_f65,
+    names_to = c("diagnosis", "gender", "age"),
+    names_pattern = "new_?(.*)_(.)(.*)",
+    names_transform = list(
+      gender = ~ readr::parse_factor(.x, levels = c("f", "m")),
+      age = ~ readr::parse_factor(
+        .x,
+        levels = c("014", "1524", "2534", "3544", "4554", "5564", "65"),
+        ordered = TRUE
+      )
+    ),
+    values_to = "cases",
     values_drop_na = TRUE
-  ) %>% 
-  mutate(
-    key = stringr::str_replace(key, "newrel", "new_rel")
-  ) %>%
-  separate(key, c("new", "var", "sexage")) %>% 
-  select(-new, -iso2, -iso3) %>% 
-  separate(sexage, c("sex", "age"), sep = 1)
+  )
+```
 
-who6
+Finally, we might want to recode the `age` variable with level names that are a bit easier to read and a bit more informative. We'll do this with an additional `mutate()` step to our pipeline using `fct_recode()` that you'll learn more about in [#factors].
+
+```{r}
+who_tidy <- who %>%
+  pivot_longer(
+    cols = new_sp_m014:newrel_f65,
+    names_to = c("diagnosis", "gender", "age"),
+    names_pattern = "new_?(.*)_(.)(.*)",
+    names_transform = list(
+      gender = ~ readr::parse_factor(.x, levels = c("f", "m")),
+      age = ~ readr::parse_factor(
+        .x,
+        levels = c("014", "1524", "2534", "3544", "4554", "5564", "65"),
+        ordered = TRUE
+      )
+    ),
+    values_to = "cases",
+    values_drop_na = TRUE
+  ) %>%
+  mutate(
+    age = fct_recode(age,
+      "0-14"  = "014",
+      "15-24" = "1524",
+      "25-34" = "2534",
+      "35-44" = "3544",
+      "45-54" = "4554",
+      "55-64" = "5564",
+      "65+"   = "65"
+    )
+  )
+who_tidy
 ```
 
 This tidy data frame allows us to explore the data with more ease than the original `who` dataset. For example, we can easily filter for a particular type of TB for a given country and sum over the number of cases to see how case numbers for this type of TB have evolved over the years.
 
 ```{r}
-who6 %>%
-  filter(var == "sp", country == "United States of America") %>%
+who_tidy %>%
+  filter(diagnosis == "sp", country == "United States of America") %>%
   group_by(year) %>%
   summarise(cases_total = sum(cases)) %>%
   ggplot(aes(x = year, y = cases_total)) +
@@ -749,11 +751,10 @@ who6 %>%
     how missing values are represented in this dataset. Are there implicit
     missing values? What's the difference between an `NA` and zero? 
 
-1.  What happens if you neglect the `mutate()` step?
-    (`mutate(names_from = stringr::str_replace(key, "newrel", "new_rel"))`)
-
 1.  I claimed that `iso2` and `iso3` were redundant with `country`. 
-    Confirm this claim.
+    Confirm this claim and think about situations where we might want to keep this 
+    information in the data frame and when we might choose to discard the 
+    redundant columns.
 
 1.  For each country, year, and sex compute the total number of cases of 
     TB. Make an informative visualisation of the data.
