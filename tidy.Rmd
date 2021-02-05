@@ -137,9 +137,9 @@ table4a %>%
   pivot_longer(
     cols = c(`1999`, `2000`),
     names_to = "year",
-    names_transform = list(year = as.integer),
     values_to = "cases",
   ) %>%
+  mutate(year = parse_integer(year)) %>%
   ggplot(aes(x = year, y = cases)) +
   geom_line(aes(group = country), colour = "grey50") + 
   geom_point(aes(colour = country, shape = country)) +
@@ -153,9 +153,9 @@ table4a %>%
   pivot_longer(
     cols = c(`1999`, `2000`),
     names_to = "year",
-    names_transform = list(year = as.integer),
     values_to = "cases"
-  )
+  ) %>%
+  mutate(year = parse_integer(year))
 ```
 
 However in `table4a` the column names `1999` and `2000` represent values of the `year` variable, the values in the `1999` and `2000` columns represent values of the `cases` variable, and each row represents two observations, not one.
@@ -190,16 +190,16 @@ In the final result, the pivoted columns are dropped, and we get new `year` and 
 knitr::include_graphics("images/tidy-9.png")
 ```
 
-There is still one issue though. Take a peek at the type of the `year` variable. We would expect `year` to be numeric (or specifically, we would expect it to be an integer), however it's showing up as a character. This is because the values in the `year` variable came from column headings in `table4a`. We can transform the type of this variable as we're pivoting the data using the `names_transform` argument in `pivot_longer()`. In this case we don't also need to transform the type of the `cases` variable, but if we did, we could simply add that to the list in `names_transform` as well.
+There is still one issue though. Take a peek at the type of the `year` variable. We would expect `year` to be numeric (or specifically, we would expect it to be an integer), however it's showing up as a character. This is because the values in the `year` variable came from column headings in `table4a`. We can add a new step to our pipeline using `dplyr::mutate()` to parse this variable as an integer with `readr::parse_integer()`. You can refer back to Section \@ref(parsing-a-vector) for functions for parsing other types of vectors.
 
 ```{r}
 table4a %>%
   pivot_longer(
     cols = c(`1999`, `2000`),
     names_to = "year",
-    names_transform = list(year = as.integer),
     values_to = "cases"
-  )
+  ) %>%
+  mutate(year = parse_integer(year))
 ```
 
 Once we have our data in this longer format, we can create the visualisation that motivated this tidying exercise as follows.
@@ -216,28 +216,28 @@ table4b %>%
   pivot_longer(
     cols = c(`1999`, `2000`), 
     names_to = "year", 
-    names_transform = list(year = as.integer),
     values_to = "population"
-    )
+  ) %>%
+  mutate(year = parse_integer(year))
 ```
 
 To combine the tidied versions of `table4a` and `table4b` into a single tibble, we need to use `dplyr::left_join()`, which you'll learn about in [relational data].
 
 ```{r}
-tidy4a <- table4b %>% 
+tidy4a <- table4b %>%
   pivot_longer(
-    cols = c(`1999`, `2000`), 
-    names_to = "year", 
-    names_transform = list(year = as.integer),
+    cols = c(`1999`, `2000`),
+    names_to = "year",
     values_to = "cases"
-    )
-tidy4b <- table4b %>% 
+  ) %>%
+  mutate(year = parse_integer(year))
+tidy4b <- table4b %>%
   pivot_longer(
-    cols = c(`1999`, `2000`), 
-    names_to = "year", 
-    names_transform = list(year = as.integer),
+    cols = c(`1999`, `2000`),
+    names_to = "year",
     values_to = "population"
-    )
+  ) %>%
+  mutate(year = parse_integer(year))
 left_join(tidy4a, tidy4b)
 ```
 
@@ -684,28 +684,28 @@ who %>%
   )
 ```
 
-Second, `diagnosis` and `gender` are characters by default, however it's a good idea to convert them to factors since they are categorical variables with a known set of values. We'll use the `parse_factor()` function from readr to make the conversion in the `names_transform` argument of `pivot_longer()`. 
+Second, `diagnosis` and `gender` are characters by default, however it's a good idea to convert them to factors since they are categorical variables with a known set of values. We'll use the `parse_factor()` function from readr to make the conversion in a `mutate()` step we add to the pipeline. 
 
 ```{r}
-who %>% 
+who %>%
   pivot_longer(
     cols = new_sp_m014:newrel_f65,
     names_to = c("diagnosis", "gender", "age"),
     names_pattern = "new_?(.*)_(.)(.*)",
-    names_transform = list(
-      gender = ~ readr::parse_factor(.x, levels = c("f", "m")),
-      age = ~ readr::parse_factor(
-        .x,
-        levels = c("014", "1524", "2534", "3544", "4554", "5564", "65"),
-        ordered = TRUE
-      )
-    ),
     values_to = "cases",
     values_drop_na = TRUE
+  ) %>%
+  mutate(
+    gender = parse_factor(gender, levels = c("f", "m")),
+    age = parse_factor(
+      age,
+      levels = c("014", "1524", "2534", "3544", "4554", "5564", "65"),
+      ordered = TRUE
+    )
   )
 ```
 
-Finally, we might want to recode the `age` variable with level names that are a bit easier to read and a bit more informative. We'll do this with an additional `mutate()` step to our pipeline using `fct_recode()` that you'll learn more about in [factors].
+Finally, we might want to recode the `age` variable with level names that are a bit easier to read and a bit more informative. We'll do this within the `mutate()` step of our pipeline using `forcats::fct_recode()` that you'll learn more about in Chapter \@ref(factors).
 
 ```{r}
 who_tidy <- who %>%
@@ -713,19 +713,18 @@ who_tidy <- who %>%
     cols = new_sp_m014:newrel_f65,
     names_to = c("diagnosis", "gender", "age"),
     names_pattern = "new_?(.*)_(.)(.*)",
-    names_transform = list(
-      gender = ~ readr::parse_factor(.x, levels = c("f", "m")),
-      age = ~ readr::parse_factor(
-        .x,
-        levels = c("014", "1524", "2534", "3544", "4554", "5564", "65"),
-        ordered = TRUE
-      )
-    ),
     values_to = "cases",
     values_drop_na = TRUE
   ) %>%
   mutate(
-    age = fct_recode(age,
+    gender = parse_factor(gender, levels = c("f", "m")),
+    age = parse_factor(
+      age,
+      levels = c("014", "1524", "2534", "3544", "4554", "5564", "65"),
+      ordered = TRUE
+    ),
+    age = fct_recode(
+      age,
       "0-14"  = "014",
       "15-24" = "1524",
       "25-34" = "2534",
