@@ -1,0 +1,15 @@
+# Preface to the second edition {.unnumbered}
+
+Welcome to the second edition of "R for Data Science".
+
+## Major changes {.unnumbered}
+
+-   The first part is renamed to "whole game" to reflect the entire data science cycle, including a chapter on data import.
+-   In the wrangle part highlight improvements to dplyr that make data scientists' lives even easier, such as new functions for rectangling data, working with list columns, and column-wise and row-wise operations.
+-   Data import also gains a whole part that goes beyond importing rectangular data to include chapters on working with spreadsheets, databases, and web scraping.
+-   The iteration chapter gains a new case study on web scraping from multiple pages.
+-   The modeling part has been removed. For modeling, we recommend using packages from [tidymodels](https://www.tidymodels.org/) and reading [Tidy Modeling with R](https://www.tmwr.org/) by Max Kuhn and Julia Silge to learn more about them.
+
+## Acknowledgements {.unnumbered}
+
+*TO DO: Add acknowledgements.*
