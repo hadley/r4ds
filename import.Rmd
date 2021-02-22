@@ -1,0 +1,21 @@
+# (PART) Import {.unnumbered}
+
+# Introduction {#import-intro}
+
+In this part of the book, you'll learn how to get your into R.
+We'll focus on plain-text rectangular formats, spreadsheets, databases, and web data.
+
+<!--# TO DO: Decide if a diagram is needed, see wrangle-intro for reference. -->
+
+This part of the book proceeds as follows:
+
+-   In Chapter \@ref(import-rectangular), you'll learn how to get plain-text data in rectangular formats from disk and into R.
+
+-   In Chapter \@ref(import-spreadsheets), you'll learn how to get data from Excel spreadsheets and Google Sheets into R.
+
+-   In Chapter \@ref(import-databases), you'll learn about getting data into R from databases.
+    <!--# TO DO: List which types of databases. -->
+
+-   In Chapter \@ref(import-webscrape), you'll learn about harvesting data off the web and getting it into R.
+
+-   We'll close up the part with a brief discussion on other types of data and pointers for how to get them into R in Chapter \@ref(import-other).
