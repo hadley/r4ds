@@ -1,5 +1,4 @@
 set.seed(1014)
-options(digits = 3)
 
 knitr::opts_chunk$set(
   comment = "#>",
@@ -13,3 +12,6 @@ knitr::opts_chunk$set(
 )
 
 options(dplyr.print_min = 6, dplyr.print_max = 6)
+
+# Supress crayon output
+options(crayon.enabled = FALSE)
