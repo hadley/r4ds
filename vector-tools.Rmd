@@ -1,3 +1,96 @@
 # Vector tools
 
 ## Introduction
+
+`%in%`
+
+## Counts
+
+-   Counts: You've seen `n()`, which takes no arguments, and returns the size of the current group.
+    To count the number of non-missing values, use `sum(!is.na(x))`.
+    To count the number of distinct (unique) values, use `n_distinct(x)`.
+
+    ```{r}
+    # Which destinations have the most carriers?
+    not_cancelled %>% 
+      group_by(dest) %>% 
+      summarise(carriers = n_distinct(carrier)) %>% 
+      arrange(desc(carriers))
+    ```
+
+    Counts are so useful that dplyr provides a simple helper if all you want is a count:
+
+    ```{r}
+    not_cancelled %>% 
+      count(dest)
+    ```
+
+    Just like with `group_by()`, you can also provide multiple variables to `count()`.
+
+    ```{r}
+    not_cancelled %>% 
+      count(carrier, dest)
+    ```
+
+    You can optionally provide a weight variable.
+    For example, you could use this to "count" (sum) the total number of miles a plane flew:
+
+    ```{r}
+    not_cancelled %>% 
+      count(tailnum, wt = distance)
+    ```
+
+## Window functions
+
+-   Offsets: `lead()` and `lag()` allow you to refer to leading or lagging values.
+    This allows you to compute running differences (e.g. `x - lag(x)`) or find when values change (`x != lag(x)`).
+    They are most useful in conjunction with `group_by()`, which you'll learn about shortly.
+
+    ```{r}
+    (x <- 1:10)
+    lag(x)
+    lead(x)
+    ```
+
+-   Ranking: there are a number of ranking functions, but you should start with `min_rank()`.
+    It does the most usual type of ranking (e.g. 1st, 2nd, 2nd, 4th).
+    The default gives smallest values the small ranks; use `desc(x)` to give the largest values the smallest ranks.
+
+    ```{r}
+    y <- c(1, 2, 2, NA, 3, 4)
+    min_rank(y)
+    min_rank(desc(y))
+    ```
+
+    If `min_rank()` doesn't do what you need, look at the variants `row_number()`, `dense_rank()`, `percent_rank()`, `cume_dist()`, `ntile()`.
+    See their help pages for more details.
+
+    ```{r}
+    row_number(y)
+    dense_rank(y)
+    percent_rank(y)
+    cume_dist(y)
+    ```
+
+-   Measures of position: `first(x)`, `nth(x, 2)`, `last(x)`.
+    These work similarly to `x[1]`, `x[2]`, and `x[length(x)]` but let you set a default value if that position does not exist (i.e. you're trying to get the 3rd element from a group that only has two elements).
+    For example, we can find the first and last departure for each day:
+
+    ```{r}
+    not_cancelled %>% 
+      group_by(year, month, day) %>% 
+      summarise(
+        first_dep = first(dep_time), 
+        last_dep = last(dep_time)
+      )
+    ```
+
+    These functions are complementary to filtering on ranks.
+    Filtering gives you all variables, with each observation in a separate row:
+
+    ```{r}
+    not_cancelled %>% 
+      group_by(year, month, day) %>% 
+      mutate(r = min_rank(desc(dep_time))) %>% 
+      filter(r %in% range(r))
+    ```
