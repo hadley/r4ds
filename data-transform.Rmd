@@ -11,7 +11,7 @@ You'll learn how to do all that (and more!) in this chapter, which will teach yo
 In this chapter we're going to focus on how to use the dplyr package, another core member of the tidyverse.
 We'll illustrate the key ideas using data from the nycflights13 package, and use ggplot2 to help us understand the data.
 
-```{r setup, message = FALSE}
+```{r setup}
 library(nycflights13)
 library(tidyverse)
 ```
@@ -22,7 +22,7 @@ If you want to use the base version of these functions after loading dplyr, you'
 
 ### nycflights13
 
-To explore the basic data manipulation verbs of dplyr, we'll use `nycflights13::flights`.
+To explore the basic dplyr verbs, we're going to look at `nycflights13::flights`.
 This data frame contains all `r format(nrow(nycflights13::flights), big.mark = ",")` flights that departed from New York City in 2013.
 The data comes from the US [Bureau of Transportation Statistics](http://www.transtats.bts.gov/DatabaseInfo.asp?DB_ID=120&Link=0), and is documented in `?flights`.
 
@@ -31,14 +31,12 @@ flights
 ```
 
 If you've used R before, you might notice that this data frame prints a little differently to data frames you might've worked with in the past.
-That's because it's a **tibble**, a special type of data frame designed by the tidyverse team.
-
-The most important difference between a tibble and a data frame is the print method.
-Tibbles only shows the first few rows and the columns that fit on one screen.
-This makes it easier to rapidly iterate when working with large data; if you want to see everything you can use `View(flights)` to open the dataset in the RStudio viewer.
+That's because it's a **tibble**, a special type of data frame designed by the tidyverse team to avoid some common data.frame gotchas.
+The most important difference is the way it prints: tibbles are designed for large datasets, so only show the first few rows and only the columns that fit on one screen.
+If you want to see everything you can use `View(flights)` to open the dataset in the RStudio viewer.
 We'll come back to other important differences in Chapter \@ref(tibbles).
 
-You might also have noticed the row of three (or four) letter abbreviations under the column names.
+You might also have noticed the row of short abbreviations under the column names.
 These describe the type of each variable:
 
 -   `int` stands for integer.
@@ -49,9 +47,9 @@ These describe the type of each variable:
 
 -   `dttm` stands for date-time (a date + a time).
 
-There are three other common types of variables that aren't used in this dataset but you'll encounter later in the book:
+There are three other common types that aren't used here but you'll encounter later in the book:
 
--   `lgl` stands for logical, vectors that contain only `TRUE` or `FALSE`.
+-   `lgl` stands for logical, a vector that contains only `TRUE` or `FALSE`.
 
 -   `fctr` stands for factor, which R uses to represent categorical variables with fixed possible values.
 
@@ -59,14 +57,14 @@ There are three other common types of variables that aren't used in this dataset
 
 ### dplyr basics
 
-In this chapter you are going to learn the primary dplyr verbs that allow you to solve the vast majority of your data manipulation challenges.
-They are organised into three camps:
+In this chapter you are going to learn the primary dplyr verbs which will allow you to solve the vast majority of your data manipulation challenges.
+They are organised into four camps:
 
--   Functions that operate on **rows**, like `filter()` which subsets rows based on the values of the columns, the `slice()` functions that subset rows based on their position, and `arrange()` which changes the order of the rows.
+-   Functions that operate on **rows**: `filter()` subsets rows based on the values of the columns, `slice()` and friends subsets rows based on their position, and `arrange()` changes the order of the rows.
 
--   Functions that operate on **columns**, like `mutate()` which creates new columns, `select()` which picks columns, `rename()` which changes column names, `relocate()` which moves columns from place to place.
+-   Functions that operate on **columns**: `mutate()` creates new columns, `select()` columns, `rename()` changes their names, and `relocate()` which changes their positions.
 
--   Functions that operate on **groups**, like `group_by()` which divides data up into groups for analysis, and `summarise()` which reduces each group to a single row.
+-   Functions that operate on **groups**: `group_by()` divides data up into groups for analysis, and `summarise()` reduces each group to a single row.
 
 Later, in Chapter \@ref(relational-data), you'll learn about other verbs that work with **tables**, like the join functions and the set operations.
 
@@ -83,12 +81,17 @@ Let's dive in and see how these verbs work.
 
 ## Rows
 
+These functions affect the rows (the observations), leaving the columns (the variables) unchanged.
+`filter()` changes which rows are included without changing the order, `arrange()` changes the order without changing the membership.
+
 ### `filter()`
 
-`filter()` allows you to subset observations based on their values.
+`filter()` allows you to choose rows based on their values[^data-transform-1].
 The first argument is the name of the data frame.
 The second and subsequent arguments are the expressions that filter the data frame.
 For example, we can select all flights on January 1st with:
+
+[^data-transform-1]: Later, you'll learn about the `slice_*()` family which allows you to choose rows based on their positions
 
 ```{r}
 filter(flights, month == 1, day == 1)
@@ -99,13 +102,6 @@ dplyr functions never modify their inputs, so if you want to save the result, yo
 
 ```{r}
 jan1 <- filter(flights, month == 1, day == 1)
-```
-
-R either prints out the results, or saves them to a variable.
-If you want to do both, you can wrap the assignment in parentheses:
-
-```{r}
-(dec25 <- filter(flights, month == 12, day == 25))
 ```
 
 To use filtering effectively, you have to know how to select the observations that you want using the comparison operators.
@@ -119,8 +115,6 @@ When you're starting out with R, the easiest mistake to make is to use `=` inste
 filter(flights, month = 1)
 ```
 
-### `slice()`
-
 ### `arrange()`
 
 `arrange()` works similarly to `filter()` except that instead of selecting rows, it changes their order.
@@ -131,7 +125,7 @@ If you provide more than one column name, each additional column will be used to
 arrange(flights, year, month, day)
 ```
 
-Use `desc()` to re-order by a column in descending order:
+You can use `desc()` to re-order by a column in descending order:
 
 ```{r}
 arrange(flights, desc(dep_delay))
@@ -160,41 +154,47 @@ arrange(flights, desc(dep_delay))
 
 ## Columns
 
+These functions affect the columns (the variables) without changing the rows (the observations).
+`mutate()` creates new variables that are functions of the existing variables; `select()`, `rename()`, and `relocate()` changes which variables are present, their names, and their positions.
+
 ### `mutate()`
 
-Besides selecting sets of existing columns, it's often useful to add new columns that are functions of existing columns.
-That's the job of `mutate()`.
-
-`mutate()` always adds new columns at the end of your dataset so we'll start by creating a narrower dataset so we can see the new variables.
-Remember that when you're in RStudio, the easiest way to see all the columns is `View()`.
+The job of `mutate()` is to add new columns that are functions of existing column.
+In the later chapters, you'll learn the full set of functions that you can use to manipulate different types of variables.
+For now, we'll stick with basic mathematical operators, which allows us to compute the `gain`, how much time a delayed flight made up in the air, and the `speed` in miles per hour:
 
 ```{r}
-flights_sml <- select(flights, 
-  year:day, 
-  ends_with("delay"), 
-  distance, 
-  air_time
-)
-```
-
-```{r}
-mutate(flights_sml,
+mutate(flights,
   gain = dep_delay - arr_delay,
   speed = distance / air_time * 60
 )
 ```
 
-Note that you can refer to columns that you've just created:
+By default, `mutate()` adds new columns at the right hand side of your dataset, which makes it hard to see what's happening here.
+We can use the `.before` argument to instead add the variables to the left hand side[^data-transform-2]:
+
+[^data-transform-2]: Remember that when you're in RStudio, the easiest way to see all the columns is `View()`.
 
 ```{r}
-mutate(flights_sml,
+mutate(flights,
   gain = dep_delay - arr_delay,
-  hours = air_time / 60,
-  gain_per_hour = gain / hours
+  speed = distance / air_time * 60,
+  .before = 1
 )
 ```
 
-You can control which variables are kept with the `.keep` argument:
+The leading `.` is a sign that `.before` is an argument to the function, not a new variable being created.
+You can also use `.after` to add after a variable, and use a variable name instead of a position:
+
+```{r}
+mutate(flights,
+  gain = dep_delay - arr_delay,
+  speed = distance / air_time * 60,
+  .after = day
+)
+```
+
+Alternatively, can control which variables are kept with the `.keep` argument:
 
 ```{r}
 mutate(flights,
@@ -211,13 +211,15 @@ It's not uncommon to get datasets with hundreds or even thousands of variables.
 In this case, the first challenge is often narrowing in on the variables you're actually interested in.
 `select()` allows you to rapidly zoom in on a useful subset using operations based on the names of the variables.
 
-`select()` is not terribly useful with the flights data because we only have 19 variables, but you can still get the general idea:
+`select()` is not terribly useful with the flights data because we only have 19 variables, but you can still get the general idea of how it works:
 
 ```{r}
 # Select columns by name
 select(flights, year, month, day)
+
 # Select all columns between year and day (inclusive)
 select(flights, year:day)
+
 # Select all columns except those from year to day (inclusive)
 select(flights, -(year:day))
 ```
@@ -230,11 +232,10 @@ There are a number of helper functions you can use within `select()`:
 
 -   `contains("ijk")`: matches names that contain "ijk".
 
--   `matches("(.)\\1")`: selects variables that match a regular expression. This one matches any variables that contain repeated characters. You'll learn more about regular expressions in [strings].
-
 -   `num_range("x", 1:3)`: matches `x1`, `x2` and `x3`.
 
 See `?select` for more details.
+Once you know regular expressions (the topic of Chapter \@ref(regular-expressions)) you'll also be use `matches()` to select variables that match a regexp.
 
 You can rename variables as you `select()` them by using `=`.
 The new name appears on the left hand side of the `=`, and the old variable appears on the right hand side:
@@ -268,6 +269,8 @@ But you can use the `.before` and `.after` arguments to choose where to place th
 relocate(flights, year:dep_time, .after = time_hour)
 relocate(flights, starts_with("arr"), .before = dep_time)
 ```
+
+These work the same way as the `.before` and `.after` arguments to `mutate()` --- they can be a numeric position, the name of a variable, or any of the other functions that you can use with `select()`.
 
 ### Exercises
 
@@ -317,43 +320,41 @@ ggplot(flights, aes(air_time - airtime2)) + geom_histogram()
 
 ## Groups
 
+The real power of dplyr comes when you add grouping into the mix.
+The two key functions are `group_by()` and `summarise()`, but as you'll learn `group_by()` affects many other dplyr verbs in interesting ways.
+
 ### `group_by()`
 
-`group_by()` doesn't appear to do anything:
+Use `group_by()` to divide your dataset into groups meaningful for your analysis:
 
 ```{r}
 by_month <- group_by(flights, month)
 by_month
 ```
 
-If you look closely, you'll notice that it's now "grouped by" month, but otherwise the data is unchanged.
-The reason to group your data is because it changes the operation of other verbs.
+`group_by()` doesn't change the data but, if you look closely, you'll notice that it's now "grouped by" month.
+The reason to group your data is because it changes the operation of subsequent verbs.
 
 ### `summarise()`
 
 The most important operation that you might apply to grouped data is a summary.
-It collapses each group to a single row:
+It collapses each group to a single row[^data-transform-3].
+Here we compute the average departure delay by month:
+
+[^data-transform-3]: This is a slightly simplification; later on you'll learn how to use `summarise()` to produce multiple summary rows for each group.
 
 ```{r}
 summarise(by_month, delay = mean(dep_delay, na.rm = TRUE))
 ```
 
-You can create any number of summaries at once.
-You'll learn various useful summaries in the upcoming chapters on individual data types, but another useful summary function is `n()`, which returns the number of rows in each group:
+You can create any number of summaries in a single call to `summarise()`.
+You'll learn various useful summaries in the upcoming chapters on individual data types, but one very useful summary is `n()`, which returns the number of rows in each group:
 
 ```{r}
 summarise(by_month, delay = mean(dep_delay, na.rm = TRUE), n = n())
 ```
 
-(In fact, `count()` which you already learned about, is just a short cut for grouping + summarising with `n()`)
-
-Here we've used `mean()` to compute the average delay for each month.
-The `na.rm = TRUE` is important because it asks R to "remove" (rm) the missing (na) values.
-If you forget it, the output isn't very useful:
-
-```{r}
-summarise(by_month, delay = mean(dep_delay))
-```
+(In fact, `count()`, which we've used a bunch in previous chapters, is just shorthand for `group_by()` + `summarise(n = n())`.)
 
 We'll come back to discuss missing values in Chapter \@ref(missing-values).
 For now, know you can drop them in summary functions by using `na.rm = TRUE` or remove them with a filter by using `!is.na()`:
@@ -364,54 +365,52 @@ by_month <- group_by(not_cancelled, month)
 summarise(by_month, delay = mean(dep_delay))
 ```
 
-### Combining multiple operations with the pipe
+### Combining multiple operations
 
-This code is a little frustrating to write because we have to give each intermediate data frame a name, even though we don't care about them.
+This code is starting to get a little frustrating to write because each intermediate data frame has to be given a name, even though we don't care about them.
 Naming things is hard, so this slows down our analysis.
-
-There's another way to tackle the same problem with the pipe, `%>%`:
+There's another way to tackle the same problem with the **pipe**, `%>%`:
 
 ```{r}
 flights %>% 
   filter(!is.na(dep_delay)) %>% 
   group_by(month) %>%
-  summarise(delay = mean(dep_delay))
+  summarise(delay = mean(dep_delay), n = n())
 ```
 
-This focuses on the transformations, not what's being transformed, which makes the code easier to read.
-You can read it as a series of imperative statements: filter, then group, then summarise.
-As suggested by this reading, a good way to pronounce `%>%` when reading code is "then".
+When you see `%>%` in code, a good way to "pronounce" it in your head is as "then".
+That way you can read this code as a series of imperative statements: take the flights dataset, then filter it to remove rows with missing `dep_delay`, then group it by month, then summarise it with the average `dep_delay` and the number of observations.
 
 Behind the scenes, `x %>% f(y)` turns into `f(x, y)`, and `x %>% f(y) %>% g(z)` turns into `g(f(x, y), z)` and so on.
 You can use the pipe to rewrite multiple operations in a way that you can read left-to-right, top-to-bottom.
-We'll use piping frequently from now on because it considerably improves the readability of code, and we'll come back to it in more detail in Chapter \@ref(pipes).
+We'll use piping frequently from now on because it considerably improves the readability of code, and we'll come back to it in more detail in Chapter \@ref(workflow-pipes).
 
 ### Grouping by multiple variables
 
 You can group a data frame by multiple variables:
 
 ```{r}
-daily <- group_by(flights, year, month, day)
+daily <- flights %>% group_by(year, month, day)
 daily
 ```
 
 When you group by multiple variables, each summary peels off one level of the grouping by default, and a message is printed that tells you how you can change this behaviour.
 
 ```{r}
-daily %>% summarise(flights = n())
+daily %>% summarise(n = n())
 ```
 
-If you're happy with this behaviour, you can also explicitly define it, in which case the message won't be printed out.
+If you're happy with this behaviour, you can explicitly define it in order to suppress the message:
 
 ```{r results = FALSE}
-summarise(daily, flights = n(), .groups = "drop_last")
+daily %>% summarise(n = n(), .groups = "drop_last")
 ```
 
-Or you can change the default behaviour by setting a different value, e.g. `"drop"` for dropping all levels of grouping or `"keep"` for same grouping structure as `daily`:
+Alternatively, you can change the default behaviour by setting a different value, e.g. `"drop"` for dropping all levels of grouping or `"keep"` for same grouping structure as `daily`:
 
 ```{r results = FALSE}
-summarise(daily, flights = n(), .groups = "drop")
-summarise(daily, flights = n(), .groups = "keep")
+daily %>% summarise(n = n(), .groups = "drop")
+daily %>% summarise(n = n(), .groups = "keep")
 ```
 
 ### Ungrouping
@@ -429,6 +428,19 @@ daily %>%
 ```
 
 For the purposes of summarising, ungrouped data is treated as if all your data was in a single group, so you get one row back.
+
+### Selecting rows
+
+`arrange()` and `filter()` are mostly unaffected by grouping.
+But the slice functions are super useful:
+
+-   `slice_head()` and `slice_tail()` select the first or last rows in each group.
+
+-   `slice_max()` and `slice_min()` select the rows in each group with highest or lowest values.
+
+-   `slice_sample()` random selects rows from each group.
+
+Each of these verbs takes either a `n` or `prop` argument depending on whether you want to select a fixed number of rows, or a number of rows proportional to the group size.
 
 ### Other verbs
 
