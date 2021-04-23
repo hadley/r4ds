@@ -1,3 +1,168 @@
 # Spreadsheets {#import-spreadsheets}
 
-<!--# TO DO: Write chapter. -->
+## Introduction
+
+So far you have learned about importing data from plain text files, e.g. `.csv` and `.tsv` files.
+Sometimes you need to analyze data that lives in a spreadsheet.
+In this chapter we will introduce you to tools for working with data in Excel spreadsheets and Google Sheets.
+This will build on much of what you've learned in Chapter \@ref(data-import) and Chapter \@ref(import-rectangular), but we will also discuss additional considerations and complexities when working with data from spreadsheets.
+
+## Excel
+
+### Prerequisites
+
+In this chapter, you'll learn how to load data from Excel spreadsheets in R with the **readxl** package.
+This package is not part of the core tidyverse, therefore you need to load it individually, but since the package is part of the non-core tidyverse packages, you don't need to install it individually if you already have tidyverse installed.
+We will also use tidyverse in the examples.
+
+```{r}
+library(readxl)
+library(tidyverse)
+```
+
+### Getting started
+
+Most of readxl's functions allow you to load Excel spreadsheets into R:
+
+-   `read_xls()` reads Excel files with `xls` format.
+-   `read_xlsx()` read Excel files with `xlsx` format.
+-   `read_excel()` can read files with both `xls` and `xlsx` format. It guesses the file type based on the input.
+
+These functions all have similar syntax just like other functions we have previously introduced for reading other types of files, e.g. `read_csv()`, `read_table()`, etc.
+For the rest of the chapter we will focus on using `read_excel()`.
+
+### Reading spreadsheets
+
+Here is the simple spreadsheet we're going to read.
+
+```{r fig.alt = "A look at the students spreadsheet in Excel. The spreadsheet contains information on 6 students, their ID, full name, favourite food, meal plan, and age.", fig.cap = "Spreadsheet called students.xlsx in Excel."}
+knitr::include_graphics("images/import-spreadsheets-students.png")
+```
+
+The first argument to `read_excel()` is the path to the file to read.
+
+```{r}
+students <- read_excel("data/students.xlsx")
+```
+
+`read_excel()` will read the file in as a tibble.
+
+```{r}
+students
+```
+
+We have six students in the data and five variables on each student.
+However there are a few things we might want to address in this dataset:
+
+1.  The column names are all over the place. You can provide column names that follow consistent format (we recommend `snake_case` using the `col_names` argument.
+
+    ```{r}
+    read_excel(
+      "data/students.xlsx",
+      col_names = c("student_id", "full_name", "favourite_food", "meal_plan", "age")
+    )
+    ```
+
+    Note that this didn't quite do the trick. You now have the variable names we want, but what was previously the header row now shows up as the first observation in the data. You can explicitly skip that row using the `skip` argument.
+
+    ```{r}
+    read_excel(
+      "data/students.xlsx",
+      col_names = c("student_id", "full_name", "favourite_food", "meal_plan", "age"),
+      skip = 1
+    )
+    ```
+
+```{=html}
+<!-- -->
+```
+2.  In the `favourite_food` column, one of the observations is `N/A`, which stands for "not available" but R currently doesn't recognize this character string as an `NA` (note the contrast between this `N/A` and the age of the fourth student in the list). You can specify which character strings should be recognized as `NA`s with the `na` argument. By default, only `""` (empty string, or in this case an empty cell) is recognized as an `NA`.
+
+    ```{r}
+    read_excel(
+      "data/students.xlsx",
+      col_names = c("student_id", "full_name", "favourite_food", "meal_plan", "age"),
+      skip = 1,
+      na = c("", "N/A")
+    )
+    ```
+
+3.  One other remaining issue is that `age` is read in as a character variable, but it really should be numeric. Just like with `read_csv()` and friends for reading data from flat files, you can supply a `col_types` argument to `read_excel()` and specify the column types for the variables you read in. Note that the syntax is a bit different, though. Your options are `"skip"`, `"guess"`, `"logical"`, `"numeric"`, `"date"`, `"text"` or `"list"`.
+
+    ```{r}
+    read_excel(
+      "data/students.xlsx",
+      col_names = c("student_id", "full_name", "favourite_food", "meal_plan", "age"),
+      skip = 1,
+      na = c("", "N/A"),
+      col_types = c("numeric", "text", "text", "text", "numeric")
+    )
+    ```
+
+    However, this didn't quite produce the desired result either. By specifying that `age` should be numeric, we have turned the one cell with the non-numeric entry (which had the value `five`) into an `NA`. In this case, we should read age in as `"text"` and then make the change once the data is loaded in R.
+
+    ```{r}
+    students <- read_excel(
+      "data/students.xlsx",
+      col_names = c("student_id", "full_name", "favourite_food", "meal_plan", "age"),
+      skip = 1,
+      na = c("", "N/A"),
+      col_types = c("numeric", "text", "text", "text", "text")
+    )
+
+    students <- students %>%
+      mutate(
+        age = if_else(age == "five", "5", age),
+        age = parse_number(age)
+      )
+
+    students
+    ```
+
+It took as multiple steps and trial-and-error to load the data in exactly the format we want, and this is not unexpected.
+Data science is an iterative process.
+There is no way to know exactly what the data will look like until you load it and take a look at it.
+Well, there is one way, actually.
+You can open the file in Excel and take a peek.
+That might be tempting, but it's strongly not recommended.
+<!--# TO DO: Provide reason why it's not recommended. --> Instead, you should not be afraid of doing what we did here: load the data, take a peek, make adjustments to your code, load it again, and repeat until you're happy with the result.
+
+### Reading individual sheets
+
+An important feature that distinguishes spreadsheets from flat files is the notion of multiple sheets.
+
+TO DO:
+
+-   Use penguin species spread across three sheets
+-   reading individual sheets
+-   combining them into a single tibble?
+-   reading a range
+
+### Writing
+
+TO DO: Recommend readxl
+
+### Exercises
+
+## Google Sheets
+
+### Prerequisites
+
+TO DO:
+
+-   use googlesheets4
+-   why 4?
+
+### Getting started
+
+TO DO:
+
+-   reading from public sheet with `read_sheet()` and `read_range()`
+
+### Authentication
+
+### Read sheets
+
+### Write sheets
+
+### Exercises
