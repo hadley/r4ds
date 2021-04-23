@@ -2,12 +2,17 @@
 
 ## Introduction
 
-This chapter introduces you to string manipulation in R.
+This chapter introduces you to strings in R.
 You'll learn the basics of how strings work and how to create them by hand.
 Big topic so spread over three chapters.
 
 Base R contains many functions to work with strings but we'll generally avoid them here because they can be inconsistent, which makes them hard to remember.
 Instead, we'll use stringr which is designed to be as consistent as possible, and all of its functions start with `str_`.
+The common `str_` prefix is particularly useful if you use RStudio, because typing `str_` will trigger autocomplete, allowing you to see all stringr functions:
+
+```{r, echo = FALSE}
+knitr::include_graphics("screenshots/stringr-autocomplete.png")
+```
 
 ### Prerequisites
 
@@ -15,6 +20,7 @@ This chapter will focus on the **stringr** package for string manipulation, whic
 
 ```{r setup, message = FALSE}
 library(tidyverse)
+library(babynames)
 ```
 
 ## Creating a string
@@ -86,7 +92,7 @@ If your string contains `)"` you can instead use `r"[]"` or `r"{}"`, and if that
 
 ### Other special characters
 
-As well as `\"`, `\'`, and `\\` there are a handful of other special characters that may come in handy. The most common are `"\n"`, newline, and `"\t"`, tab, but you can see the complete list by requesting help on `"`: `?'"'`, or `?"'"`.
+As well as `\"`, `\'`, and `\\` there are a handful of other special characters that may come in handy. The most common are `"\n"`, newline, and `"\t"`, tab, but you can see the complete list by requesting help on `"` with `?'"'` or `?"'"`.
 
 You'll also sometimes see strings containing Unicode escapes like `"\u00b5"`.
 This is a way of writing non-English characters that works on all platforms:
@@ -105,12 +111,6 @@ str_c("x", "y")
 str_c("x", "y", "z")
 ```
 
-The common `str_` prefix is particularly useful if you use RStudio, because typing `str_` will trigger autocomplete, allowing you to see all stringr functions:
-
-```{r, echo = FALSE}
-knitr::include_graphics("screenshots/stringr-autocomplete.png")
-```
-
 Use the `sep` argument to control how they're separated:
 
 ```{r}
@@ -126,24 +126,24 @@ str_c("|-", x, "-|")
 str_c("|-", coalesce(x, ""), "-|")
 ```
 
-`str_c()` is vectorised which means that it automatically recycles individual strings to the same length as the longest vector input:
-
-```{r}
-str_c("prefix-", c("a", "b", "c"), "-suffix")
-```
-
 `mutate()`
 
-## Flattening strings
-
-To collapse a vector of strings into a single string, use `collapse`:
+Another powerful way of combining strings is with the glue package.
+You can either use `glue::glue()` or call it via the `str_glue()` wrapper that string provides for you.
+Glue works a little differently to the other methods: you give it a single string using `{}` to indicate where you want to interpolate in existing variables:
 
 ```{r}
-str_flatten(c("x", "y", "z"), ", ")
+str_glue("|-{x}-|")
 ```
 
-This is a great tool for `summarise()`ing character data.
-Later we'll come back to the inverse of this, `separate_rows()`.
+Like `str_c()`, `str_glue()` pairs well with `mutate()`:
+
+```{r}
+starwars %>% mutate(
+  intro = str_glue("Hi my is {name} and I'm a {species} from {homeworld}"),
+  .keep = "none"
+)
+```
 
 ## Length and subsetting
 
@@ -151,6 +151,13 @@ For example, `str_length()` tells you the length of a string:
 
 ```{r}
 str_length(c("a", "R for data science", NA))
+```
+
+You could use this with `count()` to find the distribution of lengths of US babynames:
+
+```{r}
+babynames %>%
+  count(length = str_length(name))
 ```
 
 You can extract parts of a string using `str_sub()`.
@@ -161,6 +168,16 @@ x <- c("Apple", "Banana", "Pear")
 str_sub(x, 1, 3)
 # negative numbers count backwards from end
 str_sub(x, -3, -1)
+```
+
+We could use this with `mutate()` to find the first and last letter of each name:
+
+```{r}
+babynames %>% 
+  mutate(
+    first = str_sub(name, 1, 1),
+    last = str_sub(name, -1, -1)
+  )
 ```
 
 Note that `str_sub()` won't fail if the string is too short: it will just return as much as possible:
@@ -188,6 +205,19 @@ TODO: `separate()`
 
 4.  Write a function that turns (e.g.) a vector `c("a", "b", "c")` into the string `a, b, and c`.
     Think carefully about what it should do if given a vector of length 0, 1, or 2.
+
+## String summaries
+
+You can perform the opposite operation with `summarise()` and `str_flatten()`:
+
+To collapse a vector of strings into a single string, use `collapse`:
+
+```{r}
+str_flatten(c("x", "y", "z"), ", ")
+```
+
+This is a great tool for `summarise()`ing character data.
+Later we'll come back to the inverse of this, `separate_rows()`.
 
 ## Long strings
 
@@ -234,15 +264,14 @@ The results are identical, but I think the first approach is significantly easie
 If your regular expression gets overly complicated, try breaking it up into smaller pieces, giving each piece a name, and then combining the pieces with logical operations.
 
 A common use of `str_detect()` is to select the elements that match a pattern.
-This makes it a natural pairing with `filter()`:
+This makes it a natural pairing with `filter()`.
+The following regexp finds all names with repeated pairs of letters (you'll learn how that regexp works in the next chapter)
 
 ```{r}
-df <- tibble(
-  word = words, 
-  i = seq_along(word)
-)
-df %>% 
-  filter(str_detect(word, "x$"))
+babynames %>% 
+  filter(n > 100) %>% 
+  count(name, wt = n) %>% 
+  filter(str_detect(name, "(..).*\\1"))
 ```
 
 A variation on `str_detect()` is `str_count()`: rather than a simple yes or no, it tells you how many matches there are in a string:
@@ -258,20 +287,11 @@ mean(str_count(words, "[aeiou]"))
 It's natural to use `str_count()` with `mutate()`:
 
 ```{r}
-df %>% 
+babynames %>% 
   mutate(
-    vowels = str_count(word, "[aeiou]"),
-    consonants = str_count(word, "[^aeiou]")
+    vowels = str_count(name, "[aeiou]"),
+    consonants = str_count(name, "[^aeiou]")
   )
-```
-
-Note that matches never overlap.
-For example, in `"abababa"`, how many times will the pattern `"aba"` match?
-Regular expressions say two, not three:
-
-```{r}
-str_count("abababa", "aba")
-str_view_all("abababa", "aba")
 ```
 
 ### Exercises
@@ -383,6 +403,8 @@ tibble(sentence = sentences) %>%
 2.  Find all contractions.
     Separate out the pieces before and after the apostrophe.
 
+## Strings -\> Columns
+
 ## Separate
 
 `separate()` pulls apart one column into multiple columns, by splitting wherever a separator character appears.
@@ -416,6 +438,15 @@ table3 %>%
 
 `separate_rows()`
 
+## Strings -\> Rows
+
+```{r}
+starwars %>% 
+  select(name, eye_color) %>% 
+  filter(str_detect(eye_color, ", ")) %>% 
+  separate_rows(eye_color)
+```
+
 ### Exercises
 
 1.  Split up a string like `"apples, pears, and bananas"` into individual components.
@@ -427,11 +458,22 @@ table3 %>%
 
 ## Other languages {#other-languages}
 
-### Length
+Encoding, and why not to trust `Encoding`.
+As a general rule, we recommend using UTF-8 everywhere, converting as a early as possible (i.e. by using the `encoding` argument to `readr::locale()`).
+
+### Length and subsetting
 
 This seems like a straightforward computation if you're only familiar with English, but things get complex quick when working with other languages.
 Include some examples from <https://gankra.github.io/blah/text-hates-you/>.
-(Maybe better to include a non-English text section later?)
+
+This is a problem even with European problem because Unicode provides two ways of representing characters with accents: many common characters have a special codepoint, but others can be built up from individual components.
+
+```{r}
+x <- c("\u00e1", "a\u0301")
+x
+str_length(x)
+str_sub(x, 1, 1)
+```
 
 ### Locales
 
