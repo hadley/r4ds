@@ -54,7 +54,8 @@ students
 We have six students in the data and five variables on each student.
 However there are a few things we might want to address in this dataset:
 
-1.  The column names are all over the place. You can provide column names that follow consistent format (we recommend `snake_case` using the `col_names` argument.
+1.  The column names are all over the place.
+    You can provide column names that follow consistent format (we recommend `snake_case` using the `col_names` argument.
 
     ```{r}
     read_excel(
@@ -63,7 +64,9 @@ However there are a few things we might want to address in this dataset:
     )
     ```
 
-    Note that this didn't quite do the trick. You now have the variable names we want, but what was previously the header row now shows up as the first observation in the data. You can explicitly skip that row using the `skip` argument.
+    Note that this didn't quite do the trick.
+    You now have the variable names we want, but what was previously the header row now shows up as the first observation in the data.
+    You can explicitly skip that row using the `skip` argument.
 
     ```{r}
     read_excel(
@@ -73,10 +76,9 @@ However there are a few things we might want to address in this dataset:
     )
     ```
 
-```{=html}
-<!-- -->
-```
-2.  In the `favourite_food` column, one of the observations is `N/A`, which stands for "not available" but R currently doesn't recognize this character string as an `NA` (note the contrast between this `N/A` and the age of the fourth student in the list). You can specify which character strings should be recognized as `NA`s with the `na` argument. By default, only `""` (empty string, or in this case an empty cell) is recognized as an `NA`.
+2.  In the `favourite_food` column, one of the observations is `N/A`, which stands for "not available" but it's currently not recognized as an `NA` (note the contrast between this `N/A` and the age of the fourth student in the list).
+    You can specify which character strings should be recognized as `NA`s with the `na` argument.
+    By default, only `""` (empty string, or, in the case of reading from a spreadsheet, an empty cell) is recognized as an `NA`.
 
     ```{r}
     read_excel(
@@ -87,7 +89,10 @@ However there are a few things we might want to address in this dataset:
     )
     ```
 
-3.  One other remaining issue is that `age` is read in as a character variable, but it really should be numeric. Just like with `read_csv()` and friends for reading data from flat files, you can supply a `col_types` argument to `read_excel()` and specify the column types for the variables you read in. Note that the syntax is a bit different, though. Your options are `"skip"`, `"guess"`, `"logical"`, `"numeric"`, `"date"`, `"text"` or `"list"`.
+3.  One other remaining issue is that `age` is read in as a character variable, but it really should be numeric.
+    Just like with `read_csv()` and friends for reading data from flat files, you can supply a `col_types` argument to `read_excel()` and specify the column types for the variables you read in.
+    Note that the syntax is a bit different, though.
+    Your options are `"skip"`, `"guess"`, `"logical"`, `"numeric"`, `"date"`, `"text"` or `"list"`.
 
     ```{r}
     read_excel(
@@ -99,7 +104,9 @@ However there are a few things we might want to address in this dataset:
     )
     ```
 
-    However, this didn't quite produce the desired result either. By specifying that `age` should be numeric, we have turned the one cell with the non-numeric entry (which had the value `five`) into an `NA`. In this case, we should read age in as `"text"` and then make the change once the data is loaded in R.
+    However, this didn't quite produce the desired result either.
+    By specifying that `age` should be numeric, we have turned the one cell with the non-numeric entry (which had the value `five`) into an `NA`.
+    In this case, we should read age in as `"text"` and then make the change once the data is loaded in R.
 
     ```{r}
     students <- read_excel(
@@ -130,13 +137,116 @@ That might be tempting, but it's strongly not recommended.
 ### Reading individual sheets
 
 An important feature that distinguishes spreadsheets from flat files is the notion of multiple sheets.
+Figure \@ref(fig:penguins-multiple-sheets) shows an Excel spreadsheet with multiple sheets.
+There data come from the **palmerpenguins** package.
+Each sheet contains information on penguins from a different island where data were collected.
 
-TO DO:
+```{r penguins-multiple-sheets, fig.alt = "A look at the penguins spreadsheet in Excel. The spreadsheet contains has three sheets: Torgersen Island, Biscoe Island, and Dream Island.", fig.cap = "Spreadsheet called penguins.xlsx in Excel."}
+knitr::include_graphics("images/import-spreadsheets-penguins.png")
+```
 
--   Use penguin species spread across three sheets
--   reading individual sheets
--   combining them into a single tibble?
--   reading a range
+You can read a single sheet from a spreadsheet with the `sheet` argument in `read_excel()`.
+
+```{r}
+read_excel("data/penguins.xlsx", sheet = "Torgersen Island")
+```
+
+Some variables that appear to contain numerical data are read in as characters due to the character string `"NA"` not being recognized as a true `NA`.
+
+```{r}
+penguins_torgersen <- read_excel("data/penguins.xlsx", sheet = "Torgersen Island", na = "NA")
+
+penguins_torgersen
+```
+
+However, we cheated here a bit.
+We looked inside the Excel spreadsheet, which is not a recommended workflow.
+Instead, you can use `excel_sheets()` to get information on all sheets in an Excel spreadsheet, and then read the one(s) you're interested in.
+
+```{r}
+excel_sheets("data/penguins.xlsx")
+```
+
+Once you know the names of the sheets, you can read them in individually with `read_excel()`.
+
+```{r}
+penguins_biscoe <- read_excel("data/penguins.xlsx", sheet = "Biscoe Island", na = "NA")
+penguins_dream  <- read_excel("data/penguins.xlsx", sheet = "Dream Island", na = "NA")
+```
+
+In this case the full penguins dataset is spread across three sheets in the spreadsheet.
+Each sheet has the same number of columns but different numbers of rows.
+
+```{r}
+dim(penguins_torgersen)
+dim(penguins_biscoe)
+dim(penguins_dream)
+```
+
+We can put them together with `bind_rows()`.
+
+```{r}
+penguins <- bind_rows(penguins_torgersen, penguins_biscoe, penguins_dream)
+penguins
+```
+
+In Chapter \@ref(iteration) we'll talk about ways of doing this sort of task without repetitive code <!--# Check to make sure that's the right place to present it -->.
+
+### Reading a cell range
+
+Since many use Excel spreadsheets for presentation as well as for data storage, it's quite common to find cell entries in a spreadsheet that are not part of the data you want to read into R.
+
+Take a look at the following example from the readxl package.
+
+```{r}
+deaths_path <- readxl_example("deaths.xlsx")
+deaths <- read_excel(deaths_path)
+deaths
+```
+
+The top three rows and the bottom four rows are not part of the data frame.
+
+We could skip the top three rows with `skip`.
+Note that we set `skip = 4` since the fourth row contains column names, not the data.
+
+```{r}
+read_excel(deaths_path, skip = 4)
+```
+
+We could also set `n_max` to omit the extraneous rows at the bottom.
+
+```{r}
+read_excel(deaths_path, skip = 4, n_max = 10)
+```
+
+Another approach is using cell ranges.
+In Excel, the top left cell is `A1`, as you move across columns to the right the cell label moves down the alphabet, i.e.
+`B1`, `C1`, etc.
+And as you move down a column, the number in the cell label increases, i.e.
+`A2`, `A3`, etc.
+
+<!--# Add screenshot of this spreadsheet, with arrows across and down, so cell ranges are clear. -->
+
+The data we want to read is in `A5:F15`.
+We can supply this information to the `range` argument.
+
+```{r}
+read_excel(deaths_path, range = "A5:F15")
+```
+
+We can also do this specifying rows.
+
+```{r}
+read_excel(deaths_path, range = cell_rows(c(5, 15)))
+```
+
+Or by specifying cells that mark the top-left and bottom-right corners of the data.
+The top-left corner is `A5`, which translates to `c(5, 1)` (5th row down, 1st column).
+The bottom-right corner is `F15`, which translates to `c(15, 6)`.
+
+```{r}
+read_excel(deaths_path, range = cell_limits(c(5, 1), c(15, 6)))
+```
 
 ### Writing
 
