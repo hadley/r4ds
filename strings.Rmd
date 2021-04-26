@@ -4,11 +4,12 @@
 
 This chapter introduces you to strings in R.
 You'll learn the basics of how strings work and how to create them by hand.
-Big topic so spread over three chapters.
+Big topic so spread over three chapters: here we'll focus on the basic mechanics, in Chapter \@ref(regular-expressions) we'll dive into the details of regular expressions the sometimes cryptic language for describing patterns in strings, and we'll return to strings later in Chapter \@ref(programming-with-strings) when we think about them about from a programming perspective (rather than a data analysis perspective).
 
-Base R contains many functions to work with strings but we'll generally avoid them here because they can be inconsistent, which makes them hard to remember.
-Instead, we'll use stringr which is designed to be as consistent as possible, and all of its functions start with `str_`.
-The common `str_` prefix is particularly useful if you use RStudio, because typing `str_` will trigger autocomplete, allowing you to see all stringr functions:
+While base R contains functions that allow us to perform pretty much all of the operations described in this chapter, here we're going to use the **stringr** package.
+stringr has been carefully designed to be as consistent as possible so that knowledge gained about one function can be more easily transferred to the next.
+stringr functions all start with the same `str_` prefix.
+This is particularly useful if you use RStudio, because typing `str_` will trigger autocomplete, allowing you to see all stringr's functions:
 
 ```{r, echo = FALSE}
 knitr::include_graphics("screenshots/stringr-autocomplete.png")
@@ -17,6 +18,7 @@ knitr::include_graphics("screenshots/stringr-autocomplete.png")
 ### Prerequisites
 
 This chapter will focus on the **stringr** package for string manipulation, which is part of the core tidyverse.
+We'll also work with the babynames dataset.
 
 ```{r setup, message = FALSE}
 library(tidyverse)
@@ -25,7 +27,9 @@ library(babynames)
 
 ## Creating a string
 
-You can create strings with either single quotes or double quotes.
+To begin, let's discuss the mechanics of creating a string.
+We've created strings in passing earlier in the book, but didn't discuss the details.
+First, there are two basic ways to create a string: using either single quotes (`'`) or double quotes (`"`).
 Unlike other languages, there is no difference in behaviour.
 I recommend always using `"`, unless you want to create a string that contains multiple `"`.
 
@@ -41,7 +45,9 @@ If you forget to close a quote, you'll see `+`, the continuation character:
     + 
     + HELP I'M STUCK
 
-If this happen to you, press Escape and try again!
+If this happen to you, press Escape and try again.
+
+### Escapes
 
 To include a literal single or double quote in a string you can use `\` to "escape" it:
 
@@ -50,27 +56,25 @@ double_quote <- "\"" # or '"'
 single_quote <- '\'' # or "'"
 ```
 
-That means if you want to include a literal backslash, you'll need to double it up: `"\\"`.
-
-Beware that the printed representation of a string is not the same as string itself, because the printed representation shows the escapes.
-To see the raw contents of the string, use `writeLines()`:
+Which means if you want to include a literal backslash, you'll need to double it up: `"\\"`:
 
 ```{r}
-x <- c("\"", "\\")
-x
-str_view(x)
+backslash <- "\\"
 ```
 
-As shown above, you can combine strings into a (character) vector with `c()`:
+Beware that the printed representation of a string is not the same as string itself, because the printed representation shows the escapes.
+To see the raw contents of the string, use `str_view()`:
 
 ```{r}
-c("one", "two", "three")
+x <- c(single_quote, double_quote, backslash)
+x
+str_view(x)
 ```
 
 ### Raw strings
 
 Creating a string with multiple quotes or backslashes gets confusing quickly.
-For example, lets create a string that contains the contents of the chunk above:
+For example, lets create a string that contains the contents of the chunk where I define the `double_quote` and `single_quote` variables:
 
 ```{r}
 tricky <- "double_quote <- \"\\\"\" # or '\"'
@@ -78,7 +82,9 @@ single_quote <- '\\'' # or \"'\""
 str_view(tricky)
 ```
 
-In R 4.0.0 and above, you can use a **raw** string to reduce the amount of escaping:
+You can instead use a **raw string**[^strings-1] to reduce the amount of escaping:
+
+[^strings-1]: Available in R 4.0.0 and above.
 
 ```{r}
 tricky <- r"(double_quote <- "\"" # or '"'
@@ -88,37 +94,35 @@ str_view(tricky)
 ```
 
 A raw string starts with `r"(` and finishes with `)"`.
-If your string contains `)"` you can instead use `r"[]"` or `r"{}"`, and if that's still not enough, you can insert any number of dashes to make the opening and closing pairs unique: `` `r"--()--" ``.
+If your string contains `)"` you can instead use `r"[]"` or `r"{}"`, and if that's still not enough, you can insert any number of dashes to make the opening and closing pairs unique, e.g. `` `r"--()--" ``, `` `r"---()---" ``,etc.
 
 ### Other special characters
 
-As well as `\"`, `\'`, and `\\` there are a handful of other special characters that may come in handy. The most common are `"\n"`, newline, and `"\t"`, tab, but you can see the complete list by requesting help on `"` with `?'"'` or `?"'"`.
+As well as `\"`, `\'`, and `\\` there are a handful of other special characters that may come in handy. The most common are `"\n"`, newline, and `"\t"`, tab, but you can see the complete list in `?'"'`.
 
-You'll also sometimes see strings containing Unicode escapes like `"\u00b5"`.
-This is a way of writing non-English characters that works on all platforms:
+You'll also sometimes see strings containing Unicode escapes that start with `\u` or `\U`.
+This is a way of writing non-English characters that works on all systems:
 
 ```{r}
-x <- "\u00b5"
+x <- c("\u00b5", "\U0001f604")
 x
+str_view(x)
 ```
 
 ## Combining strings
 
-To combine two or more strings, use `str_c()`:
+Use `str_c()`[^strings-2] to join together multiple strings into a single string:
+
+[^strings-2]: `str_c()` is very similar to the base `paste0()`.
+    There are two main reasons I use it here: it obeys the usual rules for handling `NA`, and it uses the tidyverse recycling rules.
 
 ```{r}
 str_c("x", "y")
 str_c("x", "y", "z")
 ```
 
-Use the `sep` argument to control how they're separated:
-
-```{r}
-str_c("x", "y", sep = ", ")
-```
-
 Like most other functions in R, missing values are contagious.
-As usual, if you want to show a different value, use `coalesce()`:
+You can use `coalesce()` to replace missing values with a value of your choosing:
 
 ```{r}
 x <- c("abc", NA)
@@ -126,7 +130,12 @@ str_c("|-", x, "-|")
 str_c("|-", coalesce(x, ""), "-|")
 ```
 
-`mutate()`
+Since `str_c()` creates a new variable, you'll usually use it with a `mutate()`:
+
+```{r}
+starwars %>% 
+  mutate(greeting = str_c("Hi! I'm ", name, "."), .after = name)
+```
 
 Another powerful way of combining strings is with the glue package.
 You can either use `glue::glue()` or call it via the `str_glue()` wrapper that string provides for you.
@@ -139,15 +148,20 @@ str_glue("|-{x}-|")
 Like `str_c()`, `str_glue()` pairs well with `mutate()`:
 
 ```{r}
-starwars %>% mutate(
-  intro = str_glue("Hi my is {name} and I'm a {species} from {homeworld}"),
-  .keep = "none"
-)
+starwars %>% 
+  mutate(
+    intro = str_glue("Hi! My is {name} and I'm a {species} from {homeworld}"),
+    .keep = "none"
+  )
 ```
+
+You can use any valid R code inside of `{}`, but we recommend placing more complex calculations in their own variables.
 
 ## Length and subsetting
 
-For example, `str_length()` tells you the length of a string:
+It's also natural to think about the letters that make up an individual string.
+(But note that the idea of a "letter" isn't a natural fit to every language, we'll come back to that in Section \@ref(other-languages)).
+For example, `str_length()` tells you the length, the number of characters:
 
 ```{r}
 str_length(c("a", "R for data science", NA))
@@ -157,20 +171,30 @@ You could use this with `count()` to find the distribution of lengths of US baby
 
 ```{r}
 babynames %>%
-  count(length = str_length(name))
+  count(length = str_length(name), wt = n)
 ```
 
 You can extract parts of a string using `str_sub()`.
-As well as the string, `str_sub()` takes `start` and `end` arguments which give the (inclusive) position of the substring:
+As well as the string, `str_sub()` takes `start` and `end` arguments which give the (inclusive) characters to start and end at:
 
 ```{r}
 x <- c("Apple", "Banana", "Pear")
 str_sub(x, 1, 3)
-# negative numbers count backwards from end
+```
+
+You can use negative values to count back from the end of the string: -1 is the last character, -2 is the second to last character, etc.
+
+```{r}
 str_sub(x, -3, -1)
 ```
 
-We could use this with `mutate()` to find the first and last letter of each name:
+Note that `str_sub()` won't fail if the string is too short: it will just return as much as possible:
+
+```{r}
+str_sub("a", 1, 5)
+```
+
+We could use `str_sub()` with `mutate()` to find the first and last letter of each name:
 
 ```{r}
 babynames %>% 
@@ -180,54 +204,78 @@ babynames %>%
   )
 ```
 
-Note that `str_sub()` won't fail if the string is too short: it will just return as much as possible:
+Sometimes you'll get a column that's made up of individual fixed length strings that have been joined together:
 
 ```{r}
-str_sub("a", 1, 5)
+df <- tribble(
+  ~ sex_year_age,
+  "M200115",
+  "F201503",
+)
 ```
 
-Note that the idea of a "letter" isn't a natural fit to every language, so you'll need to take care if you're working with text from other languages.
-We'll briefly talk about some of the issues in Section \@ref(other-languages).
+You can extract the columns using `str_sub()`:
 
-TODO: `separate()`
+```{r}
+df %>% mutate(
+  sex = str_sub(sex_year_age, 1, 1),
+  year = str_sub(sex_year_age, 2, 5),
+  age = str_sub(sex_year_age, 6, 7),
+)
+```
+
+Or use the `separate()` helper function:
+
+```{r}
+df %>% 
+  separate(sex_year_age, c("sex", "year", "age"), c(1, 5))
+```
+
+Note that you give `separate()` three columns but only two positions --- that's because you're telling `separate()` where to break up the string.
+
+TODO: draw diagram to emphasise that it's the space between the characters.
+
+Later on, we'll come back two related problems: the components having vary length are a separated by a character
 
 ### Exercises
 
-1.  In code that doesn't use stringr, you'll often see `paste()` and `paste0()`.
-    What's the difference between the two functions?
-    What stringr function are they equivalent to?
-    How do the functions differ in their handling of `NA`?
-
-2.  In your own words, describe the difference between the `sep` and `collapse` arguments to `str_c()`.
-
-3.  Use `str_length()` and `str_sub()` to extract the middle character from a string.
-    What will you do if the string has an even number of characters?
-
-4.  Write a function that turns (e.g.) a vector `c("a", "b", "c")` into the string `a, b, and c`.
-    Think carefully about what it should do if given a vector of length 0, 1, or 2.
-
-## String summaries
-
-You can perform the opposite operation with `summarise()` and `str_flatten()`:
-
-To collapse a vector of strings into a single string, use `collapse`:
-
-```{r}
-str_flatten(c("x", "y", "z"), ", ")
-```
-
-This is a great tool for `summarise()`ing character data.
-Later we'll come back to the inverse of this, `separate_rows()`.
+1.  Use `str_length()` and `str_sub()` to extract the middle letter from each baby name. What will you do if the string has an even number of characters?
 
 ## Long strings
 
-`str_wrap()`
+Sometimes the reason you care about the length of a string is because you're trying to fit it into a label.
+stringr provides two useful tools for cases where your string is too long:
 
-`str_trunc()`
+-   `str_trunc(x, 20)` ensures that no string is longer than 20 characters, replacing any thing too long with `…`.
 
-## Introduction to regular expressions
+-   `str_wrap(x, 20)` wraps a string introducing new lines so that each line is at most 20 characters (it doesn't hyphenate, however, so any word longer than 20 characters will make a longer time)
 
-Opting out by using `fixed()`
+## String summaries
+
+`str_c()` combines multiple character vectors into a single character vector; the output is the same length as the input.
+An related function is `str_flatten()`: it takes a character vector and returns a single string:
+
+```{r}
+str_flatten(c("x", "y", "z"))
+```
+
+Just like `sum()` and `mean()` take a vector of numbers and return a single number, `str_flatten()` takes a character vector and returns a single string.
+This makes `str_flatten()` a summary function for strings, so you'll often pair it with `summarise()`:
+
+```{r}
+df <- tribble(
+  ~ name, ~ fruit,
+  "Carmen", "banana",
+  "Carmen", "apple",
+  "Marvin", "nectarine",
+  "Terence", "cantaloupe",
+  "Terence", "papaya",
+  "Terence", "madarine"
+)
+df %>%
+  group_by(name) %>% 
+  summarise(fruits = str_flatten(fruit, ", "))
+```
 
 ## Detect matches
 
@@ -239,49 +287,27 @@ x <- c("apple", "banana", "pear")
 str_detect(x, "e")
 ```
 
+This makes it a logical pairing with `filter()`:
+
+```{r}
+babynames %>% filter(str_detect(name, "x"))
+```
+
 Remember that when you use a logical vector in a numeric context, `FALSE` becomes 0 and `TRUE` becomes 1.
 That makes `sum()` and `mean()` useful if you want to answer questions about matches across a larger vector:
 
 ```{r}
-# How many common words start with t?
-sum(str_detect(words, "^t"))
-# What proportion of common words end with a vowel?
-mean(str_detect(words, "[aeiou]$"))
-```
-
-When you have complex logical conditions (e.g. match a or b but not c unless d) it's often easier to combine multiple `str_detect()` calls with logical operators, rather than trying to create a single regular expression.
-For example, here are two ways to find all words that don't contain any vowels:
-
-```{r}
-# Find all words containing at least one vowel, and negate
-no_vowels_1 <- !str_detect(words, "[aeiou]")
-# Find all words consisting only of consonants (non-vowels)
-no_vowels_2 <- str_detect(words, "^[^aeiou]+$")
-identical(no_vowels_1, no_vowels_2)
-```
-
-The results are identical, but I think the first approach is significantly easier to understand.
-If your regular expression gets overly complicated, try breaking it up into smaller pieces, giving each piece a name, and then combining the pieces with logical operations.
-
-A common use of `str_detect()` is to select the elements that match a pattern.
-This makes it a natural pairing with `filter()`.
-The following regexp finds all names with repeated pairs of letters (you'll learn how that regexp works in the next chapter)
-
-```{r}
 babynames %>% 
-  filter(n > 100) %>% 
-  count(name, wt = n) %>% 
-  filter(str_detect(name, "(..).*\\1"))
+  group_by(year) %>% 
+  summarise(prop_x = mean(str_detect(name, "x")))
 ```
+
+(Note that this gives us the proportion of names that contain an x; if you wanted the proportion of babies given a name containing an x, you'd need to perform a weighted mean).
 
 A variation on `str_detect()` is `str_count()`: rather than a simple yes or no, it tells you how many matches there are in a string:
 
 ```{r}
-x <- c("apple", "banana", "pear")
-str_count(x, "a")
-
-# On average, how many vowels per word?
-mean(str_count(words, "[aeiou]"))
+str_count(x, "p")
 ```
 
 It's natural to use `str_count()` with `mutate()`:
@@ -306,6 +332,54 @@ babynames %>%
     What word has the highest proportion of vowels?
     (Hint: what is the denominator?)
 
+## Introduction to regular expressions
+
+Before we can continue on we need to discuss the second argument to continue to `str_detect()` --- it's not a fixed string, but a pattern, called a regular expression.
+A regular expression uses special characters
+
+```{r}
+str_detect(x, ".")
+```
+
+You can opt-out with by using `fixed`:
+
+```{r}
+str_detect(x, fixed("."))
+```
+
+Note that regular expressions are case sensitive by default:
+
+```{r}
+babynames %>% filter(str_detect(name, "X"))
+babynames %>% filter(str_detect(name, fixed("X", ignore_case = TRUE)))
+```
+
+A common use of `str_detect()` is to select the elements that match a pattern.
+This makes it a natural pairing with `filter()`.
+The following regexp finds all names with repeated pairs of letters (you'll learn how that regexp works in the next chapter)
+
+```{r}
+babynames %>% 
+  filter(n > 100) %>% 
+  count(name, wt = n) %>% 
+  filter(str_detect(name, "(..).*\\1"))
+```
+
+Simple patterns we'll use:
+
+-   `.` match any character
+
+-   `[abcd]` match "a", "b", "c", or "d".
+
+-   `+` means match one or more: `a+` means match one or more as in a row; `.+` means match one or more of anything; `[abcd]+` means match one of more of a/b/c/d in a row.
+
+Can use `str_view_all()` see what a regular expression matches:
+
+```{r}
+str_view_all(x, "p+")
+str_view_all(x, "a.")
+```
+
 ## Replacing matches
 
 `str_replace_all()` allow you to replace matches with new strings.
@@ -323,6 +397,8 @@ The name gives a regular expression to match, and the value gives the replacemen
 x <- c("1 house", "1 person has 2 cars", "3 people")
 str_replace_all(x, c("1" = "one", "2" = "two", "3" = "three"))
 ```
+
+`str_remove_all()` is a short cut for `str_replace_all(x, pattern, "")` --- it removes matching patterns from a string.
 
 Use in `mutate()`
 
