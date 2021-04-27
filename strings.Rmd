@@ -2,9 +2,10 @@
 
 ## Introduction
 
-This chapter introduces you to strings in R.
-You'll learn the basics of how strings work and how to create them by hand.
+This chapter introduces you to strings.
+You'll learn the basics of how strings work in R and how to create them "by hand".
 Big topic so spread over three chapters: here we'll focus on the basic mechanics, in Chapter \@ref(regular-expressions) we'll dive into the details of regular expressions the sometimes cryptic language for describing patterns in strings, and we'll return to strings later in Chapter \@ref(programming-with-strings) when we think about them about from a programming perspective (rather than a data analysis perspective).
+We'll finish up with a discussion of some of the new challenges that arise when working with non-English strings.
 
 While base R contains functions that allow us to perform pretty much all of the operations described in this chapter, here we're going to use the **stringr** package.
 stringr has been carefully designed to be as consistent as possible so that knowledge gained about one function can be more easily transferred to the next.
@@ -111,7 +112,7 @@ str_view(x)
 
 ## Combining strings
 
-Use `str_c()`[^strings-2] to join together multiple strings into a single string:
+Use `str_c()`[^strings-2] to join together multiple character vectors into a single vector:
 
 [^strings-2]: `str_c()` is very similar to the base `paste0()`.
     There are two main reasons I use it here: it obeys the usual rules for handling `NA`, and it uses the tidyverse recycling rules.
@@ -121,7 +122,14 @@ str_c("x", "y")
 str_c("x", "y", "z")
 ```
 
-Like most other functions in R, missing values are contagious.
+`str_c()` obeys the usual recycling rules:
+
+```{r}
+names <- c("Timothy", "Dewey", "Mable")
+str_c("Hi ", names, "!")
+```
+
+And like most other functions in R, missing values are contagious.
 You can use `coalesce()` to replace missing values with a value of your choosing:
 
 ```{r}
@@ -130,7 +138,7 @@ str_c("|-", x, "-|")
 str_c("|-", coalesce(x, ""), "-|")
 ```
 
-Since `str_c()` creates a new variable, you'll usually use it with a `mutate()`:
+Since `str_c()` creates a vector, you'll usually use it with a `mutate()`:
 
 ```{r}
 starwars %>% 
@@ -138,8 +146,8 @@ starwars %>%
 ```
 
 Another powerful way of combining strings is with the glue package.
-You can either use `glue::glue()` or call it via the `str_glue()` wrapper that string provides for you.
-Glue works a little differently to the other methods: you give it a single string using `{}` to indicate where you want to interpolate in existing variables:
+You can either use `glue::glue()` directly or call it via the `str_glue()` wrapper that stringr provides for you.
+Glue works a little differently to the other methods: you give it a single string then within the string use `{}` to indicate where existing variables should be evaluated:
 
 ```{r}
 str_glue("|-{x}-|")
@@ -155,27 +163,31 @@ starwars %>%
   )
 ```
 
-You can use any valid R code inside of `{}`, but we recommend placing more complex calculations in their own variables.
+You can use any valid R code inside of `{}`, but it's a good idea to pull complex calculations out into their own variables so you can more easily check your work.
 
 ## Length and subsetting
 
-It's also natural to think about the letters that make up an individual string.
+It's natural to think about the letters that make up an individual string.
 (But note that the idea of a "letter" isn't a natural fit to every language, we'll come back to that in Section \@ref(other-languages)).
-For example, `str_length()` tells you the length, the number of characters:
+For example, `str_length()` tells you the length of a string in characters:
 
 ```{r}
 str_length(c("a", "R for data science", NA))
 ```
 
-You could use this with `count()` to find the distribution of lengths of US babynames:
+You could use this with `count()` to find the distribution of lengths of US babynames, and then with `filter()` to look at the longest names:
 
 ```{r}
 babynames %>%
   count(length = str_length(name), wt = n)
+
+babynames %>% 
+  filter(str_length(name) == 15) %>% 
+  count(name, wt = n, sort = TRUE)
 ```
 
-You can extract parts of a string using `str_sub()`.
-As well as the string, `str_sub()` takes `start` and `end` arguments which give the (inclusive) characters to start and end at:
+You can extract parts of a string using `str_sub(string, start, end)`.
+The `start` and `end` arguments are inclusive, so the length of the returned string will be `end - start + 1`:
 
 ```{r}
 x <- c("Apple", "Banana", "Pear")
@@ -235,7 +247,7 @@ Note that you give `separate()` three columns but only two positions --- that's 
 
 TODO: draw diagram to emphasise that it's the space between the characters.
 
-Later on, we'll come back two related problems: the components having vary length are a separated by a character
+Later on, we'll come back two related problems: the components have varying length and are a separated by a character, or they have an varying number of components and you want to split up into rows, rather than columns.
 
 ### Exercises
 
@@ -250,6 +262,13 @@ stringr provides two useful tools for cases where your string is too long:
 
 -   `str_wrap(x, 20)` wraps a string introducing new lines so that each line is at most 20 characters (it doesn't hyphenate, however, so any word longer than 20 characters will make a longer time)
 
+```{r}
+x <- "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat."
+
+str_trunc(x, 30)
+str_view(str_wrap(x, 30))
+```
+
 ## String summaries
 
 `str_c()` combines multiple character vectors into a single character vector; the output is the same length as the input.
@@ -257,6 +276,8 @@ An related function is `str_flatten()`: it takes a character vector and returns 
 
 ```{r}
 str_flatten(c("x", "y", "z"))
+str_flatten(c("x", "y", "z"), ", ")
+str_flatten(c("x", "y", "z"), ", ", ", and ")
 ```
 
 Just like `sum()` and `mean()` take a vector of numbers and return a single number, `str_flatten()` takes a character vector and returns a single string.
@@ -287,19 +308,23 @@ x <- c("apple", "banana", "pear")
 str_detect(x, "e")
 ```
 
-This makes it a logical pairing with `filter()`:
+This makes it a logical pairing with `filter()`.
+The following example returns all names that contain a lower-case "x":
 
 ```{r}
 babynames %>% filter(str_detect(name, "x"))
 ```
 
 Remember that when you use a logical vector in a numeric context, `FALSE` becomes 0 and `TRUE` becomes 1.
-That makes `sum()` and `mean()` useful if you want to answer questions about matches across a larger vector:
+That means you can use `summarise()` with `sum()` or `mean()` and `str_detect()` if you want to answer questions about the prevalence of patterns.
+For example, the following snippet, gives the proportion of names containing an "x" by year:
 
-```{r}
+```{r, fig.alt = "A timeseries showing the proportion of baby names that contain the letter x. The proportion declines gradually from 8 per 1000 in 1880 to 4 per 1000 in 1980, then increases rapidly to 16 per 1000 in 2019."}
 babynames %>% 
   group_by(year) %>% 
-  summarise(prop_x = mean(str_detect(name, "x")))
+  summarise(prop_x = mean(str_detect(name, "x"))) %>% 
+  ggplot(aes(year, prop_x)) + 
+  geom_line()
 ```
 
 (Note that this gives us the proportion of names that contain an x; if you wanted the proportion of babies given a name containing an x, you'd need to perform a weighted mean).
@@ -314,6 +339,7 @@ It's natural to use `str_count()` with `mutate()`:
 
 ```{r}
 babynames %>% 
+  distinct(name) %>% 
   mutate(
     vowels = str_count(name, "[aeiou]"),
     consonants = str_count(name, "[^aeiou]")
@@ -322,63 +348,76 @@ babynames %>%
 
 ### Exercises
 
-1.  For each of the following challenges, try solving it by using both a single regular expression, and a combination of multiple `str_detect()` calls.
-
-    a.  Find all words that start or end with `x`.
-    b.  Find all words that start with a vowel and end with a consonant.
-    c.  Are there any words that contain at least one of each different vowel?
-
-2.  What word has the highest number of vowels?
+1.  What word has the highest number of vowels?
     What word has the highest proportion of vowels?
     (Hint: what is the denominator?)
 
 ## Introduction to regular expressions
 
-Before we can continue on we need to discuss the second argument to continue to `str_detect()` --- it's not a fixed string, but a pattern, called a regular expression.
-A regular expression uses special characters
+Before we can continue on we need to discuss the second argument to `str_detect()` --- the pattern that you want to match.
+Above, I used a simple string, but the pattern actually a much richer tool called a **regular expression**.
+A regular expression uses special characters to match string patterns.
+For example, `.` will match any character, so `"a."` will match any string that contains an a followed by another character:
 
 ```{r}
-str_detect(x, ".")
+str_detect(c("a", "ab", "ae", "bd", "ea", "eab"), "a.")
 ```
 
-You can opt-out with by using `fixed`:
+`str_view()` shows you regular expressions to help understand what's happening:
 
 ```{r}
-str_detect(x, fixed("."))
+str_view(c("a", "ab", "ae", "bd", "ea", "eab"), "a.")
 ```
 
-Note that regular expressions are case sensitive by default:
+Regular expressions are a powerful and flexible language which we'll come back to in Chapter \@ref(regular-expressions).
+Here we'll use only the most important components of the syntax as you learn the other stringr tools for working with patterns.
+
+There are three useful **quantifiers** that can be applied to other pattern: `?` makes a pattern option (i.e. it matches 0 or 1 times), `+` lets a pattern repeat (ie. it matches at least once), and `*` lets a pattern be optional or repeat (i.e. it matches any number of times, including 0).
+
+-   `ab?` match an "a", optionally followed by a b
+
+-   `ab+` matches an "a", followed by at least one b
+
+-   `ab*` matches an "a", followed by any number of bs
+
+You can use `()` to control precedence:
+
+-   `(ab)?` optionally matches "ab"
+
+-   `(ab)+` matches one or more "ab" repeats
 
 ```{r}
-babynames %>% filter(str_detect(name, "X"))
-babynames %>% filter(str_detect(name, fixed("X", ignore_case = TRUE)))
+str_view(c("aba", "ababab", "abbbbbb"), "ab+")
+str_view(c("aba", "ababab", "abbbbbb"), "(ab)+")
 ```
 
-A common use of `str_detect()` is to select the elements that match a pattern.
-This makes it a natural pairing with `filter()`.
-The following regexp finds all names with repeated pairs of letters (you'll learn how that regexp works in the next chapter)
+There are various alternatives to `.` that match a restricted set of characters.
+One useful operator is the **character class:** `[abcd]` match "a", "b", "c", or "d"; `[^abcd]` matches anything **except** "a", "b", "c", or "d".
+
+You can opt-out of the regular expression rules by using `fixed`:
 
 ```{r}
-babynames %>% 
-  filter(n > 100) %>% 
-  count(name, wt = n) %>% 
-  filter(str_detect(name, "(..).*\\1"))
+str_view(c("", "a", "."), fixed("."))
 ```
 
-Simple patterns we'll use:
-
--   `.` match any character
-
--   `[abcd]` match "a", "b", "c", or "d".
-
--   `+` means match one or more: `a+` means match one or more as in a row; `.+` means match one or more of anything; `[abcd]+` means match one of more of a/b/c/d in a row.
-
-Can use `str_view_all()` see what a regular expression matches:
+Note that both fixed strings and regular expressions are case sensitive by default.
+You can opt out by setting `ignore_case = TRUE`.
 
 ```{r}
-str_view_all(x, "p+")
-str_view_all(x, "a.")
+str_view_all("x  X  xy", "X")
+str_view_all("x  X  xy", fixed("X", ignore_case = TRUE))
+str_view_all("x  X  xy", regex(".Y", ignore_case = TRUE))
 ```
+
+We'll come back to case later, because it's not trivial for many languages.
+
+### Exercises
+
+1.  For each of the following challenges, try solving it by using both a single regular expression, and a combination of multiple `str_detect()` calls.
+
+    a.  Find all words that start or end with `x`.
+    b.  Find all words that start with a vowel and end with a consonant.
+    c.  Are there any words that contain at least one of each different vowel?
 
 ## Replacing matches
 
@@ -402,6 +441,9 @@ str_replace_all(x, c("1" = "one", "2" = "two", "3" = "three"))
 
 Use in `mutate()`
 
+Using pipe inside mutate.
+Recommendation to make a function, and think about testing it --- don't need formal tests, but useful to build up a set of positive and negative test cases as you.
+
 #### Exercises
 
 1.  Replace all forward slashes in a string with backslashes.
@@ -412,53 +454,6 @@ Use in `mutate()`
     Which of those strings are still words?
 
 ## Extract full matches
-
-To extract the actual text of a match, use `str_extract()`.
-To show that off, we're going to need a more complicated example.
-I'm going to use the [Harvard sentences](https://en.wikipedia.org/wiki/Harvard_sentences), which were designed to test VOIP systems, but are also useful for practicing regexps.
-These are provided in `stringr::sentences`:
-
-```{r}
-length(sentences)
-head(sentences)
-```
-
-Imagine we want to find all sentences that contain a colour.
-We first create a vector of colour names, and then turn it into a single regular expression:
-
-```{r}
-colours <- c("red", "orange", "yellow", "green", "blue", "purple")
-colour_match <- str_c(colours, collapse = "|")
-colour_match
-```
-
-Now we can select the sentences that contain a colour, and then extract the colour to figure out which one it is:
-
-```{r}
-has_colour <- str_subset(sentences, colour_match)
-matches <- str_extract(has_colour, colour_match)
-head(matches)
-```
-
-Note that `str_extract()` only extracts the first match.
-We can see that most easily by first selecting all the sentences that have more than 1 match:
-
-```{r}
-more <- sentences[str_count(sentences, colour_match) > 1]
-str_view_all(more, colour_match)
-
-str_extract(more, colour_match)
-```
-
-This is a common pattern for stringr functions, because working with a single match allows you to use much simpler data structures.
-To get all matches, use `str_extract_all()`.
-It returns a list, so we'll come back to this later on.
-
-### Exercises
-
-1.  In the previous example, you might have noticed that the regular expression matched "flickered", which is not a colour. Modify the regex to fix the problem.
-
-## Extract part of matches
 
 If your data is in a tibble, it's often easier to use `tidyr::extract()`.
 It works like `str_match()` but requires you to name the matches, which are then placed in new columns:
@@ -471,8 +466,13 @@ tibble(sentence = sentences) %>%
   )
 ```
 
-#### Exercises
+### Exercises
 
+1.  In the previous example, you might have noticed that the regular expression matched "flickered", which is not a colour. Modify the regex to fix the problem.
+
+```{=html}
+<!-- -->
+```
 1.  Find all words that come after a "number" like "one", "two", "three" etc.
     Pull out both the number and the word.
 
