@@ -348,9 +348,7 @@ babynames %>%
 
 ### Exercises
 
-1.  What word has the highest number of vowels?
-    What word has the highest proportion of vowels?
-    (Hint: what is the denominator?)
+1.  What word has the highest number of vowels? What word has the highest proportion of vowels? (Hint: what is the denominator?)
 
 ## Introduction to regular expressions
 
@@ -469,15 +467,8 @@ tibble(sentence = sentences) %>%
 ### Exercises
 
 1.  In the previous example, you might have noticed that the regular expression matched "flickered", which is not a colour. Modify the regex to fix the problem.
-
-```{=html}
-<!-- -->
-```
-1.  Find all words that come after a "number" like "one", "two", "three" etc.
-    Pull out both the number and the word.
-
-2.  Find all contractions.
-    Separate out the pieces before and after the apostrophe.
+2.  Find all words that come after a "number" like "one", "two", "three" etc. Pull out both the number and the word.
+3.  Find all contractions. Separate out the pieces before and after the apostrophe.
 
 ## Strings -\> Columns
 
@@ -532,17 +523,38 @@ starwars %>%
 3.  What does splitting with an empty string (`""`) do?
     Experiment, and then read the documentation.
 
-## Other languages {#other-languages}
+## Other writing systems {#other-languages}
+
+Unicode is a system for representing the many writing systems used around the world.
+Fundamental unit is a **code point**.
+This usually represents something like a letter or symbol, but might also be formatting like a diacritic mark or a (e.g.) the skin tone of an emoji.
 
 Encoding, and why not to trust `Encoding`.
 As a general rule, we recommend using UTF-8 everywhere, converting as a early as possible (i.e. by using the `encoding` argument to `readr::locale()`).
 
+All stringr functions default to the English locale.
+This ensures that your code works the same way on every system, avoiding subtle bugs.
+
+Include some examples from [<https://gankra.github.io/blah/text-hates-you/>](https://gankra.github.io/blah/text-hates-you/){.uri}.
+
 ### Length and subsetting
 
 This seems like a straightforward computation if you're only familiar with English, but things get complex quick when working with other languages.
-Include some examples from <https://gankra.github.io/blah/text-hates-you/>.
 
-This is a problem even with European problem because Unicode provides two ways of representing characters with accents: many common characters have a special codepoint, but others can be built up from individual components.
+Four most common are Latin, Chinese, Arabic, and Devangari, which represent three different systems of writing systems:
+
+-   Latin uses an alphabet, where each consonant and vowel gets its own letter.
+
+-   Chinese.
+    Logograms.
+
+-   Arabic is an abjad, only consonants are written and vowels are optionally as diacritics.
+    Additionally, it's written from right-to-left, so the first letter is the letter on the far right.
+
+-   Devangari is an abugida where each symbol represents a consonant-vowel pair, , vowel notation secondary.
+
+This is a problem even with Latin alphabets because many languages use **diacritics**, glyphs added to the basic alphabet.
+This is a problem because Unicode provides two ways of representing characters with accents: many common characters have a special codepoint, but others can be built up from individual components.
 
 ```{r}
 x <- c("\u00e1", "a\u0301")
@@ -551,7 +563,30 @@ str_length(x)
 str_sub(x, 1, 1)
 ```
 
-### Locales
+### Collation rules
+
+`coll()`: compare strings using standard **coll**ation rules.
+This is useful for doing case insensitive matching.
+Note that `coll()` takes a `locale` parameter that controls which rules are used for comparing characters.
+Unfortunately different parts of the world use different rules!B
+oth `fixed()` and `regex()` have `ignore_case` arguments, but they do not allow you to pick the locale: they always use the default locale.
+You can see what that is with the following code; more on stringi later.
+
+```{r}
+a1 <- "\u00e1"
+a2 <- "a\u0301"
+c(a1, a2)
+a1 == a2
+
+str_detect(a1, fixed(a2))
+str_detect(a1, coll(a2))
+```
+
+The downside of `coll()` is speed; because the rules for recognising which characters are the same are complicated, `coll()` is relatively slow compared to `regex()` and `fixed()`.
+
+### Upper and lower case
+
+Relatively few writing systems have upper and lower case: Latin, Greek, and Cyrillic, plus a handful of lessor known languages.
 
 Above I used `str_to_lower()` to change the text to lower case.
 You can also use `str_to_upper()` or `str_to_title()`.
@@ -566,8 +601,23 @@ str_to_upper(c("i", "ı"), locale = "tr")
 ```
 
 The locale is specified as a ISO 639 language code, which is a two or three letter abbreviation.
-If you don't already know the code for your language, [Wikipedia](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes) has a good list.
+If you don't already know the code for your language, [Wikipedia](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes) has a good list, and you can see which are supported with `stringi::stri_locale_list()`.
 If you leave the locale blank, it will use English.
+
+The locale also affects case-insensitive matching, which `coll(ignore_case =  TRUE)` which you can control with `coll()`:
+
+```{r}
+i <- c("Iİiı")
+
+str_view_all(i, coll("i", ignore_case = TRUE))
+str_view_all(i, coll("i", ignore_case = TRUE, locale = "tr"))
+```
+
+You can also do case insensitive matching this `fixed(ignore_case = TRUE)`, but this uses a simple approximation which will not work in all cases.
+
+### Sorting
+
+Unicode collation algorithm: <https://unicode.org/reports/tr10/>
 
 Another important operation that's affected by the locale is sorting.
 The base R `order()` and `sort()` functions sort strings using the current locale.
@@ -582,50 +632,3 @@ str_sort(x, locale = "haw") # Hawaiian
 ```
 
 TODO: add connection to `arrange()`
-
-### `coll()`
-
-Beware using `fixed()` with non-English data.
-It is problematic because there are often multiple ways of representing the same character.
-For example, there are two ways to define "á": either as a single character or as an "a" plus an accent:
-
-```{r}
-a1 <- "\u00e1"
-a2 <- "a\u0301"
-c(a1, a2)
-a1 == a2
-```
-
-They render identically, but because they're defined differently, `fixed()` doesn't find a match.
-Instead, you can use `coll()`, defined next, to respect human character comparison rules:
-
-```{r}
-str_detect(a1, fixed(a2))
-str_detect(a1, coll(a2))
-```
-
--   
-
-`coll()`: compare strings using standard **coll**ation rules.
-This is useful for doing case insensitive matching.
-Note that `coll()` takes a `locale` parameter that controls which rules are used for comparing characters.
-Unfortunately different parts of the world use different rules!
-
-```{r}
-# That means you also need to be aware of the difference
-# when doing case insensitive matches:
-i <- c("I", "İ", "i", "ı")
-i
-
-str_subset(i, coll("i", ignore_case = TRUE))
-str_subset(i, coll("i", ignore_case = TRUE, locale = "tr"))
-```
-
-Both `fixed()` and `regex()` have `ignore_case` arguments, but they do not allow you to pick the locale: they always use the default locale.
-You can see what that is with the following code; more on stringi later.
-
-```{r}
-stringi::stri_locale_info()
-```
-
-The downside of `coll()` is speed; because the rules for recognising which characters are the same are complicated, `coll()` is relatively slow compared to `regex()` and `fixed()`.
