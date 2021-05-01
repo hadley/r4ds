@@ -528,14 +528,25 @@ starwars %>%
 Unicode is a system for representing the many writing systems used around the world.
 Fundamental unit is a **code point**.
 This usually represents something like a letter or symbol, but might also be formatting like a diacritic mark or a (e.g.) the skin tone of an emoji.
+Character vs grapheme cluster.
 
-Encoding, and why not to trust `Encoding`.
-As a general rule, we recommend using UTF-8 everywhere, converting as a early as possible (i.e. by using the `encoding` argument to `readr::locale()`).
+Include some examples from <https://gankra.github.io/blah/text-hates-you/>.
 
 All stringr functions default to the English locale.
 This ensures that your code works the same way on every system, avoiding subtle bugs.
 
-Include some examples from [<https://gankra.github.io/blah/text-hates-you/>](https://gankra.github.io/blah/text-hates-you/){.uri}.
+Maybe things you think are true, but aren't list?
+
+### Encoding
+
+You will not generally find the base R `Encoding()` to be useful because it only supports three different encodings (and interpreting what they mean is non-trivial) and it only tells you the encoding that R thinks it is, not what it really is.
+And typically the problem is that the declaring encoding is wrong.
+
+The tidyverse follows best practices[^strings-3] of using UTF-8 everywhere, so any string you create with the tidyverse will use UTF-8.
+It's still possible to have problems, but they'll typically arise during data import.
+Once you've diagnosed you have an encoding problem, you should fix it in data import (i.e. by using the `encoding` argument to `readr::locale()`).
+
+[^strings-3]: <http://utf8everywhere.org>
 
 ### Length and subsetting
 
@@ -547,20 +558,43 @@ Four most common are Latin, Chinese, Arabic, and Devangari, which represent thre
 
 -   Chinese.
     Logograms.
+    Half width vs full width.
+    English letters are roughly twice as high as they are wide.
+    Chinese characters are roughly square.
 
 -   Arabic is an abjad, only consonants are written and vowels are optionally as diacritics.
     Additionally, it's written from right-to-left, so the first letter is the letter on the far right.
 
 -   Devangari is an abugida where each symbol represents a consonant-vowel pair, , vowel notation secondary.
 
+> For instance, 'ch' is two letters in English and Latin, but considered to be one letter in Czech and Slovak.
+> --- <http://utf8everywhere.org>
+
+```{r}
+# But
+str_split("check", boundary("character", locale = "cs_CZ"))
+```
+
 This is a problem even with Latin alphabets because many languages use **diacritics**, glyphs added to the basic alphabet.
 This is a problem because Unicode provides two ways of representing characters with accents: many common characters have a special codepoint, but others can be built up from individual components.
 
 ```{r}
-x <- c("\u00e1", "a\u0301")
-x
+x <- c("á", "x́")
 str_length(x)
+# str_width(x)
 str_sub(x, 1, 1)
+
+# stri_width(c("全形", "ab"))
+# 0, 1, or 2
+# but this assumes no font substitution
+```
+
+```{r}
+cyrillic_a <- "А"
+latin_a <- "A"
+cyrillic_a == latin_a
+stringi::stri_escape_unicode(cyrillic_a)
+stringi::stri_escape_unicode(latin_a)
 ```
 
 ### Collation rules
@@ -621,14 +655,13 @@ Unicode collation algorithm: <https://unicode.org/reports/tr10/>
 
 Another important operation that's affected by the locale is sorting.
 The base R `order()` and `sort()` functions sort strings using the current locale.
-If you want robust behaviour across different computers, you may want to use `str_sort()` and `str_order()` which take an additional `locale` argument:
+If you want robust behaviour across different computers, you may want to use `str_sort()` and `str_order()` which take an additional `locale` argument.
+
+Can also control the "strength", which determines how accents are sorted.
 
 ```{r}
-x <- c("apple", "eggplant", "banana")
-
-str_sort(x, locale = "en")  # English
-
-str_sort(x, locale = "haw") # Hawaiian
+str_sort(c("a", "ch", "c", "h"))
+str_sort(c("a", "ch", "c", "h"), locale = "cs_CZ")
 ```
 
 TODO: add connection to `arrange()`
