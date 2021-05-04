@@ -19,3 +19,20 @@ options(
   pillar.bold = TRUE,
   stringr.html = FALSE
 )
+
+
+status <- function(type) {
+  status <- switch(type,
+    restructuring = "undergoing heavy restructuring and may be confusing or incomplete",
+    drafting = "currently a dumping ground for ideas, and we don't recommend reading it",
+    stop("Invalid `type`", call. = FALSE)
+  )
+
+  cat(paste0(
+    "::: {.rmdnote}\n",
+    "You are reading the work-in-progress second edition of R for Data Science. ",
+    "This chapter is currently ", status, ". ",
+    "You can find the polished first edition at <https://r4ds.had.co.nz>.\n",
+    ":::\n"
+  ))
+}
