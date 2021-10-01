@@ -15,13 +15,16 @@ The best practices presented in this paper will save you much headache down the 
 ### Prerequisites
 
 In this chapter, you'll learn how to load data from Excel spreadsheets in R with the **readxl** package.
-This package is not part of the core tidyverse, therefore you need to load it individually, but since the package is part of the non-core tidyverse packages, you don't need to install it individually if you already have tidyverse installed.
-We will also use tidyverse in the examples.
+This package is non-core tidyverse, so you need to load it explicitly but it is installed automatically when you install the tidyverse package.
 
 ```{r}
 library(readxl)
 library(tidyverse)
 ```
+
+**xlsx** and **XLConnect** can be used for reading data from and writing data to Excel spreadsheets.
+However, these two packages require Java installed on your machine and the rJava package.
+Due to potential challenges with installation, we recommend using alternative packages we've introduced in this chapter.
 
 ### Getting started
 
@@ -257,6 +260,41 @@ The top-left corner, `A5`, translates to `c(5, 1)` (5th row down, 1st column) an
 read_excel(deaths_path, range = cell_limits(c(5, 1), c(15, 6)))
 ```
 
+If you have control over the sheet, an even better way is to create a "named range".
+This is useful within excel because it reduces duplication... but it's also verty useful when identifying when cells to read...
+
+### Data types
+
+In the underlying for CSV files, all the values are strings.
+This is not particularly true to the data, but it is simple: everything is a string.
+
+The underlying data in spreadsheets is more complex.
+A cell can be one of ???
+things:
+
+-   A string, like "ten"
+
+-   A number, like "10"
+
+Note, importantly that there's no special type for date/times --- in a spreadsheet date/times are just numbers with special formatting.
+
+Something about floating point numbers --- in my sheet it looks like 9 but in R it looks like 8.99999.
+Jenny will know more.
+
+So what happens if you have a column that's a mix of these types?
+readxl has to make some decisions.
+
+Confusingly it's also possible to have something that looks like a number but is actually a string (e.g. type `'10` into excel).
+
+`col_type = "list"` keeps the "original" values without trying to get all the info out.
+
+### Data not in cell values
+
+**tidyxl** is useful for importing non-tabular data from Excel files into R.
+For example, tidyxl doesn't coerce a pivot table into a data frame.
+
+<https://nacnudus.github.io/spreadsheet-munging-strategies/>
+
 ### Writing to Excel
 
 Let's create a small data frame that we can then write out.
@@ -294,7 +332,12 @@ For alternatives, see Section \@ref(writing-to-a-file).
 read_excel("data/bake-sale.xlsx")
 ```
 
+### Formatted output
+
 The readxl package is a light-weight solution for writing a simple Excel spreadsheet, but if you're interested in additional features like writing to sheets within a spreadsheet and styling, you will want to use the **openxlsx** package.
+
+(Need some comment about code being not of the tidyverse. And you'll need to install separately. Camel case; can't pipe; argument in different order. Feel unfamiliar. But that's ok; you'll encounter this as you expand outside of this book)
+
 Below we show how to write a spreadsheet with three sheets, one for each species of penguins in the `penguins` data frame.
 
 ```{r message = FALSE}
@@ -310,12 +353,21 @@ addWorksheet(penguins_species, sheetName = "Gentoo")
 addWorksheet(penguins_species, sheetName = "Chinstrap")
 
 # Write data to each sheet
-writeDataTable(penguins_species, sheet = "Adelie", 
-               x = penguins %>% filter(species == "Adelie"))
-writeDataTable(penguins_species, sheet = "Gentoo", 
-               x = penguins %>% filter(species == "Gentoo"))
-writeDataTable(penguins_species, sheet = "Chinstrap", 
-               x = penguins %>% filter(species == "Chinstrap"))
+writeDataTable(
+  penguins_species, 
+  sheet = "Adelie", 
+  x = penguins %>% filter(species == "Adelie")
+)
+writeDataTable(
+  penguins_species, 
+  sheet = "Gentoo", 
+  x = penguins %>% filter(species == "Gentoo")
+)
+writeDataTable(
+  penguins_species, 
+  sheet = "Chinstrap", 
+  x = penguins %>% filter(species == "Chinstrap")
+)
 ```
 
 This creates a workbook object:
@@ -330,19 +382,15 @@ And we can write this to this with `saveWorkbook()`.
 saveWorkbook(penguins_species, "data/penguins-species.xlsx")
 ```
 
+Needs some brief discussion of formatting --- lots of people want to fully control how the sheet looks.
+Just need some pointers where to look.
+
 The resulting spreadsheet is shown in Figure \@ref(fig:penguins-species).
 By default, openxlsx formats the data as an Excel table.
 
 ```{r penguins-species, fig.alt = "A look at the penguins spreadsheet in Excel. The spreadsheet contains has three sheets: Torgersen Island, Biscoe Island, and Dream Island.", fig.cap = "Spreadsheet called penguins.xlsx in Excel.", echo = FALSE}
 knitr::include_graphics("images/import-spreadsheets-penguins-species.png")
 ```
-
-### Other resources
-
-There are a few other R packages that are designed for working with Excel data in R.
-
--   **tidyxl** is useful for importing non-tabular data from Excel files into R. For example, tidyxl doesn't coerce a pivot table into a data frame.
--   **xlsx** and **XLConnect** can be used for reading data from and writing data to Excel spreadsheets. However, these two packages require Java installed on your machine and the rJava package. Due to potential challenges with installation, we recommend using alternative packages we've introduced in this chapter.
 
 ### Exercises
 
