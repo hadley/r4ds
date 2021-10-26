@@ -241,59 +241,70 @@ And as you move down a column, the number in the cell label increases, i.e.
 
 The data we want to read in starts in cell `A5` and ends in cell `F15`.
 In spreadsheet notation, this is `A5:F15`.
-We can supply this information to the `range` argument.
 
-```{r}
-read_excel(deaths_path, range = "A5:F15")
-```
+-   Supply this information to the `range` argument:
 
-We can also do this specifying rows.
+    ```{r results = "hide"}
+    read_excel(deaths_path, range = "A5:F15")
+    ```
 
-```{r}
-read_excel(deaths_path, range = cell_rows(c(5, 15)))
-```
+-   Specify rows:
 
-Or by specifying cells that mark the top-left and bottom-right corners of the data.
-The top-left corner, `A5`, translates to `c(5, 1)` (5th row down, 1st column) and the bottom-right corner, `F15`, translates to `c(15, 6)`.
+    ```{r results = "hide"}
+    read_excel(deaths_path, range = cell_rows(c(5, 15)))
+    ```
 
-```{r}
-read_excel(deaths_path, range = cell_limits(c(5, 1), c(15, 6)))
-```
+-   Specify cells that mark the top-left and bottom-right corners of the data -- the top-left corner, `A5`, translates to `c(5, 1)` (5th row down, 1st column) and the bottom-right corner, `F15`, translates to `c(15, 6)`:
+
+    ```{r results = "hide"}
+    read_excel(deaths_path, range = cell_limits(c(5, 1), c(15, 6)))
+    ```
 
 If you have control over the sheet, an even better way is to create a "named range".
-This is useful within excel because it reduces duplication... but it's also verty useful when identifying when cells to read...
+This is useful within Excel because named ranges help repeat formulas easier to create and they have some useful properties for creating dynamic charts and graphs as well.
+Even if you're not working in Excel, named ranges can be useful for identifying which cells to read into R.
+In the example above, the table we're reading in is named `Table1`, so we can read it in with the following.
+
+**TO DO:** Add this once reading in named ranges are implemented in readxl.
 
 ### Data types
 
-In the underlying for CSV files, all the values are strings.
+In CSV files, all values are strings.
 This is not particularly true to the data, but it is simple: everything is a string.
 
-The underlying data in spreadsheets is more complex.
-A cell can be one of ???
-things:
+The underlying data in Excel spreadsheets is more complex.
+A cell can be one of five things:
+
+-   A logical, like TRUE / FALSE
+
+-   A number, like "10" or "10.5"
+
+-   A date, which can also include time like "11/1/21" or "11/1/21 3:00 PM"
 
 -   A string, like "ten"
 
--   A number, like "10"
+-   A currency, which allows numeric values in a limited range and four decimal digits of fixed precision
 
-Note, importantly that there's no special type for date/times --- in a spreadsheet date/times are just numbers with special formatting.
+When working with spreadsheet data, it's important to keep in mind that how the underlying data is stored can be very different than what you see in the cell.
+For example, Excel has no notion of an integer.
+All numbers are stored as floating points, but you can choose to display the data with a customizable number of decimal points.
+Similarly, dates are actually stored as numbers, specifically the number of seconds since January 1, 1970.
+You can customize how you display the date by applying formatting in Excel.
+Confusingly, it's also possible to have something that looks like a number but is actually a string (e.g. type `'10` into a cell in Excel).
 
-Something about floating point numbers --- in my sheet it looks like 9 but in R it looks like 8.99999.
-Jenny will know more.
+These differences between how the underlying data are stored vs. how they're displayed can cause surprises when the data are loaded into R.
+By default readxl will guess the data type in a given column.
+A recommended workflow is to let readxl guess the column types, confirm that you're happy with the guessed column types, and if not, go back and re-import specifying `col_types` as shown in Section \@ref(reading-spreadsheets).
 
-So what happens if you have a column that's a mix of these types?
-readxl has to make some decisions.
-
-Confusingly it's also possible to have something that looks like a number but is actually a string (e.g. type `'10` into excel).
-
-`col_type = "list"` keeps the "original" values without trying to get all the info out.
+Another challenge is when you have a column in your Excel spreadsheet that has a mix of these types, e.g. some cells are numeric, others text, others dates.
+When importing the data into R readxl has to make some decisions.
+In these cases you can set the type for this column to `"list"`, which will load the column as a list of length 1 vectors, where the type of each element of the vector is guessed.
 
 ### Data not in cell values
 
 **tidyxl** is useful for importing non-tabular data from Excel files into R.
 For example, tidyxl doesn't coerce a pivot table into a data frame.
-
-<https://nacnudus.github.io/spreadsheet-munging-strategies/>
+See <https://nacnudus.github.io/spreadsheet-munging-strategies/> for more on strategies for working with non-tabular data from Excel.
 
 ### Writing to Excel
 
@@ -335,8 +346,11 @@ read_excel("data/bake-sale.xlsx")
 ### Formatted output
 
 The readxl package is a light-weight solution for writing a simple Excel spreadsheet, but if you're interested in additional features like writing to sheets within a spreadsheet and styling, you will want to use the **openxlsx** package.
-
-(Need some comment about code being not of the tidyverse. And you'll need to install separately. Camel case; can't pipe; argument in different order. Feel unfamiliar. But that's ok; you'll encounter this as you expand outside of this book)
+Note that this package is not part of the tidyverse so the functions and workflows may feel unfamiliar.
+For example, function names are camelCase, multiple functions can't be composed in pipelines, and arguments are in a different order than they tend to be in the tidyverse.
+However, this is ok.
+As your R learning and usage expands outside of this book you will encounter lots of different styles used in various R packages that you might need to use to accomplish specific goals in R.
+A good way of familiarizing yourself with the coding style used in a new package is to run the examples provided in function documentation to get a feel for the syntax and the output formats as well as reading any vignettes that might come with the package.
 
 Below we show how to write a spreadsheet with three sheets, one for each species of penguins in the `penguins` data frame.
 
@@ -382,15 +396,14 @@ And we can write this to this with `saveWorkbook()`.
 saveWorkbook(penguins_species, "data/penguins-species.xlsx")
 ```
 
-Needs some brief discussion of formatting --- lots of people want to fully control how the sheet looks.
-Just need some pointers where to look.
-
 The resulting spreadsheet is shown in Figure \@ref(fig:penguins-species).
 By default, openxlsx formats the data as an Excel table.
 
 ```{r penguins-species, fig.alt = "A look at the penguins spreadsheet in Excel. The spreadsheet contains has three sheets: Torgersen Island, Biscoe Island, and Dream Island.", fig.cap = "Spreadsheet called penguins.xlsx in Excel.", echo = FALSE}
 knitr::include_graphics("images/import-spreadsheets-penguins-species.png")
 ```
+
+See <https://ycphs.github.io/openxlsx/articles/Formatting.html> for an extensive discussion on further formatting functionality for data written from R to Excel with openxlsx.
 
 ### Exercises
 
