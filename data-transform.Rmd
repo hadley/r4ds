@@ -62,16 +62,6 @@ There are three other common types that aren't used here but you'll encounter la
 ### dplyr basics
 
 In this chapter you are going to learn the primary dplyr verbs which will allow you to solve the vast majority of your data manipulation challenges.
-They are organised into four camps:
-
--   Functions that operate on **rows**: `filter()` subsets rows based on the values of the columns, `slice()` and friends subsets rows based on their position, and `arrange()` changes the order of the rows.
-
--   Functions that operate on **columns**: `mutate()` creates new columns, `select()` columns, `rename()` changes their names, and `relocate()` which changes their positions.
-
--   Functions that operate on **groups**: `group_by()` divides data up into groups for analysis, and `summarise()` reduces each group to a single row.
-
-Later, in Chapter \@ref(relational-data), you'll learn about other verbs that work with **tables**, like the join functions and the set operations.
-
 All dplyr verbs work the same way:
 
 1.  The first argument is a data frame.
@@ -81,11 +71,22 @@ All dplyr verbs work the same way:
 3.  The result is a new data frame.
 
 Together these properties make it easy to chain together multiple simple steps to achieve a complex result.
+The verbs are organised into four groups:
+
+-   Functions that operate on **rows**: `filter()` subsets rows based on the values of the columns and `arrange()` changes the order of the rows.
+
+-   Functions that operate on **columns**: `mutate()` creates new columns, `select()` columns, `rename()` changes their names, and `relocate()` changes their positions.
+
+-   Functions that operate on **groups**: `group_by()` divides data up into groups for analysis, and `summarise()` reduces each group to a single row.
+
+-   Functions that operate on **tables**, like the join functions and the set operations.
+    We'll come back to these in in Chapter \@ref(relational-data).
+
 Let's dive in and see how these verbs work.
 
 ## Rows
 
-These functions affect the rows (the observations), leaving the columns (the variables) unchanged.
+`filter()` and `arrange()` affect the rows (the observations), leaving the columns (the variables) unchanged.
 `filter()` changes which rows are included without changing the order, `arrange()` changes the order without changing the membership.
 
 ### `filter()`
@@ -111,6 +112,7 @@ jan1 <- filter(flights, month == 1, day == 1)
 To use filtering effectively, you have to know how to select the observations that you want using the comparison operators.
 R provides the standard suite: `>`, `>=`, `<`, `<=`, `!=` (not equal), and `==` (equal).
 It also provides `%in%`: `filter(df, x %in% c(a, b, c))` will return all rows where `x` is `a`, `b`, or `c`.
+We'll come back to these operations again in Chapter \@ref(logicals-numbers).
 
 When you're starting out with R, the easiest mistake to make is to use `=` instead of `==` when testing for equality.
 `filter()` will let you know when this happens:
@@ -158,7 +160,7 @@ arrange(flights, desc(dep_delay))
 
 ## Columns
 
-These functions affect the columns (the variables) without changing the rows (the observations).
+`mutate()`, `select()`, `rename()`, and `relocate()` affect the columns (the variables) without changing the rows (the observations).
 `mutate()` creates new variables that are functions of the existing variables; `select()`, `rename()`, and `relocate()` changes which variables are present, their names, and their positions.
 
 ### `mutate()`
@@ -187,8 +189,8 @@ mutate(flights,
 )
 ```
 
-The leading `.` is a sign that `.before` is an argument to the function, not a new variable being created.
-You can also use `.after` to add after a variable, and use a variable name instead of a position:
+The leading `.` is a sign that `.before` is an argument to the function, not the name of a new variable.
+You can also use `.after` to add after a variable, and in both `.before` and `.after` you can the name of a variable name instead of a position:
 
 ```{r}
 mutate(flights,
@@ -212,7 +214,7 @@ mutate(flights,
 ### `select()` {#select}
 
 It's not uncommon to get datasets with hundreds or even thousands of variables.
-In this case, the first challenge is often narrowing in on the variables you're actually interested in.
+In this case, the first challenge is often focussing on just the variables you're interested in.
 `select()` allows you to rapidly zoom in on a useful subset using operations based on the names of the variables.
 
 `select()` is not terribly useful with the flights data because we only have 19 variables, but you can still get the general idea of how it works:
@@ -239,7 +241,7 @@ There are a number of helper functions you can use within `select()`:
 -   `num_range("x", 1:3)`: matches `x1`, `x2` and `x3`.
 
 See `?select` for more details.
-Once you know regular expressions (the topic of Chapter \@ref(regular-expressions)) you'll also be use `matches()` to select variables that match a regexp.
+Once you know regular expressions (the topic of Chapter \@ref(regular-expressions)) you'll also be use `matches()` to select variables that match a pattern.
 
 You can rename variables as you `select()` them by using `=`.
 The new name appears on the left hand side of the `=`, and the old variable appears on the right hand side:
@@ -267,7 +269,7 @@ By default it moves variables to the front:
 relocate(flights, time_hour, air_time)
 ```
 
-But you can use the `.before` and `.after` arguments to choose where to place them:
+But like with `mutate()`, you can use the `.before` and `.after` arguments to choose where to place them:
 
 ```{r}
 relocate(flights, year:dep_time, .after = time_hour)
@@ -406,13 +408,13 @@ daily %>% summarise(n = n())
 
 If you're happy with this behaviour, you can explicitly define it in order to suppress the message:
 
-```{r results = FALSE}
+```{r, results = FALSE}
 daily %>% summarise(n = n(), .groups = "drop_last")
 ```
 
 Alternatively, you can change the default behaviour by setting a different value, e.g. `"drop"` for dropping all levels of grouping or `"keep"` for same grouping structure as `daily`:
 
-```{r results = FALSE}
+```{r, results = FALSE}
 daily %>% summarise(n = n(), .groups = "drop")
 daily %>% summarise(n = n(), .groups = "keep")
 ```
@@ -433,25 +435,16 @@ daily %>%
 
 For the purposes of summarising, ungrouped data is treated as if all your data was in a single group, so you get one row back.
 
-### Selecting rows
-
-`arrange()` and `filter()` are mostly unaffected by grouping.
-But the slice functions are super useful:
-
--   `slice_head()` and `slice_tail()` select the first or last rows in each group.
-
--   `slice_max()` and `slice_min()` select the rows in each group with highest or lowest values.
-
--   `slice_sample()` random selects rows from each group.
-
-Each of these verbs takes either a `n` or `prop` argument depending on whether you want to select a fixed number of rows, or a number of rows proportional to the group size.
-
 ### Other verbs
+
+`group_by()` is usually paired with `summarise()`, but it's good to know how it affects other verbs:
 
 -   `select()`, `rename()`, `relocate()`: grouping has no affect
 
--   `filter()`, `mutate()`: computation happens per group.
+-   `mutate()`: computation happens per group.
     This doesn't affect the functions you currently know but is very useful once you learn about window functions, Section \@ref(window-functions).
+
+-   `arrange()` and `filter()` are mostly unaffected by grouping, unless you are doing computation (e.g. `filter(flights, dep_delay == min(dep_delay)`), in which case the `mutate()` caveat applies.
 
 ### Exercises
 
