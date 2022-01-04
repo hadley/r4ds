@@ -14,8 +14,6 @@ Here we'll focus mostly on pattern language itself, not the functions that use i
 That means we'll mostly work with character vectors, showing the results with `str_view()` and `str_view_all()`.
 You'll need to take what you learn and apply it to data frames with tidyr functions or by combining dplyr and stringr functions.
 
-The full language of regular expression includes some
-
 ### Prerequisites
 
 This chapter will use regular expressions as provided by the **stringr** package.
@@ -29,6 +27,9 @@ That's because stringr is built on top of the [stringi package](https://stringi.
 Fortunately, the basics of regular expressions are so well established that you're unlikely to encounter any differences when working with the patterns you'll learn in this book.
 You only need to be aware of the difference when you start to rely on advanced features like complex Unicode character ranges or special features that use the `(?…)` syntax.
 You can learn more about these advanced features in `vignette("regular-expressions", package = "stringr")`.
+
+Another useful reference is [https://www.regular-expressions.info/](https://www.regular-expressions.info/tutorial.html).
+It's not R specific, but it includes a lot more information about how regular expressions actually work.
 
 ## Escaping {#regexp-escaping}
 
@@ -113,13 +114,14 @@ You can use:
 
 ```{r}
 x <- c("apple", "banana", "pear")
-str_view(x, "^a")
-str_view(x, "a$")
+str_view(x, "a")  # match "a" anywhere
+str_view(x, "^a") # match "a" at start
+str_view(x, "a$") # match "a" at end
 ```
 
 To remember which is which, try this mnemonic which I learned from [Evan Misshula](https://twitter.com/emisshula/status/323863393167613953): if you begin with power (`^`), you end up with money (`$`).
 
-To force a regular expression to only match a complete string, anchor it with both `^` and `$`:
+To force a regular expression to only match the full string, anchor it with both `^` and `$`:
 
 ```{r}
 x <- c("apple pie", "apple", "apple cake")
@@ -138,46 +140,12 @@ str_view(x, "sum")
 str_view(x, "\\bsum\\b")
 ```
 
-### Alternation and parentheses
-
-You can use **alternation** to pick between one or more alternative patterns.
-For example, `abc|def` will match either `"abcef"`, or `"abdef"`.
-Note that the precedence for `|` is low, so you'll often need to use it with parentheses: `(abc)|(def)` will match either `"abc"`, or `"def"`.
-
-`abc|xyz` matches `abc` or `xyz` not `abcyz` or `abxyz`.
-Like with mathematical expressions, if precedence ever gets confusing, use parentheses to make it clear what you want:
-
-```{r}
-str_view(c("grey", "gray"), "gr(e|a)y")
-```
-
-### Matching multiple characters
-
-There are a number of special patterns that match more than one character.
-You've already seen `.`, which matches any character apart from a newline.
-There are three escaped pairs that match narrower classes of characters:
-
--   `\d`: matches any digit. `\D` matches anything that isn't a digit.
--   `\s`: matches any whitespace (e.g. space, tab, newline). `\S` matches anything that isn't whitespace.
--   `\w` matches any "word" character, i.e. letters and numbers. The complement, `\W`, matches any non-word character.
-
-Remember, to create a regular expression containing `\d` or `\s`, you'll need to escape the `\` for the string, so you'll type `"\\d"` or `"\\s"`.
-
-```{r}
-str_view_all("abcd12345!@#%. ", "\\d+")
-str_view_all("abcd12345!@#%. ", "\\D+")
-str_view_all("abcd12345!@#%. ", "\\w+")
-str_view_all("abcd12345!@#%. ", "\\W+")
-str_view_all("abcd12345!@#%. ", "\\s+")
-str_view_all("abcd12345!@#%. ", "\\S+")
-```
-
 ### Character classes
 
 You can also create your own collections of characters using `[]`:
 
 -   `[abc]`: matches a, b, or c.
--   `[a-z]`: matches every character between a and z.
+-   `[a-z]`: matches every character between a and z. `[0-9]` matches any number.
 -   `[^abc]`: matches anything except a, b, or c.
 -   `[\^\-]`: matches `^` or `-`.
 
@@ -189,6 +157,28 @@ This can be more readable because there are fewer slashes, but it also requires 
 str_view(c("abc", "a.c", "a*c", "a c"), "a[.]c")
 str_view(c("abc", "a.c", "a*c", "a c"), ".[*]c")
 str_view(c("abc", "a.c", "a*c", "a c"), "a[ ]")
+```
+
+### Shorthand character classes
+
+There are a few character classes that are used so commonly that they get their own shortcut.
+You've already seen `.`, which matches any character apart from a newline.
+There are three other useful pairs:
+
+-   `\d`: matches any digit; `\D` matches anything that isn't a digit.
+-   `\s`: matches any whitespace (e.g. space, tab, newline); `\S` matches anything that isn't whitespace.
+-   `\w` matches any "word" character, i.e. letters and numbers; `\W`, matches any non-word character.
+
+Remember, to create a regular expression containing `\d` or `\s`, you'll need to escape the `\` for the string, so you'll type `"\\d"` or `"\\s"`.
+The following code demonstrates the different matches with a selection of letters, numbers, and punctuation characters.
+
+```{r}
+str_view_all("abcd12345!@#%. ", "\\d+")
+str_view_all("abcd12345!@#%. ", "\\D+")
+str_view_all("abcd12345!@#%. ", "\\w+")
+str_view_all("abcd12345!@#%. ", "\\W+")
+str_view_all("abcd12345!@#%. ", "\\s+")
+str_view_all("abcd12345!@#%. ", "\\S+")
 ```
 
 ### Quantifiers
@@ -220,6 +210,27 @@ This is an advanced feature of regular expressions, but it's useful to know that
 str_view(x, 'C{2,3}?')
 str_view(x, 'C+[LX]+')
 str_view(x, 'C+[LX]+?')
+```
+
+### Alternation
+
+You can use **alternation** to pick between one or more alternative patterns.
+This is a more general form of character classes that's not limited to match single characters.
+I recommend always pairing `|` with parentheses, to make it very clear what the alternatives are.
+Here are a few examples:
+
+-   Match apple, pear, or banana: `"(apple)|(pear)|(banana)"`
+-   Match 3 letters or two digits: `"(\\w{3})|(\\d{3})"`
+
+We'll come back to parentheses very shortly in more detail.
+
+For example, `abc|def` will match either `"abcef"`, or `"abdef"`.
+Note that the precedence for `|` is low, so you'll often need to use it with parentheses: `(abc)|(def)` will match either `"abc"`, or `"def"`.
+`abc|xyz` matches `abc` or `xyz` not `abcyz` or `abxyz`.
+Like with mathematical expressions, if precedence ever gets confusing, use parentheses to make it clear what you want:
+
+```{r}
+str_view(c("grey", "gray"), "gr(e|a)y")
 ```
 
 ### Exercises
@@ -268,7 +279,7 @@ str_view(x, 'C+[LX]+?')
 
 11. Solve the beginner regexp crosswords at <https://regexcrossword.com/challenges/beginner>.
 
-## Parentheses, grouping and backreferences
+## Grouping and capturing
 
 Earlier, you learned about parentheses as a way to disambiguate complex expressions.
 Parentheses also create a numbered capturing group (number 1, 2 etc.).
@@ -358,6 +369,10 @@ str_view_all("this is a sentence", "\\b")
 str_view_all("this is a sentence", "^")
 ```
 
+### Greediness
+
+Regular expressions always attempt to match the longest possible string.
+
 ### Multi-line strings
 
 -   `dotall = TRUE` allows `.` to match everything, including `\n`.
@@ -370,7 +385,7 @@ str_view_all("this is a sentence", "^")
     str_extract_all(x, regex("^Line", multiline = TRUE))[[1]]
     ```
 
-## Options
+## Flags
 
 When you use a pattern that's a string, it's automatically wrapped into a call to `regex()`:
 
