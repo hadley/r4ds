@@ -6,17 +6,17 @@ status("restructuring")
 
 ## Introduction
 
-You learned the basics of regular expressions in Chapter \@ref(strings), but regular expressions really are their own miniature language so it's worth spending some extra time on them.
-Regular expressions can be overwhelming at first, and you'll think a cat walked across your keyboard.
-Fortunately, as your understanding improves they'll soon start to make sense.
+You learned the basics of regular expressions in Chapter \@ref(strings), but because regular expressions are a miniature language it's worth spending some extra time on the details.
 
-Here we'll focus mostly on pattern language itself, not the functions that use it.
-That means we'll mostly work with character vectors, showing the results with `str_view()` and `str_view_all()`.
-You'll need to take what you learn and apply it to data frames with tidyr functions or by combining dplyr and stringr functions.
+The chapter starts by expanding your knowledge of patterns, to cover six important new topics (escaping, anchoring, character classes, shorthand classes, quantifiers, and alternation).
+Here we'll focus mostly on the language itself, not the functions that use it.
+That means we'll mostly work with toy character vectors, showing the results with `str_view()` and `str_view_all()`.
+You'll need to take what you learn here and apply it to data frames with tidyr functions or by combining dplyr and stringr functions.
 
-We'll first expand your knowledge of patterns.
-Then we'll talk about "grouping" and "capturing" and how they work with `str_separate_group()`.
-We'll finish up with a few important details for how regexps work, and then discuss some useful strategies.
+Next we'll talk about the important concepts of "grouping" and "capturing" which give you new ways to extract variables out of strings using `tidyr::separate_group()`.
+Grouping also allows you to use back references which allow you do things like match repeated patterns.
+
+We'll finish by discussing the various "flags" that allow you to tweak the operation of regular expressions and then cover a details about how regular expressions work that , and then discuss some useful strategies .
 
 ### Prerequisites
 
@@ -44,16 +44,16 @@ It's not R specific, but it includes a lot more information about how regular ex
 3.  What patterns will the regular expression `\..\..\..` match?
     How would you represent it as a string?
 
-## More patterns
+## Pattern language
 
--   Anchors, which allow you to ensure the match is at the start or end of a string.
--   Alternation and parentheses, which allows you to match "this" or "that", and allow you to control which
--   ???
--   Character classes, which allow you to assemble
--   Quantifiers, which controls the number of times a pattern matches
--   Grouping and backreferences
+You learned the very basics of the regular expression pattern language in Chapter \@ref(strings), and now its time to dig into more of the details.
+First, we'll start with **escaping**, which allows you to match characters that the pattern language otherwise treats specially.
+Next you'll learn about **anchors**, which allow you to match the start or end of the string.
+Then you'll learn about **character classes** and their shortcuts, which allow you to match any character from a set.
+We'll finish up with **quantifiers**, which control how many times a pattern can match, and **alternation**, which allows you to match either *this* or *that.*
 
-Here I used the technical names for each components, even when not that evocative of the purpose, because it's helpful to know the correct terms if you later want to Google for more information.
+The terms I use here are the technical names for each component.
+They're not always the most evocative of their purpose, but it's very helpful to know the correct terms if you later want to Google for more details.
 
 ### Escaping {#regexp-escaping}
 
@@ -294,6 +294,8 @@ For example, the following regular expression finds all fruits that have a repea
 str_view(fruit, "(..)\\1", match = TRUE)
 ```
 
+### Replacement
+
 You can also use backreferences when replacing.
 The following code will switch the order of the second and third words:
 
@@ -342,6 +344,68 @@ str_match(x, "(gr(?:e|a)y)")
     b.  Contain a repeated pair of letters (e.g. "church" contains "ch" repeated twice.)
     c.  Contain one letter repeated in at least three places (e.g. "eleven" contains three "e"s.)
 
+## Flags
+
+The are a number of settings, called **flags**, that you can use to control some of the details of the pattern language.
+In stringr, you can supply these by instead of passing a simple string as a pattern, by passing the object created by `regex()`:
+
+```{r, eval = FALSE}
+# The regular call:
+str_view(fruit, "nana")
+# Is shorthand for
+str_view(fruit, regex("nana"))
+```
+
+This is useful because it allows you to pass additional arguments to control the details of the match the most useful is probably `ignore_case = TRUE` because it allows characters to match either their uppercase or lowercase forms:
+
+```{r}
+bananas <- c("banana", "Banana", "BANANA")
+str_view(bananas, "banana")
+str_view(bananas, regex("banana", ignore_case = TRUE))
+```
+
+If you're doing a lot of work with multiline strings (i.e. strings that contain `\n`), `multiline` and `dotall` can also be useful.
+`dotall = TRUE` allows `.` to match everything, including `\n`:
+
+```{r}
+x <- "Line 1\nLine 2\nLine 3"
+str_view_all(x, ".L")
+str_view_all(x, regex(".L", dotall = TRUE))
+```
+
+And `multiline = TRUE` allows `^` and `$` to match the start and end of each line rather than the start and end of the complete string:
+
+```{r}
+x <- "Line 1\nLine 2\nLine 3"
+str_view_all(x, "^Line")
+str_view_all(x, regex("^Line", multiline = TRUE))
+```
+
+If you're writing a complicated regular expression and you're worried you might not understand it in the future, `comments = TRUE` can be super useful.
+It allows you to use comments and white space to make complex regular expressions more understandable.
+Spaces and new lines are ignored, as is everything after `#`.
+(Note that I'm using a raw string here to minimise the number of escapes needed)
+
+```{r}
+phone <- regex(r"(
+  \(?     # optional opening parens
+  (\d{3}) # area code
+  [) -]?  # optional closing parens, space, or dash
+  (\d{3}) # another three numbers
+  [ -]?   # optional space or dash
+  (\d{3}) # three more numbers
+  )", comments = TRUE)
+
+str_match("514-791-8141", phone)
+```
+
+If you're using comments and want to match a space, newline, or `#`, you'll need to escape it:
+
+```{r}
+str_view("x x #", regex("x #", comments = TRUE))
+str_view("x x #", regex(r"(x\ \#)", comments = TRUE))
+```
+
 ## Some details
 
 ### Overlapping
@@ -374,179 +438,3 @@ str_view_all("this is a sentence", "^")
 ### Greediness
 
 Regular expressions always attempt to match the longest possible string.
-
-### Multi-line strings
-
--   `dotall = TRUE` allows `.` to match everything, including `\n`.
-
--   `multiline = TRUE` allows `^` and `$` to match the start and end of each line rather than the start and end of the complete string.
-
-    ```{r}
-    x <- "Line 1\nLine 2\nLine 3"
-    str_extract_all(x, "^Line")[[1]]
-    str_extract_all(x, regex("^Line", multiline = TRUE))[[1]]
-    ```
-
-## Flags
-
-When you use a pattern that's a string, it's automatically wrapped into a call to `regex()`:
-
-```{r, eval = FALSE}
-# The regular call:
-str_view(fruit, "nana")
-# Is shorthand for
-str_view(fruit, regex("nana"))
-```
-
-You can use the other arguments of `regex()` to control details of the match:
-
--   `ignore_case = TRUE` allows characters to match either their uppercase or lowercase forms.
-    This always uses the current locale.
-
-    ```{r}
-    bananas <- c("banana", "Banana", "BANANA")
-    str_view(bananas, "banana")
-    str_view(bananas, regex("banana", ignore_case = TRUE))
-    ```
-
--   `comments = TRUE` allows you to use comments and white space to make complex regular expressions more understandable.
-    Spaces and new lines are ignored, as is everything after `#`.
-    To match a literal space, you'll need to escape it: `"\\ "`.
-
-    ```{r}
-    phone <- regex(r"(
-      \(?     # optional opening parens
-      (\d{3}) # area code
-      [) -]?  # optional closing parens, space, or dash
-      (\d{3}) # another three numbers
-      [ -]?   # optional space or dash
-      (\d{3}) # three more numbers
-      )", comments = TRUE)
-
-    str_match("514-791-8141", phone)
-    ```
-
-## Strategies
-
-### Using multiple regular expressions
-
-When you have complex logical conditions (e.g. match `a` or `b` but not `c` unless `d`) it's often easier to combine multiple `str_detect()` calls with logical operators instead of trying to create a single regular expression.
-For example, here are two ways to find all words that don't contain any vowels:
-
-```{r}
-# Find all words containing at least one vowel, and negate
-no_vowels_1 <- !str_detect(words, "[aeiou]")
-# Find all words consisting only of consonants (non-vowels)
-no_vowels_2 <- str_detect(words, "^[^aeiou]+$")
-identical(no_vowels_1, no_vowels_2)
-```
-
-The results are identical, but I think the first approach is significantly easier to understand.
-If your regular expression gets overly complicated, try breaking it up into smaller pieces, giving each piece a name, and then combining the pieces with logical operations.
-
-### Repeated `str_replace()`
-
-### A caution
-
-A word of caution before we finish up this chapter: because regular expressions are so powerful, it's easy to try and solve every problem with a single regular expression.
-In the words of Jamie Zawinski:
-
-> Some people, when confronted with a problem, think "I know, I'll use regular expressions." Now they have two problems.
-
-As a cautionary tale, check out this regular expression that checks if a email address is valid:
-
-    (?:(?:\r\n)?[ \t])*(?:(?:(?:[^()<>@,;:\\".\[\] \000-\031]+(?:(?:(?:\r\n)?[ \t]
-    )+|\Z|(?=[\["()<>@,;:\\".\[\]]))|"(?:[^\"\r\\]|\\.|(?:(?:\r\n)?[ \t]))*"(?:(?:
-    \r\n)?[ \t])*)(?:\.(?:(?:\r\n)?[ \t])*(?:[^()<>@,;:\\".\[\] \000-\031]+(?:(?:(
-    ?:\r\n)?[ \t])+|\Z|(?=[\["()<>@,;:\\".\[\]]))|"(?:[^\"\r\\]|\\.|(?:(?:\r\n)?[ 
-    \t]))*"(?:(?:\r\n)?[ \t])*))*@(?:(?:\r\n)?[ \t])*(?:[^()<>@,;:\\".\[\] \000-\0
-    31]+(?:(?:(?:\r\n)?[ \t])+|\Z|(?=[\["()<>@,;:\\".\[\]]))|\[([^\[\]\r\\]|\\.)*\
-    ](?:(?:\r\n)?[ \t])*)(?:\.(?:(?:\r\n)?[ \t])*(?:[^()<>@,;:\\".\[\] \000-\031]+
-    (?:(?:(?:\r\n)?[ \t])+|\Z|(?=[\["()<>@,;:\\".\[\]]))|\[([^\[\]\r\\]|\\.)*\](?:
-    (?:\r\n)?[ \t])*))*|(?:[^()<>@,;:\\".\[\] \000-\031]+(?:(?:(?:\r\n)?[ \t])+|\Z
-    |(?=[\["()<>@,;:\\".\[\]]))|"(?:[^\"\r\\]|\\.|(?:(?:\r\n)?[ \t]))*"(?:(?:\r\n)
-    ?[ \t])*)*\<(?:(?:\r\n)?[ \t])*(?:@(?:[^()<>@,;:\\".\[\] \000-\031]+(?:(?:(?:\
-    r\n)?[ \t])+|\Z|(?=[\["()<>@,;:\\".\[\]]))|\[([^\[\]\r\\]|\\.)*\](?:(?:\r\n)?[
-     \t])*)(?:\.(?:(?:\r\n)?[ \t])*(?:[^()<>@,;:\\".\[\] \000-\031]+(?:(?:(?:\r\n)
-    ?[ \t])+|\Z|(?=[\["()<>@,;:\\".\[\]]))|\[([^\[\]\r\\]|\\.)*\](?:(?:\r\n)?[ \t]
-    )*))*(?:,@(?:(?:\r\n)?[ \t])*(?:[^()<>@,;:\\".\[\] \000-\031]+(?:(?:(?:\r\n)?[
-     \t])+|\Z|(?=[\["()<>@,;:\\".\[\]]))|\[([^\[\]\r\\]|\\.)*\](?:(?:\r\n)?[ \t])*
-    )(?:\.(?:(?:\r\n)?[ \t])*(?:[^()<>@,;:\\".\[\] \000-\031]+(?:(?:(?:\r\n)?[ \t]
-    )+|\Z|(?=[\["()<>@,;:\\".\[\]]))|\[([^\[\]\r\\]|\\.)*\](?:(?:\r\n)?[ \t])*))*)
-    *:(?:(?:\r\n)?[ \t])*)?(?:[^()<>@,;:\\".\[\] \000-\031]+(?:(?:(?:\r\n)?[ \t])+
-    |\Z|(?=[\["()<>@,;:\\".\[\]]))|"(?:[^\"\r\\]|\\.|(?:(?:\r\n)?[ \t]))*"(?:(?:\r
-    \n)?[ \t])*)(?:\.(?:(?:\r\n)?[ \t])*(?:[^()<>@,;:\\".\[\] \000-\031]+(?:(?:(?:
-    \r\n)?[ \t])+|\Z|(?=[\["()<>@,;:\\".\[\]]))|"(?:[^\"\r\\]|\\.|(?:(?:\r\n)?[ \t
-    ]))*"(?:(?:\r\n)?[ \t])*))*@(?:(?:\r\n)?[ \t])*(?:[^()<>@,;:\\".\[\] \000-\031
-    ]+(?:(?:(?:\r\n)?[ \t])+|\Z|(?=[\["()<>@,;:\\".\[\]]))|\[([^\[\]\r\\]|\\.)*\](
-    ?:(?:\r\n)?[ \t])*)(?:\.(?:(?:\r\n)?[ \t])*(?:[^()<>@,;:\\".\[\] \000-\031]+(?
-    :(?:(?:\r\n)?[ \t])+|\Z|(?=[\["()<>@,;:\\".\[\]]))|\[([^\[\]\r\\]|\\.)*\](?:(?
-    :\r\n)?[ \t])*))*\>(?:(?:\r\n)?[ \t])*)|(?:[^()<>@,;:\\".\[\] \000-\031]+(?:(?
-    :(?:\r\n)?[ \t])+|\Z|(?=[\["()<>@,;:\\".\[\]]))|"(?:[^\"\r\\]|\\.|(?:(?:\r\n)?
-    [ \t]))*"(?:(?:\r\n)?[ \t])*)*:(?:(?:\r\n)?[ \t])*(?:(?:(?:[^()<>@,;:\\".\[\] 
-    \000-\031]+(?:(?:(?:\r\n)?[ \t])+|\Z|(?=[\["()<>@,;:\\".\[\]]))|"(?:[^\"\r\\]|
-    \\.|(?:(?:\r\n)?[ \t]))*"(?:(?:\r\n)?[ \t])*)(?:\.(?:(?:\r\n)?[ \t])*(?:[^()<>
-    @,;:\\".\[\] \000-\031]+(?:(?:(?:\r\n)?[ \t])+|\Z|(?=[\["()<>@,;:\\".\[\]]))|"
-    (?:[^\"\r\\]|\\.|(?:(?:\r\n)?[ \t]))*"(?:(?:\r\n)?[ \t])*))*@(?:(?:\r\n)?[ \t]
-    )*(?:[^()<>@,;:\\".\[\] \000-\031]+(?:(?:(?:\r\n)?[ \t])+|\Z|(?=[\["()<>@,;:\\
-    ".\[\]]))|\[([^\[\]\r\\]|\\.)*\](?:(?:\r\n)?[ \t])*)(?:\.(?:(?:\r\n)?[ \t])*(?
-    :[^()<>@,;:\\".\[\] \000-\031]+(?:(?:(?:\r\n)?[ \t])+|\Z|(?=[\["()<>@,;:\\".\[
-    \]]))|\[([^\[\]\r\\]|\\.)*\](?:(?:\r\n)?[ \t])*))*|(?:[^()<>@,;:\\".\[\] \000-
-    \031]+(?:(?:(?:\r\n)?[ \t])+|\Z|(?=[\["()<>@,;:\\".\[\]]))|"(?:[^\"\r\\]|\\.|(
-    ?:(?:\r\n)?[ \t]))*"(?:(?:\r\n)?[ \t])*)*\<(?:(?:\r\n)?[ \t])*(?:@(?:[^()<>@,;
-    :\\".\[\] \000-\031]+(?:(?:(?:\r\n)?[ \t])+|\Z|(?=[\["()<>@,;:\\".\[\]]))|\[([
-    ^\[\]\r\\]|\\.)*\](?:(?:\r\n)?[ \t])*)(?:\.(?:(?:\r\n)?[ \t])*(?:[^()<>@,;:\\"
-    .\[\] \000-\031]+(?:(?:(?:\r\n)?[ \t])+|\Z|(?=[\["()<>@,;:\\".\[\]]))|\[([^\[\
-    ]\r\\]|\\.)*\](?:(?:\r\n)?[ \t])*))*(?:,@(?:(?:\r\n)?[ \t])*(?:[^()<>@,;:\\".\
-    [\] \000-\031]+(?:(?:(?:\r\n)?[ \t])+|\Z|(?=[\["()<>@,;:\\".\[\]]))|\[([^\[\]\
-    r\\]|\\.)*\](?:(?:\r\n)?[ \t])*)(?:\.(?:(?:\r\n)?[ \t])*(?:[^()<>@,;:\\".\[\] 
-    \000-\031]+(?:(?:(?:\r\n)?[ \t])+|\Z|(?=[\["()<>@,;:\\".\[\]]))|\[([^\[\]\r\\]
-    |\\.)*\](?:(?:\r\n)?[ \t])*))*)*:(?:(?:\r\n)?[ \t])*)?(?:[^()<>@,;:\\".\[\] \0
-    00-\031]+(?:(?:(?:\r\n)?[ \t])+|\Z|(?=[\["()<>@,;:\\".\[\]]))|"(?:[^\"\r\\]|\\
-    .|(?:(?:\r\n)?[ \t]))*"(?:(?:\r\n)?[ \t])*)(?:\.(?:(?:\r\n)?[ \t])*(?:[^()<>@,
-    ;:\\".\[\] \000-\031]+(?:(?:(?:\r\n)?[ \t])+|\Z|(?=[\["()<>@,;:\\".\[\]]))|"(?
-    :[^\"\r\\]|\\.|(?:(?:\r\n)?[ \t]))*"(?:(?:\r\n)?[ \t])*))*@(?:(?:\r\n)?[ \t])*
-    (?:[^()<>@,;:\\".\[\] \000-\031]+(?:(?:(?:\r\n)?[ \t])+|\Z|(?=[\["()<>@,;:\\".
-    \[\]]))|\[([^\[\]\r\\]|\\.)*\](?:(?:\r\n)?[ \t])*)(?:\.(?:(?:\r\n)?[ \t])*(?:[
-    ^()<>@,;:\\".\[\] \000-\031]+(?:(?:(?:\r\n)?[ \t])+|\Z|(?=[\["()<>@,;:\\".\[\]
-    ]))|\[([^\[\]\r\\]|\\.)*\](?:(?:\r\n)?[ \t])*))*\>(?:(?:\r\n)?[ \t])*)(?:,\s*(
-    ?:(?:[^()<>@,;:\\".\[\] \000-\031]+(?:(?:(?:\r\n)?[ \t])+|\Z|(?=[\["()<>@,;:\\
-    ".\[\]]))|"(?:[^\"\r\\]|\\.|(?:(?:\r\n)?[ \t]))*"(?:(?:\r\n)?[ \t])*)(?:\.(?:(
-    ?:\r\n)?[ \t])*(?:[^()<>@,;:\\".\[\] \000-\031]+(?:(?:(?:\r\n)?[ \t])+|\Z|(?=[
-    \["()<>@,;:\\".\[\]]))|"(?:[^\"\r\\]|\\.|(?:(?:\r\n)?[ \t]))*"(?:(?:\r\n)?[ \t
-    ])*))*@(?:(?:\r\n)?[ \t])*(?:[^()<>@,;:\\".\[\] \000-\031]+(?:(?:(?:\r\n)?[ \t
-    ])+|\Z|(?=[\["()<>@,;:\\".\[\]]))|\[([^\[\]\r\\]|\\.)*\](?:(?:\r\n)?[ \t])*)(?
-    :\.(?:(?:\r\n)?[ \t])*(?:[^()<>@,;:\\".\[\] \000-\031]+(?:(?:(?:\r\n)?[ \t])+|
-    \Z|(?=[\["()<>@,;:\\".\[\]]))|\[([^\[\]\r\\]|\\.)*\](?:(?:\r\n)?[ \t])*))*|(?:
-    [^()<>@,;:\\".\[\] \000-\031]+(?:(?:(?:\r\n)?[ \t])+|\Z|(?=[\["()<>@,;:\\".\[\
-    ]]))|"(?:[^\"\r\\]|\\.|(?:(?:\r\n)?[ \t]))*"(?:(?:\r\n)?[ \t])*)*\<(?:(?:\r\n)
-    ?[ \t])*(?:@(?:[^()<>@,;:\\".\[\] \000-\031]+(?:(?:(?:\r\n)?[ \t])+|\Z|(?=[\["
-    ()<>@,;:\\".\[\]]))|\[([^\[\]\r\\]|\\.)*\](?:(?:\r\n)?[ \t])*)(?:\.(?:(?:\r\n)
-    ?[ \t])*(?:[^()<>@,;:\\".\[\] \000-\031]+(?:(?:(?:\r\n)?[ \t])+|\Z|(?=[\["()<>
-    @,;:\\".\[\]]))|\[([^\[\]\r\\]|\\.)*\](?:(?:\r\n)?[ \t])*))*(?:,@(?:(?:\r\n)?[
-     \t])*(?:[^()<>@,;:\\".\[\] \000-\031]+(?:(?:(?:\r\n)?[ \t])+|\Z|(?=[\["()<>@,
-    ;:\\".\[\]]))|\[([^\[\]\r\\]|\\.)*\](?:(?:\r\n)?[ \t])*)(?:\.(?:(?:\r\n)?[ \t]
-    )*(?:[^()<>@,;:\\".\[\] \000-\031]+(?:(?:(?:\r\n)?[ \t])+|\Z|(?=[\["()<>@,;:\\
-    ".\[\]]))|\[([^\[\]\r\\]|\\.)*\](?:(?:\r\n)?[ \t])*))*)*:(?:(?:\r\n)?[ \t])*)?
-    (?:[^()<>@,;:\\".\[\] \000-\031]+(?:(?:(?:\r\n)?[ \t])+|\Z|(?=[\["()<>@,;:\\".
-    \[\]]))|"(?:[^\"\r\\]|\\.|(?:(?:\r\n)?[ \t]))*"(?:(?:\r\n)?[ \t])*)(?:\.(?:(?:
-    \r\n)?[ \t])*(?:[^()<>@,;:\\".\[\] \000-\031]+(?:(?:(?:\r\n)?[ \t])+|\Z|(?=[\[
-    "()<>@,;:\\".\[\]]))|"(?:[^\"\r\\]|\\.|(?:(?:\r\n)?[ \t]))*"(?:(?:\r\n)?[ \t])
-    *))*@(?:(?:\r\n)?[ \t])*(?:[^()<>@,;:\\".\[\] \000-\031]+(?:(?:(?:\r\n)?[ \t])
-    +|\Z|(?=[\["()<>@,;:\\".\[\]]))|\[([^\[\]\r\\]|\\.)*\](?:(?:\r\n)?[ \t])*)(?:\
-    .(?:(?:\r\n)?[ \t])*(?:[^()<>@,;:\\".\[\] \000-\031]+(?:(?:(?:\r\n)?[ \t])+|\Z
-    |(?=[\["()<>@,;:\\".\[\]]))|\[([^\[\]\r\\]|\\.)*\](?:(?:\r\n)?[ \t])*))*\>(?:(
-    ?:\r\n)?[ \t])*))*)?;\s*)
-
-This is a somewhat pathological example (because email addresses are actually surprisingly complex), but is used in real code.
-See the Stack Overflow discussion at <http://stackoverflow.com/a/201378> for more details.
-
-Don't forget that you're in a programming language and you have other tools at your disposal.
-Instead of creating one complex regular expression, it's often easier to write a series of simpler regexps.
-If you get stuck trying to create a single regexp that solves your problem, take a step back and think if you could break the problem down into smaller pieces, solving each challenge before moving onto the next one.
-
-### Exercises
-
-1.  In the previous example, you might have noticed that the regular expression matched "flickered", which is not a colour. Modify the regex to fix the problem.
-2.  Find all words that come after a "number" like "one", "two", "three" etc. Pull out both the number and the word.
-3.  Find all contractions. Separate out the pieces before and after the apostrophe.
