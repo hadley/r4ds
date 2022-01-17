@@ -56,6 +56,12 @@ We'll finish up with **quantifiers**, which control how many times a pattern can
 The terms I use here are the technical names for each component.
 They're not always the most evocative of their purpose, but it's very helpful to know the correct terms if you later want to Google for more details.
 
+I'll concentrate on showing how these patterns work with `str_view()` and `str_view_all()` but remember that you can use them with any of the functions that you learned about in Chapter \@ref(strings), i.e.:
+
+-   `str_detect(x, pattern)` returns a logical vector the same length as `x`, indicating whether each element matches (`TRUE`) or doesn't match (`FALSE`) the pattern.
+-   `str_count(x, pattern)` returns the number of times `pattern` matches in each element of `x`.
+-   `str_replace_all(x, pattern, replacement)` replaces every instance of `pattern` with `replacement`.
+
 ### Escaping {#regexp-escaping}
 
 In Chapter \@ref(strings), you'll learned how to match a literal `.` by using `fixed(".")`.
@@ -165,11 +171,11 @@ There are a few character classes that are used so commonly that they get their 
 You've already seen `.`, which matches any character apart from a newline.
 There are three other particularly useful pairs:
 
--   `\d`: matches any digit; \
+-   `\d`: matches any digit;\
     `\D` matches anything that isn't a digit.
--   `\s`: matches any whitespace (e.g. space, tab, newline); \
+-   `\s`: matches any whitespace (e.g. space, tab, newline);\
     `\S` matches anything that isn't whitespace.
--   `\w` matches any "word" character, i.e. letters and numbers; \
+-   `\w` matches any "word" character, i.e. letters and numbers;\
     `\W`, matches any non-word character.
 
 Remember, to create a regular expression containing `\d` or `\s`, you'll need to escape the `\` for the string, so you'll type `"\\d"` or `"\\s"`.
@@ -196,7 +202,7 @@ You can also specify the number of matches precisely:
 -   `{n,}`: n or more
 -   `{n,m}`: between n and m
 
-The following code shows how this works for a few simple examples using to `\b` match the or end of a word.
+The following code shows how this works for a few simple examples using to `\b` match the start or end of a word.
 
 ```{r}
 x <- " x xx xxx xxxx"
@@ -274,16 +280,16 @@ But these tend to be less likely to cause confusion, for example you experience 
 ## Flags
 
 The are a number of settings, called **flags**, that you can use to control some of the details of the pattern language.
-In stringr, you can supply these by instead of passing a simple string as a pattern, by passing the object created by `regex()`:
+In stringr, you can use these by wrapping the pattern in a call to `regex()`:
 
 ```{r, eval = FALSE}
 # The regular call:
 str_view(fruit, "nana")
-# Is shorthand for
+# is shorthand for
 str_view(fruit, regex("nana"))
 ```
 
-This is useful because it allows you to pass additional arguments to control the details of the match the most useful is probably `ignore_case = TRUE` because it allows characters to match either their uppercase or lowercase forms:
+The most useful flag is probably `ignore_case = TRUE` because it allows characters to match either their uppercase or lowercase forms:
 
 ```{r}
 bananas <- c("banana", "Banana", "BANANA")
@@ -308,10 +314,10 @@ str_view_all(x, "^Line")
 str_view_all(x, regex("^Line", multiline = TRUE))
 ```
 
-If you're writing a complicated regular expression and you're worried you might not understand it in the future, `comments = TRUE` can be super useful.
-It allows you to use comments and white space to make complex regular expressions more understandable.
+Finally, if you're writing a complicated regular expression and you're worried you might not understand it in the future, `comments = TRUE` can be extremely useful.
+It allows you to use comments and whitespace to make complex regular expressions more understandable.
 Spaces and new lines are ignored, as is everything after `#`.
-(Note that I'm using a raw string here to minimise the number of escapes needed)
+(Note that I'm using a raw string here to minimize the number of escapes needed)
 
 ```{r}
 phone <- regex(r"(
@@ -343,91 +349,94 @@ str_view(head(words))
 str_view(head(sentences))
 ```
 
-Let's find all sentences that start with the:
+The following three sections help you practice the components of a pattern by discussing three general techniques: checking you work by creating simple positive and negative controls, combining regular expressions with Boolean algebra, and creating complex patterns using string manipulation.
+
+### Check your work
+
+First, let's find all sentences that start with "The".
+Using the `^` anchor alone is not enough:
 
 ```{r}
 str_view(sentences, "^The", match = TRUE)
+```
+
+Because it all matches sentences starting with `They` or `Those`.
+We need to make sure that the "e" is the last letter in the word, which we can do by adding adding a word boundary:
+
+```{r}
 str_view(sentences, "^The\\b", match = TRUE)
 ```
 
-All sentences that use a pronoun:
-
-Modify to create simple set of positive and negative examples (if you later get more into programming and learn about unit tests, I highly recommend unit testing your regular expressions. This doesn't guarantee you won't get it wrong, but it ensures that you'll never make the same mistake twice.)
+What about finding all sentences that begin with a pronoun?
 
 ```{r}
-str_view_all(sentences, "\\b(he|she|it)\\b", match = TRUE)
-str_view_all(head(sentences), "\\b(he|she|it)\\b", match = FALSE)
-
-str_view_all(sentences, regex("\\b(he|she|it)\\b", ignore_case = TRUE), match = TRUE)
+str_view(sentences, "^She|He|It|They\\b", match = TRUE)
 ```
 
-All words that only contain consonants:
+A quick inspection of the results shows that we're getting some spurious matches.
+That's because I've forgotten to use parentheses:
 
 ```{r}
-str_view(words, "[^aeiou]+", match = TRUE)
+str_view(sentences, "^(She|He|It|They)\\b", match = TRUE)
+```
+
+You might wonder how you might spot such a mistake if it didn't occur in the first few matches.
+A good technique is to create a few positive and negative matches and use them to test that you pattern works as expected.
+
+```{r}
+pos <- c("He is a boy", "She had a good time")
+neg <- c("Shells come from the sea", "Hadley said 'It's a great day'")
+
+pattern <- "^(She|He|It|They)\\b"
+str_detect(pos, pattern)
+str_detect(neg, pattern)
+```
+
+It's typically much easier to come up with positive examples than negative examples, because it takes some time until you're good enough with regular expressions to predict where your weaknesses are.
+Nevertheless they're still useful; even if you don't get them correct right away, you can slowly accumulate them as you work on your problem.
+If you you later get more into programming and learn about unit tests, you can then turn these examples into automated test that ensure you never you never make the same mistake twice.)
+
+### Boolean operations
+
+Imagine we want to find words that only contain consonants.
+One technique is to create a character class that contains all letters except for the vowels (`[^aeiou]`), then allow that to match any number of letters (`[^aeiou]+`), then force it to match the whole string by anchoring to the beginning and the end (`^[^aeiou]+$`):
+
+```{r}
 str_view(words, "^[^aeiou]+$", match = TRUE)
 ```
 
-This is a case where flipping the problem around can make it easier to solve.
-Instead of looking for words that containing only consonant, we could look for words that don't contain any vowels:
+But we can make this problem a bit easier by flipping the problem around.
+Instead of looking for words that contain only consonants, we could look for words that don't contain any vowels:
 
 ```{r}
 words[!str_detect(words, "[aeiou]")]
 ```
 
-Can we find evidence for or against the rule "i before e except after c"?
-To look for words that support this rule we want i follows e following any letter that isn't c, i.e. `[^c]ie`.
-The opposite branch is `cei`:
+This is a useful technique whenever you're dealing with logical combinations, particularly those involving "and" or "not".
+For example, imagine if you want to find all words that contain "a" and "b".
+There's no "and" operator built in to regular expressions so we have to tackle it by looking for all words that contain an "a" followed by a "b", or a "b" followed by an "a":
 
 ```{r}
-str_view(words, "[^c]ie|cei", match = TRUE)
+words[str_detect(words, "a.*b|b.*a")]
 ```
 
-To look for words that don't follow this rule, we just switch the i and the e:
+I think its simpler to combine the results of two calls to `str_detect()`:
 
 ```{r}
-str_view(words, "[^c]ei|cie", match = TRUE)
+words[str_detect(words, "a") & str_detect(words, "b")]
 ```
 
-Consist only of vowel-consonant or consonant-vowel pairs?
+What if we wanted to see if there was a word that contains all vowels?
+If we did it with patterns we'd need to generate 5!
+(120) different patterns:
 
 ```{r}
-str_view(words, "^([aeiou][^aeiou])+$", match = TRUE)
-str_view(words, "^([^aeiou][aeiou])+$", match = TRUE)
+words[str_detect(words, "a.*e.*i.*o.*u")]
+# ...
+words[str_detect(words, "u.*o.*i.*e.*a")]
 ```
 
-Could combine in two ways: by making one complex regular expression or using `str_detect()` with Boolean operators:
-
-```{r}
-str_view(words, "^((([aeiou][^aeiou])+)|([^aeiou][aeiou]+))$", match = TRUE)
-
-vc <- str_detect(words, "^([aeiou][^aeiou])+$")
-cv <- str_detect(words, "^([^aeiou][aeiou])+$")
-words[cv | vc]
-```
-
-This only handles words with even number of letters?
-What if we also wanted to allow odd numbers?
-i.e. cvc or vcv.
-
-```{r}
-vc <- str_detect(words, "^([aeiou][^aeiou])+[aeiou]?$")
-cv <- str_detect(words, "^([^aeiou][aeiou])+[^aeiou]?$")
-words[cv | vc]
-```
-
-If we wanted to require the words to be at least four characters long we could modify the regular expressions switching `+` for `{2,}` or we could combine the results with `str_length()`:
-
-```{r}
-words[(cv | vc) & str_length(words) >= 4]
-```
-
-Do any words contain all vowels?
-
-```{r}
-str_view(words, "a.*e.*i.*o.*u", match = TRUE)
-str_view(words, "e.*a.*u.*o.*i", match = TRUE)
-```
+It's much simpler to combine six calls to `str_detect()`:
 
 ```{r}
 words[
@@ -439,45 +448,73 @@ words[
 ]
 ```
 
-All sentences that contain a color:
+In general, if you get stuck trying to create a single regexp that solves your problem, take a step back and think if you could break the problem down into smaller pieces, solving each challenge before moving onto the next one.
+
+### Creating a pattern with code
+
+What if we wanted to find all `sentences` that mention a color?
+The basic idea is simple: we just combine alternation with word boundaries.
 
 ```{r}
 str_view(sentences, "\\b(red|green|blue)\\b", match = TRUE)
 ```
 
-```{r}
-colors <- colors()
-head(colors)
-colors %>% str_view("\\d", match = TRUE)
-colors <- colors[!str_detect(colors, "\\d")]
+But it would be tedious to construct this pattern by hand.
+Wouldn't it be nice if we could store the colours in a vector?
 
-pattern <- str_c("\\b(", str_flatten(colors, "|"), ")\\b")
+```{r}
+rgb <- c("red", "green", "blue")
+```
+
+Well, we can!
+We'd just need to create the pattern from the vector using `str_c()` and `str_flatten()`
+
+```{r}
+str_c("\\b(", str_flatten(rgb, "|"), ")\\b")
+```
+
+We could make this pattern more comprehensive if we had a good list of colors.
+One place we could start from is the list of built-in colours that R can use for plots:
+
+```{r}
+colors()[1:50]
+```
+
+But first lets element the numbered variants:
+
+```{r}
+cols <- colors()
+cols <- cols[!str_detect(cols, "\\d")]
+cols
+```
+
+Then we can turn this into one giant pattern:
+
+```{r}
+pattern <- str_c("\\b(", str_flatten(cols, "|"), ")\\b")
 str_view(sentences, pattern, match = TRUE)
 ```
 
-Get rid of the modifiers.
+In this example `cols` only contains numbers and letters so you don't need to worry about metacharacters.
+But in general, when creating patterns from existing strings it's good practice to run through `str_escape()` which will automatically add `\` in front of otherwise special characters.
 
-```{r}
-pattern <- str_c(".(", str_flatten(colors, "|"), ")$")
-str_view(colors, pattern, match = TRUE)
-colors[!str_detect(colors, pattern)]
+### Exercises
 
-prefix <- c("dark", "light", "medium", "pale")
-pattern <- str_c("^(", str_flatten(prefix, "|"), ")")
-colors[!str_detect(colors, pattern)]
-```
+1.  Construct patterns to find evidence for and against the rule "i before e except after c"?
+2.  `colors()` contains a number of modifiers like "lightgray" and "darkblue". How could you automatically identify these modifiers? (Think about how you might detect and removed what is being modified).
+3.  Create a regular expression that finds any use of base R dataset. You can get a list of these datasets via a special use of the `data()` function: `data(package = "datasets")$results[, "Item"]`. Note that a number of old datasets are individual vectors; these contain the name of the grouping "data frame" in parentheses, so you'll need to also strip these off.
 
 ## Grouping and capturing
 
-Parentheses are an important tool to control operator precedence in regular expressions.
+As you've learned, like in regular math, parentheses are an important tool to control operator precedence in regular expressions.
 But they also have an important additional effect: they create **capturing groups** that allow you to use to sub-components of the match.
 There are three main ways you can use them:
 
--   To match a repeated pattern
--   To include a matched pattern in the replacement
--   To extract individual components of the match
+-   To match a repeated pattern.
+-   To include a matched pattern in the replacement.
+-   To extract individual components of the match.
 
-### Backreferences
+### Matching a repeated pattern
 
 You can refer to the same text as previously matched by a capturing group with **backreferences**, like `\1`, `\2` etc.
 For example, the following regular expression finds all fruits that have a repeated pair of letters:
@@ -492,6 +529,8 @@ And this regexp finds all words that start and end with the same pair of letters
 str_view(words, "^(..).*\\1$", match = TRUE)
 ```
 
+Replacing with the matched pattern
+
 You can also use backreferences with `str_replace()` and `str_replace_all()`.
 The following code will switch the order of the second and third words:
 
@@ -501,19 +540,30 @@ sentences %>%
   head(5)
 ```
 
+You'll sometimes see people using `str_replace()` to extract a single match:
+
+```{r}
+pattern <- "^.*the ([^ .,]+).*$"
+sentences %>% 
+  str_subset(pattern) %>% 
+  str_replace(pattern, "\\1") %>% 
+  head(10)
+```
+
+I think you're generally better off using `str_match()` for this because it's clear what the intent is.
+
 ### Extracting groups
 
-You can also make use of groups with tidyr's `separate_groups()` which puts each `()` group into its own column.
-This provides a natural complement to the other separate functions that you learned about in ...
-
-stringr also provides a lower-level function for extract matches called `str_match()`.
-It returns a matrix, so isn't as easy to work with, but it's useful to know about for the connection.
+stringr provides a lower-level function for extract matches called `str_match()`.
+But it returns a matrix, so isn't as easy to work with:
 
 ```{r}
 sentences %>% 
   str_match("the (\\w+) (\\w+)") %>% 
   head()
 ```
+
+Instead I recommend using tidyr's `separate_groups()` which creates a column for each capturing group.
 
 ### Named groups
 
@@ -525,19 +575,34 @@ You can refer to it with `\k<name>`.
 str_view(words, "^(?<first>.).*\\k<first>$", match = TRUE)
 ```
 
+This verbosity is a good fit with `comments = TRUE`:
+
+```{r}
+pattern <- regex(
+  r"(
+    ^           # start at the beginning of the string
+    (?<first>.) # and match the <first> letter
+    .*          # then match any other letters
+    \k<first>$  # ensuring the last letter is the same as the <first>
+  )", 
+  comments = TRUE
+)
+```
+
 You can also use named groups as an alternative to the `col_names` argument to `tidyr::separate_groups()`.
 
 ### Non-capturing groups
 
 Occasionally, you'll want to use parentheses without creating matching groups.
 You can create a non-capturing group with `(?:)`.
-Typically, however, you'll find it easier to just ignore that result in the output of `str_match()`.
 
 ```{r}
 x <- c("a gray cat", "a grey dog")
 str_match(x, "(gr(e|a)y)")
 str_match(x, "(gr(?:e|a)y)")
 ```
+
+Typically, however, you'll find it easier to just ignore that result by setting the `col_name` to `NA`:
 
 ### Exercises
 
