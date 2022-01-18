@@ -12,12 +12,11 @@ The chapter starts by expanding your knowledge of patterns, to cover six importa
 Here we'll focus mostly on the language itself, not the functions that use it.
 That means we'll mostly work with toy character vectors, showing the results with `str_view()` and `str_view_all()`.
 You'll need to take what you learn here and apply it to data frames with tidyr functions or by combining dplyr and stringr functions.
+We'll then take what you've learned a show a few useful strategies when creating more complex patterns.
 
 Next we'll talk about the important concepts of "grouping" and "capturing" which give you new ways to extract variables out of strings using `tidyr::separate_group()`.
 Grouping also allows you to use back references which allow you do things like match repeated patterns.
-
-We'll finish by discussing the various "flags" that allow you to tweak the operation of regular expressions and cover a few final details about how regular expressions work.
-These aren't particularly important in day-to-day usage, but at little extra understanding of the underlying tools is often helpful.
+We'll finish by discussing the various "flags" that allow you to tweak the operation of regular expressions
 
 ### Prerequisites
 
@@ -32,9 +31,8 @@ That's because stringr is built on top of the [stringi package](https://stringi.
 Fortunately, the basics of regular expressions are so well established that you'll encounter few variations when working with the patterns you'll learn in this book (and I'll point them out where important).
 You only need to be aware of the difference when you start to rely on advanced features like complex Unicode character ranges or special features that use the `(?…)` syntax.
 You can learn more about these advanced features in `vignette("regular-expressions", package = "stringr")`.
-
 Another useful reference is [https://www.regular-expressions.info/](https://www.regular-expressions.info/tutorial.html).
-It's not R specific, but it includes a lot more information about how regular expressions actually work.
+It's not R specific, but it covers the most advanced features and explains how regular expressions work under the hood.
 
 ### Exercises
 
@@ -143,6 +141,12 @@ str_view(x, "sum")
 str_view(x, "\\bsum\\b")
 ```
 
+When used alone these anchors will produce a zero-width match:
+
+```{r}
+str_view_all("abc", c("$", "^", "\\b"))
+```
+
 ### Character classes
 
 A **character class**, or character **set**, allows you to match any character in a set.
@@ -154,9 +158,7 @@ Inside of `[]` only `-`, `^`, and `\` have special meanings:
 -   `\` escapes special characters so `[\^\-\]]`: matches `^`, `-`, or `]`.
 
 ```{r}
-str_view_all("abcd12345-!@#%.", "[abc]")
-str_view_all("abcd12345-!@#%.", "[a-z]")
-str_view_all("abcd12345-!@#%.", "[^a-z0-9]")
+str_view_all("abcd12345-!@#%.", c("[abc]", "[a-z]", "[^a-z0-9]"))
 
 # You need an escape to match characters that are otherwise
 # special inside of []
@@ -222,29 +224,19 @@ Here are a few examples:
 
 ### Parentheses and operator precedence
 
-What does `ab+` match.
+What does `ab+` match?
 Does it match "a" followed by one or more "b"s, or does it match "ab" repeated any number of times?
 What does `^a|b$` match?
 Does it match the complete string a or the complete string b, or does it match a string starting with a or a string starting with "b"?
-The answer to these questions is determined by operator precedence, similar to the PEMDAS or BEDMAS rule you might have learned in school.
+The answer to these questions is determined by operator precedence, similar to the PEMDAS or BEDMAS rules you might have learned in school for what `a + b * c`.
 
-The question comes down to whether `ab+` is equivalent to `a(b+)` or `(ab)+` and whether `^a|b$` is equivalent to `(^a)|(b$)` or `^(a|b)$`.
-Alternation has low precedence which means it affects many characters, whereas quantifiers have high precedence which means it affects few characters.
+You already know that `a + b * c` is equivalent to `a + (b * c)` not `(a + b) * c` because `*` has high precedence and `+` has lower precedence: you compute `*` before `+`.
+In regular expressions, quantifiers have high precedence and alternation has low precedence.
+That means `ab+` is equivalent to `a(b+)`, and `^a|b$` is equivalent to `(^a)|(b$)`.
+Just like with algebra, you can use parentheses to override the usual order (because they have the highest precedence of all).
 
-Quantifiers apply to the preceding pattern, regardless of how many letters define it: `a+` matches one or more "a"s, `\d+` matches one or more digits, and `[aeiou]+` matches one or more vowels.
-You can use parentheses to apply a quantifier to a compound pattern.
-For example, `([aeiou].)+` matches a vowel followed by any letter, repeated any number of times.
-
-```{r}
-str_view(words, "^([aeiou].)+$", match = TRUE)
-```
-
-`|` has very low precedence which means that everything to the left or right is included in the group.
-For example if you want to match only a complete string, `^apple|pear|banana$` won't work because it will match apple at the start of the string, pear anywhere, and banana at the end.
-Instead, you need `^(apple|pear|banana)$`.
-
-Technically the escape, character classes, and parentheses are all operators that have some relative precedence.
-But these tend to be less likely to cause confusion, for example you experience with escapes in other situations means it's unlikely that you'd think to write `\(s|d)` to mean `(\s)|(\d)`.
+Technically the escape, character classes, and parentheses are all operators that also have precedence.
+But these tend to be less likely to cause confusion because they mostly behave how you expect: it's unlikely that you'd think that `\(s|d)` would mean `(\s)|(\d)`.
 
 ### Exercises
 
@@ -276,68 +268,6 @@ But these tend to be less likely to cause confusion, for example you experience 
     d.  `"\\\\{4}"`
 
 8.  Solve the beginner regexp crosswords at <https://regexcrossword.com/challenges/beginner>.
-
-## Flags
-
-The are a number of settings, called **flags**, that you can use to control some of the details of the pattern language.
-In stringr, you can use these by wrapping the pattern in a call to `regex()`:
-
-```{r, eval = FALSE}
-# The regular call:
-str_view(fruit, "nana")
-# is shorthand for
-str_view(fruit, regex("nana"))
-```
-
-The most useful flag is probably `ignore_case = TRUE` because it allows characters to match either their uppercase or lowercase forms:
-
-```{r}
-bananas <- c("banana", "Banana", "BANANA")
-str_view(bananas, "banana")
-str_view(bananas, regex("banana", ignore_case = TRUE))
-```
-
-If you're doing a lot of work with multiline strings (i.e. strings that contain `\n`), `multiline` and `dotall` can also be useful.
-`dotall = TRUE` allows `.` to match everything, including `\n`:
-
-```{r}
-x <- "Line 1\nLine 2\nLine 3"
-str_view_all(x, ".L")
-str_view_all(x, regex(".L", dotall = TRUE))
-```
-
-And `multiline = TRUE` allows `^` and `$` to match the start and end of each line rather than the start and end of the complete string:
-
-```{r}
-x <- "Line 1\nLine 2\nLine 3"
-str_view_all(x, "^Line")
-str_view_all(x, regex("^Line", multiline = TRUE))
-```
-
-Finally, if you're writing a complicated regular expression and you're worried you might not understand it in the future, `comments = TRUE` can be extremely useful.
-It allows you to use comments and whitespace to make complex regular expressions more understandable.
-Spaces and new lines are ignored, as is everything after `#`.
-(Note that I'm using a raw string here to minimize the number of escapes needed)
-
-```{r}
-phone <- regex(r"(
-  \(?     # optional opening parens
-  (\d{3}) # area code
-  [) -]?  # optional closing parens, space, or dash
-  (\d{3}) # another three numbers
-  [ -]?   # optional space or dash
-  (\d{3}) # three more numbers
-  )", comments = TRUE)
-
-str_match("514-791-8141", phone)
-```
-
-If you're using comments and want to match a space, newline, or `#`, you'll need to escape it:
-
-```{r}
-str_view("x x #", regex("x #", comments = TRUE))
-str_view("x x #", regex(r"(x\ \#)", comments = TRUE))
-```
 
 ## Practice
 
@@ -477,7 +407,7 @@ We could make this pattern more comprehensive if we had a good list of colors.
 One place we could start from is the list of built-in colours that R can use for plots:
 
 ```{r}
-colors()[1:50]
+colors()[1:27]
 ```
 
 But first lets element the numbered variants:
@@ -485,7 +415,7 @@ But first lets element the numbered variants:
 ```{r}
 cols <- colors()
 cols <- cols[!str_detect(cols, "\\d")]
-cols
+cols[1:27]
 ```
 
 Then we can turn this into one giant pattern:
@@ -506,7 +436,7 @@ But in general, when creating patterns from existing strings it's good practice 
 
 ## Grouping and capturing
 
-As you've learned, like in regular math, parentheses are an important tool to control operator precedence in regular expressions.
+Like in algebra, parentheses are an important tool for controlling the order in which pattern operations are applied.
 But they also have an important additional effect: they create **capturing groups** that allow you to use to sub-components of the match.
 There are three main ways you can use them:
 
@@ -514,24 +444,28 @@ There are three main ways you can use them:
 -   To include a matched pattern in the replacement.
 -   To extract individual components of the match.
 
+If needed, there's also a special form of parentheses that only affect operator precedence without creating capturing a group.
+All of these are these described below.
+
 ### Matching a repeated pattern
 
-You can refer to the same text as previously matched by a capturing group with **backreferences**, like `\1`, `\2` etc.
-For example, the following regular expression finds all fruits that have a repeated pair of letters:
+You can refer back to previously matched text inside parentheses by using **back reference**.
+Back references are usually numbered: `\1` refers to the match contained in the first parentheses, `\2` in the the second parentheses, and so on.
+For example, the following pattern finds all fruits that have a repeated pair of letters:
 
 ```{r}
 str_view(fruit, "(..)\\1", match = TRUE)
 ```
 
-And this regexp finds all words that start and end with the same pair of letters:
+And this one finds all words that start and end with the same pair of letters:
 
 ```{r}
 str_view(words, "^(..).*\\1$", match = TRUE)
 ```
 
-Replacing with the matched pattern
+### Replacing with the matched pattern
 
-You can also use backreferences with `str_replace()` and `str_replace_all()`.
+You can also use back references when replacing with `str_replace()` and `str_replace_all()`.
 The following code will switch the order of the second and third words:
 
 ```{r}
@@ -550,7 +484,7 @@ sentences %>%
   head(10)
 ```
 
-I think you're generally better off using `str_match()` for this because it's clear what the intent is.
+But I think you're generally better off using `str_match()` or `tidyr::separate_groups()`, which you'll learn about next.
 
 ### Extracting groups
 
@@ -619,44 +553,64 @@ Typically, however, you'll find it easier to just ignore that result by setting 
     a.  Who's first letter is the same as the last letter, and the second letter is the same as the second to last letter.
     b.  Contain one letter repeated in at least three places (e.g. "eleven" contains three "e"s.)
 
-## Regular expression engine
+## Flags
 
-Regular expressions work by stepping through a string letter by letter.
+The are a number of settings, often called **flags** in other programming languages, that you can use to control some of the details of the regex.
+In stringr, you can use these by wrapping the pattern in a call to `regex()`:
 
-<https://www.regular-expressions.info/engine.html>
-
-Backtracking: if the regular expression doesn't match, it'll back up.
-
-### Overlapping
-
-Matches never overlap, and the regular expression engine only starts looking for a new match after the end of the last match.
-For example, in `"abababa"`, how many times will the pattern `"aba"` match?
-Regular expressions say two, not three:
-
-```{r}
-str_count("abababa", "aba")
-str_view_all("abababa", "aba")
+```{r, eval = FALSE}
+# The regular call:
+str_view(fruit, "nana")
+# is shorthand for
+str_view(fruit, regex("nana"))
 ```
 
-### Zero width matches
-
-It's possible for a regular expression to match no character, i.e. the space between too characters.
-This typically happens when you use a quantifier that allows zero matches:
+The most useful flag is probably `ignore_case = TRUE` because it allows characters to match either their uppercase or lowercase forms:
 
 ```{r}
-str_view_all("abcdef", "c?")
+bananas <- c("banana", "Banana", "BANANA")
+str_view(bananas, "banana")
+str_view(bananas, regex("banana", ignore_case = TRUE))
 ```
 
-But anchors also create zero-width matches:
+If you're doing a lot of work with multiline strings (i.e. strings that contain `\n`), `multiline` and `dotall` can also be useful.
+`dotall = TRUE` allows `.` to match everything, including `\n`:
 
 ```{r}
-str_view_all("this is a sentence", "\\b")
-str_view_all("this is a sentence", "^")
+x <- "Line 1\nLine 2\nLine 3"
+str_view_all(x, ".L")
+str_view_all(x, regex(".L", dotall = TRUE))
 ```
 
-And `str_replace()` can insert characters there:
+And `multiline = TRUE` allows `^` and `$` to match the start and end of each line rather than the start and end of the complete string:
 
 ```{r}
-str_replace_all("this is a sentence", "\\b", "-")
-str_replace_all("this is a sentence", "^", "-")
+x <- "Line 1\nLine 2\nLine 3"
+str_view_all(x, "^Line")
+str_view_all(x, regex("^Line", multiline = TRUE))
+```
+
+Finally, if you're writing a complicated regular expression and you're worried you might not understand it in the future, `comments = TRUE` can be extremely useful.
+It allows you to use comments and whitespace to make complex regular expressions more understandable.
+Spaces and new lines are ignored, as is everything after `#`.
+(Note that I'm using a raw string here to minimize the number of escapes needed)
+
+```{r}
+phone <- regex(r"(
+  \(?     # optional opening parens
+  (\d{3}) # area code
+  [) -]?  # optional closing parens, space, or dash
+  (\d{3}) # another three numbers
+  [ -]?   # optional space or dash
+  (\d{3}) # three more numbers
+  )", comments = TRUE)
+
+str_match("514-791-8141", phone)
+```
+
+If you're using comments and want to match a space, newline, or `#`, you'll need to escape it:
+
+```{r}
+str_view("x x #", regex("x #", comments = TRUE))
+str_view("x x #", regex(r"(x\ \#)", comments = TRUE))
 ```
