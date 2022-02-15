@@ -1,7 +1,7 @@
 # Data transformation {#data-transform}
 
 ```{r, results = "asis", echo = FALSE}
-status("restructuring")
+status("polishing")
 ```
 
 ## Introduction
@@ -15,7 +15,7 @@ We'll come back these functions in more detail in later chapters, as we start to
 
 ### Prerequisites
 
-In this chapter we're going to focus on how to use the dplyr package, another core member of the tidyverse.
+In this chapter we'll focus on the dplyr package, another core member of the tidyverse.
 We'll illustrate the key ideas using data from the nycflights13 package, and use ggplot2 to help us understand the data.
 
 ```{r setup}
@@ -37,14 +37,14 @@ The data comes from the US [Bureau of Transportation Statistics](http://www.tran
 flights
 ```
 
-If you've used R before, you might notice that this data frame prints a little differently to data frames that you might've worked with in the past.
-That's because it's a **tibble**, a special type of data frame designed by the tidyverse team to avoid some common data.frame gotchas.
+If you've used R before, you might notice that this data frame prints a little differently to other data frames you've seen.
+That's because it's a **tibble**, a special type of data frame used by the tidyverse to avoid some common gotchas.
 The most important difference is the way it prints: tibbles are designed for large datasets, so they only show the first few rows and only the columns that fit on one screen.
 If you want to see everything you can use `View(flights)` to open the dataset in the RStudio viewer.
 We'll come back to other important differences in Chapter \@ref(tibbles).
 
-You might also have noticed the row of short abbreviations following each column name.
-These describe the type of each variable: `<int>` is short for integer, and `<dbl>` is short for double (aka real numbers), `<chr>` for characters (aka strings), and `<dttm>` for date-times.
+You might have noticed the short abbreviations following each column name.
+These tell you the type of each variable: `<int>` is short for integer, `<dbl>` is short for double (aka real numbers), `<chr>` for character (aka string), and `<dttm>` for date-time.
 These are important because the operations you can perform on a column depend so much on the type of column, and are used to organize the chapters in the Transform section of this book.
 
 ### dplyr basics
@@ -390,8 +390,10 @@ ggplot(flights, aes(air_time - airtime2)) + geom_histogram()
 
 ## Groups
 
-The real power of dplyr comes when you add grouping into the mix.
-The two key functions are `group_by()` and `summarise()`, but as you'll learn `group_by()` affects many other dplyr verbs in interesting ways.
+So far you've learned about functions that work with rows and columns.
+dplyr gets even more powerful when you add in the ability to work with groups.
+In this section, we'll focus on the most important functions: `group_by()`, `summarise()`, and the slice family of functions.
+We'll also briefly mention some of the ways that `group_by()` affects other dplyr verbs.
 
 ### `group_by()`
 
@@ -403,11 +405,11 @@ flights |>
 ```
 
 `group_by()` doesn't change the data but, if you look closely at the output, you'll notice that it's now "grouped by" month.
-The reason to group your data is because it changes the operation of subsequent verbs.
+This means subsequent operations will now work "by month".
 
 ### `summarise()`
 
-The most important operation that you might apply to grouped data is a summary.
+The most important grouped operation is a summary.
 It collapses each group to a single row[^data-transform-3].
 Here we compute the average departure delay by month:
 
@@ -445,58 +447,73 @@ flights |>
   )
 ```
 
-(In fact, `count()`, which we've used a bunch in previous chapters, is just shorthand for `group_by()` + `summarise(n = n())`.)
-
 Means and counts can get you a surprisingly long way in data science!
+
+### The `slice_` functions
+
+There are five handy functions that allow you pick off specific rows within each group:
+
+-   `df |> slice_head(n = 1)` takes the first row from each group.
+-   `df |> slice_tail(n = 1)` takes the last row in each group.
+-   `df |> slice_min(x, n = 1)` takes the row with the smallest value of `x`.
+-   `df |> slice_max(x, n = 1)` takes the row with the largest value of `x`.
+-   `df |> slice_sample(x, n = 1)` takes one random row.
+
+You can of course vary `n` to select more than one row, or instead of `n =`, you can use `prop = 0.1` to select (e.g.) 10% of the rows in each group.
+For example, the following code finds the most delayed flight to each destination:
+
+```{r}
+flights |> 
+  group_by(dest) |> 
+  slice_max(arr_delay, n = 1)
+```
+
+This is similar to computing the max delay with `summarize()`, but you get the whole row instead of the single summary:
+
+```{r}
+flights |> 
+  group_by(dest) |> 
+  summarise(max_delay = max(arr_delay, na.rm = TRUE))
+```
 
 ### Grouping by multiple variables
 
-You can group a data frame by multiple variables:
+You can of course create groups using more than one variable.
+For example, we could make a group for each day:
 
 ```{r}
-daily <- flights %>% 
+daily <- flights |>  
   group_by(year, month, day)
 daily
 ```
 
-When you group by multiple variables, each summary peels off one level of the grouping by default, and a message is printed that tells you how you can change this behaviour.
+When you summarize a tibble grouped by more than one variable, each summary peels off the last group.
+In hindsight, this wasn't great way to make this function work, but it's difficult to change without breaking existing code.
+To make it obvious what's happening, dplyr displays a message that tells you how you can change this behavior:
 
 ```{r}
-daily %>% 
+daily_flights <- daily %>% 
   summarise(
     n = n()
   )
 ```
 
-If you're happy with this behaviour, you can explicitly define it in order to suppress the message:
+If you're happy with this behavior, you can explicitly define it in order to suppress the message:
 
 ```{r, results = FALSE}
-daily %>% 
+daily_flights <- daily %>% 
   summarise(
     n = n(), 
     .groups = "drop_last"
   )
 ```
 
-Alternatively, you can change the default behaviour by setting a different value, e.g. `"drop"` for dropping all levels of grouping or `"keep"` for same grouping structure as `daily`:
-
-```{r, results = FALSE}
-daily %>% 
-  summarise(
-    n = n(), 
-    .groups = "drop"
-  )
-daily %>% 
-  summarise(
-    n = n(), 
-    .groups = "keep"
-  )
-```
+Alternatively, change the default behavior by setting a different value, e.g. `"drop"` to drop all grouping or `"keep"` to preserve the same groups.
 
 ### Ungrouping
 
 You might also want to remove grouping outside of `summarise()`.
-You can do this and return to operations on ungrouped data using `ungroup()`.
+You can do this with `ungroup()`.
 
 ```{r}
 daily %>% 
@@ -507,18 +524,14 @@ daily %>%
   )
 ```
 
-For the purposes of summarising, ungrouped data is treated as if all your data was in a single group, so you get one row back.
+As you can see, when you summarize an ungrouped data frame, you get a single row back because dplyr treats it as a grouped data frame with all the data in one group.
 
 ### Other verbs
 
-`group_by()` is usually paired with `summarise()`, but it's good to know how it affects other verbs:
-
--   `select()`, `rename()`, `relocate()`: grouping has no affect.
-
--   `mutate()`: computation happens per group.
-    This doesn't affect the functions you currently know but is very useful once you learn about window functions, Section \@ref(window-functions).
-
--   `arrange()` and `filter()` are mostly unaffected by grouping, unless you are doing computation (e.g. `filter(flights, dep_delay == min(dep_delay)`), in which case the `mutate()` caveat applies.
+`group_by()` is usually paired with `summarise()`, but also affects the verbs that operate on rows.
+It causes `mutate()` to perform its calculation once per group.
+Because you can do calculation in `filter()` and `arrange()` this can also occasionally affect the results of these function.
+You'll learn more about this in Chapter \@ref(vector-tools).
 
 ### Exercises
 
@@ -532,73 +545,95 @@ For the purposes of summarising, ungrouped data is treated as if all your data w
 
 ## Case study: aggregates and sample size
 
-Whenever you do any aggregation, it's always a good idea to include either a count (`n()`).
+Whenever you do any aggregation, it's always a good idea to include a count (`n()`).
 That way you can check that you're not drawing conclusions based on very small amounts of data.
 For example, let's look at the planes (identified by their tail number) that have the highest average delays:
 
 ```{r}
-delays <- flights %>% 
-  filter(!is.na(arr_delay)) |> 
-  group_by(tailnum) %>% 
+#| fig.alt: >
+#|   A frequency histogram showing the distribution of flight delays.
+#|   The distribution is unimodal, with a large spike around 0, and
+#|   asymmetric: very few flights leave more than 30 minutes early, 
+#|   but flights are delayed up to 5 hours.
+delays <- flights |>  
+  filter(!is.na(arr_delay), !is.na(tailnum)) |> 
+  group_by(tailnum) |> 
   summarise(
-    delay = mean(arr_delay),
+    delay = mean(arr_delay, na.rm = TRUE),
     n = n()
   )
 
-ggplot(data = delays, mapping = aes(x = delay)) + 
+ggplot(delays, aes(delay)) + 
   geom_freqpoly(binwidth = 10)
 ```
 
 Wow, there are some planes that have an *average* delay of 5 hours (300 minutes)!
-
-The story is actually a little more nuanced.
-We can get more insight if we draw a scatterplot of number of flights vs. average delay:
+That seems pretty surprising, so lets draw a scatterplot of number of flights vs. average delay:
 
 ```{r}
-ggplot(data = delays, mapping = aes(x = n, y = delay)) + 
+#| fig.alt: >
+#|   A scatterplot showing number of flights versus after delay. Delays
+#|   for planes with very small number of flights have very high variability
+#|   (from -50 to ~300), but the variability rapidly decreases as the 
+#|   number of flights increases.
+ggplot(delays, aes(n, delay)) + 
   geom_point(alpha = 1/10)
 ```
 
 Not surprisingly, there is much greater variation in the average delay when there are few flights.
-The shape of this plot is very characteristic: whenever you plot a mean (or other summary) vs. group size, you'll see that the variation decreases as the sample size increases.
+The shape of this plot is very characteristic: whenever you plot a mean (or other summary) vs. group size, you'll see that the variation decreases as the sample size increases[^data-transform-4].
 
-When looking at this sort of plot, it's often useful to filter out the groups with the smallest numbers of observations, so you can see more of the pattern and less of the extreme variation in the smallest groups.
-This is what the following code does, as well as showing you a handy pattern for integrating ggplot2 into dplyr flows.
-It's a bit painful that you have to switch from `%>%` to `+`, but once you get the hang of it, it's quite convenient.
+[^data-transform-4]: \*cough\* the central limit theorem \*cough\*
 
-```{r}
-delays %>% 
-  filter(n > 25) %>% 
-  ggplot(mapping = aes(x = n, y = delay)) + 
+When looking at this sort of plot, it's often useful to filter out the groups with the smallest numbers of observations, so you can see more of the pattern and less of the extreme variation in the smallest groups:
+
+```{r, warning = FALSE}
+#| fig.alt: >
+#|   Now that the y-axis (average delay) is smaller (-20 to 60 minutes), 
+#|   we can see a more complicated story. The smooth line suggests
+#|   an initial decrease in average delay from 10 minutes to 0 minutes 
+#|   as number of flights per plane increases from 25 to 100.
+#|   This is followed by a gradual increase up to 10 minutes for 250 
+#|   flights, then a gradual decrease to ~5 minutes at 500 flights.
+delays |>  
+  filter(n > 25) |> 
+  ggplot(aes(n, delay)) + 
   geom_point(alpha = 1/10) + 
   geom_smooth(se = FALSE)
 ```
 
-There's another common variation of this type of pattern.
-Let's look at how the average performance of batters in baseball is related to the number of times they're at bat.
-Here I use data from the **Lahman** package to compute the batting average (number of hits / number of attempts) of every major league baseball player.
+Note the handy pattern for integrating ggplot2 into dplyr flows.
+It's a bit painful that you have to switch from `|>` to `+`, but once you get the hang of it, it's quite convenient.
+
+There's another common variation of this type of pattern that we can see in data about baseball batters.
+The following code uses data from the **Lahman** package to compare how the performance of a player (total hits divided by total attempts) varies with the total number of hits:
 
 ```{r}
 batters <- Lahman::Batting %>% 
   group_by(playerID) %>% 
   summarise(
-    ba = sum(H, na.rm = TRUE) / sum(AB, na.rm = TRUE),
-    ab = sum(AB, na.rm = TRUE)
+    perf = sum(H, na.rm = TRUE) / sum(AB, na.rm = TRUE),
+    n = sum(AB, na.rm = TRUE)
   )
 batters
 ```
 
-When I plot the skill of the batter (measured by the batting average, `ba`) against the number of opportunities to hit the ball (measured by at bat, `ab`), you see two patterns:
+When we plot the skill of the batter (measured by the batting average, `ba`) against the number of opportunities to hit the ball (measured by at bat, `ab`), you see two patterns:
 
 1.  As above, the variation in our aggregate decreases as we get more data points.
 
-2.  There's a positive correlation between skill (`ba`) and opportunities to hit the ball (`ab`).
-    This is because teams control who gets to play, and obviously they'll pick their best players.
+2.  There's a positive correlation between skill (`perf`) and opportunities to hit the ball (`n`) because obviously teams want to give their best batters the most opportunities to hit the ball.
 
-```{r}
+```{r, warning = FALSE}
+#| fig.alt: >
+#|   A scatterplot of number of batting opportunites vs batting performance
+#|   overlaid with a smoothed line. Average performance increases sharply
+#|   from 0.2 at when n is 1 to 0.25 when n is ~1000. Average performance
+#|   continues to increase linearly at a much shallower slope reaching
+#|   ~0.3 when n is ~15,000.
 batters %>% 
-  filter(ab > 100) %>% 
-  ggplot(mapping = aes(x = ab, y = ba)) +
+  filter(n > 100) %>% 
+  ggplot(aes(n, perf)) +
     geom_point(alpha = 1 / 10) + 
     geom_smooth(se = FALSE)
 ```
@@ -608,7 +643,7 @@ If you naively sort on `desc(ba)`, the people with the best batting averages are
 
 ```{r}
 batters %>% 
-  arrange(desc(ba))
+  arrange(desc(perf))
 ```
 
-You can find a good explanation of this problem at <http://varianceexplained.org/r/empirical_bayes_baseball/> and <http://www.evanmiller.org/how-not-to-sort-by-average-rating.html>.
+You can find a good explanation of this problem and how to overcome it at <http://varianceexplained.org/r/empirical_bayes_baseball/> and <http://www.evanmiller.org/how-not-to-sort-by-average-rating.html>.
