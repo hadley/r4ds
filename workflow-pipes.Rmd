@@ -1,169 +1,92 @@
 # Workflow: Pipes {#workflow-pipes}
 
+```{r, results = "asis", echo = FALSE}
+status("restructuring")
+```
+
 ## Introduction
 
 Pipes are a powerful tool for clearly expressing a sequence of multiple operations.
-So far, you've been using them without knowing how they work, or what the alternatives are.
-Now, in this chapter, it's time to explore the pipe in more detail.
-You'll learn the alternatives to the pipe, when you shouldn't use the pipe, and some useful related tools.
+We briefly introduced them in the previous chapter but before going too much farther I wanted to explain a little more about how they work and give a splash of history.
 
 ### Prerequisites
 
-The pipe, `%>%`, comes from the **magrittr** package by Stefan Milton Bache.
-Packages in the tidyverse load `%>%` for you automatically, so you don't usually load magrittr explicitly.
-Here, however, we're focussing on piping, and we aren't loading any other packages, so we will load it explicitly.
+The pipe `|>` is built into R itself so you don't need anything else 😄.
+But we'll also discuss another historically important pipe, `%>%`, which is provided by the core tidyverse package magrittr.
 
 ```{r setup, message = FALSE}
-library(magrittr)
+library(tidyverse)
 ```
 
-## Piping alternatives
+## Why use a pipe?
 
 The point of the pipe is to help you write code in a way that is easier to read and understand.
-To see why the pipe is so useful, we're going to explore a number of ways of writing the same code.
-Let's use code to tell a story about a little bunny named Foo Foo:
-
-> Little bunny Foo Foo\
-> Went hopping through the forest\
-> Scooping up the field mice\
-> And bopping them on the he ad
-
-This is a popular Children's poem that is accompanied by hand actions.
-
-We'll start by defining an object to represent little bunny Foo Foo:
+Imagine you wanted to express the following sequence of actions as R code: find keys, unlock car, start car, drive to work, park.
+You could write it as nested function calls:
 
 ```{r, eval = FALSE}
-foo_foo <- little_bunny()
+park(drive(start_car(find("keys")), to = "work"))
 ```
 
-And we'll use a function for each key verb: `hop()`, `scoop()`, and `bop()`.
-Using this object and these verbs, there are (at least) four ways we could retell the story in code:
-
-1.  Save each intermediate step as a new object.
-2.  Overwrite the original object many times.
-3.  Compose functions.
-4.  Use the pipe.
-
-We'll work through each approach, showing you the code and talking about the advantages and disadvantages.
-
-### Intermediate steps
-
-The simplest approach is to save each step as a new object:
+But writing it out using with the pipe gives it a more natural and easier to read structure:
 
 ```{r, eval = FALSE}
-foo_foo_1 <- hop(foo_foo, through = forest)
-foo_foo_2 <- scoop(foo_foo_1, up = field_mice)
-foo_foo_3 <- bop(foo_foo_2, on = head)
+find("keys") |> 
+  start_car() |>  
+  drive(to = "work") |> 
+  park()
 ```
 
-The main downside of this form is that it forces you to name each intermediate element.
-If there are natural names, this is a good idea, and you should do it.
-But many times, like this in this example, there aren't natural names, and you add numeric suffixes to make the names unique.
-That leads to two problems:
+Behind the scenes, the pipe actually transforms your code to the first form.
+In other words, `x |> f(y)` is equivalent to `f(x, y)`.
 
-1.  The code is cluttered with unimportant names
+## magrittr and the `%>%` pipe
 
-2.  You have to carefully increment the suffix on each line.
+If you've been using the tidyverse for a while, you might be more familiar with `%>%` than `|>`.
+`%>%` comes from the **magrittr** package by Stefan Milton Bache and has been available since 2014.
+This pipe was so successful that in 2021 the base pipe, `|>`, added to R 4.1.0.
 
-Whenever I write code like this, I invariably use the wrong number on one line and then spend 10 minutes scratching my head and trying to figure out what went wrong with my code.
+`|>` is inspired by `%>%`, and the tidyverse team was involved in its design.
+`|>` offers fewer features than `%>%`, but we largely believe this to be a feature.
+`%>%` was an experiment and included many speculative features that seemed like a good idea at the time, but in hindsight added too much complexity relative to their advantages.
+The development of the base pipe gave an us opportunity to reset back to the most useful core.
 
-You may also worry that this form creates many copies of your data and takes up a lot of memory.
-Surprisingly, that's not the case.
-First, note that proactively worrying about memory is not a useful way to spend your time: worry about it when it becomes a problem (i.e. you run out of memory), not before.
-Second, R isn't stupid, and it will share columns across data frames, where possible.
-Let's take a look at an actual data manipulation pipeline where we add a new column to `ggplot2::diamonds`:
+## Changing the argument
+
+There is one feature that `%>%` has that `|>` currently lacks: a very easy way to change which argument you pass the object to --- you just put a `.` where you want the object on the left of the pipe to go.
+Ironically this is particularly important for many base functions which were designed well before the pipe existed.
+
+One particularly challenging example is extract a single column out of a data frame with `$`.
+With `%>%` you can write the fairly straightforward:
 
 ```{r}
-diamonds <- ggplot2::diamonds
-diamonds2 <- diamonds %>% 
-  dplyr::mutate(price_per_carat = price / carat)
-
-pryr::object_size(diamonds)
-pryr::object_size(diamonds2)
-pryr::object_size(diamonds, diamonds2)
+mtcars %>% .$cyl
 ```
 
-`pryr::object_size()` gives the memory occupied by all of its arguments.
-The results seem counterintuitive at first:
-
--   `diamonds` takes up 3.46 MB,
--   `diamonds2` takes up 3.89 MB,
--   `diamonds` and `diamonds2` together take up 3.89 MB!
-
-How can that work?
-Well, `diamonds2` has 10 columns in common with `diamonds`: there's no need to duplicate all that data, so the two data frames have variables in common.
-These variables will only get copied if you modify one of them.
-In the following example, we modify a single value in `diamonds$carat`.
-That means the `carat` variable can no longer be shared between the two data frames, and a copy must be made.
-The size of each data frame is unchanged, but the collective size increases:
+But the base pipe requires the rather cryptic:
 
 ```{r}
-diamonds$carat[1] <- NA
-pryr::object_size(diamonds)
-pryr::object_size(diamonds2)
-pryr::object_size(diamonds, diamonds2)
+mtcars |> (`$`)(cyl)
 ```
 
-(Note that we use `pryr::object_size()` here, not the built-in `object.size()`.
-`object.size()` only takes a single object so it can't compute how data is shared across multiple objects.)
+Fortunately, dplyr provides a way out of this common problem with `pull`:
 
-### Overwrite the original
-
-Instead of creating intermediate objects at each step, we could overwrite the original object:
-
-```{r, eval = FALSE}
-foo_foo <- hop(foo_foo, through = forest)
-foo_foo <- scoop(foo_foo, up = field_mice)
-foo_foo <- bop(foo_foo, on = head)
+```{r}
+mtcars |> pull(cyl)
 ```
 
-This is less typing (and less thinking), so you're less likely to make mistakes.
-However, there are two problems:
+magrittr offers a number of other variations on the pipe that you might want to learn about.
+We don't teach them here because none of them has been sufficiently popular that you could reasonable expect a randomly chosen R user to recognize them.
 
-1.  Debugging is painful: if you make a mistake you'll need to re-run the complete pipeline from the beginning.
+In R 4.2, the base pipe will gain its own placeholder, `_`.
+Must be named.
+Doesn't solve problem above, but helps out in lots of other places.
 
-2.  The repetition of the object being transformed (we've written `foo_foo` six times!) obscures what's changing on each line.
-
-### Function composition
-
-Another approach is to abandon assignment and just string the function calls together:
-
-```{r, eval = FALSE}
-bop(
-  scoop(
-    hop(foo_foo, through = forest),
-    up = field_mice
-  ), 
-  on = head
-)
-```
-
-Here the disadvantage is that you have to read from inside-out, from right-to-left, and that the arguments end up spread far apart (evocatively called the [Dagwood sandwich](https://en.wikipedia.org/wiki/Dagwood_sandwich) problem).
-In short, this code is hard for a human to consume.
-
-### Use the pipe
-
-Finally, we can use the pipe:
-
-```{r, eval = FALSE}
-foo_foo %>%
-  hop(through = forest) %>%
-  scoop(up = field_mice) %>%
-  bop(on = head)
-```
-
-This is my favourite form, because it focusses on verbs, not nouns.
-You can read this series of function compositions like it's a set of imperative actions.
-Foo Foo hops, then scoops, then bops.
-The downside, of course, is that you need to be familiar with the pipe.
-If you've never seen `%>%` before, you'll have no idea what this code does.
-Fortunately, most people pick up the idea very quickly, so when you share your code with others who aren't familiar with the pipe, you can easily teach them.
-
-The pipe works by performing a "lexical transformation": behind the scenes, R reassembles the code in the pipe to the function composition form used above.
+Expect it to continue to evolve.
 
 ## When not to use the pipe
 
-The pipe is a powerful tool, but it's not the only tool at your disposal, and it doesn't solve every problem!
+The pipe is such fun to use, it's easy to go overboard and use pipes when better alternatives exists.
 Pipes are most useful for rewriting a fairly short linear sequence of operations.
 I think you should reach for another tool when:
 
@@ -173,6 +96,3 @@ I think you should reach for another tool when:
 
 -   You have multiple inputs or outputs.
     If there isn't one primary object being transformed, but two or more objects being combined together, don't use the pipe.
-
--   You are starting to think about a directed graph with a complex dependency structure.
-    Pipes are fundamentally linear and expressing complex relationships with them will typically yield confusing code.
