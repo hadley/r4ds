@@ -6,80 +6,105 @@ status("restructuring")
 
 ## Introduction
 
-Pipes are a powerful tool for clearly expressing a sequence of multiple operations.
-We briefly introduced them in the previous chapter but before going too much farther I wanted to explain a little more about how they work and give a splash of history.
-
-### Prerequisites
-
-The pipe `|>` is built into R itself so you don't need anything else 😄.
-But we'll also discuss another historically important pipe, `%>%`, which is provided by the core tidyverse package magrittr.
-
-```{r setup, message = FALSE}
-library(tidyverse)
-```
+The pipe, `|>` is a powerful tool for clearly expressing a sequence of multiple operations.
+We briefly introduced them in the previous chapter but before going too much farther I wanted to give a little more motivation, discuss another important pipe (`%>%`), and discuss one challenge of the pipe.
 
 ## Why use a pipe?
 
-The point of the pipe is to help you write code in a way that is easier to read and understand.
-Imagine you wanted to express the following sequence of actions as R code: find keys, unlock car, start car, drive to work, park.
-You could write it as nested function calls:
+Each individual dplyr function is quite simple, so to solve complex problems you'll typically need to combine multiple verbs together.
+The end of the last chapter finished with a moderately complex pipe:
 
 ```{r, eval = FALSE}
-park(drive(start_car(find("keys")), to = "work"))
+flights |>  
+  filter(!is.na(arr_delay), !is.na(tailnum)) |> 
+  group_by(tailnum) |> 
+  summarise(
+    delay = mean(arr_delay, na.rm = TRUE),
+    n = n()
+  )
 ```
 
-But writing it out using with the pipe gives it a more natural and easier to read structure:
+Even though this pipe has four steps, it quites easy to skim to get the main meaning: we start with flights, then filter, then group, then summarize.
+
+What would happen if we didn't have the pipe?
+We can still solve this same problem but we'd need to nest each function call inside the previous:
 
 ```{r, eval = FALSE}
-find("keys") |> 
-  start_car() |>  
-  drive(to = "work") |> 
-  park()
+summarise(
+  group_by(
+    filter(
+      flights, 
+      !is.na(arr_delay), !is.na(tailnum)
+    ),
+    tailnum
+  ), 
+  delay = mean(arr_delay, na.rm = TRUE
+  ), 
+  n = n()
+)
 ```
 
-Behind the scenes, the pipe actually transforms your code to the first form.
-In other words, `x |> f(y)` is equivalent to `f(x, y)`.
+Or use a bunch of intermediate variables:
+
+```{r, eval = FALSE}
+flights1 <- filter(flights, !is.na(arr_delay), !is.na(tailnum))
+flights2 <- group_by(flights1, tailnum) 
+flights3 <- summarise(flight2,
+  delay = mean(arr_delay, na.rm = TRUE),
+  n = n()
+)
+```
+
+While both of these forms have their uses, the pipe generally produces code that is easier to read and easier to write.
 
 ## magrittr and the `%>%` pipe
 
-If you've been using the tidyverse for a while, you might be more familiar with `%>%` than `|>`.
-`%>%` comes from the **magrittr** package by Stefan Milton Bache and has been available since 2014.
-This pipe was so successful that in 2021 the base pipe, `|>`, added to R 4.1.0.
+If you've been using the tidyverse for a while, you might have been be more familiar with the `%>%` pipe provided by the **magrittr** package by Stefan Milton Bache.
+The magrittr package is included in the code the tidyverse, so you can use `%>%` whenever you use the tidyverse:
 
-`|>` is inspired by `%>%`, and the tidyverse team was involved in its design.
-`|>` offers fewer features than `%>%`, but we largely believe this to be a feature.
-`%>%` was an experiment and included many speculative features that seemed like a good idea at the time, but in hindsight added too much complexity relative to their advantages.
-The development of the base pipe gave an us opportunity to reset back to the most useful core.
+```{r, message = FALSE}
+library(tidyverse)
 
-## Changing the argument
-
-There is one feature that `%>%` has that `|>` currently lacks: a very easy way to change which argument you pass the object to --- you just put a `.` where you want the object on the left of the pipe to go.
-Ironically this is particularly important for many base functions which were designed well before the pipe existed.
-
-One particularly challenging example is extract a single column out of a data frame with `$`.
-With `%>%` you can write the fairly straightforward:
-
-```{r}
-mtcars %>% .$cyl
+mtcars %>% 
+  group_by(cyl) %>%
+  summarise(n = n())
 ```
 
-But the base pipe requires the rather cryptic:
+For simple cases `|>` and `%>%` behave identically.
+So why do we recommend the base pipe?
+Firstly, because it's part of base R, it's always available for you to use, even when you're not using the tidyverse.
+Secondly, the `|>` is quite a bit simpler than the magrittr pipe.
+In the 7 years between the invention of `%>%` in 2014 and the inclusion of `|>` in R 4.1.0 in 2021, we honed in the core strength of the pipe, allowing the base implementation to jettison to estoeric and relatively unimportant features.
 
-```{r}
-mtcars |> (`$`)(cyl)
-```
+### Key differences
 
-Fortunately, dplyr provides a way out of this common problem with `pull`:
+If you haven't used `%>%` you can skip this section; if you have, read on to learn about the most important differences.
 
-```{r}
-mtcars |> pull(cyl)
-```
+-   `%>%` allows you to use `.` as a placeholder to control how the object on the left is passed to the function on the right.
+    R 4.2.0 will bring a `_` as a placeholder with the additional restriction that it must be named.
 
-magrittr offers a number of other variations on the pipe that you might want to learn about.
-We don't teach them here because none of them has been sufficiently popular that you could reasonable expect a randomly chosen R user to recognize them.
+-   The base pipe `|>` doesn't support any of the more complex uses of `.` such as passing `.` to more than one argument, or the special behavior when used with `.`.
 
-In R 4.2, the base pipe will gain its own placeholder, `_`.
-Must be named.
-Doesn't solve problem above, but helps out in lots of other places.
+-   The base pipe doesn't yet provide a convenient way to use `$` (and similar functions).
+    With magrittr, you can write:
 
-Expect it to continue to evolve.
+    ```{r}
+    mtcars %>% .$cyl
+    ```
+
+    With the base pipe you instead need the rather cryptic:
+
+    ```{r}
+    mtcars |> (`$`)(cyl)
+    ```
+
+    Fortunately, you can instead use `dplyr::pull():`
+
+    ```{r}
+    mtcars |> pull(cyl)
+    ```
+
+-   When calling a function with no argument, you could drop the parenthesis, and write (e.g.) `x %>% ungroup`.
+    The parenthesis are always required with `|>`.
+
+-   Starting a pipe with `.`, like `. %>% group_by(x) %>% summarise(x)` would create a function rather than immediately performing the pipe.
