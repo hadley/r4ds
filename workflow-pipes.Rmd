@@ -4,15 +4,13 @@
 status("restructuring")
 ```
 
-## Introduction
-
-The pipe, `|>` is a powerful tool for clearly expressing a sequence of multiple operations.
-We briefly introduced them in the previous chapter but before going too much farther I wanted to give a little more motivation, discuss another important pipe (`%>%`), and discuss one challenge of the pipe.
+The pipe, `|>`, is a powerful tool for clearly expressing a sequence of operations that transform an object.
+We briefly introduced them in the previous chapter but before going too much farther I wanted to give a little more motivation and discuss another pipe that you're likely to see in the wild.
 
 ## Why use a pipe?
 
-Each individual dplyr function is quite simple, so to solve complex problems you'll typically need to combine multiple verbs together.
-The end of the last chapter finished with a moderately complex pipe:
+Because each individual dplyr function is quite simple, solving complex problems typically require multiple verbs together.
+For example, the last chapter finished with a moderately complex pipe:
 
 ```{r, eval = FALSE}
 flights |>  
@@ -24,10 +22,10 @@ flights |>
   )
 ```
 
-Even though this pipe has four steps, it quites easy to skim to get the main meaning: we start with flights, then filter, then group, then summarize.
+Even though this pipe has four steps, because the verbs come at the start of each line, it's quite easy to skim: we start with flights, then filter, then group, then summarize.
 
 What would happen if we didn't have the pipe?
-We can still solve this same problem but we'd need to nest each function call inside the previous:
+We could nest each function call inside the previous call:
 
 ```{r, eval = FALSE}
 summarise(
@@ -44,7 +42,7 @@ summarise(
 )
 ```
 
-Or use a bunch of intermediate variables:
+Or we could use a bunch of intermediate variables:
 
 ```{r, eval = FALSE}
 flights1 <- filter(flights, !is.na(arr_delay), !is.na(tailnum))
@@ -55,7 +53,19 @@ flights3 <- summarise(flight2,
 )
 ```
 
-While both of these forms have their uses, the pipe generally produces code that is easier to read and easier to write.
+While both of these forms have their place and time, the pipe generally produces code that is easier to read and easier to write.
+
+To add the pipe to your code, we recommend using the build-in keyboard shortcut Ctrl/Cmd + Shift + M.
+You'll also need to make one change to your RStudio options to use the base pipe instead of the magrittr pipe as shown in Figure \@ref(fig:pipe-options); more on that next.
+
+```{r pipe-options, out.width = NULL, echo = FALSE}
+#| fig.cap: >
+#|   To insert `|>`, make sure the "Use native pipe" option is checked.
+#| fig.alt: > 
+#|   Screenshot showing the "Use native pipe operator" option which can
+#|   be found on the "Editing" panel of the "Code" options.
+knitr::include_graphics("screenshots/rstudio-pipe-options.png")
+```
 
 ## magrittr and the `%>%` pipe
 
@@ -73,38 +83,37 @@ mtcars %>%
 For simple cases `|>` and `%>%` behave identically.
 So why do we recommend the base pipe?
 Firstly, because it's part of base R, it's always available for you to use, even when you're not using the tidyverse.
-Secondly, the `|>` is quite a bit simpler than the magrittr pipe.
-In the 7 years between the invention of `%>%` in 2014 and the inclusion of `|>` in R 4.1.0 in 2021, we honed in the core strength of the pipe, allowing the base implementation to jettison to estoeric and relatively unimportant features.
+Secondly, the `|>` is quite a bit simpler than `%>%`: in the 7 years between the invention of `%>%` in 2014 and the inclusion of `|>` in R 4.1.0 in 2021, we better learned what the core strength of the pipe was, allowing the base implementation to jettison infrequently used and less important features.
 
-### Key differences
+## Base pipe vs magrittr pipe
 
-If you haven't used `%>%` you can skip this section; if you have, read on to learn about the most important differences.
+While `|>` and `%>%` behave identically for simple cases there are a few important differences.
+These are most likely to affect you if you're a long-term `%>%` user who has taken advantage of some of the more advanced features.
+But they're good to know about even if you've never used `%>%`, because you're likely to encounter some of them when reading wild-caught code.
 
--   `%>%` allows you to use `.` as a placeholder to control how the object on the left is passed to the function on the right.
-    R 4.2.0 will bring a `_` as a placeholder with the additional restriction that it must be named.
+-   The pipe requires that object on the left hand side be passed to the first argument of the function on the right-hand side.
+    `%>%` allows you change the placement using `.` as a placeholder.
+    For example, `x %>% f(1)` is equivalent to `f(x, 1)` but `x %>% f(1, .)` is equivalent to `f(1, x)`.
 
--   The base pipe `|>` doesn't support any of the more complex uses of `.` such as passing `.` to more than one argument, or the special behavior when used with `.`.
+    R 4.2.0 will bring a `_` as a placeholder, but it has to be named, so you could write `x |> f(1, y = _)`.
+    The base placeholder is deliberately simple; you can't pass it to multiple arguments, and it doesn't have the special behavior that `%>%` does when used with `{}`.
 
--   The base pipe doesn't yet provide a convenient way to use `$` (and similar functions).
-    With magrittr, you can write:
+    You can also use both `.` and `_` on the left-hand side of operators like `$`, `[[`, `[` (which you'll learn about in Chapter \@ref(vectors)):
 
-    ```{r}
+    ``` r
     mtcars %>% .$cyl
+    mtcars |> _$cyl
     ```
 
-    With the base pipe you instead need the rather cryptic:
-
-    ```{r}
-    mtcars |> (`$`)(cyl)
-    ```
-
-    Fortunately, you can instead use `dplyr::pull():`
+    For the special case of extracting a column out of a data frame, you can also use `dplyr::pull():`
 
     ```{r}
     mtcars |> pull(cyl)
     ```
 
--   When calling a function with no argument, you could drop the parenthesis, and write (e.g.) `x %>% ungroup`.
-    The parenthesis are always required with `|>`.
+-   When calling a function with no argument, `%>%` allowed you to drop the drop the parentheses, and write (e.g.) `x %>% ungroup`.
+    `|>` always requires the parentheses.
 
 -   Starting a pipe with `.`, like `. %>% group_by(x) %>% summarise(x)` would create a function rather than immediately performing the pipe.
+    This is an error with the base pipe.
+
