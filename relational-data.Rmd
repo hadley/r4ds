@@ -121,12 +121,12 @@ Once you've identified the primary keys in your data frames, it's good practice 
 One way to do that is to `count()` the primary keys and look for entries where `n` is greater than one:
 
 ```{r}
-planes %>% 
-  count(tailnum) %>% 
+planes |> 
+  count(tailnum) |> 
   filter(n > 1)
 
-weather %>% 
-  count(year, month, day, hour, origin) %>% 
+weather |> 
+  count(year, month, day, hour, origin) |> 
   filter(n > 1)
 ```
 
@@ -135,12 +135,12 @@ For example, what's the primary key in the `flights` data frame?
 You might think it would be the date plus the flight or tail number, but neither of those are unique:
 
 ```{r}
-flights %>% 
-  count(year, month, day, flight) %>% 
+flights |> 
+  count(year, month, day, flight) |> 
   filter(n > 1)
 
-flights %>% 
-  count(year, month, day, tailnum) %>% 
+flights |> 
+  count(year, month, day, tailnum) |> 
   filter(n > 1)
 ```
 
@@ -192,7 +192,7 @@ Like `mutate()`, the join functions add variables to the right, so if you have a
 For these examples, we'll make it easier to see what's going on in the examples by creating a narrower dataset:
 
 ```{r}
-flights2 <- flights %>% 
+flights2 <- flights |> 
   select(year:day, hour, origin, dest, tailnum, carrier)
 flights2
 ```
@@ -203,8 +203,8 @@ Imagine you want to add the full airline name to the `flights2` data.
 You can combine the `airlines` and `flights2` data frames with `left_join()`:
 
 ```{r}
-flights2 %>%
-  select(-origin, -dest) %>% 
+flights2 |>
+  select(-origin, -dest) |> 
   left_join(airlines, by = "carrier")
 ```
 
@@ -213,8 +213,8 @@ This is why I call this type of join a mutating join.
 In this case, you could have got to the same place using `mutate()` and R's base subsetting:
 
 ```{r}
-flights2 %>%
-  select(-origin, -dest) %>% 
+flights2 |>
+  select(-origin, -dest) |> 
   mutate(name = airlines$name[match(carrier, airlines$carrier)])
 ```
 
@@ -284,7 +284,7 @@ The output of an inner join is a new data frame that contains the key, the x val
 We use `by` to tell dplyr which variable is the key:
 
 ```{r}
-x %>% 
+x |> 
   inner_join(y, by = "key")
 ```
 
@@ -391,7 +391,7 @@ You can use other values for `by` to connect the data frames in other ways:
     For example, the flights and weather data frames match on their common variables: `year`, `month`, `day`, `hour` and `origin`.
 
     ```{r}
-    flights2 %>% 
+    flights2 |> 
       left_join(weather)
     ```
 
@@ -400,7 +400,7 @@ You can use other values for `by` to connect the data frames in other ways:
     For example, `flights` and `planes` have `year` variables, but they mean different things so we only want to join by `tailnum`.
 
     ```{r}
-    flights2 %>% 
+    flights2 |> 
       left_join(planes, by = "tailnum")
     ```
 
@@ -414,10 +414,10 @@ You can use other values for `by` to connect the data frames in other ways:
     Each flight has an origin and destination `airport`, so we need to specify which one we want to join to:
 
     ```{r}
-    flights2 %>% 
+    flights2 |> 
       left_join(airports, c("dest" = "faa"))
 
-    flights2 %>% 
+    flights2 |> 
       left_join(airports, c("origin" = "faa"))
     ```
 
@@ -427,8 +427,8 @@ You can use other values for `by` to connect the data frames in other ways:
     Here's an easy way to draw a map of the United States:
 
     ```{r, eval = FALSE}
-    airports %>%
-      semi_join(flights, c("faa" = "dest")) %>%
+    airports |>
+      semi_join(flights, c("faa" = "dest")) |>
       ggplot(aes(lon, lat)) +
         borders("state") +
         geom_point() +
@@ -450,11 +450,11 @@ You can use other values for `by` to connect the data frames in other ways:
 
     ```{r, eval = FALSE, include = FALSE}
     worst <- filter(flights, !is.na(dep_time), month == 6, day == 13)
-    worst %>%
-      group_by(dest) %>%
-      summarise(delay = mean(arr_delay), n = n()) %>%
-      filter(n > 5) %>%
-      inner_join(airports, by = c("dest" = "faa")) %>%
+    worst |>
+      group_by(dest) |>
+      summarise(delay = mean(arr_delay), n = n()) |>
+      filter(n > 5) |>
+      inner_join(airports, by = c("dest" = "faa")) |>
       ggplot(aes(lon, lat)) +
         borders("state") +
         geom_point(aes(size = n, colour = delay)) +
@@ -501,8 +501,8 @@ Semi-joins are useful for matching filtered summary data frames back to the orig
 For example, imagine you've found the top ten most popular destinations:
 
 ```{r}
-top_dest <- flights %>%
-  count(dest, sort = TRUE) %>%
+top_dest <- flights |>
+  count(dest, sort = TRUE) |>
   head(10)
 top_dest
 ```
@@ -511,7 +511,7 @@ Now you want to find each flight that went to one of those destinations.
 You could construct a filter yourself:
 
 ```{r}
-flights %>% 
+flights |> 
   filter(dest %in% top_dest$dest)
 ```
 
@@ -522,7 +522,7 @@ How would you construct the filter statement that used `year`, `month`, and `day
 Instead you can use a semi-join, which connects the two data frames like a mutating join, but instead of adding new columns, only keeps the rows in `x` that have a match in `y`:
 
 ```{r}
-flights %>% 
+flights |> 
   semi_join(top_dest)
 ```
 
@@ -550,8 +550,8 @@ Anti-joins are useful for diagnosing join mismatches.
 For example, when connecting `flights` and `planes`, you might be interested to know that there are many `flights` that don't have a match in `planes`:
 
 ```{r}
-flights %>%
-  anti_join(planes, by = "tailnum") %>%
+flights |>
+  anti_join(planes, by = "tailnum") |>
   count(tailnum, sort = TRUE)
 ```
 
@@ -587,7 +587,7 @@ Your own data is unlikely to be so nice, so there are a few things that you shou
     For example, the altitude and longitude uniquely identify each airport, but they are not good identifiers!
 
     ```{r}
-    airports %>% count(alt, lon) %>% filter(n > 1)
+    airports |> count(alt, lon) |> filter(n > 1)
     ```
 
 2.  Check that none of the variables in the primary key are missing.

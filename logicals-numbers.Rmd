@@ -23,7 +23,7 @@ The elements in a logical vector can have one of three possible values: `TRUE`, 
 ### Boolean operations
 
 If you use multiple conditions In `filter()`, only rows where every condition is `TRUE` are returned.
-R uses `&` to denote logical "and", so that means `df %>% filter(cond1, cond2)` is equivalent to `df %>% filter(cond1 & cond2)`.
+R uses `&` to denote logical "and", so that means `df |> filter(cond1, cond2)` is equivalent to `df |> filter(cond1 & cond2)`.
 For other types of combinations, you'll need to use Boolean operators yourself: `|` is "or" and `!` is "not".
 Figure \@ref(fig:bool-ops) shows the complete set of Boolean operations.
 
@@ -46,7 +46,7 @@ knitr::include_graphics("diagrams/transform-logical.png")
 The following code finds all flights that departed in November or December:
 
 ```{r, eval = FALSE}
-flights %>% filter(month == 11 | month == 12)
+flights |> filter(month == 11 | month == 12)
 ```
 
 Note that the order of operations doesn't work like English.
@@ -61,15 +61,15 @@ An easy way to solve this problem is to use `%in%`.
 So we could use it to rewrite the code above:
 
 ```{r, eval = FALSE}
-nov_dec <- flights %>% filter(month %in% c(11, 12))
+nov_dec <- flights |> filter(month %in% c(11, 12))
 ```
 
 Sometimes you can simplify complicated subsetting by remembering De Morgan's law: `!(x & y)` is the same as `!x | !y`, and `!(x | y)` is the same as `!x & !y`.
 For example, if you wanted to find flights that weren't delayed (on arrival or departure) by more than two hours, you could use either of the following two filters:
 
 ```{r, eval = FALSE}
-flights %>% filter(!(arr_delay > 120 | dep_delay > 120))
-flights %>% filter(arr_delay <= 120, dep_delay <= 120)
+flights |> filter(!(arr_delay > 120 | dep_delay > 120))
+flights |> filter(arr_delay <= 120, dep_delay <= 120)
 ```
 
 As well as `&` and `|`, R also has `&&` and `||`.
@@ -82,8 +82,8 @@ These are called short-circuiting operators and you'll learn when you should use
 If you want to find rows containing missing values, you'll need to convert missingness into a logical vector using `is.na()`.
 
 ```{r}
-flights %>% filter(is.na(dep_delay) | is.na(arr_delay))
-flights %>% filter(is.na(dep_delay) != is.na(arr_delay))
+flights |> filter(is.na(dep_delay) | is.na(arr_delay))
+flights |> filter(is.na(dep_delay) != is.na(arr_delay))
 ```
 
 ### In mutate()
@@ -93,8 +93,8 @@ That makes it much easier to check your work.When checking your work, a particul
 This makes it easy to see the variables involved side-by-side.
 
 ```{r}
-flights %>% 
-  mutate(is_cancelled = is.na(dep_delay) | is.na(arr_delay), .keep = "used") %>% 
+flights |> 
+  mutate(is_cancelled = is.na(dep_delay) | is.na(arr_delay), .keep = "used") |> 
   filter(is_cancelled)
 ```
 
@@ -110,7 +110,7 @@ df <- data.frame(
   date = as.Date("2020-01-01") + 0:6,
   balance = c(100, 50, 25, -25, -50, 30, 120)
 )
-df %>% mutate(status = if_else(balance < 0, "overdraft", "ok"))
+df |> mutate(status = if_else(balance < 0, "overdraft", "ok"))
 ```
 
 If you start to nest multiple sets of `if_else`s, I'd suggest switching to `case_when()` instead.
@@ -118,7 +118,7 @@ If you start to nest multiple sets of `if_else`s, I'd suggest switching to `case
 `condition` must evaluate to a logical vector; when it's `TRUE`, output will be used.
 
 ```{r}
-df %>% 
+df |> 
   mutate(
     status = case_when(
       balance == 0 ~ "no money", 
@@ -168,17 +168,17 @@ Like all summary functions, they'll return `NA` if there are any missing values 
 This means that `sum(x)` gives the number of `TRUE`s in `x` and `mean(x)` gives the proportion of `TRUE`s:
 
 ```{r}
-not_cancelled <- flights %>% filter(!is.na(dep_delay), !is.na(arr_delay))
+not_cancelled <- flights |> filter(!is.na(dep_delay), !is.na(arr_delay))
 
 # How many flights left before 5am? (these usually indicate delayed
 # flights from the previous day)
-not_cancelled %>% 
-  group_by(year, month, day) %>% 
+not_cancelled |> 
+  group_by(year, month, day) |> 
   summarise(n_early = sum(dep_time < 500))
 
 # What proportion of flights are delayed by more than an hour?
-not_cancelled %>% 
-  group_by(year, month, day) %>% 
+not_cancelled |> 
+  group_by(year, month, day) |> 
   summarise(hour_prop = mean(arr_delay > 60))
 ```
 
@@ -208,7 +208,7 @@ There's no way to list every possible function that you might use, but here's a 
     For example, in the flights dataset, you can compute `hour` and `minute` from `dep_time` with:
 
     ```{r}
-    flights %>% mutate(
+    flights |> mutate(
       hour = dep_time %/% 100,
       minute = dep_time %% 100,
       .keep = "used"
@@ -227,10 +227,10 @@ There's no way to list every possible function that you might use, but here's a 
 ```{r}
 
 
-flights %>% 
-  group_by(hour = sched_dep_time %/% 100) %>% 
-  summarise(prop_cancelled = mean(is.na(dep_time)), n = n()) %>% 
-  filter(hour > 1) %>% 
+flights |> 
+  group_by(hour = sched_dep_time %/% 100) |> 
+  summarise(prop_cancelled = mean(is.na(dep_time)), n = n()) |> 
+  filter(hour > 1) |> 
   ggplot(aes(hour, prop_cancelled)) +
   geom_point()
 ```
@@ -243,8 +243,8 @@ Just using means, counts, and sum can get you a long way, but R provides many ot
     The mean is the sum divided by the length; the median is a value where 50% of `x` is above it, and 50% is below it.
 
     ```{r}
-    not_cancelled %>%
-      group_by(month) %>%
+    not_cancelled |>
+      group_by(month) |>
       summarise(
         med_arr_delay = median(arr_delay),
         med_dep_delay = median(dep_delay)
@@ -255,8 +255,8 @@ Just using means, counts, and sum can get you a long way, but R provides many ot
     We haven't talked about this sort of subsetting yet, but you'll learn more about it in Section \@ref(vector-subsetting).
 
     ```{r}
-    not_cancelled %>% 
-      group_by(year, month, day) %>% 
+    not_cancelled |> 
+      group_by(year, month, day) |> 
       summarise(
         avg_delay1 = mean(arr_delay),
         avg_delay2 = mean(arr_delay[arr_delay > 0]) # the average positive delay
@@ -269,15 +269,15 @@ Just using means, counts, and sum can get you a long way, but R provides many ot
 
     ```{r}
     # Why is distance to some destinations more variable than to others?
-    not_cancelled %>% 
-      group_by(origin, dest) %>% 
-      summarise(distance_sd = sd(distance), n = n()) %>% 
+    not_cancelled |> 
+      group_by(origin, dest) |> 
+      summarise(distance_sd = sd(distance), n = n()) |> 
       filter(distance_sd > 0)
 
     # Did it move?
-    not_cancelled %>% 
-      filter(dest == "EGE") %>% 
-      select(time_hour, dest, distance, origin) %>% 
+    not_cancelled |> 
+      filter(dest == "EGE") |> 
+      select(time_hour, dest, distance, origin) |> 
       ggplot(aes(time_hour, distance, colour = origin)) +
       geom_point()
     ```
@@ -288,8 +288,8 @@ Just using means, counts, and sum can get you a long way, but R provides many ot
 
     ```{r}
     # When do the first and last flights leave each day?
-    not_cancelled %>% 
-      group_by(year, month, day) %>% 
+    not_cancelled |> 
+      group_by(year, month, day) |> 
       summarise(
         first = min(dep_time),
         last = max(dep_time)
