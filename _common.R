@@ -4,10 +4,9 @@ knitr::opts_chunk$set(
   comment = "#>",
   collapse = TRUE,
   # cache = TRUE,
-  out.width = "70%",
-  fig.align = 'center',
+  fig.retina = 2,
   fig.width = 6,
-  fig.asp = 0.618,  # 1 / phi
+  fig.asp = 2/3,
   fig.show = "hold"
 )
 
