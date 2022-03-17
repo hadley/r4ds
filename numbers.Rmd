@@ -1,0 +1,289 @@
+# Numbers {#logicals-numbers}
+
+```{r, results = "asis", echo = FALSE}
+status("drafting")
+```
+
+## Introduction
+
+In this chapter, you'll learn useful tools for working with numeric vectors.
+
+### Prerequisites
+
+```{r, message = FALSE}
+library(tidyverse)
+library(nycflights13)
+```
+
+### Counts
+
+Doesn't quite belong here, but it's really important (and it makes numbers) so I wanted to discuss it first.
+
+-   Counts: You've seen `n()`, which takes no arguments, and returns the size of the current group.
+    To count the number of non-missing values, use `sum(!is.na(x))`.
+    To count the number of distinct (unique) values, use `n_distinct(x)`.
+
+    ```{r}
+    # Which destinations have the most carriers?
+    not_cancelled |> 
+      group_by(dest) |> 
+      summarise(carriers = n_distinct(carrier)) |> 
+      arrange(desc(carriers))
+    ```
+
+    Counts are so useful that dplyr provides a simple helper if all you want is a count:
+
+    ```{r}
+    not_cancelled |> 
+      count(dest)
+    ```
+
+    Just like with `group_by()`, you can also provide multiple variables to `count()`.
+
+    ```{r}
+    not_cancelled |> 
+      count(carrier, dest)
+    ```
+
+    You can optionally provide a weight variable.
+    For example, you could use this to "count" (sum) the total number of miles a plane flew:
+
+    ```{r}
+    not_cancelled |> 
+      count(tailnum, wt = distance)
+    ```
+
+### 
+
+## Transformations
+
+There are many functions for creating new variables that you can use with `mutate()`.
+The key property is that the function must be vectorised: it must take a vector of values as input, return a vector with the same number of values as output.
+There's no way to list every possible function that you might use, but here's a selection of functions that are frequently useful:
+
+-   Arithmetic operators: `+`, `-`, `*`, `/`, `^`.
+    These are all vectorised, using the so called "recycling rules".
+    If one parameter is shorter than the other, it will be automatically extended to be the same length.
+    This is most useful when one of the arguments is a single number: `air_time / 60`, `hours * 60 + minute`, etc.
+
+-   Trigonometry: R provides all the trigonometry functions that you might expect.
+    I'm not going to enumerate them here since it's rare that you need them for data science, but you can sleep soundly at night knowing that they're available if you need them.
+
+-   Modular arithmetic: `%/%` (integer division) and `%%` (remainder), where `x == y * (x %/% y) + (x %% y)`.
+    Modular arithmetic is a handy tool because it allows you to break integers up into pieces.
+    For example, in the flights dataset, you can compute `hour` and `minute` from `dep_time` with:
+
+    ```{r}
+    flights |> mutate(
+      hour = dep_time %/% 100,
+      minute = dep_time %% 100,
+      .keep = "used"
+    )
+    ```
+
+-   Logs: `log()`, `log2()`, `log10()`.
+    Logarithms are an incredibly useful transformation for dealing with data that ranges across multiple orders of magnitude.
+    They also convert multiplicative relationships to additive.
+
+    All else being equal, I recommend using `log2()` because it's easy to interpret: a difference of 1 on the log scale corresponds to doubling on the original scale and a difference of -1 corresponds to halving.
+
+-   `round()`.
+    Negative numbers.
+
+```{r}
+flights |> 
+  group_by(hour = sched_dep_time %/% 100) |> 
+  summarise(prop_cancelled = mean(is.na(dep_time)), n = n()) |> 
+  filter(hour > 1) |> 
+  ggplot(aes(hour, prop_cancelled)) +
+  geom_point()
+```
+
+## Summaries
+
+Just using means, counts, and sum can get you a long way, but R provides many other useful summary functions:
+
+-   Measures of location: we've used `mean(x)`, but `median(x)` is also useful.
+    The mean is the sum divided by the length; the median is a value where 50% of `x` is above it, and 50% is below it.
+
+    ```{r}
+    not_cancelled |>
+      group_by(month) |>
+      summarise(
+        med_arr_delay = median(arr_delay),
+        med_dep_delay = median(dep_delay)
+      )
+    ```
+
+    It's sometimes useful to combine aggregation with logical subsetting.
+    We haven't talked about this sort of subsetting yet, but you'll learn more about it in Section \@ref(vector-subsetting).
+
+    ```{r}
+    not_cancelled |> 
+      group_by(year, month, day) |> 
+      summarise(
+        avg_delay1 = mean(arr_delay),
+        avg_delay2 = mean(arr_delay[arr_delay > 0]) # the average positive delay
+      )
+    ```
+
+-   Measures of spread: `sd(x)`, `IQR(x)`, `mad(x)`.
+    The root mean squared deviation, or standard deviation `sd(x)`, is the standard measure of spread.
+    The interquartile range `IQR(x)` and median absolute deviation `mad(x)` are robust equivalents that may be more useful if you have outliers.
+
+    ```{r}
+    # Why is distance to some destinations more variable than to others?
+    not_cancelled |> 
+      group_by(origin, dest) |> 
+      summarise(distance_sd = sd(distance), n = n()) |> 
+      filter(distance_sd > 0)
+
+    # Did it move?
+    not_cancelled |> 
+      filter(dest == "EGE") |> 
+      select(time_hour, dest, distance, origin) |> 
+      ggplot(aes(time_hour, distance, colour = origin)) +
+      geom_point()
+    ```
+
+-   Measures of rank: `min(x)`, `quantile(x, 0.25)`, `max(x)`.
+    Quantiles are a generalisation of the median.
+    For example, `quantile(x, 0.25)` will find a value of `x` that is greater than 25% of the values, and less than the remaining 75%.
+
+    ```{r}
+    # When do the first and last flights leave each day?
+    not_cancelled |> 
+      group_by(year, month, day) |> 
+      summarise(
+        first = min(dep_time),
+        last = max(dep_time)
+      )
+    ```
+
+### Summary functions with mutate
+
+When you use a summary function inside mutate(), they are automatically recycled to the correct length.
+
+-   Arithmetic operators are also useful in conjunction with the aggregate functions you'll learn about later. For example, `x / sum(x)` calculates the proportion of a total, and `y - mean(y)` computes the difference from the mean.
+
+## Cumulative
+
+-   Cumulative and rolling aggregates: R provides functions for running sums, products, mins and maxes: `cumsum()`, `cumprod()`, `cummin()`, `cummax()`; and dplyr provides `cummean()` for cumulative means. If you need rolling aggregates (i.e. a sum computed over a rolling window), try the RcppRoll package.
+
+```{r}
+x <- 1:10
+cumsum(x)
+cummean(x)
+```
+
+Generalise to rolling and use slider package instead?
+
+### Exercises
+
+1.  Currently `dep_time` and `sched_dep_time` are convenient to look at, but hard to compute with because they're not really continuous numbers.
+    Convert them to a more convenient representation of number of minutes since midnight.
+
+2.  What trigonometric functions does R provide?
+
+3.  Brainstorm at least 5 different ways to assess the typical delay characteristics of a group of flights.
+    Consider the following scenarios:
+
+    -   A flight is 15 minutes early 50% of the time, and 15 minutes late 50% of the time.
+
+    -   A flight is always 10 minutes late.
+
+    -   A flight is 30 minutes early 50% of the time, and 30 minutes late 50% of the time.
+
+    -   99% of the time a flight is on time.
+        1% of the time it's 2 hours late.
+
+    Which is more important: arrival delay or departure delay?
+
+### Window functions
+
+-   Offsets: `lead()` and `lag()` allow you to refer to leading or lagging values.
+    This allows you to compute running differences (e.g. `x - lag(x)`) or find when values change (`x != lag(x)`).
+    They are most useful in conjunction with `group_by()`, which you'll learn about shortly.
+
+    ```{r}
+    (x <- 1:10)
+    lag(x)
+    lead(x)
+    ```
+
+-   Ranking: there are a number of ranking functions, but you should start with `min_rank()`.
+    It does the most usual type of ranking (e.g. 1st, 2nd, 2nd, 4th).
+    The default gives smallest values the small ranks; use `desc(x)` to give the largest values the smallest ranks.
+
+    ```{r}
+    y <- c(1, 2, 2, NA, 3, 4)
+    min_rank(y)
+    min_rank(desc(y))
+    ```
+
+    If `min_rank()` doesn't do what you need, look at the variants `row_number()`, `dense_rank()`, `percent_rank()`, `cume_dist()`, `ntile()`.
+    See their help pages for more details.
+
+    ```{r}
+    row_number(y)
+    dense_rank(y)
+    percent_rank(y)
+    cume_dist(y)
+    ```
+
+-   Measures of position: `first(x)`, `nth(x, 2)`, `last(x)`.
+    These work similarly to `x[1]`, `x[2]`, and `x[length(x)]` but let you set a default value if that position does not exist (i.e. you're trying to get the 3rd element from a group that only has two elements).
+    For example, we can find the first and last departure for each day:
+
+    ```{r}
+    not_cancelled |> 
+      group_by(year, month, day) |> 
+      summarise(
+        first_dep = first(dep_time), 
+        last_dep = last(dep_time)
+      )
+    ```
+
+    These functions are complementary to filtering on ranks.
+    Filtering gives you all variables, with each observation in a separate row:
+
+    ```{r}
+    not_cancelled |> 
+      group_by(year, month, day) |> 
+      mutate(r = min_rank(desc(dep_time))) |> 
+      filter(r %in% range(r))
+    ```
+
+Functions that work most naturally in grouped mutates and filters are known as window functions (vs. the summary functions used for summaries).
+You can learn more about useful window functions in the corresponding vignette: `vignette("window-functions")`.
+
+### Exercises
+
+1.  Find the 10 most delayed flights using a ranking function.
+    How do you want to handle ties?
+    Carefully read the documentation for `min_rank()`.
+
+2.  Which plane (`tailnum`) has the worst on-time record?
+
+3.  What time of day should you fly if you want to avoid delays as much as possible?
+
+4.  For each destination, compute the total minutes of delay.
+    For each flight, compute the proportion of the total delay for its destination.
+
+5.  Delays are typically temporally correlated: even once the problem that caused the initial delay has been resolved, later flights are delayed to allow earlier flights to leave.
+    Using `lag()`, explore how the delay of a flight is related to the delay of the immediately preceding flight.
+
+6.  Look at each destination.
+    Can you find flights that are suspiciously fast?
+    (i.e. flights that represent a potential data entry error).
+    Compute the air time of a flight relative to the shortest flight to that destination.
+    Which flights were most delayed in the air?
+
+7.  Find all destinations that are flown by at least two carriers.
+    Use that information to rank the carriers.
+
+### Recycling rules
+
+Base R.
+
+Tidyverse.
