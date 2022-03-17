@@ -294,17 +294,11 @@ knitr::include_graphics("diagrams/tidy-data/cell-values.png", dpi = 144)
 ### Many variables in column names
 
 A more challenging situation occurs when you have multiple variables crammed into the column names.
-For example, take this minor variation on the `who` dataset:
+For example, take the `who2` dataset:
 
 ```{r}
-who2 <- who |> 
-  rename_with(~ str_remove(.x, "new_?")) |> 
-  rename_with(~ str_replace(.x, "([mf])", "\\1_")) |> 
-  select(!starts_with("iso"))
 who2
 ```
-
-I've used regular expressions to make the problem a little simpler; you'll learn how they work in Chapter \@ref(regular-expressions).
 
 This dataset records information about tuberculosis data collected by the WHO.
 There are two columns that are easy to interpret: `country` and `year`.
@@ -331,23 +325,13 @@ An alternative to `names_sep` is `names_pattern`, which you can use to extract v
 ### Data and variable names in the column headers
 
 The next step up in complexity is when the column names include a mix of variable values and variable names.
-For example, take this dataset adapted from the [data.table vignette](https://CRAN.R-project.org/package=data.table/vignettes/datatable-reshape.html).
-It contains data about five families, with the names and dates of birth of up to two children:
+For example, take the `family` dataset:
 
 ```{r}
-family <- tribble(
-  ~family,  ~dob_child1,  ~dob_child2, ~name_child1, ~name_child2,
-        1, "1998-11-26", "2000-01-29",      "Susan",       "Jose",
-        2, "1996-06-22",           NA,       "Mark",           NA,
-        3, "2002-07-11", "2004-04-05",        "Sam",       "Seth",
-        4, "2004-10-10", "2009-08-27",      "Craig",       "Khai",
-        5, "2000-12-05", "2005-02-28",     "Parker",     "Gracie",
-)
-family <- family |> 
-  mutate(across(starts_with("dob"), parse_date))
 family
 ```
 
+This dataset contains data about five families, with the names and dates of birth of up to two children.
 The new challenge in this dataset is that the column names contain both the name of variable (`dob`, `name)` and the value of a variable (`child1`, `child2`).
 We again we need to supply a vector to `names_to` but this time we use the special `".value"`[^data-tidy-1] to indicate that first component of the column name is in fact a variable name.
 
@@ -366,215 +350,244 @@ family |>
 
 We again use `values_drop_na = TRUE`, since the shape of the input forces the creation of explicit missing variables (e.g. for families with only one child), and `parse_number()` to convert (e.g.) `child1` into 1.
 
-### Tidy census
+### Widening data
 
 So far we've used `pivot_longer()` to solves the common class of problems where values have ended up in column names.
 Next we'll pivot (HA HA) to `pivot_wider()`, which helps when one observation is spread across multiple rows.
-This seems to be a much less common problem in practice, but it's good to know about in case you hit it.
+This seems to be less needed problem in practice, but it's common when dealing with governmental data and arises in a few other places as well.
 
-For example, take the `us_rent_income` dataset, which contains information about median income and rent for each state in the US for 2017 (from the American Community Survey, retrieved with the [tidycensus](https://walker-data.com/tidycensus/) package).
+We'll start with `cms_patient_experience`, a dataset from the Centers of Medicare and Medicaid services that provides information about patient experiences:
 
 ```{r}
-us_rent_income
+cms_patient_experience
 ```
 
-Here an observation is a state, and I think there are four variables.
-`GEOID` and `NAME`, which identify the state and are already columns.
-The `estimate` and `moe` (margin of error) for each of `rent` and `income`, i.e. `income_estimate`, `income_moe`, `rent_estimate`, `rent_moe`.
-
-We can get most of the way there with a simple call to `pivot_wider()`:
+An observation is an organisation, but each organisation is spread across six rows.
+There's one row for each variable, or measure.
+We can see the complete set of variables across the whole dataset with `distinct()`:
 
 ```{r}
-us_rent_income |> 
+cms_patient_experience |> 
+  distinct(measure_cd, measure_title)
+```
+
+Neither of these variables make particularly great variable names: `measure_cd` doesn't hint at the meaning of the variable and `measure_title` is a long sentence containing spaces.
+We'll use `measure_cd` for now.
+
+`pivot_wider()` has the opposite interface to `pivot_longer()` we need to provide the existing columns that define the values (`values_from`) and the column name (`names_from)`:
+
+```{r}
+cms_patient_experience |> 
   pivot_wider(
-    names_from = variable, 
-    values_from = c(estimate, moe)
+    names_from = measure_cd,
+    values_from = prf_rate
   )
 ```
 
-However, there are two problems:
-
--   We want (e.g.) `income_estimate` not `estimate_income`
--   We want `_estimate` then `_moe` for each variable, not all the estimates then all the margins of error.
-
-Fixing these problems requires more tweaking of the call to `pivot_wider()`.
-The details aren't too important here but we can fix the renaming problems by providing a custom glue specification for creating the variable names, and have the variable names vary slowest rather than default of fastest:
+The output doesn't look quite right as we still seem to have multiple rows for each organistaion.
+That's because, by default, `pivot_wider()` will attempt to preservere all the existing columns including `measure_title` which has six distinct observations.
+To fix this problem we need to tell `pivot_wider()` which columns identify each row; in this case that's the variables starting with `org`:
 
 ```{r}
-us_rent_income |> 
+cms_patient_experience |> 
   pivot_wider(
-    names_from = variable, 
-    values_from = c(estimate, moe),
-    names_glue = "{variable}_{.value}",
-    names_vary = "slowest"
+    id_cols = starts_with("org"),
+    names_from = measure_cd,
+    values_from = prf_rate
   )
 ```
 
-Both `pivot_longer()` and `pivot_wider()` have many more capabilities that we get into in this work.
-Once you're comfortable with the basics, we encourage to learn more by reading the documentation for the functions and the vignettes included in the tidyr package.
+### Widening multiple variables
 
-We'll see a couple more examples where `pivot_wider()` is useful in the next section where we work through some challenges that require both `pivot_longer()` and `pivot_wider()`.
-
-## Case studies
-
-Some problems can't be solved by pivoting in a single direction.
-The two examples in this section show how you might combine both `pivot_longer()` and `pivot_wider()` to solve more complex problems.
-
-### World bank
-
-`world_bank_pop` contains data from the World Bank about population per country from 2000 to 2018.
+`cms_patient_care` has a similar structure:
 
 ```{r}
-world_bank_pop
+cms_patient_care
 ```
 
-Our goal is to produce a tidy dataset where each variable is in a column, but I don't know exactly what variables exist yet, so I'm not sure what I'll need to do.
-Luckily, there's one obvious problem to start with: year, which is clearly a variable, is spread across multiple columns.
-I'll fix this with `pivot_longer()`:
+Depending on what you want to do next I think there are three meaningful ways:
 
 ```{r}
-pop2 <- world_bank_pop |> 
+cms_patient_care |> 
+  pivot_wider(
+    names_from = type,
+    values_from = score
+  )
+
+cms_patient_care |> 
+  pivot_wider(
+    names_from = measure_abbr,
+    values_from = score
+  )
+
+cms_patient_care |> 
+  pivot_wider(
+    names_from = c(measure_abbr, type),
+    values_from = score
+  )
+```
+
+We'll come back to this idea in the next section; for different analysis purposes you may want to consider different things to be variables
+
+## Untidy data
+
+`pivot_wider()` isn't that useful for tidying data because its real strength is making **untidy** data.
+While that sounds like a bad thing, untidy isn't a pejorative term: there are many data structures that are extremely useful, just not tidy.
+Tidy data is a great starting point and useful in very many analyses, but it's not the only format of data you'll need.
+
+The following sections will show a few examples of `pivot_wider()` making usefully untidy data:
+
+-   When an operation is easier to apply to rows than columns.
+-   Producing a table for display to other humans.
+-   For input to multivariate statistics.
+
+### Presentation tables
+
+`dplyr::count()` produces tidy data --- it has produces one row for each group, with one column for each grouping variable, and one column for the number of observations:
+
+```{r}
+diamonds |> 
+  count(clarity, color)
+```
+
+This is easy to visualize or summarize further, but it's not the most compact form for display.
+You can use `pivot_wider()` to create a form more suitable for display to other humans:
+
+```{r}
+diamonds |> 
+  count(clarity, color) |> 
+  pivot_wider(
+    names_from = color, 
+    values_from = n
+  )
+```
+
+The other advantage of this display is that, as with `facet_grid()`, you can easily compare in two directions: horizontally and vertically.
+
+There's an additional challenge if you have multiple aggregates.
+Take this datasets which summarizes each combination of clarity and color with the mean carat and the number of observations:
+
+```{r}
+average_size <- diamonds |> 
+  group_by(clarity, color) |> 
+  summarise(
+    n = n(),
+    carat = mean(carat),
+    .groups = "drop"
+  )
+average_size
+```
+
+If you copy the same pivoting code from above, you'll only get one count in each row because both `clarity` and `carat` are used to define each row:
+
+```{r}
+average_size |> 
+  pivot_wider(
+    names_from = color, 
+    values_from = carat
+  )
+```
+
+You can `select()` off the variables you don't care about, or use `id_cols` to define which columns identify each row:
+
+```{r}
+average_size |> 
+  pivot_wider(
+    id_cols = clarity,
+    names_from = color, 
+    values_from = carat
+  )
+```
+
+### What is a variable?
+
+Additionally, in some cases there are genuinely multiple ways that you might choose what variables are, or you might find it useful to temporarily put data in non-tidy form in order to do some computation.
+
+One column = one variable above, quite strictly.
+But didn't actually define what a variable is.
+Typically because you'll know it when you see it, and it's very hard to define precisely in a way that's useful.
+If you're stuck, might be useful to think about observations instead.
+
+It's also fine to take a pragmatic approach: a variable is whatever makes the rest of your analysis easier.
+For computations that involved a fixed number of values, it's usually easier if in columns; for those with a variable number easier in rows.
+Eg.
+compute difference or ratio; or count number of missing values across variables.
+
+```{r}
+country_tb <- who2 |> 
   pivot_longer(
-    cols = `2000`:`2017`, 
-    names_to = "year", 
-    values_to = "value"
+    cols = !(country:year),
+    names_to = c("diagnosis", "gender", "age"), 
+    names_sep = "_",
+    values_to = "count"
   ) |> 
-  mutate(year = parse_number(year))
-pop2
-```
+  filter(year > 1995) |> 
+  group_by(country, year) |> 
+  summarise(count = sum(count, na.rm = TRUE)) |> 
+  filter(min(count) > 100) 
 
-Next we need to consider the `indicator` variable.
-I use `count()` to see all possible values:
+country_tb |> 
+  ggplot(aes(year, log10(count), group = country)) + 
+  geom_line()
 
-```{r}
-pop2 |> 
-  count(indicator)
-```
 
-There are only four values, and they have a consistent structure.
-I then dig a little digging discovered that:
 
--   `SP.POP.GROW` is population growth,
--   `SP.POP.TOTL` is total population,
--   `SP.URB.GROW` is population growth in urban areas,
--   `SP.POP.TOTL` is total population in urban areas.
+country
 
-To me, this feels like it could be broken down into three variables:
-
--   `GROW`: population growth
--   `TOTL`: total population
--   `area`: whether the statistics apply to the complete country or just urban areas.
-
-So I'll first separate indicator into these pieces:
-
-```{r}
-pop3 <- pop2 |> 
-  separate(indicator, c(NA, "area", "variable"))
-pop3
-```
-
-(You'll learn more about this function in Chapter \@ref(strings).)
-
-And then complete the tidying by pivoting `variable` and `value` to make `TOTL` and `GROW` columns:
-
-```{r}
-pop3 |> 
+library(gapminder)
+gapminder |>
   pivot_wider(
-    names_from = variable, 
-    values_from = value
+    id_cols = year, 
+    names_from = country, 
+    values_from = gdpPercap
+  ) |>
+  ggplot(aes(Canada, Italy)) +
+  geom_point()
+```
+
+Or in `cms_patient_experience`, what if we wanted to find out how many explicit missing values.
+It's easier to work with the untidy form:
+
+```{r}
+cms_patient_experience |> 
+  group_by(org_pac_id) |> 
+  summarise(
+    n_miss = sum(is.na(prf_rate)),
+    n = n(),
   )
 ```
 
-### Multi-choice
+Later in Chapter \@ref(column-wise) you'll learn about `across()` and `c_across()` that makes it easier to perform these calculations on wider forms, but if you already have the longer form, it's often easier to work with that directly.
 
-The final example shows a dataset inspired by [Maxime Wack](https://github.com/tidyverse/tidyr/issues/384), which requires us to deal with a common, but annoying, way of recording multiple choice data.
-Often you will get such data as follows:
+### Multivariate statistics
 
-```{r}
-multi <- tribble(
-  ~id, ~choice1, ~choice2, ~choice3,
-    1,      "A",      "B",      "C",
-    2,      "B",      "C",       NA,
-    3,      "D",       NA,       NA,
-    4,      "B",      "D",       NA,
-)
-```
+Classic multivariate statistical methods (like dimension reduction and clustering) as well as many time series methods require matrix representation where each column needs to be a time point, or a location, or gene, or species, or ... Sometimes these formats have substantial performance or space advantages or sometimes they're just necessary to get closer to the underlying matrix mathematics.
 
-This represents the results of four surveys: person 1 selected A, B, and C; person 2 selected B and C; person 3 selected D; and person 4 selected B and D.
-
-The current structure is not very useful because it's hard to (e.g.) find all people who chose B, and it would be more useful to have columns, A, B, C, and D.
-To get to this form, we'll need two steps.
-First, you make the data longer, eliminating the explicit `NA`s with `values_drop_na`, and adding a column to indicate that this response was chosen:
+For example, if you wanted to cluster the gapminder data to find countries that had similar progression of `gdpPercap` over time, you'd need to put year in the columns:
 
 ```{r}
-multi2 <- multi |>  
-  pivot_longer(
-    cols = !id, 
-    values_drop_na = TRUE
-  ) |> 
-  mutate(selected = TRUE)
-multi2
-```
-
-Then you make the data wider, filling in the missing observations with `FALSE`:
-
-```{r}
-multi2 |> 
-  mutate(selected = TRUE) |> 
+col_year <- gapminder |> 
+  mutate(gdpPercap = log10(gdpPercap)) |> 
   pivot_wider(
-    id_cols = id,
-    names_from = value, 
-    values_from = selected, 
-    values_fill = FALSE
-  )
+    id_cols = country, 
+    names_from = year,
+    values_from = gdpPercap
+  ) 
+col_year
 ```
 
-## Non-tidy data
-
-Before we continue on to other topics, it's worth talking briefly about non-tidy data.
-Earlier in the chapter, I used the pejorative term "messy" to refer to non-tidy data.
-That's an oversimplification: there are lots of useful and well-founded data structures that are not tidy data.
-There are three main reasons to use other data structures:
-
--   Alternative representations may have substantial performance or space advantages.
-
--   A specific field may have evolved its own conventions for storing data that are quite different to the conventions of tidy data.
-
--   You want to create a table for presentation.
-
-Either of these reasons means you'll need something other than a tibble (or data frame).
-If your data does fit naturally into a rectangular structure composed of observations and variables, I think tidy data should be your default choice.
-But there are good reasons to use other structures; tidy data is not the only way.
-
-For example, take the tidy `fish_encounters` dataset, which describes when fish swimming down a river are detected by automatic monitoring stations:
+You then need to move `country` out of the columns into the the row names, and you can cluster it with `kmeans()`.
 
 ```{r}
-fish_encounters
+clustered <- col_year |> 
+  column_to_rownames("country") |> 
+  stats::kmeans(6)
+
+cluster_id <- enframe(clustered$cluster, "country", "cluster_id")
+gapminder |> 
+  left_join(cluster_id, by = "country") |> 
+  ggplot(aes(year, gdpPercap, group = country)) + 
+  geom_line() + 
+  scale_y_log10() + 
+  facet_wrap(~ cluster_id)
 ```
-
-Many tools used to analyse this data need it in a non-tidy form where each station is a column.
-`pivot_wider()` makes it easier to get our tidy dataset into this form:
-
-```{r}
-fish_encounters |> 
-  pivot_wider(
-    names_from = station, 
-    values_from = seen,
-    values_fill = 0
-  )
-```
-
-This dataset only records when a fish was detected by the station - it doesn't record when it wasn't detected (this is common with this type of data).
-That means the output data is filled with `NA`s.
-However, in this case we know that the absence of a record means that the fish was not `seen`, so we can ask `pivot_wider()` to fill these missing values in with zeros:
-
-```{r}
-fish_encounters |> 
-  pivot_wider(
-    names_from = station, 
-    values_from = seen,
-    values_fill = 0
-  )
-```
-
-If you'd like to learn more about non-tidy data, I'd highly recommend this thoughtful blog post by Jeff Leek: <https://simplystatistics.org/posts/2016-02-17-non-tidy-data>.
