@@ -1,4 +1,4 @@
-# Logicals and numbers {#logicals-numbers}
+# Logicals and numbers {#logicals}
 
 ```{r, results = "asis", echo = FALSE}
 status("drafting")
@@ -7,7 +7,8 @@ status("drafting")
 ## Introduction
 
 In this chapter, you'll learn useful tools for working with logical vectors.
-The elements in a logical vector can have one of three possible values: `TRUE`, `FALSE`, and `NA`.
+Logical vectors are the simplest type of vector because each element can only be one of three possible values: `TRUE`, `FALSE`, and `NA`.
+Despite that simplicity, they're an extremely powerful tool.
 
 ### Prerequisites
 
@@ -18,44 +19,93 @@ library(nycflights13)
 
 ## Comparisons
 
-Some times you'll get data that already includes logical vectors but in most cases you'll create them by using a comparison.
+Some times you'll get data that already includes logical vectors but in most cases you'll create them by using a comparison, like `<`, `<=`, `>`, `>=`, `!=`, and `==`.
 
-`<`, `<=`, `>`, `>=`, `!=`, and `==`.
-If you're doing a complex sequence of logical operations it's often a good idea to store the interim values in new variables so you can check that each step is working as expected.
+### In `mutate()`
 
-A useful shortcut is `between(x, low, high)` which is a bit less typing than `x >= low & x <= high)`.
-If you want an exclusive between or left-open right-closed etc, you'll need to write by hand.
+So far, you've mostly created these new variables implicitly within `filter()`:
+
+```{r}
+flights |> 
+  filter(dep_time > 600 & dep_time < 2000 & abs(arr_delay) < 20)
+```
+
+But it's useful to know that this is a shortcut and you can explicitly create perform these operations inside a `mutate()`
+
+```{r}
+flights |> 
+  mutate(
+    daytime = dep_time > 600 & dep_time < 2000,
+    approx_ontime = abs(arr_delay) < 20,
+    .keep = "used"
+  )
+```
+
+So the filter above could also be written as:
+
+```{r}
+flights |> 
+  mutate(
+    daytime = dep_time > 600 & dep_time < 2000,
+    approx_ontime = abs(arr_delay) < 20,
+  ) |> 
+  filter(daytime & approx_ontime)
+```
+
+This is an important technique when you're are doing complicated subsetting because it allows you to double-check the intermediate steps.
+
+### Floating point comparison
 
 Beware when using `==` with numbers as results might surprise you!
+You might think that the following two computations yield 1 and 2:
 
 ```{r}
-(sqrt(2) ^ 2) == 2
+(1 / 49 * 49)
+sqrt(2) ^ 2
+```
+
+But if you test them for equality, you'll discover that they're not what you expect!
+
+```{r}
 (1 / 49 * 49) == 1
+(sqrt(2) ^ 2) == 2
 ```
 
-Computers use finite precision arithmetic (they obviously can't store an infinite number of digits!) so remember that every number you see is an approximation.
+That's because computers use finite precision arithmetic (they obviously can't store an infinite number of digits!) so in most cases, the number number you see is an actually approximation.
+R usually rounds these numbers to avoid displaying a bunch of usually unimportant digits.
+You can use the `digits` argument to `format()` to force R to display more:
 
 ```{r}
-(sqrt(2) ^ 2) - 2
-(1 / 49 * 49) - 1
+format(1 / 49 * 49, digits = 20)
+format(sqrt(2) ^ 2, digits = 20)
 ```
 
-So instead of relying on `==`, use `near()`, which does the comparison with a small amount of tolerance:
+Instead of relying on `==`, you can use `dplyr::near()`, which does the comparison with a small amount of tolerance:
 
 ```{r}
 near(sqrt(2) ^ 2,  2)
 near(1 / 49 * 49, 1)
 ```
 
-Alternatively, you might want to use `round()` to trim off extra digits.
+### `is.na()`
+
+Another common way to create logical vector is with `is.na()`.
+This is particularly important in conjunction with `filter()` because filter only selects rows where the value is `TRUE`; rows where the value is `FALSE` are automatically dropped.
+
+```{r}
+flights |> filter(is.na(dep_delay) | is.na(arr_delay))
+flights |> filter(is.na(dep_delay) != is.na(arr_delay))
+```
 
 ## Boolean algebra
 
-For other types of combinations, you'll need to use Boolean operators yourself: `|` is "or" and `!` is "not".
-Figure \@ref(fig:bool-ops) shows the complete set of Boolean operations.
+Once you have multiple logical vectors, you can combine them together using Boolean algebra: `&` is "and", `|` is "or", and `!` is "not".
+`xor()` provides one final useful operation: exclusive or.
+Figure \@ref(fig:bool-ops) shows the complete set of Boolean operations and how they work.
 
 ```{r bool-ops}
 #| echo: false
+#| out.width: NULL
 #| fig.cap: > 
 #|    Complete set of boolean operations. `x` is the left-hand
 #|    circle, `y` is the right-hand circle, and the shaded region show 
@@ -70,71 +120,122 @@ Figure \@ref(fig:bool-ops) shows the complete set of Boolean operations.
 knitr::include_graphics("diagrams/transform-logical.png")
 ```
 
+As well as `&` and `|`, R also has `&&` and `||`.
+Don't use them in dplyr functions!
+These are called short-circuiting operators and only ever return a single `TRUE` or `FALSE`.
+They're important for programming so you'll learn more about them in Section \@ref(conditional-execution).
+
 The following code finds all flights that departed in November or December:
 
 ```{r, eval = FALSE}
-flights |> filter(month == 11 | month == 12)
+flights |> 
+   filter(month == 11 | month == 12)
 ```
 
 Note that the order of operations doesn't work like English.
-You can't write `filter(flights, month == 11 | 12)`, which you might read as "find all flights that departed in November or December".
-Instead it does something rather confusing.
-First it evaluates `11 | 12` which is equivalent to `TRUE | TRUE`, which returns `TRUE`.
+You can't think "find all flights that departed in November or December" and write `flights |> filter(month == 11 | 12)`.
+This code will not error, but it will do something rather confusing.
+First R evaluates `11 | 12` which is equivalent to `TRUE | TRUE`, which returns `TRUE`.
 Then it evaluates `month == TRUE`.
-Since month is numeric, this is equivalent to `month == 1`, so that expression finds all flights in January!
+Since month is numeric, this is equivalent to `month == 1`, so `flights |> filter(month == 11 | 12)` returns all flights in January!
 
-An easy way to solve this problem is to use `%in%`.
+### `%in%`
+
+An easy way to avoid this issue is to use `%in%`.
 `x %in% y` returns a logical vector the same length as `x` that is `TRUE` whenever a value in `x` is anywhere in `y` .
-So we could use it to rewrite the code above:
+So we could instead write:
 
 ```{r, eval = FALSE}
-nov_dec <- flights |> filter(month %in% c(11, 12))
+flights |> 
+  filter(month %in% c(11, 12))
 ```
 
 Sometimes you can simplify complicated subsetting by remembering De Morgan's law: `!(x & y)` is the same as `!x | !y`, and `!(x | y)` is the same as `!x & !y`.
 For example, if you wanted to find flights that weren't delayed (on arrival or departure) by more than two hours, you could use either of the following two filters:
 
 ```{r, eval = FALSE}
-flights |> filter(!(arr_delay > 120 | dep_delay > 120))
-flights |> filter(arr_delay <= 120, dep_delay <= 120)
-```
-
-As well as `&` and `|`, R also has `&&` and `||`.
-Don't use them in dplyr functions!
-These are called short-circuiting operators and you'll learn when you should use them in Section \@ref(conditional-execution) on conditional execution.
-
-## Missing values {#logical-missing}
-
-`filter()` only selects rows where the logical expression is `TRUE`; it doesn't select rows where it's missing or `FALSE`.
-If you want to find rows containing missing values, you'll need to convert missingness into a logical vector using `is.na()`.
-
-```{r}
-flights |> filter(is.na(dep_delay) | is.na(arr_delay))
-flights |> filter(is.na(dep_delay) != is.na(arr_delay))
-```
-
-## In mutate()
-
-Whenever you start using complicated, multi-part expressions in `filter()`, consider making them explicit variables instead.
-That makes it much easier to check your work.When checking your work, a particularly useful `mutate()` argument is `.keep = "used"`: this will just show you the variables you've used, along with the variables that you created.
-This makes it easy to see the variables involved side-by-side.
-
-```{r}
 flights |> 
-  mutate(is_cancelled = is.na(dep_delay) | is.na(arr_delay), .keep = "used") |> 
-  filter(is_cancelled)
+  filter(!(arr_delay > 120 | dep_delay > 120))
+flights |> 
+  filter(arr_delay <= 120 & dep_delay <= 120)
 ```
 
-## Cumulative functions
+### Missing values {#logical-missing}
+
+The rules for missing values in Boolean algebra are a little tricky to explain because they seem inconsistent at first glance:
+
+```{r}
+NA & c(TRUE, FALSE, NA)
+NA | c(TRUE, FALSE, NA)
+```
+
+<!-- Draw truth tables? -->
+
+To understand what's going on you need to think about `x | TRUE`, because regardless of whether `x` is `TRUE` or `FALSE` the result is still `TRUE`.
+That means even if you don't know what `x` is (i.e. it's missing), the result must still be `TRUE`.
+
+## Summaries
+
+There are four particularly useful summary functions for logical vectors: they all take a vector of logical values and return a single value, making them a good fit for use in `summarise()`.
+
+`any()` and `all()` --- `any()` will return if there's at least one `TRUE`, `all()` will return `TRUE` if all values are `TRUE`.
+Like all summary functions, they'll return `NA` if there are any missing values present, and like usual you can make the missing values go away with `na.rm = TRUE`.
+We could use this to see if there were any days where every flight was delayed:
+
+```{r}
+not_cancelled <- flights |> filter(!is.na(dep_delay), !is.na(arr_delay))
+
+not_cancelled |> 
+  group_by(year, month, day) |> 
+  filter(all(arr_delay >= 0))
+```
+
+`sum()` and `mean()` are particularly useful with logical vectors because when you use a logical vector in a numeric context, `TRUE` becomes 1 and `FALSE` becomes 0.
+That means that `sum(x)` gives the number of `TRUE`s in `x` and `mean(x)` gives the proportion of `TRUE`s.
+That lets us find the day with the highest proportion of delayed flights:
+
+```{r}
+not_cancelled |> 
+  group_by(year, month, day) |> 
+  summarise(prop_delayed = mean(arr_delay > 0)) |> 
+  arrange(desc(prop_delayed))
+
+```
+
+Or we could ask how many flights left before 5am, which usually are flights that were delayed from the previous day:
+
+```{r}
+not_cancelled |> 
+  group_by(year, month, day) |> 
+  summarise(n_early = sum(dep_time < 500)) |> 
+  arrange(desc(n_early))
+```
+
+### Exercises
+
+1.  For each plane, count the number of flights before the first delay of greater than 1 hour.
+2.  What does `prod()` return when applied to a logical vector? What logical summary function is it equivalent to? What does `min()` return applied to a logical vector? What logical summary function is it equivalent to?
+
+## Transformations
+
+### Cumulative functions
 
 Another useful pair of functions are cumulative any, `cumany()`, and cumulative all, `cumall()`.
 `cumany()` will be `TRUE` after it encounters the first `TRUE`, and `cumall()` will be `FALSE` after it encounters its first `FALSE`.
-These are particularly useful in conjunction with `filter()` because they allow you to select:
 
--   `cumall(x)`: all cases until the first `FALSE`.
--   `cumall(!x)`: all cases until the first `TRUE`.
--   `cumany(x)`: all cases after the first `TRUE`.
--   `cumany(!x)`: all cases after the first `FALSE`.
+```{r}
+cumany(c(FALSE, FALSE, TRUE, TRUE, FALSE, TRUE))
+cumall(c(TRUE, FALSE, TRUE, TRUE, FALSE, TRUE))
+```
+
+These are particularly useful in conjunction with `filter()` because they allow you to select rows:
+
+-   Before the first `FALSE` with `cumall(x)`.
+-   Before the first `TRUE` with `cumall(!x)`.
+-   After the first `TRUE` with `cumany(x)`.
+-   After the first `FALSE` with `cumany(!x)`.
+
+If you imagine some data about a bank balance, then these functions allow you t
 
 ```{r}
 df <- data.frame(
@@ -147,11 +248,11 @@ df |> filter(cumany(balance < 0))
 df |> filter(cumall(!(balance < 0)))
 ```
 
-## Conditional outputs
+### Conditional outputs
 
-If you want to use one value when a condition is true and another value when it's `FALSE`, you can use `if_else()`[^logicals-numbers-1].
+If you want to use one value when a condition is true and another value when it's `FALSE`, you can use `if_else()`[^logicals-1].
 
-[^logicals-numbers-1]: This is equivalent to the base R function `ifelse`.
+[^logicals-1]: This is equivalent to the base R function `ifelse`.
     There are two main advantages of `if_else()`over `ifelse()`: you can choose what should happen to missing values, and `if_else()` is much more likely to give you a meaningful error message if you use the wrong type of variable.
 
 ```{r}
@@ -206,36 +307,6 @@ case_when(
 )
 ```
 
-## Summaries
-
-When you use a logical vector in a numeric context, `TRUE` becomes 1 and `FALSE` becomes 0, and when you use a numeric vector in a logical context, 0 becomes `FALSE` and everything else becomes `TRUE`.
-
-There are four particularly useful summary functions for logical vectors: they all take a vector of logical values and return a single value, making them a good fit for use in `summarise()`.
-
-`any()` and `all()` --- `any()` will return if there's at least one `TRUE`, `all()` will return `TRUE` if all values are `TRUE`.
-Like all summary functions, they'll return `NA` if there are any missing values present, and like usual you can make the missing values go away with `na.rm = TRUE`.
-
-`sum()` and `mean()` are particularly useful with logical vectors because `TRUE` is converted to 1 and `FALSE` to 0.
-This means that `sum(x)` gives the number of `TRUE`s in `x` and `mean(x)` gives the proportion of `TRUE`s:
-
-```{r}
-not_cancelled <- flights |> filter(!is.na(dep_delay), !is.na(arr_delay))
-
-# How many flights left before 5am? (these usually indicate delayed
-# flights from the previous day)
-not_cancelled |> 
-  group_by(year, month, day) |> 
-  summarise(n_early = sum(dep_time < 500))
-
-# What proportion of flights are delayed by more than an hour?
-not_cancelled |> 
-  group_by(year, month, day) |> 
-  summarise(hour_prop = mean(arr_delay > 60))
-```
-
-### Exercises
-
-1.  For each plane, count the number of flights before the first delay of greater than 1 hour.
-2.  What does `prod()` return when applied to a logical vector? What logical summary function is it equivalent to? What does `min()` return applied to a logical vector? What logical summary function is it equivalent to?
+## 
 
 ## 
