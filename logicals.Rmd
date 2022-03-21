@@ -1,4 +1,4 @@
-# Logicals and numbers {#logicals}
+# Logical vectors {#logicals}
 
 ```{r, results = "asis", echo = FALSE}
 status("drafting")
@@ -8,29 +8,50 @@ status("drafting")
 
 In this chapter, you'll learn useful tools for working with logical vectors.
 Logical vectors are the simplest type of vector because each element can only be one of three possible values: `TRUE`, `FALSE`, and `NA`.
-Despite that simplicity, they're an extremely powerful tool.
+You'll find logical vectors directly in data relatively rarely, but despite that they're extremely powerful because you'll frequently create them during data analysis.
+
+We'll begin with the most common way of creating logical vectors: numeric comparisons.
+Then we'll talk about using Boolean algebra to combine different logical vectors, and some useful summaries for logical vectors.
+We'll finish off with some other tool for making conditional changes
 
 ### Prerequisites
 
-```{r, message = FALSE}
+In this chapter, we'll continue to draw inspiration from the nyclights13 dataset.
+
+```{r setup, message = FALSE}
 library(tidyverse)
 library(nycflights13)
 ```
 
+But as we start to discuss more tools, there won't always be a perfect example.
+So from this chapter on we'll start to use more abstract examples where we create a vector with `c()`, and then manipulate it in various ways.
+This will make it easier to explain the general point without having to construct a full example.
+It does make it a little harder to apply directly to your data problems, but remember that you can do these same manipulations with a vector inside a data frame using `mutate()` and friends.
+
+```{r}
+x <- c(1, 2, 3, 5, 7, 11, 13)
+x * 2
+
+df <- tibble(
+  x = c(1, 2, 3, 5, 7, 11, 13)
+)
+df |> 
+  mutate(y = x *  2)
+```
+
 ## Comparisons
 
-Some times you'll get data that already includes logical vectors but in most cases you'll create them by using a comparison, like `<`, `<=`, `>`, `>=`, `!=`, and `==`.
-
-### In `mutate()`
-
-So far, you've mostly created these new variables implicitly within `filter()`:
+A very common way to create a logical vector is via a numeric comparison with `<`, `<=`, `>`, `>=`, `!=`, and `==`.
+You'll learn other ways to create them in later chapters dealing with strings and dates.
+So far, we've mostly created logical variables implicitly within `filter()` --- they are computed, used, and then throw away.
+For example, the following filter finds all day time departures that leave roughly on time:
 
 ```{r}
 flights |> 
   filter(dep_time > 600 & dep_time < 2000 & abs(arr_delay) < 20)
 ```
 
-But it's useful to know that this is a shortcut and you can explicitly create perform these operations inside a `mutate()`
+But it's useful to know that this is a shortcut and you can explicitly create the underlying logical variables with `mutate()`:
 
 ```{r}
 flights |> 
@@ -41,9 +62,12 @@ flights |>
   )
 ```
 
-So the filter above could also be written as:
+This is useful because it allows you to name components, which can made the code easier to read, and it allows you to double-check the intermediate steps.
+This is a particularly useful technique when you're doing more complicated Boolean algebra, as you'll learn about in the next section.
 
-```{r}
+So the initial filter could also be written as:
+
+```{r, results = FALSE}
 flights |> 
   mutate(
     daytime = dep_time > 600 & dep_time < 2000,
@@ -52,56 +76,122 @@ flights |>
   filter(daytime & approx_ontime)
 ```
 
-This is an important technique when you're are doing complicated subsetting because it allows you to double-check the intermediate steps.
-
 ### Floating point comparison
 
 Beware when using `==` with numbers as results might surprise you!
-You might think that the following two computations yield 1 and 2:
+It looks like this vector contains the numbers 1 and 2:
 
 ```{r}
-(1 / 49 * 49)
-sqrt(2) ^ 2
+x <- c(1 / 49 * 49, sqrt(2) ^ 2)
+x
 ```
 
-But if you test them for equality, you'll discover that they're not what you expect!
+But if you test them for equality, you surprisingly get `FALSE`:
 
 ```{r}
-(1 / 49 * 49) == 1
-(sqrt(2) ^ 2) == 2
+x == c(1, 2)
 ```
 
 That's because computers use finite precision arithmetic (they obviously can't store an infinite number of digits!) so in most cases, the number number you see is an actually approximation.
 R usually rounds these numbers to avoid displaying a bunch of usually unimportant digits.
-You can use the `digits` argument to `format()` to force R to display more:
+
+To see the details you can call `print()` with the the `digits`[^logicals-1] argument.
+R normally calls print automatically for you (i.e. `x` is a shortcut for `print(x)`), but calling it explicitly is useful if you want to provide other arguments:
+
+[^logicals-1]: A floating point number can hold roughly 16 decimal digits; the precise number is surprisingly complicated and depends on the number.
 
 ```{r}
-format(1 / 49 * 49, digits = 20)
-format(sqrt(2) ^ 2, digits = 20)
+print(x, digits = 16)
 ```
 
-Instead of relying on `==`, you can use `dplyr::near()`, which does the comparison with a small amount of tolerance:
+Now that you've seen why `==` is failing, what can you do about it?
+One option is to use `round()` to round to any number of digits, or instead of `==`, use `dplyr::near()`, which does the comparison with a small amount of tolerance:
 
 ```{r}
-near(sqrt(2) ^ 2,  2)
-near(1 / 49 * 49, 1)
+near(x, c(1, 2))
 ```
+
+### Missing values {#na-comparison}
+
+Missing values represent the unknown so they missing values are "contagious": almost any operation involving an unknown value will also be unknown:
+
+```{r}
+NA > 5
+10 == NA
+```
+
+The most confusing result is this one:
+
+```{r}
+NA == NA
+```
+
+It's easiest to understand why this is true with a bit more context:
+
+```{r}
+# Let x be Mary's age. We don't know how old she is.
+x <- NA
+
+# Let y be John's age. We don't know how old he is.
+y <- NA
+
+# Are John and Mary the same age?
+x == y
+# We don't know!
+```
+
+So if you want to find all flights with `dep_time` is missing, the following code won't work because `dep_time == NA` will yield a `NA` for every single row, and `filter()` automatically drops missing values:
+
+```{r}
+flights |> 
+  filter(dep_time == NA)
+```
+
+Instead we'll need a new too: `is.na()`.
 
 ### `is.na()`
 
-Another common way to create logical vector is with `is.na()`.
-This is particularly important in conjunction with `filter()` because filter only selects rows where the value is `TRUE`; rows where the value is `FALSE` are automatically dropped.
+There's one other very useful way to create logical vectors: `is.na()`.
+This takes any type of vector and returns `TRUE` is the value is `NA`, and `FALSE` otherwise:
 
 ```{r}
-flights |> filter(is.na(dep_delay) | is.na(arr_delay))
-flights |> filter(is.na(dep_delay) != is.na(arr_delay))
+is.na(c(TRUE, NA, FALSE))
+is.na(c(1, NA, 3))
+is.na(c("a", NA, "b"))
 ```
+
+We can use `is.na()` to find all the rows with a missing `dep_time`:
+
+```{r}
+flights |> 
+  filter(is.na(dep_time))
+```
+
+It can also be useful in `arrange()`, because by default, `arrange()` puts all the missing values at the end.
+You can override this default by first sorting by `is.na()`:
+
+```{r}
+flights |> 
+  arrange(arr_delay)
+
+flights |> 
+  arrange(desc(is.na(arr_delay)), arr_delay)
+```
+
+### Exercises
+
+1.  How does `dplyr::near()` work? Read the source code to find out.
+2.  Use `mutate()`, `is.na()`, and `count()` together to describe how the missing values in `dep_time`, `sched_dep_time` and `dep_delay` are connected.
 
 ## Boolean algebra
 
-Once you have multiple logical vectors, you can combine them together using Boolean algebra: `&` is "and", `|` is "or", and `!` is "not".
-`xor()` provides one final useful operation: exclusive or.
+Once you have multiple logical vectors, you can combine them together using Boolean algebra.
+In R, `&` is "and", `|` is "or", and `!` is "not", and `xor()` is exclusive or[^logicals-2].
 Figure \@ref(fig:bool-ops) shows the complete set of Boolean operations and how they work.
+
+[^logicals-2]: That is, `xor(x, y)` is true if x is true, or y is true, but not both.
+    This is how we usually use "or" In English.
+    Both is not usually an acceptable answer to the question "would you like ice cream or cake?".
 
 ```{r bool-ops}
 #| echo: false
@@ -117,7 +207,7 @@ Figure \@ref(fig:bool-ops) shows the complete set of Boolean operations and how 
 #|    x but none of y, x is all of x none of y, xor(x, y) is everything
 #|    except the intersection of x and y, y is all of y none of x, and 
 #|    x | y is everything.
-knitr::include_graphics("diagrams/transform-logical.png")
+knitr::include_graphics("diagrams/transform.png", dpi = 270)
 ```
 
 As well as `&` and `|`, R also has `&&` and `||`.
@@ -143,6 +233,11 @@ Since month is numeric, this is equivalent to `month == 1`, so `flights |> filte
 
 An easy way to avoid this issue is to use `%in%`.
 `x %in% y` returns a logical vector the same length as `x` that is `TRUE` whenever a value in `x` is anywhere in `y` .
+
+```{r}
+letters[1:10] %in% c("a", "e", "i", "o", "u")
+```
+
 So we could instead write:
 
 ```{r, eval = FALSE}
@@ -150,17 +245,14 @@ flights |>
   filter(month %in% c(11, 12))
 ```
 
-Sometimes you can simplify complicated subsetting by remembering De Morgan's law: `!(x & y)` is the same as `!x | !y`, and `!(x | y)` is the same as `!x & !y`.
-For example, if you wanted to find flights that weren't delayed (on arrival or departure) by more than two hours, you could use either of the following two filters:
+Note the `%in%` obeys different rules for `NA` to `==`.
 
-```{r, eval = FALSE}
+```{r}
 flights |> 
-  filter(!(arr_delay > 120 | dep_delay > 120))
-flights |> 
-  filter(arr_delay <= 120 & dep_delay <= 120)
+  filter(dep_time %in% c(NA, 0800))
 ```
 
-### Missing values {#logical-missing}
+### Missing values {#na-boolean}
 
 The rules for missing values in Boolean algebra are a little tricky to explain because they seem inconsistent at first glance:
 
@@ -169,10 +261,14 @@ NA & c(TRUE, FALSE, NA)
 NA | c(TRUE, FALSE, NA)
 ```
 
-<!-- Draw truth tables? -->
+To understand what's going on, think about `NA | TRUE`.
+If a logical is `NA`, than means it could either be `TRUE` or `FALSE`.
+`TRUE | TRUE` and `FALSE | TRUE` are both `TRUE`, so `NA | TRUE` must also be `TRUE`.
+Similar reasoning applies with `NA & FALSE`.
 
-To understand what's going on you need to think about `x | TRUE`, because regardless of whether `x` is `TRUE` or `FALSE` the result is still `TRUE`.
-That means even if you don't know what `x` is (i.e. it's missing), the result must still be `TRUE`.
+### Exercises
+
+1.  Find all flights where `arr_delay` is missing but `dep_delay` is not. Find all flights where neither `arr_time` nor `sched_arr_time` are missing, but `arr_delay` is.
 
 ## Summaries
 
@@ -199,7 +295,6 @@ not_cancelled |>
   group_by(year, month, day) |> 
   summarise(prop_delayed = mean(arr_delay > 0)) |> 
   arrange(desc(prop_delayed))
-
 ```
 
 Or we could ask how many flights left before 5am, which usually are flights that were delayed from the previous day:
@@ -211,6 +306,17 @@ not_cancelled |>
   arrange(desc(n_early))
 ```
 
+You can also use logical vectors inside summaries:
+
+```{r}
+not_cancelled |> 
+  group_by(year, month, day) |> 
+  summarise(
+    ahead = mean(arr_delay[arr_delay > 0]),
+    behind = mean(arr_delay[arr_delay < 0]),
+  )
+```
+
 ### Exercises
 
 1.  For each plane, count the number of flights before the first delay of greater than 1 hour.
@@ -218,41 +324,11 @@ not_cancelled |>
 
 ## Transformations
 
-### Cumulative functions
-
-Another useful pair of functions are cumulative any, `cumany()`, and cumulative all, `cumall()`.
-`cumany()` will be `TRUE` after it encounters the first `TRUE`, and `cumall()` will be `FALSE` after it encounters its first `FALSE`.
-
-```{r}
-cumany(c(FALSE, FALSE, TRUE, TRUE, FALSE, TRUE))
-cumall(c(TRUE, FALSE, TRUE, TRUE, FALSE, TRUE))
-```
-
-These are particularly useful in conjunction with `filter()` because they allow you to select rows:
-
--   Before the first `FALSE` with `cumall(x)`.
--   Before the first `TRUE` with `cumall(!x)`.
--   After the first `TRUE` with `cumany(x)`.
--   After the first `FALSE` with `cumany(!x)`.
-
-If you imagine some data about a bank balance, then these functions allow you t
-
-```{r}
-df <- data.frame(
-  date = as.Date("2020-01-01") + 0:6,
-  balance = c(100, 50, 25, -25, -50, 30, 120)
-)
-# all rows after first overdraft
-df |> filter(cumany(balance < 0))
-# all rows until first overdraft
-df |> filter(cumall(!(balance < 0)))
-```
-
 ### Conditional outputs
 
-If you want to use one value when a condition is true and another value when it's `FALSE`, you can use `if_else()`[^logicals-1].
+If you want to use one value when a condition is true and another value when it's `FALSE`, you can use `if_else()`[^logicals-3].
 
-[^logicals-1]: This is equivalent to the base R function `ifelse`.
+[^logicals-3]: This is equivalent to the base R function `ifelse`.
     There are two main advantages of `if_else()`over `ifelse()`: you can choose what should happen to missing values, and `if_else()` is much more likely to give you a meaningful error message if you use the wrong type of variable.
 
 ```{r}
@@ -307,6 +383,36 @@ case_when(
 )
 ```
 
-## 
+### Cumulative functions
+
+Another useful pair of functions are cumulative any, `cumany()`, and cumulative all, `cumall()`.
+`cumany()` will be `TRUE` after it encounters the first `TRUE`, and `cumall()` will be `FALSE` after it encounters its first `FALSE`.
+
+```{r}
+cumany(c(FALSE, FALSE, TRUE, TRUE, FALSE, TRUE))
+cumall(c(TRUE, FALSE, TRUE, TRUE, FALSE, TRUE))
+```
+
+These are particularly useful in conjunction with `filter()` because they allow you to select rows:
+
+-   Before the first `FALSE` with `cumall(x)`.
+-   Before the first `TRUE` with `cumall(!x)`.
+-   After the first `TRUE` with `cumany(x)`.
+-   After the first `FALSE` with `cumany(!x)`.
+
+If you imagine some data about a bank balance, then these functions allow you t
+
+```{r}
+df <- data.frame(
+  date = as.Date("2020-01-01") + 0:6,
+  balance = c(100, 50, 25, -25, -50, 30, 120)
+)
+# all rows after first overdraft
+df |> filter(cumany(balance < 0))
+# all rows until first overdraft
+df |> filter(cumall(!(balance < 0)))
+```
+
+### 
 
 ## 
