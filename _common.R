@@ -19,6 +19,7 @@ options(
   stringr.html = FALSE
 )
 
+ggplot2::theme_set(ggplot2::theme_gray(12))
 
 status <- function(type) {
   status <- switch(type,
