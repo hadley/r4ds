@@ -25,7 +25,6 @@ devtools::install_github("hadley/r4ds")
 ```
     #| echo: FALSE
     #| out.width: NULL
-    #| fig.retina: 1.5
     knitr::include_graphics("diagrams/transform.png", dpi = 270)
 
 ## Code of Conduct
