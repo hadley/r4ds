@@ -329,9 +329,12 @@ not_cancelled |>
 1.  For each plane, count the number of flights before the first delay of greater than 1 hour.
 2.  What does `prod()` return when applied to a logical vector? What logical summary function is it equivalent to? What does `min()` return applied to a logical vector? What logical summary function is it equivalent to?
 
-## Transformations
+## Conditonal transformations
 
-### Conditional outputs
+One of the most powerful features of logical vectors are their use for conditional transformations, i.e. returning one value for true values, and a different value for false values.
+We'll see a couple of different ways to do this, and the
+
+### `if_else()`
 
 If you want to use one value when a condition is true and another value when it's `FALSE`, you can use `if_else()`[^logicals-3].
 
@@ -339,15 +342,32 @@ If you want to use one value when a condition is true and another value when it'
     There are two main advantages of `if_else()`over `ifelse()`: you can choose what should happen to missing values, and `if_else()` is much more likely to give you a meaningful error message if you use the wrong type of variable.
 
 ```{r}
-df <- data.frame(
+df <- tibble(
   date = as.Date("2020-01-01") + 0:6,
   balance = c(100, 50, 25, -25, -50, 30, 120)
 )
-df |> mutate(status = if_else(balance < 0, "overdraft", "ok"))
+df |> 
+  mutate(
+    status = if_else(balance < 0, "overdraft", "ok")
+  )
 ```
 
-If you start to nest multiple sets of `if_else`s, I'd suggest switching to `case_when()` instead.
-`case_when()` has a special syntax: it takes pairs that look like `condition ~ output`.
+If you need to create more complex conditions, you can string together multiple `if_elses()`s, but this quickly gets hard to read.
+
+```{r}
+df |> 
+  mutate(
+    status = if_else(balance == 0, "zero", 
+      if_else(balance < 0, "overdraft", "ok"))
+  )
+```
+
+Instead, you can switch to `case_when()` instead.
+
+### `case_when()`
+
+`case_when()` has a special syntax that unfortunately looks like nothing else you'll use in the tidyverse.
+it takes pairs that look like `condition ~ output`.
 `condition` must evaluate to a logical vector; when it's `TRUE`, output will be used.
 
 ```{r}
@@ -390,7 +410,13 @@ case_when(
 )
 ```
 
-### Cumulative functions
+## Cumulative tricks
+
+Before we move on to the next chapter, I want to show you a grab bag of tricks that make use of cumulative functions (i.e. functions that depending on every previous value of a vector in some way).
+These all feel a bit magical, and I'm torn on whether or not they should be included in this book.
+But in the end, some of them are just so useful I think it's important to mention them --- they don't help with that many problems, but when they do, they provide a substantial advantage.
+
+<!-- TODO: illustration of accumulating function -->
 
 Another useful pair of functions are cumulative any, `cumany()`, and cumulative all, `cumall()`.
 `cumany()` will be `TRUE` after it encounters the first `TRUE`, and `cumall()` will be `FALSE` after it encounters its first `FALSE`.
@@ -420,7 +446,14 @@ df |> filter(cumany(balance < 0))
 df |> filter(cumall(!(balance < 0)))
 ```
 
-### 
+`cumsum()` as way of defining groups:
+
+```{r}
+df |> 
+  mutate(
+    flip = (balance < 0) != lag(balance < 0),
+    group = cumsum(coalesce(flip, FALSE))
+  )
+```
 
 ## 
-
