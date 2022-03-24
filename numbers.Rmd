@@ -7,11 +7,13 @@ status("drafting")
 ## Introduction
 
 In this chapter, you'll learn useful tools for working with numeric vectors.
-Also discuss window functions, which apply beyond numeric vectors, but are typically used with them.
+Also includes a handful of functions are often used with numeric vectors, but also work with many other types.Prerequisites
 
-### Prerequisites
+In this chapter, we'll mostly use functions from base R, so they're immediately available without loading any packages.
+But we'll use them in the context of functions like `mutate()` and `filter()`, so we still need the tidyverse.
+Like in the last chapter, we'll use a mix of real examples from nycflights13 and toy examples made directly with `c()` and `tribble()`.
 
-```{r, message = FALSE}
+```{r setup, message = FALSE}
 library(tidyverse)
 library(nycflights13)
 ```
@@ -82,81 +84,101 @@ There are a couple of related counts that you might find useful:
 
 ### Exercises
 
--   How can you use `count()` to count the number rows with a missing value for a given variable?
+1.  How can you use `count()` to count the number rows with a missing value for a given variable?
 
 ## Numeric transformations
 
 There are many functions for creating new variables that you can use with `mutate()`.
 The key property is that the function must be vectorised: it must take a vector of values as input, return a vector with the same number of values as output.
-There's no way to list every possible function that you might use, but this section will give a selection of frequently useful function.
+There's no way to list every possible function that you might use, but this section will give a selection of frequently useful functions.
 
 R also provides all the trigonometry functions that you might expect.
 I'm not going to discuss them here since it's rare that you need them for data science, but you can sleep soundly at night knowing that they're available if you need them.
 
 ### Arithmetic and recycling rules
 
-Have used these a bunch without explanation, which is fine because they mostly do what you expect.
-`+`, `-`, `*`, `/`, `^`.
+We introduced the basics of arithmetic (`+`, `-`, `*`, `/`, `^`) in Chapter \@ref(workflow-basics) and have used them a bunch since.
+They don't need a huge amount of explanation, because they mostly do what you expect.
+But we need to to briefly talk about the **recycling rules** which determine what happens when you do arithmetic with different numbers of operations on the left and right hand sides.
 
-But we've used them in two subtly different ways: `air_time / 60` and `air_time / distance`.
-In the first case we're dividing a vector of numbers by a single number, and in the second case we're working with a pair of vectors that have the same length.
-
-R handles the first case by transforming it to the second case:
+This is important for operations like `air_time / 60` because there are 336,776 numbers on the left hand side, and 1 number on the right hand side.
+R handles this by repeating, or **recycling**, the short vector, i.e:
 
 ```{r}
 x <- c(1, 2, 10, 20)
 x / 5
-# Short hand for
+# is shorthand for
 x / c(5, 5, 5, 5)
 ```
 
-Whenever you're working with a pair of vectors that have different lengths R uses the so called **recycling rules**.
-In general, there's only one way you actually want to use these: with a vector and a scalar.
-But R supports a somewhat more general rule where it will recycle any shorter length vector:
+Generally, there's only one want to recycle vectors of length 1, but R supports a rather more general rule where it will recycle any shorter length vector:
 
 ```{r}
 x * c(1, 2)
 x * c(1, 2, 3)
 ```
 
-In most cases you'll get a warning if the longer vector is not a integer multiple of the shower.
+In most cases (but not all), you'll get a warning if the longer vector is not a integer multiple of the shower.
 
-The most common way this can bite you is if you accidentally use `==` instead of `%in%` and the data frame has an unfortunate number of row.
-For example, this code works but it's unlikely that the result is what you want:
+This can lead to a surprising result if you accidentally use `==` instead of `%in%` and the data frame has an unfortunate number of rows.
+For example, take this code which attempts to find all flights in January and February:
 
 ```{r}
 flights |> 
   filter(month == c(1, 2))
 ```
 
-It returns odd rows in January and even in February.
+The code runs without error, but it doesn't return what you want.
+Because of the recycling rules it returns January flights that are in odd numbered rows and February flights that are in even numbered rows.
 
-To protect you from this silently failure, tidyverse functions generally use a stricter set of rules that only recycles single numbers, but it doesn't help in this case because you're using the base R function `==`.
+To protect you from this silent failure, most tidyverse functions use a stricter set of rules that only recycles single values.
+Unfortunately that doesn't help here, or many other cases, because the computation is performed by the base R function `==`, not `filter()`.
 
 ### Minimum and maximum
 
-`pmin()`, `pmax()`
+The arithmetic functions work with pairs of variables.
+Two closely related functions are `pmin()` and `pmax()`, which when given two or more variables will return the smallest or largest value in each row:
+
+```{r}
+df <- tribble(
+  ~x, ~y,
+  1,  3,
+  5,  2,
+  7, NA,
+)
+
+df |> 
+  mutate(
+    min = pmin(x, y),
+    max = pmax(x, y)
+  )
+```
+
+Note that are different to the summary functions `min()` and `max()` which take multiple observations and return a single value.
+We'll come back to those in Section \@ref(min-max-summary).
 
 ### Modular arithmetic
 
-`%/%` (integer division) and `%%` (remainder), where `x == y * (x %/% y) + (x %% y)`.
+Modular arithmetic is the technical name for the type of maths you did before you learned about real numbers, i.e. when you did division that yield a whole number and a remainder.
+In R, these are provided by `%/%` which does integer division, and `%%` which computes the remainder:
 
 ```{r}
 1:10 %/% 3
 1:10 %% 3
 ```
 
-This is handy for the flights dataset, because we can use it to unpack the `dep_time` variable into and `hour` and `minute`:
+Modular arithmetic is handy for the flights dataset, because we can use it to unpack the `sched_dep_time` variable into and `hour` and `minute`:
 
 ```{r}
-flights |> mutate(
-  hour = dep_time %/% 100,
-  minute = dep_time %% 100,
-  .keep = "used"
-)
+flights |> 
+  mutate(
+    hour = sched_dep_time %/% 100,
+    minute = sched_dep_time %% 100,
+    .keep = "used"
+  )
 ```
 
-For example, we can use `%/%` plus the `mean(is.na(x))` trick from the last chapter to compute the proportion of flights delayed per hour:
+And we can use that with the `mean(is.na(x))` trick from Section \@ref(logical-summaries) to see how the proportion of delayed flights varies over the course of the day:
 
 ```{r}
 flights |> 
@@ -164,7 +186,8 @@ flights |>
   summarise(prop_cancelled = mean(is.na(dep_time)), n = n()) |> 
   filter(hour > 1) |> 
   ggplot(aes(hour, prop_cancelled)) +
-  geom_point()
+  geom_line(colour = "grey50") + 
+  geom_point(aes(size = n))
 ```
 
 ### Logarithms and exponents
@@ -192,23 +215,40 @@ round(123.456, 0) # round to integer
 round(123.456, -1) # round to nearest 10
 ```
 
-There's one weirdness with `round()` that might surprise you:
+There's one weirdness with `round()` that seems surprising:
 
 ```{r}
-round(1.5, 0)
-round(2.5, 0)
+round(c(1.5, 2.5))
 ```
 
-If a number is half way between the two possible numbers it can be rounded to, it will rounded to the nearest even number.
-This is sometimes called "Round half to even" or Banker's rounding.
-It's important because it keeps the rounding unbiased.
+`round()` uses what's known as "round half to even" or Banker's rounding.
+If a number is half way between two integers, then will rounded to the even integer.
+It's important because it keeps the rounding unbiased because half the 0.5s are rounded up, and half are rounded down.
 
-In other cases, `ceiling()` (round up) and `floor()` (round down) might be useful, but they don't have a digits argument.
+In other situations, you might want to use `ceiling()` to round up or `floor()` to down, but note that they don't have a digits argument.
+Instead, you can scale down, round, and then scale back up:
+
+```{r}
+x <- 123.456
+# Round down to nearest two digits
+floor(x / 0.01) * 0.01
+# Round up to nearest two digits
+ceiling(x / 0.01) * 0.01
+```
+
+You can use the same technique if you want to round to a multiple of some other number:
+
+```{r}
+# Round to nearest multiple of 4
+round(x / 4) * 4
+
+# Round to nearest 0.25
+round(x / 0.25) * 0.25
+```
 
 ### Cumulative and rolling aggregates
 
 R provides functions for running sums, products, mins and maxes: `cumsum()`, `cumprod()`, `cummin()`, `cummax()`; and dplyr provides `cummean()` for cumulative means.
-If you need more complex rolling or sliding aggregates (i.e. a sum computed over a rolling window), try the slider package.
 
 ```{r}
 x <- 1:10
@@ -216,14 +256,34 @@ cumsum(x)
 cummean(x)
 ```
 
+If you need more complex rolling or sliding aggregates, try the [slider](https://davisvaughan.github.io/slider/) package by Davis Vaughan.
+The example below illustrates some of its features.
+
+```{r}
+library(slider)
+
+# Same as a cumulative sum
+slide_vec(x, sum, .before = Inf)
+# Sum the current element and the one before it
+slide_vec(x, sum, .before = 1)
+# Sum the current element and the two before and after it
+slide_vec(x, sum, .before = 2, .after = 2)
+# Only compute if the window is complete
+slide_vec(x, sum, .before = 2, .after = 2, .complete = TRUE)
+```
+
+### Exercises
+
+1.  Explain what each argument does in each line in the final example of the modular arithmetic example.
+
 ## General transformations
 
 These are often used with numbers, but can be applied to most other column types.
 
 ### Ranks
 
-There are a number of ranking functions, but you should start with `min_rank()`.
-It does the most usual type of ranking (e.g. 1st, 2nd, 2nd, 4th).
+dplyr provides a number of ranking functions, but you should start with `dplyr::min_rank()`.
+It does the most usual way of dealing with ties (e.g. 1st, 2nd, 2nd, 4th).
 The default gives smallest values the small ranks; use `desc(x)` to give the largest values the smallest ranks.
 
 ```{r}
@@ -232,15 +292,7 @@ min_rank(y)
 min_rank(desc(y))
 ```
 
-If `min_rank()` doesn't do what you need, look at the variants `row_number()`, `dense_rank()`, `percent_rank()`, `cume_dist()`, `ntile()`.
-See their help pages for more details.
-
-```{r}
-row_number(y)
-dense_rank(y)
-percent_rank(y)
-cume_dist(y)
-```
+If `min_rank()` doesn't do what you need, look at the variants `dplyr::row_number()`, `dplyr::dense_rank()`, `dplyr::percent_rank()`, `dplyr::cume_dist()`, `dplyr::ntile()`, as well as base R's `rank()`.
 
 `row_number()` can also be used without a variable within `mutate()`.
 When combined with `%%` and `%/%` this can be a useful tool for dividing data into similarly sized groups:
@@ -257,20 +309,24 @@ flights |>
 
 ### Offset
 
-`lead()` and `lag()` allow you to refer to leading or lagging values.
+`dplyr::lead()` and `dplyr::lag()` allow you to refer to leading or lagging values.
+They return a vector of the same length but padded with NAs at the start or end
+
+```{r}
+x <- c(2, 5, 11, 19, 35)
+lag(x)
+lag(x, 2)
+lead(x)
+```
 
 -   `x - lag(x)` gives you the difference between the current and previous value.
 -   `x == lag(x)` tells you when the current value changes. See Section XXX for use with cumulative tricks.
 
-```{r}
-(x <- 1:10)
-lag(x)
-lead(x)
-```
+If the rows are not already ordered, you can provide the `order_by` argument.
 
 ### Positions
 
-If your rows have a meaningful order, you can use `first(x)`, `nth(x, 2)`, `last(x)` to extract values at a certain position.
+If your rows have a meaningful order, you can use base R's `[`, or dplyr's `first(x)`, `nth(x, 2)`, or `last(x)` to extract values at a certain position.
 For example, we can find the first and last departure for each day:
 
 ```{r}
@@ -282,18 +338,20 @@ flights |>
   )
 ```
 
-If you're familiar with `[`, these function work similarly to but they let you set a default value if that position does not exist (i.e. you're trying to get the 3rd element from a group that only has two elements).
+The chief advantage of `first()` and `nth()` over `[` is that you can set a default value if that position does not exist (i.e. you're trying to get the 3rd element from a group that only has two elements).
+The chief advantage of `last()` over `[`, is writing `last(x)` rather than `x[length(x)]`.
 
-If the rows aren't ordered, but there's a variable that defines the order, you can use `order_by` argument.
+Additioanlly, if the rows aren't ordered, but there's a variable that defines the order, you can use `order_by` argument.
+You can do this with `[` + `order_by()` but it requires a little thought.
 
-These functions are complementary to filtering on ranks.
+Computing positions is complementary to filtering on ranks.
 Filtering gives you all variables, with each observation in a separate row:
 
 ```{r}
 flights |> 
   group_by(year, month, day) |> 
   mutate(r = min_rank(desc(sched_dep_time))) |> 
-  filter(r %in% range(r))
+  filter(r %in% c(1, max(r)))
 ```
 
 ### Exercises
@@ -341,15 +399,11 @@ flights |>
 
 Don't forget what you learned in Section \@ref(sample-size): whenever creating numerical summaries, it's a good idea to include the number of observations in each group.
 
-### Minimum, maximum, and quantiles
+### Minimum, maximum, and quantiles {#min-max-summary}
 
 Quantiles are a generalization of the median.
 For example, `quantile(x, 0.25)` will find a value of `x` that is greater than 25% of the values, and less than the remaining 75%.
 `min()` and `max()` are like the 0% and 100% quantiles: they're the smallest and biggest numbers.
-
-If you
-
-`min(x)`, `quantile(x, 0.25)`, `max(x)`.
 
 ```{r}
 # When do the first and last flights leave each day?
@@ -360,6 +414,9 @@ flights |>
     last = max(dep_time, na.rm = TRUE)
   )
 ```
+
+Using the median and 95% quantile is coming in performance monitoring.
+`median()` shows you what the (bare) majority of people experience, and 95% shows you the worst case, excluding 5% of outliers.
 
 ### Spread
 
@@ -389,10 +446,11 @@ IQR is `quantile(x, 0.75) - quantile(x, 0.25)`.
 
 ### With `mutate()`
 
-As the names suggest, the summary functions are typically paired with `summarise()`, but they can also be usefully paired with `mutate()`, particularly when you want do some sort of group standardisations.
+As the names suggest, the summary functions are typically paired with `summarise()`, but they can also be usefully paired with `mutate()`, particularly when you want do some sort of group standardization.
 
-Arithmetic operators are also useful in conjunction with the aggregate functions you'll learn about later.
-For example, `x / sum(x)` calculates the proportion of a total, and `y - mean(y)` computes the difference from the mean, `y / y[1]` indexes using the first observation.
+-   `x / sum(x)` calculates the proportion of a total.
+-   `(x - mean(x)) / sd(x)` computes a Z-score (standardised to mean 0 and sd 1).
+-   `x / x[1]` computes an index based on the first observation.
 
 ### Exercises
 
