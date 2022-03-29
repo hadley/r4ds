@@ -150,7 +150,7 @@ flights |>
   filter(dep_time == NA)
 ```
 
-Instead we'll need a new too: `is.na()`.
+Instead we'll need a new tool: `is.na()`.
 
 ### `is.na()`
 
@@ -248,7 +248,14 @@ flights |>
   filter(month %in% c(11, 12))
 ```
 
-Note the `%in%` obeys different rules for `NA` to `==`.
+Note that `%in%` obeys different rules for `NA` to `==`.
+
+```{r}
+c(1, 2, NA) == NA
+c(1, 2, NA) %in% NA
+```
+
+This can make for a useful shortcut:
 
 ```{r}
 flights |> 
@@ -260,30 +267,39 @@ flights |>
 The rules for missing values in Boolean algebra are a little tricky to explain because they seem inconsistent at first glance:
 
 ```{r}
-NA & c(TRUE, FALSE, NA)
-NA | c(TRUE, FALSE, NA)
+df <- tibble(x = c(TRUE, FALSE, NA))
+
+df |> 
+  mutate(
+    and = x & NA,
+    or = x | NA
+  )
 ```
 
 To understand what's going on, think about `NA | TRUE`.
-If a logical is `NA`, than means it could either be `TRUE` or `FALSE`.
+A missing value means that the value could either be `TRUE` or `FALSE`.
 `TRUE | TRUE` and `FALSE | TRUE` are both `TRUE`, so `NA | TRUE` must also be `TRUE`.
 Similar reasoning applies with `NA & FALSE`.
 
 ### Exercises
 
 1.  Find all flights where `arr_delay` is missing but `dep_delay` is not. Find all flights where neither `arr_time` nor `sched_arr_time` are missing, but `arr_delay` is.
-2.  How many flights have a missing `dep_time`? What other variables are missing? What might these rows represent?
-3.  How could you use `arrange()` to sort all missing values to the start? (Hint: use `!is.na()`).
-4.  Come up with another approach that will give you the same output as `not_cancelled |> count(dest)` and `not_cancelled |> count(tailnum, wt = distance)` (without using `count()`).
-5.  Look at the number of cancelled flights per day. Is there a pattern? Is the proportion of cancelled flights related to the average delay?
+2.  How many flights have a missing `dep_time`? What other variables are missing in these rows? What might these rows represent?
+3.  Look at the number of cancelled flights per day. Is there a pattern? Is the proportion of cancelled flights related to the average delay?
 
 ## Summaries {#logical-summaries}
 
-There are four particularly useful summary functions for logical vectors: they all take a vector of logical values and return a single value, making them a good fit for use in `summarise()`.
+While, you can summarize logical variables directly with functions that work only with logicals, there are two other important summaries.
+Numeric summaries like `sum()` and `mean()`, and using summaries as inline filters.
 
-`any()` and `all()` --- `any()` will return if there's at least one `TRUE`, `all()` will return `TRUE` if all values are `TRUE`.
+### Logical summaries
+
+There are two important logical summaries: `any()` and `all()`.
+`any(x)` is the equivalent of `|`; it'll return `TRUE` if there are any `TRUE`'s in `x`.
+`all(x)` is equivalent of `&`; it'll return `TRUE` only if all values of `x` are `TRUE`'s.
 Like all summary functions, they'll return `NA` if there are any missing values present, and like usual you can make the missing values go away with `na.rm = TRUE`.
-We could use this to see if there were any days where every flight was delayed:
+
+For example, we could use `all()` to find out if there were days where every flight was delayed:
 
 ```{r}
 not_cancelled <- flights |> 
@@ -291,18 +307,31 @@ not_cancelled <- flights |>
 
 not_cancelled |> 
   group_by(year, month, day) |> 
-  filter(all(arr_delay >= 0))
+  summarise(
+    all_delayed = all(arr_delay >= 0),
+    any_delayed = any(arr_delay >= 0),
+    .groups = "drop"
+  )
 ```
 
-`sum()` and `mean()` are particularly useful with logical vectors because when you use a logical vector in a numeric context, `TRUE` becomes 1 and `FALSE` becomes 0.
-That means that `sum(x)` gives the number of `TRUE`s in `x` and `mean(x)` gives the proportion of `TRUE`s.
-That lets us find the day with the highest proportion of delayed flights:
+In most cases, however, `any()` and `all()` are a little too crude, and it would be nice to be able to get a little more detail about how many values are `TRUE` or `FALSE`.
+That leads us to the numeric summaries.
+
+### Numeric summaries
+
+When you use a logical vector in a numeric context, `TRUE` becomes 1 and `FALSE` becomes 0.
+This makes `sum()` and `mean()` are particularly useful with logical vectors because `sum(x)` will give the number of `TRUE`s and `mean(x)` gives the proportion of `TRUE`s.
+That lets us see the distribution of delays across the days of the year:
 
 ```{r}
 not_cancelled |> 
   group_by(year, month, day) |> 
-  summarise(prop_delayed = mean(arr_delay > 0)) |> 
-  arrange(desc(prop_delayed))
+  summarise(
+    prop_delayed = mean(arr_delay > 0),
+    .groups = "drop"
+  ) |> 
+  ggplot(aes(prop_delayed)) + 
+  geom_histogram(binwidth = 0.05)
 ```
 
 Or we could ask how many flights left before 5am, which usually are flights that were delayed from the previous day:
@@ -310,13 +339,37 @@ Or we could ask how many flights left before 5am, which usually are flights that
 ```{r}
 not_cancelled |> 
   group_by(year, month, day) |> 
-  summarise(n_early = sum(dep_time < 500)) |> 
+  summarise(
+    n_early = sum(dep_time < 500),
+    .groups = "drop"
+  ) |> 
   arrange(desc(n_early))
 ```
 
-There's another useful way to use logical vectors with summaries: to reduce variables to a subset of interest.
-This makes use of the base `[` (pronounced subset) operator.
-You'll learn more about this in Section \@ref(vector-subsetting), but this usage works in a similar way to a `filter()` except that instead of applying to entire data frame it applies to a single variable.
+### Logical subsetting
+
+There's one final use for logical vectors in summaries: you can use a logical vector to filter a single variable to a subset of interest.
+This makes use of the base `[` (pronounced subset) operator, which you'll learn more about this in Section \@ref(vector-subsetting).
+
+Imagine we wanted to look at the average delay just for flights that were actually delayed.
+One way to do so would be to first filter the flights:
+
+```{r}
+not_cancelled |> 
+  filter(arr_delay > 0) |> 
+  group_by(year, month, day) |> 
+  summarise(
+    ahead = mean(arr_delay),
+    n = n(),
+    .groups = "drop"
+  )
+```
+
+This works, but what if we wanted to also compute the average delay for flights that left early?
+We'd need to perform a separate filter step, and then figure out how to combine the two data frames together (which we'll cover in Chapter \@ref(relational-data)).
+Instead you could use `[` to perform an inline filtering: `arr_delay[arr_delay > 0]` will yield only the positive arrival delays.
+
+This leads to:
 
 ```{r}
 not_cancelled |> 
@@ -324,15 +377,19 @@ not_cancelled |>
   summarise(
     ahead = mean(arr_delay[arr_delay > 0]),
     behind = mean(arr_delay[arr_delay < 0]),
+    n = n(),
+    .groups = "drop"
   )
 ```
 
+Also note the difference in the group size: in the first chunk `n` gives the number of delayed flights per day; in the second, `n` gives the total number of flights.
+
 ### Exercises
 
-1.  For each plane, count the number of flights before the first delay of greater than 1 hour.
-2.  What does `prod()` return when applied to a logical vector? What logical summary function is it equivalent to? What does `min()` return applied to a logical vector? What logical summary function is it equivalent to?
+1.  What will `sum(is.na(x))` tell you? How about `mean(is.na(x))`?
+2.  What does `prod()` return when applied to a logical vector? What logical summary function is it equivalent to? What does `min()` return applied to a logical vector? What logical summary function is it equivalent to? Read the documentation and perform a few experiments.
 
-## Conditonal transformations
+## Conditional transformations
 
 One of the most powerful features of logical vectors are their use for conditional transformations, i.e. returning one value for true values, and a different value for false values.
 We'll see a couple of different ways to do this, and the
@@ -371,53 +428,70 @@ Instead, you can switch to `case_when()` instead.
 
 `case_when()` has a special syntax that unfortunately looks like nothing else you'll use in the tidyverse.
 it takes pairs that look like `condition ~ output`.
-`condition` must evaluate to a logical vector; when it's `TRUE`, output will be used.
+`condition` must make a logical a logical vector; when it's `TRUE`, `output` will be used.
 
 ```{r}
-df |> 
+flights |> 
   mutate(
     status = case_when(
-      balance == 0 ~ "no money", 
-      balance  < 0 ~ "overdraft",
-      balance  > 0 ~ "ok"
-    )
+      is.na(arr_delay)      ~ "cancelled",
+      arr_delay > 60        ~ "very late",
+      arr_delay > 15        ~ "late",
+      abs(arr_delay) <= 15  ~ "on time",
+      arr_delay < -15       ~ "early",
+      arr_delay < -30       ~ "very early",
+    ),
+    .keep = "used"
   )
 ```
 
 (Note that I usually add spaces to make the outputs line up so it's easier to scan)
 
-If none of the cases match, the output will be missing:
+To explain how `case_when()` works, lets pull it out of the mutate and create some simple dummy data.
 
 ```{r}
 x <- 1:10
 case_when(
-  x %% 2 == 0 ~ "even",
+  x <  5 ~ "small",
+  x >= 5 ~ "big"
 )
 ```
 
-You can create a catch all value by using `TRUE` as the condition:
+-   If none of the cases match, the output will be missing:
 
-```{r}
-case_when(
-  x %% 2 == 0 ~ "even",
-  TRUE        ~ "odd"
-)
-```
+    ```{r}
+    case_when(
+      x %% 2 == 0 ~ "even",
+    )
+    ```
 
-If multiple conditions are `TRUE`, the first is used:
+-   You can create a catch all value by using `TRUE` as the condition:
 
-```{r}
-case_when(
-  x < 5 ~ "< 5",
-  x < 3 ~ "< 3",
-)
-```
+    ```{r}
+    case_when(
+      x %% 2 == 0 ~ "even",
+      TRUE        ~ "odd"
+    )
+    ```
+
+-   If multiple conditions are `TRUE`, the first is used:
+
+    ```{r}
+    case_when(
+      x < 5 ~ "< 5",
+      x < 3 ~ "< 3",
+      TRUE ~ "big"
+    )
+    ```
+
+The simple examples I've shown you here all use just a single variable, but the logical conditions can use any number of variables.
+And you can use variables on the right hand side.
 
 ## Cumulative tricks
 
-Before we move on to the next chapter, I want to show you a grab bag of tricks that make use of cumulative functions (i.e. functions that depending on every previous value of a vector in some way).
+Before we move on to the next chapter, I want to show you a grab bag of tricks that make use of cumulative functions (i.e. functions that depending on every previous value of a vector).
 These all feel a bit magical, and I'm torn on whether or not they should be included in this book.
-But in the end, some of them are just so useful I think it's important to mention them --- they don't help with that many problems, but when they do, they provide a substantial advantage.
+But in the end, some of them are just so useful I think it's important to mention them --- they're not particularly easy to understand and don't help with that many problems, but when they do, they provide a substantial advantage.
 
 <!-- TODO: illustration of accumulating function -->
 
@@ -454,9 +528,12 @@ df |> filter(cumall(!(balance < 0)))
 ```{r}
 df |> 
   mutate(
-    flip = (balance < 0) != lag(balance < 0),
+    negative = balance < 0,
+    flip = negative != lag(negative),
     group = cumsum(coalesce(flip, FALSE))
   )
 ```
 
-## 
+### Exercises
+
+1.  For each plane, count the number of flights before the first delay of greater than 1 hour.
