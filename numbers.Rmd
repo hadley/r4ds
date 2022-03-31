@@ -6,12 +6,16 @@ status("drafting")
 
 ## Introduction
 
-In this chapter, you'll learn useful tools for working with numeric vectors.
-Also includes a handful of functions are often used with numeric vectors, but also work with many other types.Prerequisites
+In this chapter, you'll learn useful tools for creating and manipulating with numeric vectors.
+We'll start by doing into a little more detail of `count()` before diving into various numeric transformations.
+You'll then learn about more general transformations that are often used with numeric vectors, but also work with other types.
+Then you'll learn about a few more useful summaries before we finish up with a comparison of function variants that have similar names and similar actions, but are each designed for a specific use case.
 
-In this chapter, we'll mostly use functions from base R, so they're immediately available without loading any packages.
-But we'll use them in the context of functions like `mutate()` and `filter()`, so we still need the tidyverse.
-Like in the last chapter, we'll use a mix of real examples from nycflights13 and toy examples made directly with `c()` and `tribble()`.
+### Prerequisites
+
+This chapter mostly uses functions from base R, which are available without loading any packages.
+But we still need the tidyverse because we'll use these base R functions inside of tidyverse functions like `mutate()` and `filter()`.
+Like in the last chapter, we'll again use real examples from nycflights13, as well as toy examples made inline with `c()` and `tribble()`.
 
 ```{r setup, message = FALSE}
 library(tidyverse)
@@ -20,10 +24,9 @@ library(nycflights13)
 
 ### Counts
 
-A very important type of number is a count --- and it's surprising how much data science you can do with just counts and a little basic arithmetic.
+It's surprising how much data science you can do with just counts and a little basic arithmetic.
 There are two ways to compute a count in dplyr.
-The easiest way is to use `count()`.
-This is great for quick exploration and checks during analysis:
+The simplest is to use `count()`, which is great for quick exploration and checks during analysis:
 
 ```{r}
 flights |> count(dest)
@@ -31,13 +34,15 @@ flights |> count(dest)
 
 (Despite the advice in Chapter \@ref(code-style), I usually put `count()` on a single line because I'm usually using it at the console for a quick check that my calculation is working as expected.)
 
-Alternatively, you can also count "by hand" by using `n()` with `group_by()` and `summarise()`.
-This has a couple of advantages: you can combine it with other summary functions and it's easier to control
+Alternatively, you can count "by hand" which allows you to compute other summaries at the same time:
 
 ```{r}
 flights |> 
   group_by(dest) |> 
-  summarise(n = n())
+  summarise(
+    n = n(),
+    delay = mean(arr_delay, na.rm = TRUE)
+  )
 ```
 
 `n()` is a special a summary function because it doesn't take any arguments and instead reads information from the current group.
@@ -49,13 +54,15 @@ n()
 
 There are a couple of related counts that you might find useful:
 
--   `n_distinct(x)` counts the number of distinct (unique) values of one or more variables:
+-   `n_distinct(x)` counts the number of distinct (unique) values of one or more variables.
+    For example, we could figure out which destinations are served by the most carriers?
 
     ```{r}
-    # Which destinations have the most carriers?
     flights |> 
       group_by(dest) |> 
-      summarise(carriers = n_distinct(carrier)) |> 
+      summarise(
+        carriers = n_distinct(carrier)
+      ) |> 
       arrange(desc(carriers))
     ```
 
@@ -92,21 +99,21 @@ There are a couple of related counts that you might find useful:
 
 ## Numeric transformations
 
-There are many functions for creating new variables that you can use with `mutate()`.
-The key property is that the function must be vectorised: it must take a vector of values as input, return a vector with the same number of values as output.
-There's no way to list every possible function that you might use, but this section will give a selection of frequently useful functions.
+Base R provides many useful transformation functions that you can use with `mutate()`.
+We'll come back to this distinction later in Section \@ref(variants), but the key property that they all possess is that the output is the same length as the input.
 
-R also provides all the trigonometry functions that you might expect.
-I'm not going to discuss them here since it's rare that you need them for data science, but you can sleep soundly at night knowing that they're available if you need them.
+There's no way to list every possible function that you might use, so this section will aim give a selection of the most useful.
+One category that I've deliberately omit is the trigonometric functions; R provides all the trig functions that you might expect, but they're rarely needed for data science.
 
 ### Arithmetic and recycling rules
 
 We introduced the basics of arithmetic (`+`, `-`, `*`, `/`, `^`) in Chapter \@ref(workflow-basics) and have used them a bunch since.
-They don't need a huge amount of explanation, because they mostly do what you expect.
-But we need to to briefly talk about the **recycling rules** which determine what happens when you do arithmetic with different numbers of operations on the left and right hand sides.
-
+They don't need a huge amount of explanation, because they do what you learned in grade school.
+But we need to to briefly talk about the **recycling rules** which determine what happens when the left and right hand sides have different lengths.
 This is important for operations like `air_time / 60` because there are 336,776 numbers on the left hand side, and 1 number on the right hand side.
-R handles this by repeating, or **recycling**, the short vector, i.e:
+
+R handles this by repeating, or **recycling**, the short vector.
+We can see this in operation more easily if we create some vectors outside of a data frame:
 
 ```{r}
 x <- c(1, 2, 10, 20)
@@ -115,16 +122,14 @@ x / 5
 x / c(5, 5, 5, 5)
 ```
 
-Generally, there's only one want to recycle vectors of length 1, but R supports a rather more general rule where it will recycle any shorter length vector:
+Generally, you want to recycle vectors of length 1, but R supports a rather more general rule where it will recycle any shorter length vector, usually (but not always) warning if the longer vector isn't a multiple of the shorter:
 
 ```{r}
 x * c(1, 2)
 x * c(1, 2, 3)
 ```
 
-In most cases (but not all), you'll get a warning if the longer vector is not a integer multiple of the shower.
-
-This can lead to a surprising result if you accidentally use `==` instead of `%in%` and the data frame has an unfortunate number of rows.
+This recycling can lead to a surprising result if you accidentally use `==` instead of `%in%` and the data frame has an unfortunate number of rows.
 For example, take this code which attempts to find all flights in January and February:
 
 ```{r}
@@ -134,9 +139,10 @@ flights |>
 
 The code runs without error, but it doesn't return what you want.
 Because of the recycling rules it returns January flights that are in odd numbered rows and February flights that are in even numbered rows.
+There's no warning because `nycflights` has an even number of rows.
 
-To protect you from this silent failure, most tidyverse functions use a stricter set of rules that only recycles single values.
-Unfortunately that doesn't help here, or many other cases, because the computation is performed by the base R function `==`, not `filter()`.
+To protect you from this silent failure, most tidyverse functions uses stricter recycling that only recycles single values.
+Unfortunately that doesn't help here, or many other cases, because the key computation is performed by the base R function `==`, not `filter()`.
 
 ### Minimum and maximum
 
@@ -158,12 +164,12 @@ df |>
   )
 ```
 
-Note that are different to the summary functions `min()` and `max()` which take multiple observations and return a single value.
+These are different to the summary functions `min()` and `max()` which take multiple observations and return a single value.
 We'll come back to those in Section \@ref(min-max-summary).
 
 ### Modular arithmetic
 
-Modular arithmetic is the technical name for the type of maths you did before you learned about real numbers, i.e. when you did division that yield a whole number and a remainder.
+Modular arithmetic is the technical name for the type of math you did before you learned about real numbers, i.e. when you did division that yield a whole number and a remainder.
 In R, these are provided by `%/%` which does integer division, and `%%` which computes the remainder:
 
 ```{r}
@@ -182,9 +188,21 @@ flights |>
   )
 ```
 
-And we can use that with the `mean(is.na(x))` trick from Section \@ref(logical-summaries) to see how the proportion of delayed flights varies over the course of the day:
+We can combine that with the `mean(is.na(x))` trick from Section \@ref(logical-summaries) to see how the proportion of delayed flights varies over the course of the day.
+The results are shown in Figure \@ref(fig:prop-cancelled).
 
-```{r}
+```{r prop-cancelled}
+#| fig.cap: > 
+#|   A line plot with scheduled departure hour on the x-axis, and proportion
+#|   of cancelled flights on the y-axis. Cancellations seem to accumulate
+#|   over the course of the day until 8pm, very late flights are much
+#|   less likely to be cancelled.
+#| fig.alt: >
+#|   A line plot showing how proportion of cancelled flights changes over
+#|   the course of the day. The proportion starts low at around 0.5% at
+#|   6am, then steadily increases over the course of the day until peaking
+#|   at 4% at 7pm. The proportion of cancelled flights then drops rapidly
+#|   getting down to around 1% by midnight.
 flights |> 
   group_by(hour = sched_dep_time %/% 100) |> 
   summarise(prop_cancelled = mean(is.na(dep_time)), n = n()) |> 
@@ -194,53 +212,95 @@ flights |>
   geom_point(aes(size = n))
 ```
 
-### Logarithms and exponents
+### Logarithms
 
 Logarithms are an incredibly useful transformation for dealing with data that ranges across multiple orders of magnitude.
 They also convert multiplicative relationships to additive.
-R provides three `log()` (natural log, base e), `log2()` (base 2), and `log10()` (base 10).
-You can also supply the `base` argument to `log` if you need a different base.
+For example, take compounding interest --- the amount of money you have at `year + 1` is the amount of money you had at `year` multiplied by the interest rate.
+That gives a formula like `money = starting * interest ^ year`:
 
+```{r}
+starting <- 100
+interest <- 1.05
+
+money <- tibble(
+  year = 2000 + 1:50,
+  money = starting * interest^(1:50)
+)
+```
+
+If you plot this data, you'll get a curve:
+
+```{r}
+ggplot(money, aes(year, money)) +
+  geom_line()
+```
+
+Log transforming the y-axis gives a straight line:
+
+```{r}
+ggplot(money, aes(year, money)) +
+  geom_line() + 
+  scale_y_log10()
+```
+
+We get a straight line because (after a little algebra) we get `log(money) = log(starting) + n * log(interest)`, which matches the pattern for a straight line, `y = m * x + b`.
+This is a useful pattern: if you see a (roughly) straight line after log-transforming the y-axis, you know that there's an underlying multiplicative relationship.
+
+If you're log-transforming your data with dplyr, instead of relying on ggplot2 to do it for you, you have a choice of three logarithms: `log()` (the natural log, base e), `log2()` (base 2), and `log10()` (base 10).
 I recommend using `log2()` or `log10()`.
 `log2()` is easy to interpret because difference of 1 on the log scale corresponds to doubling on the original scale and a difference of -1 corresponds to halving; whereas `log10()` is easy to back-transform because (e.g) 3 is 10\^3 = 1000.
 
-The inverse of `log()` is `exp()`; to compute the inverse of `log2()` or `log10()` you'll need to use `^`.
+The inverse of `log()` is `exp()`; to compute the inverse of `log2()` or `log10()` you'll need to use `2^` or `10^`.
 
 ### Rounding
 
-Workhorse is `round(x, n)`.
-This rounds to the nearest `10^-n`.
+Use `round(x)` to round a number to the nearest integer:
+
+```{r}
+round(123.456)
+```
+
+You can control the precision of the rounding with the second argument, `digits`.
+`round(x, digits)` rounds to the nearest `10^-n` so `digits = 2` will give you.
 This definition is cool because it implies `round(x, -3)` will round to the nearest thousand:
 
 ```{r}
-round(123.456, 2) # two digits
-round(123.456, 1) # one digit
-round(123.456, 0) # round to integer
-round(123.456, -1) # round to nearest 10
+round(123.456, 2)  # two digits
+round(123.456, 1)  # one digit
+round(123.456, -1) # round to nearest ten
+round(123.456, -2) # round to nearest hundred
 ```
 
-There's one weirdness with `round()` that seems surprising:
+There's one weirdness with `round()` that seems surprising at first glance:
 
 ```{r}
 round(c(1.5, 2.5))
 ```
 
 `round()` uses what's known as "round half to even" or Banker's rounding.
-If a number is half way between two integers, then will rounded to the even integer.
-It's important because it keeps the rounding unbiased because half the 0.5s are rounded up, and half are rounded down.
+If a number is half way between two integers, it will be rounded to the **even** integer.
+This is the right general strategy because it keeps the rounding unbiased: half the 0.5s are rounded up, and half are rounded down.
 
-In other situations, you might want to use `ceiling()` to round up or `floor()` to down, but note that they don't have a digits argument.
-Instead, you can scale down, round, and then scale back up:
+`round()` is paired with `floor()` to round down and `ceiling()` to round up:
 
 ```{r}
 x <- 123.456
+
+floor(x)
+ceiling(x)
+```
+
+These functions don't have a digits argument, but instead, you can scale down, round, and then scale back up:
+
+```{r}
 # Round down to nearest two digits
 floor(x / 0.01) * 0.01
 # Round up to nearest two digits
 ceiling(x / 0.01) * 0.01
 ```
 
-You can use the same technique if you want to round to a multiple of some other number:
+You can use the same technique if you want to `round()` to a multiple of some other number:
 
 ```{r}
 # Round to nearest multiple of 4
@@ -252,7 +312,7 @@ round(x / 0.25) * 0.25
 
 ### Cumulative and rolling aggregates
 
-R provides functions for running sums, products, mins and maxes: `cumsum()`, `cumprod()`, `cummin()`, `cummax()`; and dplyr provides `cummean()` for cumulative means.
+Base R provides `cumsum()`, `cumprod()`, `cummin()`, `cummax()` for running, or cumulative, sums, products, mins and maxes, and dplyr provides `cummean()` for cumulative means.
 
 ```{r}
 x <- 1:10
@@ -278,7 +338,7 @@ slide_vec(x, sum, .before = 2, .after = 2, .complete = TRUE)
 
 ### Exercises
 
-1.  Explain what each argument does in each line in the final example of the modular arithmetic example.
+1.  Explain in words what each line of the code used to generate Figure \@ref(fig:prop-cancelled) does.
 
 ## General transformations
 
