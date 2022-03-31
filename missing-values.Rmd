@@ -6,27 +6,21 @@ status("drafting")
 
 ## Introduction
 
-```{r}
+A value can be missing in one of two possible ways.
+It can be **explicitly** missing, i.e. flagged with `NA`, or it can be **implicitly**, missing i.e. simply not present in the data.
+
+This chapter will explore cases where implicit and explicit missing values can become explict,
+
+### Prerequisites
+
+```{r setup, message = FALSE}
 library(tidyverse)
+library(nycflights13)
 ```
 
-Missing topics:
+## Motivation
 
--   Missing values generated from matching data frames (i.e. `left_join()` and `anti_join()`
-
--   Last observation carried forward and `tidy::fill()`
-
--   `coalesce()` and `na_if()`
-
-## Explicit vs implicit missing values {#missing-values-tidy}
-
-Changing the representation of a dataset brings up an important subtlety of missing values.
-Surprisingly, a value can be missing in one of two possible ways:
-
--   **Explicitly**, i.e. flagged with `NA`.
--   **Implicitly**, i.e. simply not present in the data.
-
-Let's illustrate this idea with a very simple data set:
+Let's illustrate this idea with a very simple data set.
 
 ```{r}
 stocks <- tibble(
@@ -43,6 +37,47 @@ There are two missing values in this dataset:
 -   The return for the first quarter of 2016 is implicitly missing, because it simply does not appear in the dataset.
 
 One way to think about the difference is with this Zen-like koan: An explicit missing value is the presence of an absence; an implicit missing value is the absence of a presence.
+
+## Complete and joins
+
+If a dataset has a regular structure, you can make implicit missing values implicit with `complete()`:
+
+```{r}
+stocks |>
+  complete(year, qtr)
+```
+
+If you know that the range isn't correct, you can:
+
+```{r}
+stocks |>
+  complete(year = 2015:2017, qtr)
+```
+
+`complete()` takes a set of columns, and finds all unique combinations.
+It then ensures the original dataset contains all those values, filling in explicit `NA`s where necessary.
+
+```{r}
+stocks |> 
+  expand(year, qtr) |> 
+  left_join(stocks)
+```
+
+Other times missing values might be defined by another dataset.
+
+```{r}
+flights |> 
+  distinct(faa = dest) |> 
+  anti_join(airports)
+
+flights |> 
+  distinct(tailnum) |> 
+  anti_join(planes)
+```
+
+## Pivotting {#missing-values-tidy}
+
+Changing the representation of a dataset brings up an important subtlety of missing values.
 
 The way that a dataset is represented can make implicit values explicit.
 For example, we can make the implicit missing value explicit by putting years in the columns:
@@ -65,15 +100,7 @@ stocks |>
   )
 ```
 
-Another important tool for making missing values explicit in tidy data is `complete()`:
-
-```{r}
-stocks |>
-  complete(year, qtr)
-```
-
-`complete()` takes a set of columns, and finds all unique combinations.
-It then ensures the original dataset contains all those values, filling in explicit `NA`s where necessary.
+## Last observation carried forward
 
 There's one other important tool that you should know for working with missing values.
 Sometimes when a data source has primarily been used for data entry, missing values indicate that the previous value should be carried forward:
@@ -96,41 +123,8 @@ treatment |>
   fill(person)
 ```
 
-`group_by` + `.drop = FALSE`
+## Factors
 
-### Exercises
+-   factors: `group_by` + `.drop = FALSE`
 
-1.  Compare and contrast the `fill` arguments to `pivot_wider()` and `complete()`.
-
-2.  What does the direction argument to `fill()` do?
-
-## dplyr verbs
-
-`filter()` only includes rows where the condition is `TRUE`; it excludes both `FALSE` and `NA` values.
-If you want to preserve missing values, ask for them explicitly:
-
-```{r}
-df <- tibble(x = c(1, NA, 3))
-filter(df, x > 1)
-filter(df, is.na(x) | x > 1)
-```
-
-Missing values are always sorted at the end:
-
-```{r}
-df <- tibble(x = c(5, 2, NA))
-arrange(df, x)
-arrange(df, desc(x))
-```
-
-Explain the warning here
-
-```{r, eval = FALSE}
-flights |> 
-  group_by(dest) |> 
-  summarise(max_delay = max(arr_delay, na.rm = TRUE))
-```
-
-## Exercises
-
-1.  Why is `NA ^ 0` not missing? Why is `NA | TRUE` not missing? Why is `FALSE & NA` not missing? Can you figure out the general rule? (`NA * 0` is a tricky counterexample!)
+## 
