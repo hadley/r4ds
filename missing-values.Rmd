@@ -6,10 +6,9 @@ status("drafting")
 
 ## Introduction
 
-A value can be missing in one of two possible ways.
-It can be **explicitly** missing, i.e. flagged with `NA`, or it can be **implicitly**, missing i.e. simply not present in the data.
+We have also discussed missing values earlier in the book in:
 
-This chapter will explore cases where implicit and explicit missing values can become explict,
+TODO: add index of previous mentions
 
 ### Prerequisites
 
@@ -18,50 +17,95 @@ library(tidyverse)
 library(nycflights13)
 ```
 
-## Motivation
+## Explicit vs implicit missing values
 
-Let's illustrate this idea with a very simple data set.
+A value can be missing in one of two possible ways.
+It can be **explicitly** missing, i.e. flagged with `NA`, or it can be **implicitly**, missing i.e. simply not present in the data.
+Let's illustrate this important idea with a very simple data set, which records the price of a stock in each quarter.
 
 ```{r}
 stocks <- tibble(
-  year   = c(2015, 2015, 2015, 2015, 2016, 2016, 2016),
-  qtr    = c(   1,    2,    3,    4,    2,    3,    4),
-  return = c(1.88, 0.59, 0.35,   NA, 0.92, 0.17, 2.66)
+  year  = c(2022, 2022, 2022, 2022, 2023, 2023, 2023),
+  qtr   = c(   1,    2,    3,    4,    2,    3,    4),
+  price = c(1.88, 0.59, 0.35,   NA, 0.92, 0.17, 2.66)
 )
 ```
 
 There are two missing values in this dataset:
 
--   The return for the fourth quarter of 2015 is explicitly missing, because the cell where its value should be instead contains `NA`.
+-   The return for the fourth quarter of 2022 is explicitly missing, because the cell where its value should be instead contains `NA`.
 
--   The return for the first quarter of 2016 is implicitly missing, because it simply does not appear in the dataset.
+-   The return for the first quarter of 2023 is implicitly missing, because it simply does not appear in the dataset.
 
-One way to think about the difference is with this Zen-like koan: An explicit missing value is the presence of an absence; an implicit missing value is the absence of a presence.
+One way to think about the difference is with this Zen-like koan:
 
-## Complete and joins
+> An explicit missing value is the presence of an absence.\
+> An implicit missing value is the absence of a presence.
 
-If a dataset has a regular structure, you can make implicit missing values implicit with `complete()`:
+### Pivoting
+
+You've already learned about one tool that can make implicit missings explicit and vice versa: pivoting.
+Making data wider can make implicit missing values become explicit.
+For example, if we pivot `stocks` to put the `year` in the columns pivoting, we can make both missing values explicit:
+
+```{r}
+stocks |>
+  pivot_wider(
+    names_from = year, 
+    values_from = price
+  )
+```
+
+Making data longer generally preserves explicit missing values, but you can make them implicit by setting `drop_na`.
+If we make that wider data longer, and specify `values_drop_na = TRUE` we can make both missing values implicit:
+
+```{r}
+stocks |>
+  pivot_wider(
+    names_from = year, 
+    values_from = price
+  ) |> 
+  pivot_longer(
+    cols = -qtr, 
+    names_to = "year", 
+    values_to = "price", 
+    values_drop_na = TRUE
+  )
+```
+
+Generally, however, you use `values_drop_na` because you have missing values that don't represent missing observations, but are forced to exist due to the representation of the data.
+See the examples in Chapter \@ref(tidy-data) for more details.
+
+### Complete
+
+A more direct way to implicit values into explicit values is with `complete()`:
 
 ```{r}
 stocks |>
   complete(year, qtr)
 ```
 
-If you know that the range isn't correct, you can:
+`complete()` takes a set of columns, and finds all unique combinations.
+It then ensures the original dataset contains all those values, filling in explicit `NA`s where necessary.
+
+Typically, you'll work with the values in the dataset, filling in missing combinations.
+But sometimes the dataset is incomplete If you know that the range isn't correct, you can:
 
 ```{r}
 stocks |>
   complete(year = 2015:2017, qtr)
 ```
 
-`complete()` takes a set of columns, and finds all unique combinations.
-It then ensures the original dataset contains all those values, filling in explicit `NA`s where necessary.
+Or if the range is correct, but there might be missing values in the middle:
 
 ```{r}
-stocks |> 
-  expand(year, qtr) |> 
-  left_join(stocks)
+stocks |>
+  complete(year = full_seq(year, 1), qtr = 1:4)
 ```
+
+TODO: add discussion of `group_by()` plus nesting etc.
+
+### Joins
 
 Other times missing values might be defined by another dataset.
 
@@ -75,34 +119,11 @@ flights |>
   anti_join(planes)
 ```
 
-## Pivotting {#missing-values-tidy}
+## When missings represent values
 
-Changing the representation of a dataset brings up an important subtlety of missing values.
+### Last observation carried forward
 
-The way that a dataset is represented can make implicit values explicit.
-For example, we can make the implicit missing value explicit by putting years in the columns:
-
-```{r}
-stocks |>
-  pivot_wider(names_from = year, values_from = return)
-```
-
-Because these explicit missing values may not be important in other representations of the data, you can set `values_drop_na = TRUE` in `pivot_longer()` to turn explicit missing values implicit:
-
-```{r}
-stocks |>
-  pivot_wider(names_from = year, values_from = return) |>
-  pivot_longer(
-    cols = c(`2015`, `2016`),
-    names_to = "year",
-    values_to = "return",
-    values_drop_na = TRUE
-  )
-```
-
-## Last observation carried forward
-
-There's one other important tool that you should know for working with missing values.
+Another place that missing values arise is as a data entry convenience.
 Sometimes when a data source has primarily been used for data entry, missing values indicate that the previous value should be carried forward:
 
 ```{r}
@@ -123,8 +144,96 @@ treatment |>
   fill(person)
 ```
 
+You can use the `direction` argument to fill in missing values that have been generated in more exotic ways.
+
+### Fixed values
+
+Some times missing values represent some fixed known value, mostly commonly 0.
+You can use `coalesce()` to replace.
+
+```{r}
+x <- c(1, 4, 5, 7, NA)
+coalesce(x, 0)
+```
+
+You can apply this to every numeric column in a data frame with:
+
+```{r, eval = FALSE}
+df |> mutate(across(where(is.numeric), coalesce, 0))
+```
+
+### Sentinel values
+
+Sometimes you'll hit the opposite problem because some older software doesn't have an explicit way to represent missing values, so it might be recorded using some special sentinel value like 99 or -999.
+If possible, handle this when reading in the data, for example, by using the `na` argument to `read::read_csv()`.
+If you discover later, or from a data source that doesn't provide a way to handle on read, you can use `na_if()`
+
+```{r}
+x <- c(1, 4, 5, 7, -99)
+na_if(x, -99)
+```
+
+You can apply this to every numeric column in a data frame with:
+
+```{r, eval = FALSE}
+df |> mutate(across(where(is.numeric), na_if, -99))
+```
+
 ## Factors
 
--   factors: `group_by` + `.drop = FALSE`
+Another sort of missing value arises with factors.
+For example, imagine we have a dataset that contains some health information about people:
 
-## 
+```{r}
+health <- tibble(
+  name = c("Ikaia", "Oletta", "Leriah", "Dashay", "Tresaun"),
+  smoker = factor(c("no", "no", "no", "no", "no"), levels = c("yes", "no")),
+  age = c(34L, 88L, 75L, 47L, 56L),
+)
+```
+
+And we want to count the number of smokers:
+
+```{r}
+health |> count(smoker)
+```
+
+This dataset only contains non-smokers, but we know that smokers exist.
+We can request to keep all the value, even if not seen in the data with `.drop = FALSE`:
+
+```{r}
+health |> count(smoker, .drop = FALSE)
+```
+
+This argument also works with `group_by()`:
+
+```{r}
+health |> 
+  group_by(smoker, .drop = FALSE) |> 
+  summarise(
+    n = n(),
+    mean_age = mean(age),
+    min_age = min(age),
+    max_age = max(age),
+    sd_age = sd(age)
+  )
+```
+
+Summary functions generally work with zero-length vectors, but they may return results that are surprising at first glance.
+There's almost always some deeper logic behind them.
+A sometimes simpler approach is to perform the summary and then make the implicit missings explicit with `complete()`.
+
+```{r}
+health |> 
+  group_by(smoker) |> 
+  summarise(
+    n = n(),
+    mean_age = mean(age),
+    min_age = min(age),
+    max_age = max(age),
+    sd_age = sd(age)
+  ) |> 
+  complete(smoker, fill = list(n = 0))
+```
+
+Main con of this approach is that you need to carefully specify the `fill` argument so that
