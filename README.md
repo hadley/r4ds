@@ -1,6 +1,10 @@
 # R for Data Science
 
-[![Travis build status](https://travis-ci.org/hadley/r4ds.svg?branch=master)](https://travis-ci.org/hadley/r4ds)
+<!-- badges: start -->
+
+[![build_book](https://github.com/hadley/r4ds/actions/workflows/build_book.yaml/badge.svg)](https://github.com/hadley/r4ds/actions/workflows/build_book.yaml)
+
+<!-- badges: end -->
 
 This repository contains the source of [R for Data Science](http://r4ds.had.co.nz) book.
 The book is built using [bookdown](https://github.com/rstudio/bookdown).
@@ -20,9 +24,8 @@ devtools::install_github("hadley/r4ds")
 -   Website font is 18 px = 13.5 pt, so scale dpi to match font sizes: 270 = 300 \* 12 / 13.5
 -   Verified sizes are visually equivalent by screenshotting.
 
-```{=html}
 <!-- -->
-```
+
     #| echo: FALSE
     #| out.width: NULL
     knitr::include_graphics("diagrams/transform.png", dpi = 270)
