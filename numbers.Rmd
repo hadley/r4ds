@@ -1,21 +1,21 @@
 # Numeric vectors {#numbers}
 
 ```{r, results = "asis", echo = FALSE}
-status("drafting")
+status("polishing")
 ```
 
 ## Introduction
 
-In this chapter, you'll learn useful tools for creating and manipulating with numeric vectors.
-We'll start by doing into a little more detail of `count()` before diving into various numeric transformations.
-You'll then learn about more general transformations that are often used with numeric vectors, but also work with other types.
+In this chapter, you'll learn useful tools for creating and manipulating numeric vectors.
+We'll start by going into a little more detail of `count()` before diving into various numeric transformations.
+You'll then learn about more general transformations that can be applied to other types of vector, but are often used with numeric vectors.
 Then you'll learn about a few more useful summaries before we finish up with a comparison of function variants that have similar names and similar actions, but are each designed for a specific use case.
 
 ### Prerequisites
 
 This chapter mostly uses functions from base R, which are available without loading any packages.
 But we still need the tidyverse because we'll use these base R functions inside of tidyverse functions like `mutate()` and `filter()`.
-Like in the last chapter, we'll again use real examples from nycflights13, as well as toy examples made inline with `c()` and `tribble()`.
+Like in the last chapter, we'll use real examples from nycflights13, as well as toy examples made with `c()` and `tribble()`.
 
 ```{r setup, message = FALSE}
 library(tidyverse)
@@ -24,9 +24,8 @@ library(nycflights13)
 
 ### Counts
 
-It's surprising how much data science you can do with just counts and a little basic arithmetic.
-There are two ways to compute a count in dplyr.
-The simplest is to use `count()`, which is great for quick exploration and checks during analysis:
+It's surprising how much data science you can do with just counts and a little basic arithmetic, so dplyr strives to make counting as easy as possible with `count()`.
+This function is great for quick exploration and checks during analysis:
 
 ```{r}
 flights |> count(dest)
@@ -34,7 +33,16 @@ flights |> count(dest)
 
 (Despite the advice in Chapter \@ref(code-style), I usually put `count()` on a single line because I'm usually using it at the console for a quick check that my calculation is working as expected.)
 
-Alternatively, you can count "by hand" which allows you to compute other summaries at the same time:
+If you want to see the most common values add `sort = TRUE`:
+
+```{r}
+flights |> count(dest, sort = TRUE)
+```
+
+And remember that if you want to see all the values, you can use `|> View()` or `|> print(n = Inf)`.
+
+You can perform the same computation "by hand" with `group_by()`, `summarise()` and `n()`.
+This is useful because it allows you to compute other summaries at the same time:
 
 ```{r}
 flights |> 
@@ -45,17 +53,17 @@ flights |>
   )
 ```
 
-`n()` is a special a summary function because it doesn't take any arguments and instead reads information from the current group.
-This means you can't use it outside of dplyr verbs:
+`n()` is a special summary function that doesn't take any arguments and instead access information about the "current" group.
+This means that it only works inside dplyr verbs:
 
 ```{r, error = TRUE}
 n()
 ```
 
-There are a couple of related counts that you might find useful:
+There are a couple of variants of `n()` that you might find useful:
 
 -   `n_distinct(x)` counts the number of distinct (unique) values of one or more variables.
-    For example, we could figure out which destinations are served by the most carriers?
+    For example, we could figure out which destinations are served by the most carriers:
 
     ```{r}
     flights |> 
@@ -66,7 +74,7 @@ There are a couple of related counts that you might find useful:
       arrange(desc(carriers))
     ```
 
--   A weighted count is just a sum.
+-   A weighted count is a sum.
     For example you could "count" the number of miles each plane flew:
 
     ```{r}
@@ -75,13 +83,14 @@ There are a couple of related counts that you might find useful:
       summarise(miles = sum(distance))
     ```
 
-    This comes up enough that `count()` has a `wt` argument that does this for you:
+    Weighted counts are a common problem so `count()` has a `wt` argument that does the same thing:
 
     ```{r}
     flights |> count(tailnum, wt = distance)
     ```
 
--   `sum()` and `is.na()` is also a powerful combination, allowing you to count the number of missing values:
+-   You can count missing values by combining `sum()` and `is.na()`.
+    In the flights dataset this represents flights that are cancelled:
 
     ```{r}
     flights |> 
@@ -92,27 +101,26 @@ There are a couple of related counts that you might find useful:
 ### Exercises
 
 1.  How can you use `count()` to count the number rows with a missing value for a given variable?
-2.  Expand the following calls to `count()` to use the core verbs of dplyr:
+2.  Expand the following calls to `count()` to instead use `group_by()`, `summarise()`, and `arrange()`:
     1.  `flights |> count(dest, sort = TRUE)`
 
     2.  `flights |> count(tailnum, wt = distance)`
 
 ## Numeric transformations
 
-Base R provides many useful transformation functions that you can use with `mutate()`.
-We'll come back to this distinction later in Section \@ref(variants), but the key property that they all possess is that the output is the same length as the input.
-
-There's no way to list every possible function that you might use, so this section will aim give a selection of the most useful.
-One category that I've deliberately omit is the trigonometric functions; R provides all the trig functions that you might expect, but they're rarely needed for data science.
+Transformation functions work well with `mutate()` because their output is the same length as the input.
+The vast majority of transformation functions are already built into base R.
+It's impractical to list them all so this section will give show the most useful.
+As an example, while R provides all the trigonometric functions that you might dream of, I don't list them here because they're rarely needed for data science.
 
 ### Arithmetic and recycling rules
 
 We introduced the basics of arithmetic (`+`, `-`, `*`, `/`, `^`) in Chapter \@ref(workflow-basics) and have used them a bunch since.
-They don't need a huge amount of explanation, because they do what you learned in grade school.
-But we need to to briefly talk about the **recycling rules** which determine what happens when the left and right hand sides have different lengths.
-This is important for operations like `air_time / 60` because there are 336,776 numbers on the left hand side, and 1 number on the right hand side.
+These functions don't need a huge amount of explanation because they do what you learned in grade school.
+But we need to briefly talk about the **recycling rules** which determine what happens when the left and right hand sides have different lengths.
+This is important for operations like `flights |> mutate(air_time = air_time / 60)` because there are 336,776 numbers on the left of `/` but only one on the right.
 
-R handles this by repeating, or **recycling**, the short vector.
+R handles mismatched lengths by **recycling,** or repeating, the short vector.
 We can see this in operation more easily if we create some vectors outside of a data frame:
 
 ```{r}
@@ -122,14 +130,15 @@ x / 5
 x / c(5, 5, 5, 5)
 ```
 
-Generally, you want to recycle vectors of length 1, but R supports a rather more general rule where it will recycle any shorter length vector, usually (but not always) warning if the longer vector isn't a multiple of the shorter:
+Generally, you only want to recycle single numbers (i.e. vectors of length 1), but R will recycle any shorter length vector.
+It usually (but not always) warning if the longer vector isn't a multiple of the shorter:
 
 ```{r}
 x * c(1, 2)
 x * c(1, 2, 3)
 ```
 
-This recycling can lead to a surprising result if you accidentally use `==` instead of `%in%` and the data frame has an unfortunate number of rows.
+These recycling rules are also applied to logical comparisons (`==`, `<`, `<=`, `>`, `>=`, `!=`) and can lead to a surprising result if you accidentally use `==` instead of `%in%` and the data frame has an unfortunate number of rows.
 For example, take this code which attempts to find all flights in January and February:
 
 ```{r}
@@ -138,11 +147,11 @@ flights |>
 ```
 
 The code runs without error, but it doesn't return what you want.
-Because of the recycling rules it returns January flights that are in odd numbered rows and February flights that are in even numbered rows.
-There's no warning because `nycflights` has an even number of rows.
+Because of the recycling rules it finds flights in odd numbered rows that departed in January and flights in even numbered rows that departed in February.
+And unforuntately there's no warning because `nycflights` has an even number of rows.
 
-To protect you from this silent failure, most tidyverse functions uses stricter recycling that only recycles single values.
-Unfortunately that doesn't help here, or many other cases, because the key computation is performed by the base R function `==`, not `filter()`.
+To protect you from this type of silent failure, most tidyverse functions use a stricter form of recycling that only recycles single values.
+Unfortunately that doesn't help here, or in many other cases, because the key computation is performed by the base R function `==`, not `filter()`.
 
 ### Minimum and maximum
 
@@ -159,8 +168,8 @@ df <- tribble(
 
 df |> 
   mutate(
-    min = pmin(x, y),
-    max = pmax(x, y)
+    min = pmin(x, y, na.rm = TRUE),
+    max = pmax(x, y, na.rm = TRUE)
   )
 ```
 
@@ -169,8 +178,8 @@ We'll come back to those in Section \@ref(min-max-summary).
 
 ### Modular arithmetic
 
-Modular arithmetic is the technical name for the type of math you did before you learned about real numbers, i.e. when you did division that yield a whole number and a remainder.
-In R, these are provided by `%/%` which does integer division, and `%%` which computes the remainder:
+Modular arithmetic is the technical name for the type of math you did before you learned about real numbers, i.e. division that yields a whole number and a remainder.
+In R, `%/%` does integer division and `%%` computes the remainder:
 
 ```{r}
 1:10 %/% 3
@@ -215,7 +224,7 @@ flights |>
 ### Logarithms
 
 Logarithms are an incredibly useful transformation for dealing with data that ranges across multiple orders of magnitude.
-They also convert multiplicative relationships to additive.
+They also convert exponential growth to linear growth.
 For example, take compounding interest --- the amount of money you have at `year + 1` is the amount of money you had at `year` multiplied by the interest rate.
 That gives a formula like `money = starting * interest ^ year`:
 
@@ -229,7 +238,7 @@ money <- tibble(
 )
 ```
 
-If you plot this data, you'll get a curve:
+If you plot this data, you'll get an exponential curve:
 
 ```{r}
 ggplot(money, aes(year, money)) +
@@ -244,10 +253,10 @@ ggplot(money, aes(year, money)) +
   scale_y_log10()
 ```
 
-We get a straight line because (after a little algebra) we get `log(money) = log(starting) + n * log(interest)`, which matches the pattern for a straight line, `y = m * x + b`.
-This is a useful pattern: if you see a (roughly) straight line after log-transforming the y-axis, you know that there's an underlying multiplicative relationship.
+This a straight line because a little algebra reveals that `log(money) = log(starting) + n * log(interest)`, which matches the pattern for a line, `y = m * x + b`.
+This is a useful pattern: if you see a (roughly) straight line after log-transforming the y-axis, you know that there's underlying exponential growth.
 
-If you're log-transforming your data with dplyr, instead of relying on ggplot2 to do it for you, you have a choice of three logarithms: `log()` (the natural log, base e), `log2()` (base 2), and `log10()` (base 10).
+If you're log-transforming your data with dplyr you have a choice of three logarithms provided by base R: `log()` (the natural log, base e), `log2()` (base 2), and `log10()` (base 10).
 I recommend using `log2()` or `log10()`.
 `log2()` is easy to interpret because difference of 1 on the log scale corresponds to doubling on the original scale and a difference of -1 corresponds to halving; whereas `log10()` is easy to back-transform because (e.g) 3 is 10\^3 = 1000.
 
@@ -262,8 +271,8 @@ round(123.456)
 ```
 
 You can control the precision of the rounding with the second argument, `digits`.
-`round(x, digits)` rounds to the nearest `10^-n` so `digits = 2` will give you.
-This definition is cool because it implies `round(x, -3)` will round to the nearest thousand:
+`round(x, digits)` rounds to the nearest `10^-n` so `digits = 2` will round to the nearest 0.01.
+This definition is useful because it implies `round(x, -3)` will round to the nearest thousand, which indeed it does:
 
 ```{r}
 round(123.456, 2)  # two digits
@@ -278,11 +287,10 @@ There's one weirdness with `round()` that seems surprising at first glance:
 round(c(1.5, 2.5))
 ```
 
-`round()` uses what's known as "round half to even" or Banker's rounding.
-If a number is half way between two integers, it will be rounded to the **even** integer.
-This is the right general strategy because it keeps the rounding unbiased: half the 0.5s are rounded up, and half are rounded down.
+`round()` uses what's known as "round half to even" or Banker's rounding: if a number is half way between two integers, it will be rounded to the **even** integer.
+This is a good strategy because it keeps the rounding unbiased: half of all 0.5s are rounded up, and half are rounded down.
 
-`round()` is paired with `floor()` to round down and `ceiling()` to round up:
+`round()` is paired with `floor()` which always rounds down and `ceiling()` which always rounds up:
 
 ```{r}
 x <- 123.456
@@ -291,7 +299,7 @@ floor(x)
 ceiling(x)
 ```
 
-These functions don't have a digits argument, but instead, you can scale down, round, and then scale back up:
+These functions don't have a digits argument, so you can instead scale down, round, and then scale back up:
 
 ```{r}
 # Round down to nearest two digits
@@ -312,16 +320,17 @@ round(x / 0.25) * 0.25
 
 ### Cumulative and rolling aggregates
 
-Base R provides `cumsum()`, `cumprod()`, `cummin()`, `cummax()` for running, or cumulative, sums, products, mins and maxes, and dplyr provides `cummean()` for cumulative means.
+Base R provides `cumsum()`, `cumprod()`, `cummin()`, `cummax()` for running, or cumulative, sums, products, mins and maxes.
+dplyr provides `cummean()` for cumulative means.
+Cumulative sums tend to come up the most in practice:
 
 ```{r}
 x <- 1:10
 cumsum(x)
-cummean(x)
 ```
 
 If you need more complex rolling or sliding aggregates, try the [slider](https://davisvaughan.github.io/slider/) package by Davis Vaughan.
-The example below illustrates some of its features.
+The following example illustrates some of its features.
 
 ```{r}
 library(slider)
@@ -342,85 +351,92 @@ slide_vec(x, sum, .before = 2, .after = 2, .complete = TRUE)
 
 ## General transformations
 
-These are often used with numbers, but can be applied to most other column types.
+The following sections describe some general transformations which are often used with numeric vectors, but can be applied to all other column types.
 
 ### Missing values {#missing-values-numbers}
 
-`coalesce()`
+You can fill in missing values with dplyr's `coalesce()`:
+
+```{r}
+x <- c(1, NA, 5, NA, 10)
+coalesce(x, 0)
+```
+
+`coalesce()` is vectorised, so you can find the non-missing values from a pair of vectors:
+
+```{r}
+y <- c(2, 3, 4, NA, 5)
+coalesce(x, y)
+```
 
 ### Ranks
 
-dplyr provides a number of ranking functions, but you should start with `dplyr::min_rank()`.
-It does the most usual way of dealing with ties (e.g. 1st, 2nd, 2nd, 4th).
-The default gives smallest values the small ranks; use `desc(x)` to give the largest values the smallest ranks.
+dplyr provides a number of ranking functions inspired by SQL, but you should always start with `dplyr::min_rank()`.
+It uses the typical method for dealing with ties, e.g. 1st, 2nd, 2nd, 4th.
 
 ```{r}
-y <- c(1, 2, 2, NA, 3, 4)
-min_rank(y)
-min_rank(desc(y))
+x <- c(1, 2, 2, 3, 4, NA)
+min_rank(x)
 ```
 
-If `min_rank()` doesn't do what you need, look at the variants `dplyr::row_number()`, `dplyr::dense_rank()`, `dplyr::percent_rank()`, `dplyr::cume_dist()`, `dplyr::ntile()`, as well as base R's `rank()`.
+Note that the smallest values get the lowest ranks; use `desc(x)` to give the largest values the smallest ranks:
 
-`row_number()` can also be used without a variable within `mutate()`.
+```{r}
+min_rank(desc(x))
+```
+
+If `min_rank()` doesn't do what you need, look at the variants `dplyr::row_number()`, `dplyr::dense_rank()`, `dplyr::percent_rank()`, and `dplyr::cume_dist()`.
+See the documentation for details.
+
+```{r}
+df <- data.frame(x = x)
+df |> mutate(
+  row_number = row_number(x),
+  dense_rank = dense_rank(x),
+  percent_rank = percent_rank(x),
+  cume_dist = cume_dist(x)
+)
+```
+
+You can achieve many of the same results by picking the appropriate `ties.method` argument to base R's `rank()`; you'll probably also want to set `na.last = "keep"` to keep `NA`s as `NA`.
+
+`row_number()` can also be used without a variable when you're inside a dplyr verb, in which case it'll give within `mutate()`.
 When combined with `%%` and `%/%` this can be a useful tool for dividing data into similarly sized groups:
 
 ```{r}
 flights |> 
   mutate(
     row = row_number(),
-    group_3 = row %/% (n() / 3),
-    group_3 = row %% 3,
+    three_groups = (row - 1) %% 3,
+    three_in_each_group = (row - 1) %/% 3,
     .keep = "none"
   )
 ```
 
-### Offset
+### Offsets
 
-`dplyr::lead()` and `dplyr::lag()` allow you to refer to leading or lagging values.
-They return a vector of the same length but padded with NAs at the start or end
+`dplyr::lead()` and `dplyr::lag()` allow you to refer the values just before or just after the "current" value.
+They return a vector of the same length, padded with NAs at the start or end.
 
 ```{r}
-x <- c(2, 5, 11, 19, 35)
+x <- c(2, 5, 11, 11, 19, 35)
 lag(x)
 lag(x, 2)
 lead(x)
 ```
 
 -   `x - lag(x)` gives you the difference between the current and previous value.
--   `x == lag(x)` tells you when the current value changes. See Section XXX for use with cumulative tricks.
 
-If the rows are not already ordered, you can provide the `order_by` argument.
+    ```{r}
+    x - lag(x)
+    ```
 
-### Positions
+-   `x == lag(x)` tells you when the current value changes.
+    This is often useful combined with the cumulative tricks describe in Section \@ref(cumulative-tricks).
 
-If your rows have a meaningful order, you can use base R's `[`, or dplyr's `first(x)`, `nth(x, 2)`, or `last(x)` to extract values at a certain position.
-For example, we can find the first and last departure for each day:
-
-```{r}
-flights |> 
-  group_by(year, month, day) |> 
-  summarise(
-    first_dep = first(dep_time), 
-    last_dep = last(dep_time)
-  )
-```
-
-The chief advantage of `first()` and `nth()` over `[` is that you can set a default value if that position does not exist (i.e. you're trying to get the 3rd element from a group that only has two elements).
-The chief advantage of `last()` over `[`, is writing `last(x)` rather than `x[length(x)]`.
-
-Additionally, if the rows aren't ordered, but there's a variable that defines the order, you can use `order_by` argument.
-You can do this with `[` + `order_by()` but it requires a little thought.
-
-Computing positions is complementary to filtering on ranks.
-Filtering gives you all variables, with each observation in a separate row:
-
-```{r}
-flights |> 
-  group_by(year, month, day) |> 
-  mutate(r = min_rank(desc(sched_dep_time))) |> 
-  filter(r %in% c(1, max(r)))
-```
+    ```{r}
+    x == lag(x)
+    ```
 
 ### Exercises
 
@@ -432,29 +448,34 @@ flights |>
 
 3.  What time of day should you fly if you want to avoid delays as much as possible?
 
-4.  For each destination, compute the total minutes of delay.
+4.  What does `flights |> group_by(dest() |> filter(row_number() < 4)` do?
+    What does `flights |> group_by(dest() |> filter(row_number(dep_delay) < 4)` do?
+
+5.  For each destination, compute the total minutes of delay.
     For each flight, compute the proportion of the total delay for its destination.
 
-5.  Delays are typically temporally correlated: even once the problem that caused the initial delay has been resolved, later flights are delayed to allow earlier flights to leave.
+6.  Delays are typically temporally correlated: even once the problem that caused the initial delay has been resolved, later flights are delayed to allow earlier flights to leave.
     Using `lag()`, explore how the delay of a flight is related to the delay of the immediately preceding flight.
 
-6.  Look at each destination.
+7.  Look at each destination.
     Can you find flights that are suspiciously fast?
     (i.e. flights that represent a potential data entry error).
     Compute the air time of a flight relative to the shortest flight to that destination.
     Which flights were most delayed in the air?
 
-7.  Find all destinations that are flown by at least two carriers.
+8.  Find all destinations that are flown by at least two carriers.
     Use that information to rank the carriers.
 
 ## Summaries
 
 Just using means, counts, and sum can get you a long way, but R provides many other useful summary functions.
+Here are a section that you might find useful.
 
 ### Center
 
-We've used `mean(x)`, but `median(x)` is also useful.
+We've mostly used `mean(x)` so far, but `median(x)` is also useful.
 The mean is the sum divided by the length; the median is a value where 50% of `x` is above it, and 50% is below it.
+This makes it more robust to unusual values.
 
 ```{r}
 flights |>
@@ -512,6 +533,34 @@ The interquartile range `IQR(x)` and median absolute deviation `mad(x)` are robu
 IQR is `quantile(x, 0.75) - quantile(x, 0.25)`.
 `mad()` is derivied similarly to `sd()`, but inside being the average of the squared distances from the mean, it's the median of the absolute differences from the median.
 
+### Positions
+
+Base R provides a powerful tool for extracting subsets of vectors called `[`.
+This book doesn't cover `[` until Section \@ref(vector-subsetting) so for now we'll introduce three specialized functions that are useful inside of `summarise()` if you want to extract values at a specified position: `first()`, `last()`, and `nth()`.
+
+For example, we can find the first and last departure for each day:
+
+```{r}
+flights |> 
+  group_by(year, month, day) |> 
+  summarise(
+    first_dep = first(dep_time), 
+    last_dep = last(dep_time)
+  )
+```
+
+Compared to `[`, these functions allow you to set a `default` value if requested position doesn't exist (e.g. you're trying to get the 3rd element from a group that only has two elements) and you can use `order_by` argument.
+
+Extracting values at positions is complementary to filtering on ranks.
+Filtering gives you all variables, with each observation in a separate row:
+
+```{r}
+flights |> 
+  group_by(year, month, day) |> 
+  mutate(r = min_rank(desc(sched_dep_time))) |> 
+  filter(r %in% c(1, max(r)))
+```
+
 ### With `mutate()`
 
 As the names suggest, the summary functions are typically paired with `summarise()`, but they can also be usefully paired with `mutate()`, particularly when you want do some sort of group standardization.
@@ -564,3 +613,4 @@ sum(x)
 cumsum(x)
 x + 10
 ```
+
