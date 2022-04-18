@@ -9,7 +9,7 @@ status("polishing")
 In this chapter, you'll learn useful tools for creating and manipulating numeric vectors.
 We'll start by going into a little more detail of `count()` before diving into various numeric transformations.
 You'll then learn about more general transformations that can be applied to other types of vector, but are often used with numeric vectors.
-Then you'll learn about a few more useful summaries before we finish up with a comparison of function variants that have similar names and similar actions, but are each designed for a specific use case.
+Then you'll learn about a few more useful summaries and how they can also be used with `mutate()`.
 
 ### Prerequisites
 
@@ -173,8 +173,16 @@ df |>
   )
 ```
 
-These are different to the summary functions `min()` and `max()` which take multiple observations and return a single value.
-We'll come back to those in Section \@ref(min-max-summary).
+Note that these are different to the summary functions `min()` and `max()` which take multiple observations and return a single value.
+You can tell that you've used the wrong form when all the minimums and all the maximums have the same value:
+
+```{r}
+df |> 
+  mutate(
+    min = min(x, y, na.rm = TRUE),
+    max = max(x, y, na.rm = TRUE)
+  )
+```
 
 ### Modular arithmetic
 
@@ -349,11 +357,26 @@ slide_vec(x, sum, .before = 2, .after = 2, .complete = TRUE)
 
 1.  Explain in words what each line of the code used to generate Figure \@ref(fig:prop-cancelled) does.
 
+2.  What trigonometric functions does R provide? Guess some names and look up the documentation. Do they use degrees or radians?
+
+3.  Currently `dep_time` and `sched_dep_time` are convenient to look at, but hard to compute with because they're not really continuous numbers. You can see the basic problem in this plot: there's a gap between each hour.
+
+    ```{r}
+    flights |> 
+      filter(month == 1, day == 1) |> 
+      ggplot(aes(sched_dep_time, dep_delay)) +
+      geom_point()
+    ```
+
+    Convert them to a more truthful representation of time (either fractional hours or minutes since midnight).
+
+4.  
+
 ## General transformations
 
 The following sections describe some general transformations which are often used with numeric vectors, but can be applied to all other column types.
 
-### Missing values {#missing-values-numbers}
+### Fill in missing values {#missing-values-numbers}
 
 You can fill in missing values with dplyr's `coalesce()`:
 
@@ -389,39 +412,41 @@ If `min_rank()` doesn't do what you need, look at the variants `dplyr::row_numbe
 See the documentation for details.
 
 ```{r}
-df <- data.frame(x = x)
-df |> mutate(
-  row_number = row_number(x),
-  dense_rank = dense_rank(x),
-  percent_rank = percent_rank(x),
-  cume_dist = cume_dist(x)
-)
+df <- tibble(x = x)
+df |> 
+  mutate(
+    row_number = row_number(x),
+    dense_rank = dense_rank(x),
+    percent_rank = percent_rank(x),
+    cume_dist = cume_dist(x)
+  )
 ```
 
 You can achieve many of the same results by picking the appropriate `ties.method` argument to base R's `rank()`; you'll probably also want to set `na.last = "keep"` to keep `NA`s as `NA`.
 
-`row_number()` can also be used without a variable when you're inside a dplyr verb, in which case it'll give within `mutate()`.
-When combined with `%%` and `%/%` this can be a useful tool for dividing data into similarly sized groups:
+`row_number()` can also be used without any arguments when inside a dplyr verb.
+In this case, it'll give the number of the "current" row.
+When combined with `%%` or `%/%` this can be a useful tool for dividing data into similarly sized groups:
 
 ```{r}
-flights |> 
+df <- tibble(x = runif(10))
+
+df |> 
   mutate(
-    row = row_number(),
-    three_groups = (row - 1) %% 3,
-    three_in_each_group = (row - 1) %/% 3,
-    .keep = "none"
+    row0 = row_number() - 1,
+    three_groups = row0 %/% (n() / 3),
+    three_in_each_group = row0 %/% 3,
   )
 ```
 
 ### Offsets
 
 `dplyr::lead()` and `dplyr::lag()` allow you to refer the values just before or just after the "current" value.
-They return a vector of the same length, padded with NAs at the start or end.
+They return a vector of the same length as the input, padded with `NA`s at the start or end:
 
 ```{r}
 x <- c(2, 5, 11, 11, 19, 35)
 lag(x)
-lag(x, 2)
 lead(x)
 ```
 
@@ -437,6 +462,8 @@ lead(x)
     ```{r}
     x == lag(x)
     ```
+
+You can lead or lag by more than one position by using the second argument, `n`.
 
 ### Exercises
 
@@ -455,7 +482,19 @@ lead(x)
     For each flight, compute the proportion of the total delay for its destination.
 
 6.  Delays are typically temporally correlated: even once the problem that caused the initial delay has been resolved, later flights are delayed to allow earlier flights to leave.
-    Using `lag()`, explore how the delay of a flight is related to the delay of the immediately preceding flight.
+    Using `lag()`, explore how the average flight delay for an hour is related to the average delay for the previous hour.
+
+    ```{r, results = FALSE}
+    flights |> 
+      mutate(hour = dep_time %/% 100) |> 
+      group_by(year, month, day, hour) |> 
+      summarise(
+        dep_delay = mean(dep_delay, na.rm = TRUE),
+        n = n(),
+        .groups = "drop"
+      ) |> 
+      filter(n > 5)
+    ```
 
 7.  Look at each destination.
     Can you find flights that are suspiciously fast?
@@ -464,29 +503,48 @@ lead(x)
     Which flights were most delayed in the air?
 
 8.  Find all destinations that are flown by at least two carriers.
-    Use that information to rank the carriers.
+    Use those destinations to come up with a relative ranking of the carriers based on their performance for the same destination.
 
 ## Summaries
 
-Just using means, counts, and sum can get you a long way, but R provides many other useful summary functions.
-Here are a section that you might find useful.
+Just using the counts, means, and sums that we've introduced already can get you a long way, but R provides many other useful summary functions.
+Here are a selection that you might find useful.
 
 ### Center
 
-We've mostly used `mean(x)` so far, but `median(x)` is also useful.
-The mean is the sum divided by the length; the median is a value where 50% of `x` is above it, and 50% is below it.
-This makes it more robust to unusual values.
+So far, we've mostly used `mean()` to summarize the center of a vector of values.
+Because the mean is the sum divided by the count, it is sensitive to even just a few unusually high or low values.
+An alternative is to use the `median()` which finds a value where 50% of the data is above it and 50% is below it.
 
-```{r}
+Depending on the shape of the distribution of the variable you're interested in, mean or median might be a better measure of center.
+For example, for symmetric distributions we geenerally report the mean while for skewed distributions we usually report the median.
+Figure \@ref(fig:mean-vs-median) compares the hourly mean vs median departure delay.
+You can see that the median delay is always smaller than the mean delay.
+This is because there are a few very large delays, but flights never live much earlier.
+Which is "better"?
+It depends on the question you're asking --- I think the `mean()` is probably better reflection of the total suffering, but the median
+
+```{r mean-vs-median}
+#| fig.cap: >
+#|   Mean vs median
 flights |>
-  group_by(month) |>
+  group_by(year, month, day) |>
   summarise(
-    med_arr_delay = median(arr_delay, na.rm = TRUE),
-    med_dep_delay = median(dep_delay, na.rm = TRUE)
-  )
+    mean = mean(dep_delay, na.rm = TRUE),
+    median = median(dep_delay, na.rm = TRUE),
+    n = n(),
+    .groups = "drop"
+  ) |> 
+  ggplot(aes(mean, median)) + 
+  geom_abline(slope = 1, intercept = 0, colour = "white", size = 2) +
+  geom_point()
 ```
 
 Don't forget what you learned in Section \@ref(sample-size): whenever creating numerical summaries, it's a good idea to include the number of observations in each group.
+
+You might also wonder about the "mode", the most common value in the dataset.
+Generally, this is a summary that works well for very simple cases (which is why you might have learned about it in school), but it doesn't work well for many real datasets since there are often multiple most common values, or because all the values are slightly different (due to floating point issues), there's no one most common value.
+You might use something like <https://pkg.robjhyndman.com/hdrcde/>
 
 ### Minimum, maximum, and quantiles {#min-max-summary}
 
@@ -507,9 +565,20 @@ flights |>
 Using the median and 95% quantile is coming in performance monitoring.
 `median()` shows you what the (bare) majority of people experience, and 95% shows you the worst case, excluding 5% of outliers.
 
+```{r}
+flights |>
+  group_by(year, month, day) |>
+  summarise(
+    median = median(dep_delay, na.rm = TRUE),
+    q95 = quantile(dep_delay, 0.95, na.rm = TRUE),
+    .groups = "drop"
+  )
+```
+
 ### Spread
 
 The root mean squared deviation, or standard deviation `sd(x)`, is the standard measure of spread.
+It's the square root of the mean squared distance to the mean.
 
 ```{r}
 # Why is distance to some destinations more variable than to others?
@@ -529,12 +598,46 @@ flights |>
 <https://en.wikipedia.org/wiki/Eagle_County_Regional_Airport> --- seasonal airport.
 Nothing in wikipedia suggests a move in 2013.
 
-The interquartile range `IQR(x)` and median absolute deviation `mad(x)` are robust equivalents that may be more useful if you have outliers.
+The interquartile range `IQR(x)` is a simple that is useful for skewed data or data with outliers.
 IQR is `quantile(x, 0.75) - quantile(x, 0.25)`.
-`mad()` is derivied similarly to `sd()`, but inside being the average of the squared distances from the mean, it's the median of the absolute differences from the median.
+It gives you the range that the middle 50% of the data lies within.
+
+### Distributions
+
+It's worth remembering that all of these summary statistics are a way of reducing the distribution down to a single number.
+This means that they're fundamentally reductive, and if you pick the wrong summary, you can easily miss important differences between groups.
+That's why it's always a good idea to visualize the distribution before committing to your summary statistics.
+
+The departure delay histgram is highly skewed suggesting that the median would be a better summary of the "middle" than the mean.
+
+```{r}
+flights |>
+  ggplot(aes(dep_delay)) + 
+  geom_histogram(binwidth = 15)
+
+flights |>
+  filter(dep_delay < 360) |> 
+  ggplot(aes(dep_delay)) + 
+  geom_histogram(binwidth = 5)
+```
+
+It's also good to check that the individual distributions look similar to the overall.
+The following plot draws a frequency polygon that suggests the distribution of departure delays looks roughly similar for each day.
+
+```{r}
+flights |>
+  filter(dep_delay < 360) |> 
+  ggplot(aes(dep_delay, group = interaction(day, month))) + 
+  geom_freqpoly(binwidth = 15, alpha = 1/5)
+```
+
+Don't be afraid to explore your own custom summaries that are tailor made for the situation you're working with.
+In this case, that might mean separating out the distribution of delayed vs flights that left early.
+Or given that the values are so heavily skewed, you might try a log-transformation to see if that revealed clearer patterns.
 
 ### Positions
 
+There's one final type of summary that's useful for numeric vectors, but also works with every other type of value: extracting a value at specific position.
 Base R provides a powerful tool for extracting subsets of vectors called `[`.
 This book doesn't cover `[` until Section \@ref(vector-subsetting) so for now we'll introduce three specialized functions that are useful inside of `summarise()` if you want to extract values at a specified position: `first()`, `last()`, and `nth()`.
 
@@ -549,7 +652,7 @@ flights |>
   )
 ```
 
-Compared to `[`, these functions allow you to set a `default` value if requested position doesn't exist (e.g. you're trying to get the 3rd element from a group that only has two elements) and you can use `order_by` argument.
+Compared to `[`, these functions allow you to set a `default` value if requested position doesn't exist (e.g. you're trying to get the 3rd element from a group that only has two elements) and you can use `order_by` argument if you want to base your ordering on some variable, rather than the order in which the rows appear.
 
 Extracting values at positions is complementary to filtering on ranks.
 Filtering gives you all variables, with each observation in a separate row:
@@ -563,20 +666,17 @@ flights |>
 
 ### With `mutate()`
 
-As the names suggest, the summary functions are typically paired with `summarise()`, but they can also be usefully paired with `mutate()`, particularly when you want do some sort of group standardization.
+As the names suggest, the summary functions are typically paired with `summarise()`.
+However, because of the recycling rules we discussed in Section \@ref(scalars-and-recycling-rules) they can also be usefully paired with `mutate()`, particularly when you want do some sort of group standardization.
+For example:
 
 -   `x / sum(x)` calculates the proportion of a total.
--   `(x - mean(x)) / sd(x)` computes a Z-score (standardised to mean 0 and sd 1).
--   `x / x[1]` computes an index based on the first observation.
+-   `(x - mean(x)) / sd(x)` computes a Z-score (standardized to mean 0 and sd 1).
+-   `x / first(x)` computes an index based on the first observation.
 
 ### Exercises
 
-1.  Currently `dep_time` and `sched_dep_time` are convenient to look at, but hard to compute with because they're not really continuous numbers.
-    Convert them to a more convenient representation of number of minutes since midnight.
-
-2.  What trigonometric functions does R provide?
-
-3.  Brainstorm at least 5 different ways to assess the typical delay characteristics of a group of flights.
+1.  Brainstorm at least 5 different ways to assess the typical delay characteristics of a group of flights.
     Consider the following scenarios:
 
     -   A flight is 15 minutes early 50% of the time, and 15 minutes late 50% of the time.
@@ -588,29 +688,4 @@ As the names suggest, the summary functions are typically paired with `summarise
     -   99% of the time a flight is on time.
         1% of the time it's 2 hours late.
 
-    Which is more important: arrival delay or departure delay?
-
-## Variants
-
-We've seen a few variants of different functions
-
-| Summary | Cumulative | Paired |
-|---------|------------|--------|
-| `sum`   | `cumsum`   | `+`    |
-| `prod`  | `cumprod`  | `*`    |
-| `all`   | `cumall`   | `&`    |
-| `any`   | `cumany`   | `|`    |
-| `min`   | `cummin`   | `pmin` |
-| `max`   | `cummax`   | `pmax` |
-
--   Summary functions take a vector and always return a length 1 vector. Typically used with `summarise()`
--   Cumulative functions take a vector and return the same length. Used with `mutate()`.
--   Paired functions take a pair of functions and return a vector the same length (using the recycling rules if the vectors aren't the same length). Used with `mutate()`
-
-```{r}
-x <- c(1, 2, 3, 5)
-sum(x)
-cumsum(x)
-x + 10
-```
-
+    Which do you think is more important: arrival delay or departure delay?
