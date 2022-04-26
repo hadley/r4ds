@@ -81,7 +81,7 @@ flights |>
 
 ### Floating point comparison
 
-Beware when using `==` with numbers as results might surprise you!
+Beware when using `==` with numbers as the results might surprise you!
 It looks like this vector contains the numbers 1 and 2:
 
 ```{r}
@@ -95,20 +95,24 @@ But if you test them for equality, you surprisingly get `FALSE`:
 x == c(1, 2)
 ```
 
-That's because computers use finite precision arithmetic (they obviously can't store an infinite number of digits!) so in most cases, the number number you see is an actually approximation.
-R usually rounds these numbers to avoid displaying a bunch of usually unimportant digits.
+That's because computers use finite precision arithmetic (they obviously can't store an infinite number of digits!) so in most cases, the number you see on screen is an approximation.
+R automatically rounds these numbers to avoid displaying a bunch of usually unimportant digits[^logicals-1].
 
-To see the details you can call `print()` with the the `digits`[^logicals-1] argument.
-R normally calls print automatically for you (i.e. `x` is a shortcut for `print(x)`), but calling it explicitly is useful if you want to provide other arguments:
+[^logicals-1]: You can control this behavior with the `digits` option.
 
-[^logicals-1]: A floating point number can hold roughly 16 decimal digits; the precise number is surprisingly complicated and depends on the number.
+To see the details you can call `print()` with the the `digits`[^logicals-2] argument.
+R normally calls print for you (i.e. `x` is a shortcut for `print(x)`), but calling it explicitly is useful if you want to provide other arguments:
+
+[^logicals-2]: A floating point number can hold roughly 16 decimal digits; the precise number is surprisingly complicated and depends on the number.
 
 ```{r}
 print(x, digits = 16)
 ```
 
 Now that you've seen why `==` is failing, what can you do about it?
-One option is to use `round()` to round to any number of digits, or instead of `==`, use `dplyr::near()`, which does the comparison with a small amount of tolerance:
+One option is to use `round()`[^logicals-3] to round to any number of digits, or instead of `==`, use `dplyr::near()`, which ignores small differences:
+
+[^logicals-3]: We'll cover `round()` in more detail in Section \@ref(rounding).
 
 ```{r}
 near(x, c(1, 2))
@@ -116,7 +120,7 @@ near(x, c(1, 2))
 
 ### Missing values {#na-comparison}
 
-Missing values represent the unknown so they missing values are "contagious": almost any operation involving an unknown value will also be unknown:
+Missing values represent the unknown so they are "contagious": almost any operation involving an unknown value will also be unknown:
 
 ```{r}
 NA > 5
@@ -129,7 +133,7 @@ The most confusing result is this one:
 NA == NA
 ```
 
-It's easiest to understand why this is true with a bit more context:
+It's easiest to understand why this is true if we artificial supply a little more context:
 
 ```{r}
 # Let x be Mary's age. We don't know how old she is.
@@ -170,29 +174,29 @@ flights |>
   filter(is.na(dep_time))
 ```
 
-It can also be useful in `arrange()`, because by default, `arrange()` puts all the missing values at the end.
+`is.na()` can also be useful in `arrange()`, because `arrange()` usually puts all the missing values at the end.
 You can override this default by first sorting by `is.na()`:
 
 ```{r}
 flights |> 
-  arrange(arr_delay)
+  arrange(dep_time)
 
 flights |> 
-  arrange(desc(is.na(arr_delay)), arr_delay)
+  arrange(desc(is.na(dep_time)), dep_time)
 ```
 
 ### Exercises
 
-1.  How does `dplyr::near()` work? Read the source code to find out.
+1.  How does `dplyr::near()` work? Type `near` to see the source code.
 2.  Use `mutate()`, `is.na()`, and `count()` together to describe how the missing values in `dep_time`, `sched_dep_time` and `dep_delay` are connected.
 
 ## Boolean algebra
 
 Once you have multiple logical vectors, you can combine them together using Boolean algebra.
-In R, `&` is "and", `|` is "or", and `!` is "not", and `xor()` is exclusive or[^logicals-2].
+In R, `&` is "and", `|` is "or", and `!` is "not", and `xor()` is exclusive or[^logicals-4].
 Figure \@ref(fig:bool-ops) shows the complete set of Boolean operations and how they work.
 
-[^logicals-2]: That is, `xor(x, y)` is true if x is true, or y is true, but not both.
+[^logicals-4]: That is, `xor(x, y)` is true if x is true, or y is true, but not both.
     This is how we usually use "or" In English.
     Both is not usually an acceptable answer to the question "would you like ice cream or cake?".
 
@@ -216,7 +220,7 @@ knitr::include_graphics("diagrams/transform.png", dpi = 270)
 As well as `&` and `|`, R also has `&&` and `||`.
 Don't use them in dplyr functions!
 These are called short-circuiting operators and only ever return a single `TRUE` or `FALSE`.
-They're important for programming so you'll learn more about them in Section \@ref(conditional-execution).
+They're important for programming and you'll learn more about them in Section \@ref(conditional-execution).
 
 The following code finds all flights that departed in November or December:
 
@@ -277,7 +281,7 @@ df |>
 ```
 
 To understand what's going on, think about `NA | TRUE`.
-A missing value means that the value could either be `TRUE` or `FALSE`.
+A missing value in a logical vector means that the value could either be `TRUE` or `FALSE`.
 `TRUE | TRUE` and `FALSE | TRUE` are both `TRUE`, so `NA | TRUE` must also be `TRUE`.
 Similar reasoning applies with `NA & FALSE`.
 
@@ -285,12 +289,12 @@ Similar reasoning applies with `NA & FALSE`.
 
 1.  Find all flights where `arr_delay` is missing but `dep_delay` is not. Find all flights where neither `arr_time` nor `sched_arr_time` are missing, but `arr_delay` is.
 2.  How many flights have a missing `dep_time`? What other variables are missing in these rows? What might these rows represent?
-3.  Look at the number of cancelled flights per day. Is there a pattern? Is the proportion of cancelled flights related to the average delay?
+3.  Assuming that a missing `dep_time` implies that a flight is cancelled, look at the number of cancelled flights per day. Is there a pattern? Is there a connection between the proportion of cancelled flights and average delay of non-cancelled flights?
 
 ## Summaries {#logical-summaries}
 
-While, you can summarize logical variables directly with functions that work only with logicals, there are two other important summaries.
-Numeric summaries like `sum()` and `mean()`, and using summaries as inline filters.
+The following sections describe some useful techniques for summarizing logical vectors.
+As you'll learn as well as functions that only work with logical vectors, you can also effectively use functions that work with numeric vectors.
 
 ### Logical summaries
 
@@ -366,8 +370,10 @@ not_cancelled |>
 ```
 
 This works, but what if we wanted to also compute the average delay for flights that left early?
-We'd need to perform a separate filter step, and then figure out how to combine the two data frames together (which we'll cover in Chapter \@ref(relational-data)).
+We'd need to perform a separate filter step, and then figure out how to combine the two data frames together[^logicals-5].
 Instead you could use `[` to perform an inline filtering: `arr_delay[arr_delay > 0]` will yield only the positive arrival delays.
+
+[^logicals-5]: We'll cover this in Chapter \@ref(relational-data)
 
 This leads to:
 
@@ -382,7 +388,7 @@ not_cancelled |>
   )
 ```
 
-Also note the difference in the group size: in the first chunk `n` gives the number of delayed flights per day; in the second, `n` gives the total number of flights.
+Also note the difference in the group size: in the first chunk `n()` gives the number of delayed flights per day; in the second, `n()` gives the total number of flights.
 
 ### Exercises
 
@@ -392,43 +398,106 @@ Also note the difference in the group size: in the first chunk `n` gives the num
 ## Conditional transformations
 
 One of the most powerful features of logical vectors are their use for conditional transformations, i.e. returning one value for true values, and a different value for false values.
-We'll see a couple of different ways to do this, and the
+There are two important tools for this: `if_else()` and `case_when()`.
 
 ### `if_else()`
 
-If you want to use one value when a condition is true and another value when it's `FALSE`, you can use `if_else()`[^logicals-3].
+If you want to use one value when a condition is true and another value when it's `FALSE`, you can use `dplyr::if_else()`[^logicals-6].
+Let's begin with a few simple examples.
+You'll always use the first three argument of `if_else(`).
+The first argument is a logical condition, the second argument decides determines the output if the condition is true, and the third argument determines the output if the condition is false.
 
-[^logicals-3]: This is equivalent to the base R function `ifelse`.
-    There are two main advantages of `if_else()`over `ifelse()`: you can choose what should happen to missing values, and `if_else()` is much more likely to give you a meaningful error message if you use the wrong type of variable.
+[^logicals-6]: dplyr's `if_else()` is very similar to base R's `ifelse()`.
+    There are two main advantages of `if_else()`over `ifelse()`: you can choose what should happen to missing values, and `if_else()` is much more likely to give you a meaningful error if you variables have incompatible types.
 
 ```{r}
-df <- tibble(
-  date = as.Date("2020-01-01") + 0:6,
-  balance = c(100, 50, 25, -25, -50, 30, 120)
-)
-df |> 
-  mutate(
-    status = if_else(balance < 0, "overdraft", "ok")
-  )
+x <- c(-3:3, NA)
+if_else(x < 0, "-ve", "+ve")
+```
+
+There's an optional fourth argument which will be used if the input is missing:
+
+```{r}
+if_else(x < 0, "-ve", "+ve", "???")
+```
+
+You can also include vectors for the the `true` and `false` arguments.
+For example, this allows you to create your own implementation of `abs()`:
+
+```{r}
+if_else(x < 0, -x, x)
+```
+
+So far all the arguments have used the same vectors, but you can of course mix and match.
+For example, you could implement a simple version of `coalesce()` this way:
+
+```{r}
+x1 <- c(NA, 1, 2, NA)
+y1 <- c(3, NA, 4, 6)
+if_else(is.na(x1), y1, x1)
 ```
 
 If you need to create more complex conditions, you can string together multiple `if_elses()`s, but this quickly gets hard to read.
 
 ```{r}
-df |> 
-  mutate(
-    status = if_else(balance == 0, "zero", 
-      if_else(balance < 0, "overdraft", "ok"))
-  )
+if_else(x == 0, "0", if_else(x < 0, "-ve", "+ve"), "???")
 ```
 
-Instead, you can switch to `case_when()` instead.
+Instead, you can switch to `dplyr::case_when()`.
 
 ### `case_when()`
 
+Inspired by SQL.
+
 `case_when()` has a special syntax that unfortunately looks like nothing else you'll use in the tidyverse.
 it takes pairs that look like `condition ~ output`.
-`condition` must make a logical a logical vector; when it's `TRUE`, `output` will be used.
+`condition` must be a logical vector; when it's `TRUE`, `output` will be used.
+This means we could recreate our previous nested `if_else()` as follows:
+
+```{r}
+case_when(
+  x == 0   ~ "0",
+  x < 0    ~ "-ve", 
+  x > 0    ~ "+ve",
+  is.na(x) ~ "???"
+)
+```
+
+(Note that I've added spaces before the `~` to make the outputs line up so it's easier to scan)
+
+This is more code, but it's also more explicit.
+
+To explain how `case_when()` works, lets explore some simpler cases.
+If none of the cases match, the output gets an `NA`:
+
+```{r}
+case_when(
+  x < 0 ~ "-ve",
+  x > 0 ~ "+ve"
+)
+```
+
+If you want to create a "default"/catch all value, put `TRUE` on the left hand side:
+
+```{r}
+case_when(
+  x < 0 ~ "-ve",
+  x > 0 ~ "+ve",
+  TRUE ~ "???"
+)
+```
+
+Note that if multiple conditions match, only the first will be used:
+
+```{r}
+case_when(
+  x > 0 ~ "-ve",
+  x > 3 ~ "big"
+)
+```
+
+Just like with `if_else()` you can use variables on both sides of the `~` and you can mix and match variables as needed for your problem.
+Finally, you'll typically use with `mutate()`.
 
 ```{r}
 flights |> 
@@ -445,92 +514,32 @@ flights |>
   )
 ```
 
-(Note that I usually add spaces to make the outputs line up so it's easier to scan)
+## Making groups
 
-To explain how `case_when()` works, lets pull it out of the mutate and create some simple dummy data.
+Before we move on to the next chapter, I want to show you one last handy trick.
+I don't know exactly how to describe it, and it feels a little magical, but it's super handy so I wanted to make sure you knew about it.
+
+Sometimes you want to divide your dataset up into groups whenever some event occurs.
+For example, when you're looking at website data it's common to want to break up events into sessions, where a session is defined an a gap of more than x minutes since the last activity.
 
 ```{r}
-x <- 1:10
-case_when(
-  x <  5 ~ "small",
-  x >= 5 ~ "big"
+events <- tibble(
+  time = c(0, 1, 2, 3, 5, 10, 12, 15, 17, 19, 20, 27, 28, 30)
 )
-```
-
--   If none of the cases match, the output will be missing:
-
-    ```{r}
-    case_when(
-      x %% 2 == 0 ~ "even",
-    )
-    ```
-
--   You can create a catch all value by using `TRUE` as the condition:
-
-    ```{r}
-    case_when(
-      x %% 2 == 0 ~ "even",
-      TRUE        ~ "odd"
-    )
-    ```
-
--   If multiple conditions are `TRUE`, the first is used:
-
-    ```{r}
-    case_when(
-      x < 5 ~ "< 5",
-      x < 3 ~ "< 3",
-      TRUE ~ "big"
-    )
-    ```
-
-The simple examples I've shown you here all use just a single variable, but the logical conditions can use any number of variables.
-And you can use variables on the right hand side.
-
-## Cumulative tricks
-
-Before we move on to the next chapter, I want to show you a grab bag of tricks that make use of cumulative functions (i.e. functions that depending on every previous value of a vector).
-These all feel a bit magical, and I'm torn on whether or not they should be included in this book.
-But in the end, some of them are just so useful I think it's important to mention them --- they're not particularly easy to understand and don't help with that many problems, but when they do, they provide a substantial advantage.
-
-<!-- TODO: illustration of accumulating function -->
-
-Another useful pair of functions are cumulative any, `dplyr::cumany()`, and cumulative all, `dplyr::cumall()`.
-`cumany()` will be `TRUE` after it encounters the first `TRUE`, and `cumall()` will be `FALSE` after it encounters its first `FALSE`.
-
-```{r}
-cumany(c(FALSE, FALSE, TRUE, TRUE, FALSE, TRUE))
-cumall(c(TRUE, FALSE, TRUE, TRUE, FALSE, TRUE))
-```
-
-These are particularly useful in conjunction with `filter()` because they allow you to select rows:
-
--   Before the first `FALSE` with `cumall(x)`.
--   Before the first `TRUE` with `cumall(!x)`.
--   After the first `TRUE` with `cumany(x)`.
--   After the first `FALSE` with `cumany(!x)`.
-
-If you imagine some data about a bank balance, then these functions allow you t
-
-```{r}
-df <- tibble(
-  date = as.Date("2020-01-01") + 0:6,
-  balance = c(100, 50, 25, -25, -50, 30, 120)
-)
-# all rows after first overdraft
-df |> filter(cumany(balance < 0))
-# all rows until first overdraft
-df |> filter(cumall(!(balance < 0)))
-```
-
-`cumsum()` as way of defining groups:
-
-```{r}
-df |> 
+events <- events |> 
   mutate(
-    negative = balance < 0,
-    flip = negative != lag(negative),
-    group = cumsum(coalesce(flip, FALSE))
+    diff = time - lag(time, default = first(time)),
+    gap = diff >= 5
+  )
+events
+```
+
+We can use `cumsum()` as a way of turning this logical vector into a unique group identifier.
+Remember that whenever you use a
+
+```{r}
+events |> mutate(
+    group = cumsum(jump) + 1
   )
 ```
 
