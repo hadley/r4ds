@@ -357,9 +357,12 @@ slide_vec(x, sum, .before = 2, .after = 2, .complete = TRUE)
 
 1.  Explain in words what each line of the code used to generate Figure \@ref(fig:prop-cancelled) does.
 
-2.  What trigonometric functions does R provide? Guess some names and look up the documentation. Do they use degrees or radians?
+2.  What trigonometric functions does R provide?
+    Guess some names and look up the documentation.
+    Do they use degrees or radians?
 
-3.  Currently `dep_time` and `sched_dep_time` are convenient to look at, but hard to compute with because they're not really continuous numbers. You can see the basic problem in this plot: there's a gap between each hour.
+3.  Currently `dep_time` and `sched_dep_time` are convenient to look at, but hard to compute with because they're not really continuous numbers.
+    You can see the basic problem in this plot: there's a gap between each hour.
 
     ```{r}
     flights |> 
@@ -369,8 +372,6 @@ slide_vec(x, sum, .before = 2, .after = 2, .complete = TRUE)
     ```
 
     Convert them to a more truthful representation of time (either fractional hours or minutes since midnight).
-
-4.  
 
 ## General transformations
 
@@ -514,19 +515,23 @@ Here are a selection that you might find useful.
 
 So far, we've mostly used `mean()` to summarize the center of a vector of values.
 Because the mean is the sum divided by the count, it is sensitive to even just a few unusually high or low values.
-An alternative is to use the `median()` which finds a value where 50% of the data is above it and 50% is below it.
-
+An alternative is to use the `median()` which finds a value that lies in the "middle" of the vector, i.e. 50% of the values is above it and 50% are below it.
 Depending on the shape of the distribution of the variable you're interested in, mean or median might be a better measure of center.
-For example, for symmetric distributions we geenerally report the mean while for skewed distributions we usually report the median.
-Figure \@ref(fig:mean-vs-median) compares the hourly mean vs median departure delay.
-You can see that the median delay is always smaller than the mean delay.
-This is because there are a few very large delays, but flights never live much earlier.
-Which is "better"?
-It depends on the question you're asking --- I think the `mean()` is probably better reflection of the total suffering, but the median
+For example, for symmetric distributions we generally report the mean while for skewed distributions we usually report the median.
+
+Figure \@ref(fig:mean-vs-median) compares the mean vs the median when looking at the hourly vs median departure delay.
+The median delay is always smaller than the mean delay because because flight sometimes leave multiple hours late, but never leave multiple hours early.
 
 ```{r mean-vs-median}
 #| fig.cap: >
-#|   Mean vs median
+#|   A scatterplot showing the differences of summarising hourly depature
+#|   delay with median instead of median.
+#| fig.alt: >
+#|   All points fall below a 45° line, meaning that the median delay is
+#|   always less than the mean delay. Most points are clustered in a 
+#|   dense region of mean [0, 20] and median [0, 5]. As the mean delay
+#|   increases, the spread of the median also increases. There are two
+#|   outlying points with mean ~60, median ~50, and mean ~85, median ~55.
 flights |>
   group_by(year, month, day) |>
   summarise(
@@ -540,36 +545,26 @@ flights |>
   geom_point()
 ```
 
-Don't forget what you learned in Section \@ref(sample-size): whenever creating numerical summaries, it's a good idea to include the number of observations in each group.
+You might also wonder about the **mode**, or the most common value.
+This is a summary that only works well for very simple cases (which is why you might have learned about it in high school), but it doesn't work well for many real datasets.
+If the data is discrete, there may be multiple most common values, and if the data is continuous, there might be no most common value because every value is every so slightly different.
+For these reasons, the mode tends not to be used by statisticians and there's no mode function included in base R[^numbers-1].
 
-You might also wonder about the "mode", the most common value in the dataset.
-Generally, this is a summary that works well for very simple cases (which is why you might have learned about it in school), but it doesn't work well for many real datasets since there are often multiple most common values, or because all the values are slightly different (due to floating point issues), there's no one most common value.
-You might use something like <https://pkg.robjhyndman.com/hdrcde/>
+[^numbers-1]: The `mode()` function does something quite different!
 
 ### Minimum, maximum, and quantiles {#min-max-summary}
 
-Quantiles are a generalization of the median.
-For example, `quantile(x, 0.25)` will find a value of `x` that is greater than 25% of the values, and less than the remaining 75%.
-`min()` and `max()` are like the 0% and 100% quantiles: they're the smallest and biggest numbers.
+What if you're interested in locations other than the center?
+`min()` and `max()` will give you the largest and smallest values.
+Another powerful tool is `quantile()` which is a generalization of the median: `quantile(x, 0.25)` will find a value of `x` that is greater than 25% of the values, `quantile(x, 0.5)` is equivalent to the median, and `quantile(x, 0.95)` will find a value that's greater than 95% of the values.
 
-```{r}
-# When do the first and last flights leave each day?
-flights |> 
-  group_by(year, month, day) |> 
-  summarise(
-    first = min(dep_time, na.rm = TRUE),
-    last = max(dep_time, na.rm = TRUE)
-  )
-```
-
-Using the median and 95% quantile is coming in performance monitoring.
-`median()` shows you what the (bare) majority of people experience, and 95% shows you the worst case, excluding 5% of outliers.
+For the flights data, you might want to look at the 95% quantile of delays rather than the maximum, because it will ignore the 5% of most delayed flights which can be quite extreme.
 
 ```{r}
 flights |>
   group_by(year, month, day) |>
   summarise(
-    median = median(dep_delay, na.rm = TRUE),
+    max = max(dep_delay, na.rm = TRUE),
     q95 = quantile(dep_delay, 0.95, na.rm = TRUE),
     .groups = "drop"
   )
@@ -577,69 +572,91 @@ flights |>
 
 ### Spread
 
-The root mean squared deviation, or standard deviation `sd(x)`, is the standard measure of spread.
-It's the square root of the mean squared distance to the mean.
+Sometimes you're not so interested in where the bulk of the data lies, but how spread out it.
+Two commonly used summaries are the standard deviation, `sd(x)`, and the inter-quartile range, `IQR()`.
+I won't explain `sd()` here since you're probably already familiar with it, but `IQR()` might be new --- it's `quantile(x, 0.75) - quantile(x, 0.25)` and gives you the range that contains the middle 50% of the data.
+
+We can use this to reveal a small oddity in the flights data.
+You might expect that the spread of the distance between origin and destination to be zero, since airports are always in the same place.
+But the code below makes it looks like one airport, [EGE](https://en.wikipedia.org/wiki/Eagle_County_Regional_Airport), might have moved.
 
 ```{r}
-# Why is distance to some destinations more variable than to others?
 flights |> 
   group_by(origin, dest) |> 
-  summarise(distance_sd = sd(distance), n = n()) |> 
+  summarise(
+    distance_sd = IQR(distance), 
+    n = n(),
+    .groups = "drop"
+  ) |> 
   filter(distance_sd > 0)
-
-# Did it move?
-flights |> 
-  filter(dest == "EGE") |> 
-  select(time_hour, dest, distance, origin) |> 
-  ggplot(aes(time_hour, distance, colour = origin)) +
-  geom_point()
 ```
-
-<https://en.wikipedia.org/wiki/Eagle_County_Regional_Airport> --- seasonal airport.
-Nothing in wikipedia suggests a move in 2013.
-
-The interquartile range `IQR(x)` is a simple that is useful for skewed data or data with outliers.
-IQR is `quantile(x, 0.75) - quantile(x, 0.25)`.
-It gives you the range that the middle 50% of the data lies within.
 
 ### Distributions
 
-It's worth remembering that all of these summary statistics are a way of reducing the distribution down to a single number.
+It's worth remembering that all of the summary statistics described above are a way of reducing the distribution down to a single number.
 This means that they're fundamentally reductive, and if you pick the wrong summary, you can easily miss important differences between groups.
 That's why it's always a good idea to visualize the distribution before committing to your summary statistics.
 
-The departure delay histgram is highly skewed suggesting that the median would be a better summary of the "middle" than the mean.
+Figure \@ref(fig:flights-dist) shows the overall distribution of departure delays.
+The distribution is so skewed that we have to zoom in to see the bulk of the data.
+This suggests that the mean is unlikely to be a good summary and we might prefer the median instead.
 
-```{r}
+```{r flights-dist}
+#| fig.cap: >
+#|   The distribution of `dep_delay` is highly skewed. On the left we
+#|   see the full range of the data. Zooming into just delays less than 
+#|   2 hours continues to show a very skewed distribution.
+#| fig.alt: >
+#|   Two histograms of `dep_delay`. On the left, it's very hard to see
+#|   any pattern except that there's a very large spike around zero, the
+#|   bars rapidly decay in height, and for most of the plot, you can't
+#|   see any bars because they are too short to see. On the right,
+#|   where we've discarded delays of greater than two hours, we can
+#|   see that the spike occurs slightly below zero (i.e. most flights
+#|   leave a couple of minutes early), but there's still a very steep
+#|   decay after that.
+#| out.width: 50%
+#| fig.align: default
+#| fig.width: 4
+#| fig.height: 2
 flights |>
   ggplot(aes(dep_delay)) + 
   geom_histogram(binwidth = 15)
 
 flights |>
-  filter(dep_delay < 360) |> 
+  filter(dep_delay <= 120) |> 
   ggplot(aes(dep_delay)) + 
   geom_histogram(binwidth = 5)
 ```
 
-It's also good to check that the individual distributions look similar to the overall.
-The following plot draws a frequency polygon that suggests the distribution of departure delays looks roughly similar for each day.
+It's also a good idea to check that distributions for subgroups resemble the whole.
+Figure \@ref(fig:flights-dist-daily) overlays a frequency polygon for each day.
+The distributions seem to follow a common pattern, suggesting it's fine to use the same summary for each day.
 
-```{r}
+```{r flights-dist-daily}
+#| fig.cap: >
+#|   365 frequency polygons of `dep_delay`, one for each day. The frequency
+#|   polygons appear to have the same shape, suggesting that it's reasonable
+#|   to compare days by looking at just a few summary statistics.
+#| fig.alt: >
+#|   The distribution of `dep_delay` is highly right skewed with a strong
+#|   peak slightly less than 0. The 365 frequency polygons are mostly 
+#|   overlapping forming a thick black bland.
 flights |>
-  filter(dep_delay < 360) |> 
+  filter(dep_delay < 120) |> 
   ggplot(aes(dep_delay, group = interaction(day, month))) + 
-  geom_freqpoly(binwidth = 15, alpha = 1/5)
+  geom_freqpoly(binwidth = 5, alpha = 1/5)
 ```
 
-Don't be afraid to explore your own custom summaries that are tailor made for the situation you're working with.
-In this case, that might mean separating out the distribution of delayed vs flights that left early.
-Or given that the values are so heavily skewed, you might try a log-transformation to see if that revealed clearer patterns.
+Don't be afraid to explore your own custom summaries specifically tailored for the data that you're working with.
+In this case, that might mean separately summarizing the flights that left early vs the flights that left late, or given that the values are so heavily skewed, you might try a log-transformation.
+Finally, don't forget what you learned in Section \@ref(sample-size): whenever creating numerical summaries, it's a good idea to include the number of observations in each group.
 
 ### Positions
 
 There's one final type of summary that's useful for numeric vectors, but also works with every other type of value: extracting a value at specific position.
-Base R provides a powerful tool for extracting subsets of vectors called `[`.
-This book doesn't cover `[` until Section \@ref(vector-subsetting) so for now we'll introduce three specialized functions that are useful inside of `summarise()` if you want to extract values at a specified position: `first()`, `last()`, and `nth()`.
+You can do this with the base R `[` function, but we're not cover it until Section \@ref(vector-subsetting), because it's a very powerful and general function.
+For now we'll introduce three specialized functions that you can use to extract values at a specified position: `first(x)`, `last(x)`, and `nth(x, n)`.
 
 For example, we can find the first and last departure for each day:
 
@@ -648,11 +665,17 @@ flights |>
   group_by(year, month, day) |> 
   summarise(
     first_dep = first(dep_time), 
+    fifth_dep = nth(dep_time, 5),
     last_dep = last(dep_time)
   )
 ```
 
-Compared to `[`, these functions allow you to set a `default` value if requested position doesn't exist (e.g. you're trying to get the 3rd element from a group that only has two elements) and you can use `order_by` argument if you want to base your ordering on some variable, rather than the order in which the rows appear.
+(These functions currently lack an `na.rm` argument but will hopefully be fixed by the time you read this book: <https://github.com/tidyverse/dplyr/issues/6242>).
+
+If you're familiar with `[`, you might wonder if you ever need these functions.
+I think there are main reasons: the `default` argument and the `order_by` argument.
+`default` allows you to set a default value that's use if the requested position doesn't exist, e.g. you're trying to get the 3rd element from a two element group.
+`order_by` lets you locally override the existing ordering of the rows, so you can
 
 Extracting values at positions is complementary to filtering on ranks.
 Filtering gives you all variables, with each observation in a separate row:
@@ -680,12 +703,13 @@ For example:
     Consider the following scenarios:
 
     -   A flight is 15 minutes early 50% of the time, and 15 minutes late 50% of the time.
-
     -   A flight is always 10 minutes late.
-
     -   A flight is 30 minutes early 50% of the time, and 30 minutes late 50% of the time.
-
-    -   99% of the time a flight is on time.
-        1% of the time it's 2 hours late.
+    -   99% of the time a flight is on time. 1% of the time it's 2 hours late.
 
     Which do you think is more important: arrival delay or departure delay?
+
+2.  Which destinations show the greatest variation in air speed?
+
+3.  Create a plot to further explore the adventures of EGE.
+    Can you find any evidence that the airport moved locations?
