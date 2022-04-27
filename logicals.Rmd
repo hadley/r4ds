@@ -198,15 +198,15 @@ Figure \@ref(fig:bool-ops) shows the complete set of Boolean operations and how 
 #| echo: false
 #| out.width: NULL
 #| fig.cap: > 
-#|    Complete set of boolean operations. `x` is the left-hand
+#|    The complete set of boolean operations. `x` is the left-hand
 #|    circle, `y` is the right-hand circle, and the shaded region show 
-#|    which parts each operator selects."
+#|    which parts each operator selects.
 #| fig.alt: >
 #|    Six Venn diagrams, each explaining a given logical operator. The
 #|    circles (sets) in each of the Venn diagrams represent x and y. 1. y &
-#|    !x is y but none of x, x & y is the intersection of x and y, x & !y is
-#|    x but none of y, x is all of x none of y, xor(x, y) is everything
-#|    except the intersection of x and y, y is all of y none of x, and 
+#|    !x is y but none of x; x & y is the intersection of x and y; x & !y is
+#|    x but none of y; x is all of x none of y; xor(x, y) is everything
+#|    except the intersection of x and y; y is all of y and none of x; and 
 #|    x | y is everything.
 knitr::include_graphics("diagrams/transform.png", dpi = 270)
 ```
@@ -215,50 +215,6 @@ As well as `&` and `|`, R also has `&&` and `||`.
 Don't use them in dplyr functions!
 These are called short-circuiting operators and only ever return a single `TRUE` or `FALSE`.
 They're important for programming and you'll learn more about them in Section \@ref(conditional-execution).
-
-The following code finds all flights that departed in November or December:
-
-```{r, eval = FALSE}
-flights |> 
-   filter(month == 11 | month == 12)
-```
-
-Note that the order of operations doesn't work like English.
-You can't think "find all flights that departed in November or December" and write `flights |> filter(month == 11 | 12)`.
-This code will not error, but it will do something rather confusing.
-First R evaluates `11 | 12` which is equivalent to `TRUE | TRUE`, which returns `TRUE`.
-Then it evaluates `month == TRUE`.
-Since month is numeric, this is equivalent to `month == 1`, so `flights |> filter(month == 11 | 12)` returns all flights in January!
-
-### `%in%`
-
-An easy way to avoid this issue is to use `%in%`.
-`x %in% y` returns a logical vector the same length as `x` that is `TRUE` whenever a value in `x` is anywhere in `y` .
-
-```{r}
-letters[1:10] %in% c("a", "e", "i", "o", "u")
-```
-
-So we could instead write:
-
-```{r, eval = FALSE}
-flights |> 
-  filter(month %in% c(11, 12))
-```
-
-Note that `%in%` obeys different rules for `NA` to `==`.
-
-```{r}
-c(1, 2, NA) == NA
-c(1, 2, NA) %in% NA
-```
-
-This can make for a useful shortcut:
-
-```{r}
-flights |> 
-  filter(dep_time %in% c(NA, 0800))
-```
 
 ### Missing values {#na-boolean}
 
@@ -279,6 +235,69 @@ A missing value in a logical vector means that the value could either be `TRUE` 
 `TRUE | TRUE` and `FALSE | TRUE` are both `TRUE`, so `NA | TRUE` must also be `TRUE`.
 Similar reasoning applies with `NA & FALSE`.
 
+### Order of operations
+
+Note that the order of operations doesn't work like English.
+Take the following code finds all flights that departed in November or December:
+
+```{r, eval = FALSE}
+flights |> 
+   filter(month == 11 | month == 12)
+```
+
+You might be tempted to write it like you'd say in English: "find all flights that departed in November or December":
+
+```{r}
+flights |> 
+   filter(month == 11 | 12)
+```
+
+This code doesn't error but it also doesn't seem to have worked.
+What's going on?
+Here R first evaluates `month == 11` creating a logical vector, which I'll call `nov`.
+It computes `nov | 12`.
+When you use a number with a logical operator it converts everything apart from 0 to TRUE, so this is equivalent to `nov | TRUE` which will always be `TRUE`, so every row will be selected:
+
+```{r}
+flights |> 
+  mutate(
+    nov = month == 11,
+    final = nov | 12,
+    .keep = "used"
+  )
+```
+
+### `%in%`
+
+An easy way to avoid the problem of getting your `==`s and `|`s in the right order is to use `%in%`.
+`x %in% y` returns a logical vector the same length as `x` that is `TRUE` whenever a value in `x` is anywhere in `y` .
+
+```{r}
+1:12 %in% c(1, 5, 11)
+letters[1:10] %in% c("a", "e", "i", "o", "u")
+```
+
+So to find all flights in November and December we could write:
+
+```{r, eval = FALSE}
+flights |> 
+  filter(month %in% c(11, 12))
+```
+
+Note that `%in%` obeys different rules for `NA` to `==`, as `NA %in% NA` is `TRUE`.
+
+```{r}
+c(1, 2, NA) == NA
+c(1, 2, NA) %in% NA
+```
+
+This can make for a useful shortcut:
+
+```{r}
+flights |> 
+  filter(dep_time %in% c(NA, 0800))
+```
+
 ### Exercises
 
 1.  Find all flights where `arr_delay` is missing but `dep_delay` is not. Find all flights where neither `arr_time` nor `sched_arr_time` are missing, but `arr_delay` is.
@@ -288,26 +307,23 @@ Similar reasoning applies with `NA & FALSE`.
 ## Summaries {#logical-summaries}
 
 The following sections describe some useful techniques for summarizing logical vectors.
-As you'll learn as well as functions that only work with logical vectors, you can also effectively use functions that work with numeric vectors.
+As well as functions that only work specifically with logical vectors, you can also use functions that work with numeric vectors.
 
 ### Logical summaries
 
-There are two important logical summaries: `any()` and `all()`.
+There are two main logical summaries: `any()` and `all()`.
 `any(x)` is the equivalent of `|`; it'll return `TRUE` if there are any `TRUE`'s in `x`.
 `all(x)` is equivalent of `&`; it'll return `TRUE` only if all values of `x` are `TRUE`'s.
-Like all summary functions, they'll return `NA` if there are any missing values present, and like usual you can make the missing values go away with `na.rm = TRUE`.
+Like all summary functions, they'll return `NA` if there are any missing values present, and as usual you can make the missing values go away with `na.rm = TRUE`.
 
 For example, we could use `all()` to find out if there were days where every flight was delayed:
 
 ```{r}
-not_cancelled <- flights |> 
-  filter(!is.na(dep_delay), !is.na(arr_delay))
-
-not_cancelled |> 
+flights |> 
   group_by(year, month, day) |> 
   summarise(
-    all_delayed = all(arr_delay >= 0),
-    any_delayed = any(arr_delay >= 0),
+    all_delayed = all(arr_delay >= 0, na.rm = TRUE),
+    any_delayed = any(arr_delay >= 0, na.rm = TRUE),
     .groups = "drop"
   )
 ```
@@ -318,27 +334,32 @@ That leads us to the numeric summaries.
 ### Numeric summaries
 
 When you use a logical vector in a numeric context, `TRUE` becomes 1 and `FALSE` becomes 0.
-This makes `sum()` and `mean()` are particularly useful with logical vectors because `sum(x)` will give the number of `TRUE`s and `mean(x)` gives the proportion of `TRUE`s.
-That lets us see the distribution of delays across the days of the year:
+This makes `sum()` and `mean()` very useful with logical vectors because `sum(x)` will give the number of `TRUE`s and `mean(x)` the proportion of `TRUE`s.
+That lets us see the distribution of delays across the days of the year as shown in Figure \@ref(fig:prop-delayed-dist).
 
-```{r}
-not_cancelled |> 
+```{r prop-delayed-dist}
+#| fig.cap: >
+#|   A histogram showing the proportion of delayed flights each day.
+#| fig.alt: >
+#|   The distribution is unimodal and mildly right skewed. The distribution
+#|   peaks around 30% delayed flights.
+flights |> 
   group_by(year, month, day) |> 
   summarise(
-    prop_delayed = mean(arr_delay > 0),
+    prop_delayed = mean(arr_delay > 0, na.rm = TRUE),
     .groups = "drop"
   ) |> 
   ggplot(aes(prop_delayed)) + 
   geom_histogram(binwidth = 0.05)
 ```
 
-Or we could ask how many flights left before 5am, which usually are flights that were delayed from the previous day:
+Or we could ask how many flights left before 5am, which are often flights that were delayed from the previous day:
 
 ```{r}
-not_cancelled |> 
+flights |> 
   group_by(year, month, day) |> 
   summarise(
-    n_early = sum(dep_time < 500),
+    n_early = sum(dep_time < 500, na.rm = TRUE),
     .groups = "drop"
   ) |> 
   arrange(desc(n_early))
@@ -353,7 +374,7 @@ Imagine we wanted to look at the average delay just for flights that were actual
 One way to do so would be to first filter the flights:
 
 ```{r}
-not_cancelled |> 
+flights |> 
   filter(arr_delay > 0) |> 
   group_by(year, month, day) |> 
   summarise(
@@ -372,11 +393,11 @@ Instead you could use `[` to perform an inline filtering: `arr_delay[arr_delay >
 This leads to:
 
 ```{r}
-not_cancelled |> 
+flights |> 
   group_by(year, month, day) |> 
   summarise(
-    ahead = mean(arr_delay[arr_delay > 0]),
-    behind = mean(arr_delay[arr_delay < 0]),
+    ahead = mean(arr_delay[arr_delay > 0], na.rm = TRUE),
+    behind = mean(arr_delay[arr_delay < 0], na.rm = TRUE),
     n = n(),
     .groups = "drop"
   )
