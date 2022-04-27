@@ -6,37 +6,36 @@ status("drafting")
 
 ## Introduction
 
-In this chapter, you'll learn useful tools for working with logical vectors.
+In this chapter, you'll learn tools for working with logical vectors.
 Logical vectors are the simplest type of vector because each element can only be one of three possible values: `TRUE`, `FALSE`, and `NA`.
-You'll find logical vectors directly in data relatively rarely, but despite that they're extremely powerful because you'll frequently create them during data analysis.
+It's relatively rare to find logical vectors in your raw data, but you'll create and manipulate in the course of almost every analysis.
 
-We'll begin with the most common way of creating logical vectors: numeric comparisons.
-Then we'll talk about using Boolean algebra to combine different logical vectors, and some useful summaries for logical vectors.
-We'll finish off with some other tool for making conditional changes.
-Along the way, you'll also learn a little more about working with missing values, `NA`.
+We'll begin by discussing the most common way of creating logical vectors: with numeric comparisons.
+Then you'll learn about how you can use use Boolean algebra to combine different logical vectors, as well some useful summaries.
+We'll finish off with some tools for making conditional changes, and a cool hack for turning logical vectors into groups.
 
 ### Prerequisites
 
-Most of the functions you'll learn about this package are provided by base R; I'll label any new functions that don't come from base R with `dplyr::`.
-You don't need the tidyverse to use base R functions, but we'll still load it so we can use `mutate()`, `filter()`, and friends.
-use plenty of functions .
-We'll also continue to draw inspiration from the nyclights13 dataset.
+Most of the functions you'll learn about in this chapter are provided by base R, so we don't need the tidyverse, but but we'll still load it so we can use `mutate()`, `filter()`, and friends to work with data frames.
+We'll also continue to draw examples from the nyclights13 dataset.
 
 ```{r setup, message = FALSE}
 library(tidyverse)
 library(nycflights13)
 ```
 
-However, as we start to discuss more tools, there won't always be a perfect real example.
-So we'll also start to use more abstract examples where we create some dummy data with `c()`.
-This makes it easiesr to explain the general point at the cost to making it harder to see how it might apply to your data problems.
-Just remember that any manipulate we do to a free-floating vector, you can do to a variable inside data frame with `mutate()` and friends.
+However, as we start to cover more tools, there won't always be a perfect real example.
+So we'll start making up some dummy data with `c()`:
 
 ```{r}
 x <- c(1, 2, 3, 5, 7, 11, 13)
 x * 2
+```
 
-# Equivalent to:
+This makes it easier to explain individual functions at the cost to making it harder to see how it might apply to your data problems.
+Just remember that any manipulation we do to a free-floating vector, you can do to a variable inside data frame with `mutate()` and friends.
+
+```{r}
 df <- tibble(x)
 df |> 
   mutate(y = x *  2)
@@ -45,16 +44,15 @@ df |>
 ## Comparisons
 
 A very common way to create a logical vector is via a numeric comparison with `<`, `<=`, `>`, `>=`, `!=`, and `==`.
-You'll learn other ways to create them in later chapters dealing with strings and dates.
-So far, we've mostly created logical variables implicitly within `filter()` --- they are computed, used, and then throw away.
-For example, the following filter finds all day time departures that leave roughly on time:
+So far, we've mostly create logical variables transiently within `filter()` --- they are computed, used, and then throw away.
+For example, the following filter finds all daytime departures that leave roughly on time:
 
 ```{r}
 flights |> 
   filter(dep_time > 600 & dep_time < 2000 & abs(arr_delay) < 20)
 ```
 
-But it's useful to know that this is a shortcut and you can explicitly create the underlying logical variables with `mutate()`:
+It's useful to know that this is a shortcut and you can explicitly create the underlying logical variables with `mutate()`:
 
 ```{r}
 flights |> 
@@ -65,10 +63,9 @@ flights |>
   )
 ```
 
-This is useful because it allows you to name components, which can made the code easier to read, and it allows you to double-check the intermediate steps.
-This is a particularly useful technique when you're doing more complicated Boolean algebra, as you'll learn about in the next section.
+This is particularly useful for more complicated logic because naming the intermediate steps makes it easier to both read your code and check that each step has been computed correctly.
 
-So the initial filter could also be written as:
+All up, the initial filter is equivalent to:
 
 ```{r, results = FALSE}
 flights |> 
@@ -81,38 +78,34 @@ flights |>
 
 ### Floating point comparison
 
-Beware when using `==` with numbers as the results might surprise you!
-It looks like this vector contains the numbers 1 and 2:
+Beware of using `==` with numbers.
+For example, it looks like this vector contains the numbers 1 and 2:
 
 ```{r}
 x <- c(1 / 49 * 49, sqrt(2) ^ 2)
 x
 ```
 
-But if you test them for equality, you surprisingly get `FALSE`:
+But if you test them for equality, you get `FALSE`:
 
 ```{r}
 x == c(1, 2)
 ```
 
-That's because computers use finite precision arithmetic (they obviously can't store an infinite number of digits!) so in most cases, the number you see on screen is an approximation.
-R automatically rounds these numbers to avoid displaying a bunch of usually unimportant digits[^logicals-1].
+What's going on?
+Computers store numbers with a fixed number of decimal places so there's no way to exactly represent 1/49 or `sqrt(2)` and subsequent computations will be very slightly off.
+We can see the exact values by calling `print()` with the the `digits`[^logicals-1] argument:
 
-[^logicals-1]: You can control this behavior with the `digits` option.
-
-To see the details you can call `print()` with the the `digits`[^logicals-2] argument.
-R normally calls print for you (i.e. `x` is a shortcut for `print(x)`), but calling it explicitly is useful if you want to provide other arguments:
-
-[^logicals-2]: A floating point number can hold roughly 16 decimal digits; the precise number is surprisingly complicated and depends on the number.
+[^logicals-1]: R normally calls print for you (i.e. `x` is a shortcut for `print(x)`), but calling it explicitly is useful if you want to provide other arguments.
 
 ```{r}
 print(x, digits = 16)
 ```
 
-Now that you've seen why `==` is failing, what can you do about it?
-One option is to use `round()`[^logicals-3] to round to any number of digits, or instead of `==`, use `dplyr::near()`, which ignores small differences:
+You can see why R defaults to rounding these numbers; they really are very close to what you expect.
 
-[^logicals-3]: We'll cover `round()` in more detail in Section \@ref(rounding).
+Now that you've seen why `==` is failing, what can you do about it?
+One option is to use `dplyr::near()` which ignores small differences:
 
 ```{r}
 near(x, c(1, 2))
@@ -147,7 +140,7 @@ x == y
 # We don't know!
 ```
 
-So if you want to find all flights with `dep_time` is missing, the following code won't work because `dep_time == NA` will yield a `NA` for every single row, and `filter()` automatically drops missing values:
+So if you want to find all flights with `dep_time` is missing, the following code doesn't work because `dep_time == NA` will yield a `NA` for every single row, and `filter()` automatically drops missing values:
 
 ```{r}
 flights |> 
@@ -158,8 +151,7 @@ Instead we'll need a new tool: `is.na()`.
 
 ### `is.na()`
 
-There's one other very useful way to create logical vectors: `is.na()`.
-This takes any type of vector and returns `TRUE` is the value is `NA`, and `FALSE` otherwise:
+`is.na(x)` works with any type of vector and returns `TRUE` for missing values and `FALSE` for everything else:
 
 ```{r}
 is.na(c(TRUE, NA, FALSE))
@@ -174,14 +166,16 @@ flights |>
   filter(is.na(dep_time))
 ```
 
-`is.na()` can also be useful in `arrange()`, because `arrange()` usually puts all the missing values at the end.
-You can override this default by first sorting by `is.na()`:
+`is.na()` can also be useful in `arrange()`.
+`arrange()` usually puts all the missing values at the end but you can override this default by first sorting by `is.na()`:
 
 ```{r}
 flights |> 
+  filter(month == 1, day == 1) |> 
   arrange(dep_time)
 
 flights |> 
+  filter(month == 1, day == 1) |> 
   arrange(desc(is.na(dep_time)), dep_time)
 ```
 
@@ -193,10 +187,10 @@ flights |>
 ## Boolean algebra
 
 Once you have multiple logical vectors, you can combine them together using Boolean algebra.
-In R, `&` is "and", `|` is "or", and `!` is "not", and `xor()` is exclusive or[^logicals-4].
+In R, `&` is "and", `|` is "or", and `!` is "not", and `xor()` is exclusive or[^logicals-2].
 Figure \@ref(fig:bool-ops) shows the complete set of Boolean operations and how they work.
 
-[^logicals-4]: That is, `xor(x, y)` is true if x is true, or y is true, but not both.
+[^logicals-2]: That is, `xor(x, y)` is true if x is true, or y is true, but not both.
     This is how we usually use "or" In English.
     Both is not usually an acceptable answer to the question "would you like ice cream or cake?".
 
@@ -370,10 +364,10 @@ not_cancelled |>
 ```
 
 This works, but what if we wanted to also compute the average delay for flights that left early?
-We'd need to perform a separate filter step, and then figure out how to combine the two data frames together[^logicals-5].
+We'd need to perform a separate filter step, and then figure out how to combine the two data frames together[^logicals-3].
 Instead you could use `[` to perform an inline filtering: `arr_delay[arr_delay > 0]` will yield only the positive arrival delays.
 
-[^logicals-5]: We'll cover this in Chapter \@ref(relational-data)
+[^logicals-3]: We'll cover this in Chapter \@ref(relational-data)
 
 This leads to:
 
@@ -402,12 +396,12 @@ There are two important tools for this: `if_else()` and `case_when()`.
 
 ### `if_else()`
 
-If you want to use one value when a condition is true and another value when it's `FALSE`, you can use `dplyr::if_else()`[^logicals-6].
+If you want to use one value when a condition is true and another value when it's `FALSE`, you can use `dplyr::if_else()`[^logicals-4].
 Let's begin with a few simple examples.
 You'll always use the first three argument of `if_else(`).
 The first argument is a logical condition, the second argument decides determines the output if the condition is true, and the third argument determines the output if the condition is false.
 
-[^logicals-6]: dplyr's `if_else()` is very similar to base R's `ifelse()`.
+[^logicals-4]: dplyr's `if_else()` is very similar to base R's `ifelse()`.
     There are two main advantages of `if_else()`over `ifelse()`: you can choose what should happen to missing values, and `if_else()` is much more likely to give you a meaningful error if you variables have incompatible types.
 
 ```{r}
@@ -534,13 +528,13 @@ events <- events |>
 events
 ```
 
-We can use `cumsum()` as a way of turning this logical vector into a unique group identifier.
-Remember that whenever you use a
+We can use the cumulative sum, `cumsum(),` to turn this logical vector into a unique group identifier.
+Remember that whenever you use a logical vector in a numeric context `TRUE` becomes 1 and `FALSE` becomes 0, taking the cumulative sum of a logical vector creates a numeric index that increments every time it sees a `TRUE`.
 
 ```{r}
 events |> mutate(
-    group = cumsum(jump) + 1
-  )
+  group = cumsum(gap) + 1
+)
 ```
 
 ### Exercises
