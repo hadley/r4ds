@@ -1,7 +1,7 @@
 # Logical vectors {#logicals}
 
 ```{r, results = "asis", echo = FALSE}
-status("drafting")
+status("polishing")
 ```
 
 ## Introduction
@@ -412,39 +412,40 @@ Also note the difference in the group size: in the first chunk `n()` gives the n
 
 ## Conditional transformations
 
-One of the most powerful features of logical vectors are their use for conditional transformations, i.e. returning one value for true values, and a different value for false values.
+One of the most powerful features of logical vectors are their use for conditional transformations, i.e. doing one thing for condition x, and something different for condition y.
 There are two important tools for this: `if_else()` and `case_when()`.
 
 ### `if_else()`
 
 If you want to use one value when a condition is true and another value when it's `FALSE`, you can use `dplyr::if_else()`[^logicals-4].
-Let's begin with a few simple examples.
 You'll always use the first three argument of `if_else(`).
-The first argument is a logical condition, the second argument decides determines the output if the condition is true, and the third argument determines the output if the condition is false.
+The first argument, `condition`, is a logical vector, the second, `true`, gives the output when the condition is true, and the third, `false`, gives the output if the condition is false.
 
 [^logicals-4]: dplyr's `if_else()` is very similar to base R's `ifelse()`.
     There are two main advantages of `if_else()`over `ifelse()`: you can choose what should happen to missing values, and `if_else()` is much more likely to give you a meaningful error if you variables have incompatible types.
 
+Let's begin with a simple example of labeling a numeric vector as either "+ve" or "-ve":
+
 ```{r}
 x <- c(-3:3, NA)
-if_else(x < 0, "-ve", "+ve")
+if_else(x > 0, "+ve", "-ve")
 ```
 
-There's an optional fourth argument which will be used if the input is missing:
+There's an optional fourth argument, `missing` which will be used if the input is `NA`:
 
 ```{r}
-if_else(x < 0, "-ve", "+ve", "???")
+if_else(x > 0, "+ve", "-ve", "???")
 ```
 
-You can also include vectors for the the `true` and `false` arguments.
-For example, this allows you to create your own implementation of `abs()`:
+You can also use vectors for the the `true` and `false` arguments.
+For example, this allows us to create a minimal implementation of `abs()`:
 
 ```{r}
 if_else(x < 0, -x, x)
 ```
 
 So far all the arguments have used the same vectors, but you can of course mix and match.
-For example, you could implement a simple version of `coalesce()` this way:
+For example, you could implement a simple version of `coalesce()` like this:
 
 ```{r}
 x1 <- c(NA, 1, 2, NA)
@@ -452,21 +453,23 @@ y1 <- c(3, NA, 4, 6)
 if_else(is.na(x1), y1, x1)
 ```
 
-If you need to create more complex conditions, you can string together multiple `if_elses()`s, but this quickly gets hard to read.
+You might have noticed a small infelicity in our labeling: zero is neither positive nor negative.
+We could resolves this by adding an additional `if_else():`
 
 ```{r}
 if_else(x == 0, "0", if_else(x < 0, "-ve", "+ve"), "???")
 ```
 
+This is already a little hard to read, and you can imagine it would only get harder if you have more conditions.
 Instead, you can switch to `dplyr::case_when()`.
 
 ### `case_when()`
 
-Inspired by SQL.
-
-`case_when()` has a special syntax that unfortunately looks like nothing else you'll use in the tidyverse.
+dplyr's `case_when()` is inspired by SQL's `CASE` statement and provides a flexible way of performing different computations for different computations.
+It has a special syntax that unfortunately looks like nothing else you'll use in the tidyverse.
 it takes pairs that look like `condition ~ output`.
 `condition` must be a logical vector; when it's `TRUE`, `output` will be used.
+
 This means we could recreate our previous nested `if_else()` as follows:
 
 ```{r}
@@ -477,8 +480,6 @@ case_when(
   is.na(x) ~ "???"
 )
 ```
-
-(Note that I've added spaces before the `~` to make the outputs line up so it's easier to scan)
 
 This is more code, but it's also more explicit.
 
@@ -492,7 +493,7 @@ case_when(
 )
 ```
 
-If you want to create a "default"/catch all value, put `TRUE` on the left hand side:
+If you want to create a "default"/catch all value, use `TRUE` on the left hand side:
 
 ```{r}
 case_when(
@@ -502,7 +503,7 @@ case_when(
 )
 ```
 
-Note that if multiple conditions match, only the first will be used:
+And note that if multiple conditions match, only the first will be used:
 
 ```{r}
 case_when(
@@ -512,7 +513,7 @@ case_when(
 ```
 
 Just like with `if_else()` you can use variables on both sides of the `~` and you can mix and match variables as needed for your problem.
-Finally, you'll typically use with `mutate()`.
+For example, we could use `case_when()` to provide some human readable labels for the arrival delay:
 
 ```{r}
 flights |> 
@@ -531,11 +532,13 @@ flights |>
 
 ## Making groups
 
-Before we move on to the next chapter, I want to show you one last handy trick.
+Before we move on to the next chapter, I want to show you one last trick.
 I don't know exactly how to describe it, and it feels a little magical, but it's super handy so I wanted to make sure you knew about it.
-
-Sometimes you want to divide your dataset up into groups whenever some event occurs.
+Sometimes you want to divide your dataset up into groups based on the occurrence of some event.
 For example, when you're looking at website data it's common to want to break up events into sessions, where a session is defined an a gap of more than x minutes since the last activity.
+
+Here's some made up data that illustrates the problem.
+I've computed the time lag between the events, and figured out if there's a gap that's big enough to qualify.
 
 ```{r}
 events <- tibble(
@@ -549,7 +552,8 @@ events <- events |>
 events
 ```
 
-We can use the cumulative sum, `cumsum(),` to turn this logical vector into a unique group identifier.
+How do I go from that logical vector to something that I can `group_by()`?
+You can use the cumulative sum, `cumsum(),` to turn this logical vector into a unique group identifier.
 Remember that whenever you use a logical vector in a numeric context `TRUE` becomes 1 and `FALSE` becomes 0, taking the cumulative sum of a logical vector creates a numeric index that increments every time it sees a `TRUE`.
 
 ```{r}
@@ -557,7 +561,3 @@ events |> mutate(
   group = cumsum(gap) + 1
 )
 ```
-
-### Exercises
-
-1.  For each plane, count the number of flights before the first delay of greater than 1 hour.
