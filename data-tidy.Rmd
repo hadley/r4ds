@@ -432,19 +432,15 @@ We'll come back to this idea in the next section; for different analysis purpose
 
 ## Untidy data
 
-`pivot_wider()` isn't that useful for tidying data because its real strength is making **untidy** data.
-While that sounds like a bad thing, untidy isn't a pejorative term: there are many data structures that are extremely useful, just not tidy.
-Tidy data is a great starting point and useful in very many analyses, but it's not the only format of data you'll need.
+While I showed a couple of examples of using `pivot_wider()` to make tidy data, it's real strength is making **untidy** data.
+While that sounds like a bad thing, untidy isn't a pejorative term: there are many untidy data structures that are extremely useful.
+Tidy data is a great starting point for most analysis; it's not the only data format you'll even need.
 
-The following sections will show a few examples of `pivot_wider()` making usefully untidy data:
-
--   When an operation is easier to apply to rows than columns.
--   Producing a table for display to other humans.
--   For input to multivariate statistics.
+The following sections will show a few examples of `pivot_wider()` making usefully untidy data for presenting data to other humans, for multivariate statistics, and pragmatic solving problems.
 
 ### Presentation tables
 
-`dplyr::count()` produces tidy data --- it has produces one row for each group, with one column for each grouping variable, and one column for the number of observations:
+As you've seen, `dplyr::count()` produces tidy data --- it makes one row for each group, with one column for each grouping variable, and one column for the number of observations:
 
 ```{r}
 diamonds |> 
@@ -463,10 +459,10 @@ diamonds |>
   )
 ```
 
-The other advantage of this display is that, as with `facet_grid()`, you can easily compare in two directions: horizontally and vertically.
+This display also makes it easily compare in two directions, horizontally and vertically, like `facet_grid()`.
 
-There's an additional challenge if you have multiple aggregates.
-Take this datasets which summarizes each combination of clarity and color with the mean carat and the number of observations:
+Making a compact table is more challenging if you have multiple aggregates.
+For example, take this dataset which summarizes each combination of clarity and color with the mean carat size **and** the number of observations:
 
 ```{r}
 average_size <- diamonds |> 
@@ -500,69 +496,21 @@ average_size |>
   )
 ```
 
-### What is a variable?
-
-Additionally, in some cases there are genuinely multiple ways that you might choose what variables are, or you might find it useful to temporarily put data in non-tidy form in order to do some computation.
-
-One column = one variable above, quite strictly.
-But didn't actually define what a variable is.
-Typically because you'll know it when you see it, and it's very hard to define precisely in a way that's useful.
-If you're stuck, might be useful to think about observations instead.
-
-It's also fine to take a pragmatic approach: a variable is whatever makes the rest of your analysis easier.
-For computations that involved a fixed number of values, it's usually easier if in columns; for those with a variable number easier in rows.
-Eg.
-compute difference or ratio; or count number of missing values across variables.
-
-```{r}
-country_tb <- who2 |> 
-  pivot_longer(
-    cols = !(country:year),
-    names_to = c("diagnosis", "gender", "age"), 
-    names_sep = "_",
-    values_to = "count"
-  ) |> 
-  filter(year > 1995) |> 
-  group_by(country, year) |> 
-  summarise(count = sum(count, na.rm = TRUE)) |> 
-  filter(min(count) > 100) 
-
-country_tb |> 
-  ggplot(aes(year, log10(count), group = country)) + 
-  geom_line()
-
-library(gapminder)
-gapminder |>
-  pivot_wider(
-    id_cols = year, 
-    names_from = country, 
-    values_from = gdpPercap
-  ) |>
-  ggplot(aes(Canada, Italy)) +
-  geom_point()
-```
-
-Or in `cms_patient_experience`, what if we wanted to find out how many explicit missing values.
-It's easier to work with the untidy form:
-
-```{r}
-cms_patient_experience |> 
-  group_by(org_pac_id) |> 
-  summarise(
-    n_miss = sum(is.na(prf_rate)),
-    n = n(),
-  )
-```
-
-Later in Chapter \@ref(column-wise) you'll learn about `across()` and `c_across()` that makes it easier to perform these calculations on wider forms, but if you already have the longer form, it's often easier to work with that directly.
+`pivot_wider()` is great for quickly sketching out a table.
+For real presentation tables, we highly suggest learning a package like [gt](https://gt.rstudio.com).
+gt is similar ggplot2 in that it provides an extremely grammar for laying out tables.
+It takes some work to learn but the payoff is the ability to make just about any table you can imagine.
 
 ### Multivariate statistics
 
-Classic multivariate statistical methods (like dimension reduction and clustering) as well as many time series methods require matrix representation where each column needs to be a time point, or a location, or gene, or species, or ... Sometimes these formats have substantial performance or space advantages or sometimes they're just necessary to get closer to the underlying matrix mathematics.
+Classic multivariate statistical methods (like dimension reduction and clustering), as well as many time series methods, often require a matrix representation where each column needs to be a time point, or a location, or gene, or species.
+Sometimes these formats have substantial performance or space advantages or sometimes they're just necessary to get closer to the underlying matrix mathematics.
 
+We're not going to cover these methods here, but it's useful to know how to get your data into the form that these methods need.
 For example, if you wanted to cluster the gapminder data to find countries that had similar progression of `gdpPercap` over time, you'd need to put year in the columns:
 
 ```{r}
+library(gapminder)
 col_year <- gapminder |> 
   mutate(gdpPercap = log10(gdpPercap)) |> 
   pivot_wider(
@@ -573,18 +521,57 @@ col_year <- gapminder |>
 col_year
 ```
 
-You then need to move `country` out of the columns into the the row names, and you can cluster it with `kmeans()`.
+You then need to move `country` out of the columns into the the row names with `column_to_rowname()`; this labels the results with the country name, but ensures that it doesn't otherwise partake in the clustering.
+And then turn it into a matrix
 
 ```{r}
-clustered <- col_year |> 
+col_year <- col_year |> 
   column_to_rownames("country") |> 
-  stats::kmeans(6)
+  as.matrix()
 
-cluster_id <- enframe(clustered$cluster, "country", "cluster_id")
-gapminder |> 
-  left_join(cluster_id, by = "country") |> 
-  ggplot(aes(year, gdpPercap, group = country)) + 
-  geom_line() + 
-  scale_y_log10() + 
-  facet_wrap(~ cluster_id)
+# Look at the top-left corner
+col_year[1:5, 1:5] 
 ```
+
+You can then (e.g.) cluster it with `kmeans():`
+
+```{r}
+cluster <- stats::kmeans(col_year, centers = 6)
+```
+
+Extracting the data out of this object into a form you can work with is a challenge we'll need to come back to later in the book, once you've learned more about lists.
+But for now, you can get the clustering membership out:
+
+```{r}
+cluster_id <- cluster$cluster |> 
+  enframe() |> 
+  rename(country = name, cluster_id = value)
+cluster_id
+```
+
+You could then combine this back with the original data using one of the joins you'll learn about in Chapter \@ref(relational-data).
+
+```{r}
+gapminder |> left_join(cluster_id)
+```
+
+### Pragmatic computation
+
+Sometimes it's just easier to answer a question using a tool that you're already familiar with an untidy data.
+For example, if you're interested in just the total number of missing values in `cms_patient_experience`, it's easier to work with the untidy form:
+
+```{r}
+cms_patient_experience |> 
+  group_by(org_pac_id) |> 
+  summarise(
+    n_miss = sum(is.na(prf_rate)),
+    n = n(),
+  )
+```
+
+While above I said that tidy data has one variable per column, I didn't actually define what a variable is (and it's surprisingly hard to do so).
+It's totally fine to be pragmatic and to say a variable is whatever makes your analysis easiest.
+
+So if you're stuck figuring out how to do some computation, maybe it's time to switch up the organisation of your data.
+For computations involving a fixed number of values (like computing differences or ratios), it's usually easier if the data is columns; for those with a variable of number of values (like sums or means) it's usually easier in rows.
+
