@@ -10,8 +10,11 @@ In this chapter, you will learn a consistent way to organize your data in R usin
 Getting your data into this format requires some work up front, but that work pays off in the long term.
 Once you have tidy data and the tidy tools provided by packages in the tidyverse, you will spend much less time munging data from one representation to another, allowing you to spend more time on the data questions you care about.
 
-This chapter will give you a practical introduction to tidy data and the accompanying tools in the **tidyr** package.
-If you'd like to learn more about the underlying theory, you might enjoy the [*Tidy Data*](https://www.jstatsoft.org/article/view/v059i10) paper published in the Journal of Statistical Software.
+In this chapter, you'll first learn the definition of tidy data and see it applied to simple toy dataset.
+Then we'll dive into the main tool you'll use for tidying data: pivoting.
+Pivoting allows you to change the form of your data, without changing any of the values.
+We'll finish up with a discussion of usefully untidy data, and how you can create it if needed.
+If you particularly enjoy this chapter and learn more about the underlying theory, you can learn more about the history and theoretical underpinnings in the [Tidy Data](https://www.jstatsoft.org/article/view/v059i10) paper published in the Journal of Statistical Software.
 
 ### Prerequisites
 
@@ -434,11 +437,11 @@ We'll come back to this idea in the next section; for different analysis purpose
 
 While I showed a couple of examples of using `pivot_wider()` to make tidy data, it's real strength is making **untidy** data.
 While that sounds like a bad thing, untidy isn't a pejorative term: there are many untidy data structures that are extremely useful.
-Tidy data is a great starting point for most analysis; it's not the only data format you'll even need.
+Tidy data is a great starting point for most analyses but it's not the only data format you'll even need.
 
-The following sections will show a few examples of `pivot_wider()` making usefully untidy data for presenting data to other humans, for multivariate statistics, and pragmatic solving problems.
+The following sections will show a few examples of `pivot_wider()` making usefully untidy data for presenting data to other humans, for multivariate statistics, and just for pragmatically solving data manipulation challenges.
 
-### Presentation tables
+### Presenting data to humans
 
 As you've seen, `dplyr::count()` produces tidy data --- it makes one row for each group, with one column for each grouping variable, and one column for the number of observations:
 
@@ -485,7 +488,8 @@ average_size |>
   )
 ```
 
-You can `select()` off the variables you don't care about, or use `id_cols` to define which columns identify each row:
+That because, by default, `pivot_wider()` uses all the unmentioned columns to identify a row in the new dataset.
+To get the display you are looking forward, you can either `select()` off the variables you don't care about, or use the `id_cols` arguments to explicitly define which columns identify each row in the result:
 
 ```{r}
 average_size |> 
@@ -498,19 +502,21 @@ average_size |>
 
 `pivot_wider()` is great for quickly sketching out a table.
 For real presentation tables, we highly suggest learning a package like [gt](https://gt.rstudio.com).
-gt is similar ggplot2 in that it provides an extremely grammar for laying out tables.
+gt is similar ggplot2 in that it provides an extremely powerful grammar for laying out tables.
 It takes some work to learn but the payoff is the ability to make just about any table you can imagine.
 
 ### Multivariate statistics
 
-Classic multivariate statistical methods (like dimension reduction and clustering), as well as many time series methods, often require a matrix representation where each column needs to be a time point, or a location, or gene, or species.
+Most classical multivariate statistical methods (like dimension reduction and clustering) require a matrix representation of your data, where each column is time point, or a location, or gene, or species.
 Sometimes these formats have substantial performance or space advantages or sometimes they're just necessary to get closer to the underlying matrix mathematics.
 
-We're not going to cover these methods here, but it's useful to know how to get your data into the form that these methods need.
-For example, if you wanted to cluster the gapminder data to find countries that had similar progression of `gdpPercap` over time, you'd need to put year in the columns:
+We're not going to cover these statisticals methods here, but it is useful to know how to get your data into the form that they need.
+For example, lets imagine you wanted to cluster the gapminder data to find countries that had similar progression of `gdpPercap` over time.
+To do this, we need one country in each row, and hence one year in each column:
 
 ```{r}
 library(gapminder)
+
 col_year <- gapminder |> 
   mutate(gdpPercap = log10(gdpPercap)) |> 
   pivot_wider(
@@ -521,26 +527,29 @@ col_year <- gapminder |>
 col_year
 ```
 
-You then need to move `country` out of the columns into the the row names with `column_to_rowname()`; this labels the results with the country name, but ensures that it doesn't otherwise partake in the clustering.
-And then turn it into a matrix
+This structure uses a column, `country`, to label each row.
+Most classic statistcal methods don't want the identifier as an explicit variable, but instead want it in the so-called row names.
+We move the year out of the columns into the row names with `column_to_rowname()`:
 
 ```{r}
 col_year <- col_year |> 
-  column_to_rownames("country") |> 
-  as.matrix()
+  column_to_rownames("country") 
 
-# Look at the top-left corner
-col_year[1:5, 1:5] 
+head(col_year)
 ```
 
-You can then (e.g.) cluster it with `kmeans():`
+This produces a data frame, because tibbles don't support row names[^data-tidy-1].
+
+[^data-tidy-1]: tibbles don't use row names because they only work for a subset of important cases: when observations can be identified by a single character vector.
+
+We're now ready to cluster with (e.g.) `kmeans():`
 
 ```{r}
 cluster <- stats::kmeans(col_year, centers = 6)
 ```
 
 Extracting the data out of this object into a form you can work with is a challenge we'll need to come back to later in the book, once you've learned more about lists.
-But for now, you can get the clustering membership out:
+But for now, you can get the clustering membership out with this code:
 
 ```{r}
 cluster_id <- cluster$cluster |> 
@@ -557,7 +566,7 @@ gapminder |> left_join(cluster_id)
 
 ### Pragmatic computation
 
-Sometimes it's just easier to answer a question using a tool that you're already familiar with an untidy data.
+Finally, sometimes it's just easier to answer a question using untidy data.
 For example, if you're interested in just the total number of missing values in `cms_patient_experience`, it's easier to work with the untidy form:
 
 ```{r}
@@ -569,9 +578,9 @@ cms_patient_experience |>
   )
 ```
 
-While above I said that tidy data has one variable per column, I didn't actually define what a variable is (and it's surprisingly hard to do so).
+This partly comes back to our original definition of tidy data, where I said tidy data has one variable in each column, but I didn't actually define what a variable is (and it's surprisingly hard to do so).
 It's totally fine to be pragmatic and to say a variable is whatever makes your analysis easiest.
 
 So if you're stuck figuring out how to do some computation, maybe it's time to switch up the organisation of your data.
 For computations involving a fixed number of values (like computing differences or ratios), it's usually easier if the data is columns; for those with a variable of number of values (like sums or means) it's usually easier in rows.
-
+Don't be afraid to untidy, transform, and re-tidy if needed.
