@@ -1,22 +1,27 @@
-# Relational data
+# Two-table verbs
+
+```{r, results = "asis", echo = FALSE}
+status("restructuring")
+```
 
 ## Introduction
 
+Waiting on <https://github.com/tidyverse/dplyr/pull/5910>
+
+<!-- TODO: redraw all diagrams to match O'Reilly style -->
+
 It's rare that a data analysis involves only a single data frame.
 Typically you have many data frames, and you must combine them to answer the questions that you're interested in.
-Collectively, multiple data frames are called **relational data** because it is the relations, not just the individual datasets, that are important.
-
-Relations are always defined between a pair of data frames.
-All other relations are built up from this simple idea: the relations of three or more data frames are always a property of the relations between each pair.
-Sometimes both elements of a pair can be the same data frame!
+All the verbs in this chapter use a pair of data frames.
+Fortunately this is enough, since you can combine three data frames by combining two pairs.
+Sometimes both elements of a pair will be the same data frame.
 This is needed if, for example, you have a data frame of people, and each person has a reference to their parents.
 
-To work with relational data you need verbs that work with pairs of data frames.
-There are three families of verbs designed to work with relational data:
+There are three families of verbs designed to work with pairs of data frames:
 
--   **Mutating joins**, which add new variables to one data frame from matching observations in another.
+-   **Mutating joins**, which adds new variables to one data frame from matching observations in another.
 
--   **Filtering joins**, which filter observations from one data frame based on whether or not they match an observation in the other data frame.
+-   **Filtering joins**, which filters observations from one data frame based on whether or not they match an observation in another.
 
 -   **Set operations**, which treat observations as if they were set elements.
 
@@ -25,7 +30,8 @@ If you've used a database before, you've almost certainly used SQL.
 If so, you should find the concepts in this chapter familiar, although their expression in dplyr is a little different.
 One other major terminology difference between databases and R is that what we generally refer to as data frames in R while the same concept is referred to as "table" in databases.
 Hence you'll see references to one-table and two-table verbs in dplyr documentation.
-Generally, dplyr is a little easier to use than SQL because dplyr is specialised to do data analysis: it makes common data analysis operations easier, at the expense of making it more difficult to do other things that aren't commonly needed for data analysis.
+Generally, dplyr is a little easier to use than SQL because dplyr is specialized to do data analysis: it makes common data analysis operations easier, at the expense of making it more difficult to do other things that aren't commonly needed for data analysis.
+If you're not familiar with databases or SQL, you'll learn more about them in Chapter \@ref(import-databases).
 
 ### Prerequisites
 
@@ -38,7 +44,6 @@ library(nycflights13)
 
 ## nycflights13 {#nycflights13-relational}
 
-We will use the nycflights13 package to learn about relational data.
 nycflights13 contains five tibbles : `airlines`, `airports`, `weather` and `planes` which are all related to the `flights` data frame that you used in Chapter \@ref(data-transform) on data transformation:
 
 -   `airlines` lets you look up the full carrier name from its abbreviated code:
@@ -65,17 +70,7 @@ nycflights13 contains five tibbles : `airlines`, `airports`, `weather` and `plan
     weather
     ```
 
-One way to show the relationships between the different data frames is with a diagram:
-
-```{r, echo = FALSE, fig.alt = "Diagram of the relationships between airports, planes, flights, weather, and airlines datasets from the nycflights13 package. The faa variable in the airports data frame is connected to the origin and dest variables in the flights data frame. The tailnum variable in the planes data frame is connected to the tailnum variable in flights. The year, month, day, hour, and origin variables are connected to the variables with the same name in the flights data frame. And finally the carrier variables in the airlines data frame is connected to the carrier variable in the flights data frame. There are no direct connections between airports, planes, airlines, and weather data frames."}
-knitr::include_graphics("diagrams/relational-nycflights.png")
-```
-
-This diagram is a little overwhelming, but it's simple compared to some you'll see in the wild!
-The key to understanding diagrams like this is to remember each relation always concerns a pair of data frames.
-You don't need to understand the whole thing; you just need to understand the chain of relations between the data frames that you are interested in.
-
-For nycflights13:
+These datasets are connected as follows:
 
 -   `flights` connects to `planes` via a single variable, `tailnum`.
 
@@ -84,6 +79,29 @@ For nycflights13:
 -   `flights` connects to `airports` in two ways: via the `origin` and `dest` variables.
 
 -   `flights` connects to `weather` via `origin` (the location), and `year`, `month`, `day` and `hour` (the time).
+
+One way to show the relationships between the different data frames is with a diagram, as in Figure \@ref(fig:flights-relationships).
+This diagram is a little overwhelming, but it's simple compared to some you'll see in the wild!
+The key to understanding diagrams like this is that you'll solve real problems by working with pairs of data frames.
+You don't need to understand the whole thing; you just need to understand the chain of connections between the two data frames that you're interested in.
+
+```{r flights-relationships, echo = FALSE}
+#| echo: false
+#| fig.cap: > 
+#|   Connections between all six data frames in the nycflights package.
+#| fig.alt: >
+#|   Diagram showing the relationships between airports, planes, flights, 
+#|   weather, and airlines datasets from the nycflights13 package. The faa
+#|   variable in the airports data frame is connected to the origin and dest
+#|   variables in the flights data frame. The tailnum variable in the planes
+#|   data frame is connected to the tailnum variable in flights. The year,
+#|   month, day, hour, and origin variables are connected to the variables
+#|   with the same name in the flights data frame. And finally the carrier
+#|   variables in the airlines data frame is connected to the carrier
+#|   variable in the flights data frame. There are no direct connections
+#|   between airports, planes, airlines, and weather data frames.
+knitr::include_graphics("diagrams/relational-nycflights.png")
+```
 
 ### Exercises
 
@@ -144,7 +162,7 @@ flights |>
   filter(n > 1)
 ```
 
-When starting to work with this data, I had naively assumed that each flight number would be only used once per day: that would make it much easier to communicate problems with a specific flight.
+When starting to work with this data, we had naively assumed that each flight number would be only used once per day: that would make it much easier to communicate problems with a specific flight.
 Unfortunately that is not the case!
 If a data frame lacks a primary key, it's sometimes useful to add one with `mutate()` and `row_number()`.
 That makes it easier to match observations if you've done some filtering and want to check back in with the original data.
@@ -204,21 +222,23 @@ You can combine the `airlines` and `flights2` data frames with `left_join()`:
 
 ```{r}
 flights2 |>
-  select(-origin, -dest) |> 
+  select(!origin, !dest) |> 
   left_join(airlines, by = "carrier")
 ```
 
 The result of joining airlines to flights2 is an additional variable: `name`.
 This is why I call this type of join a mutating join.
-In this case, you could have got to the same place using `mutate()` and R's base subsetting:
+In this case, you could get the same result using `mutate()` and a pair of base R functions, `[` and `match()`:
 
 ```{r}
 flights2 |>
-  select(-origin, -dest) |> 
-  mutate(name = airlines$name[match(carrier, airlines$carrier)])
+  select(!origin, !dest) |> 
+  mutate(
+    name = airlines$name[match(carrier, airlines$carrier)]
+  )
 ```
 
-But this is hard to generalise when you need to match multiple variables, and takes close reading to figure out the overall intent.
+But this is hard to generalize when you need to match multiple variables, and takes close reading to figure out the overall intent.
 
 The following sections explain, in detail, how mutating joins work.
 You'll start by learning a useful visual representation of joins.
@@ -230,7 +250,13 @@ Finally, you'll learn how to tell dplyr which variables are the keys for a given
 
 To help you learn how joins work, I'm going to use a visual representation:
 
-```{r, echo = FALSE, out.width = NULL, fig.alt = "x and y are two data frames with 2 columns and 3 rows each. The first column in each is the key and the second is the value. The contents of these data frames are given in the subsequent code chunk."}
+```{r}
+#| echo: false
+#| out.width: NULL
+#| fig.alt: >
+#|   x and y are two data frames with 2 columns and 3 rows each. The first
+#|   column in each is the key and the second is the value. The contents of
+#|   these data frames are given in the subsequent code chunk.
 knitr::include_graphics("diagrams/join-setup.png")
 ```
 
@@ -260,7 +286,8 @@ The following diagram shows each potential match as an intersection of a pair of
 knitr::include_graphics("diagrams/join-setup2.png")
 ```
 
-(If you look closely, you might notice that we've switched the order of the key and value columns in `x`. This is to emphasise that joins match based on the key; the value is just carried along for the ride.)
+If you look closely, you'll notice that we've switched the order of the key and value columns in `x`.
+This is to emphasize that joins match based on the key; the other columns are just carried along for the ride.
 
 In an actual join, matches will be indicated with dots.
 The number of dots = the number of matches = the number of rows in the output.
@@ -328,6 +355,8 @@ So far all the diagrams have assumed that the keys are unique.
 But that's not always the case.
 This section explains what happens when the keys are not unique.
 There are two possibilities:
+
+TODO: update for new warnings
 
 1.  One data frame has duplicate keys.
     This is useful when you want to add in additional information as there is typically a one-to-many relationship.
@@ -461,33 +490,13 @@ You can use other values for `by` to connect the data frames in other ways:
         coord_quickmap()
     ```
 
-### Other implementations
+## Non-equi joins
 
-`base::merge()` can perform all four types of mutating join:
+`join_by()`
 
-| dplyr              | merge                                     |
-|--------------------|-------------------------------------------|
-| `inner_join(x, y)` | `merge(x, y)`                             |
-| `left_join(x, y)`  | `merge(x, y, all.x = TRUE)`               |
-| `right_join(x, y)` | `merge(x, y, all.y = TRUE)`,              |
-| `full_join(x, y)`  | `merge(x, y, all.x = TRUE, all.y = TRUE)` |
+Rolling joins
 
-The advantages of the specific dplyr verbs is that they more clearly convey the intent of your code: the difference between the joins is really important but concealed in the arguments of `merge()`.
-dplyr's joins are considerably faster and don't mess with the order of the rows.
-
-SQL is the inspiration for dplyr's conventions, so the translation is straightforward:
-
-| dplyr                        | SQL                                            |
-|------------------------------|------------------------------------------------|
-| `inner_join(x, y, by = "z")` | `SELECT * FROM x INNER JOIN y USING (z)`       |
-| `left_join(x, y, by = "z")`  | `SELECT * FROM x LEFT OUTER JOIN y USING (z)`  |
-| `right_join(x, y, by = "z")` | `SELECT * FROM x RIGHT OUTER JOIN y USING (z)` |
-| `full_join(x, y, by = "z")`  | `SELECT * FROM x FULL OUTER JOIN y USING (z)`  |
-
-Note that "INNER" and "OUTER" are optional, and often omitted.
-
-Joining different variables between the data frames, e.g. `inner_join(x, y, by = c("a" = "b"))` uses a slightly different syntax in SQL: `SELECT * FROM x INNER JOIN y ON x.a = y.b`.
-As this syntax suggests, SQL supports a wider range of join types than dplyr because you can connect the data frames using constraints other than equality (sometimes called non-equijoins).
+Overlap joins
 
 ## Filtering joins {#filtering-joins}
 
