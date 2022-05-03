@@ -33,6 +33,8 @@ You can represent the same underlying data in multiple ways.
 The example below shows the same data organised in four different ways.
 Each dataset shows the same values of four variables *country*, *year*, *population*, and *cases*, but each dataset organizes the values in a different way.
 
+<!-- TODO redraw as tables -->
+
 ```{r}
 table1
 table2
@@ -45,6 +47,7 @@ table4b # population
 
 These are all representations of the same underlying data, but they are not equally easy to use.
 One of them, `table1`, will be much easier to work with inside the tidyverse because it's tidy.
+
 There are three interrelated rules that make a dataset tidy:
 
 1.  Each variable is a column; each column is a variable.
@@ -115,7 +118,7 @@ ggplot(table1, aes(year, cases)) +
 
 1.  Using prose, describe how the variables and observations are organised in each of the sample tables.
 
-2.  Compute the `rate` for `table2`, and `table4a` + `table4b`.
+2.  Sketch out the process you'd use to the `rate` for `table2`, and `table4a` + `table4b`.
     You will need to perform four operations:
 
     a.  Extract the number of TB cases per country per year.
@@ -123,9 +126,7 @@ ggplot(table1, aes(year, cases)) +
     c.  Divide cases by population, and multiply by 10000.
     d.  Store back in the appropriate place.
 
-    Which representation is easiest to work with?
-    Which is hardest?
-    Why?
+    You haven't yet learned all the functions you'd need to actual perform these operations, but you should still be able to think through the transformations you'd need.
 
 3.  Recreate the plot showing change in cases over time using `table2` instead of `table1`.
     What do you need to do first?
@@ -147,8 +148,6 @@ Sometimes this is easy; other times you'll need to consult with the people who o
 Next, you'll **pivot** your data into a tidy form, with variables in the columns and observations in the rows.
 
 tidyr provides two functions for pivoting data: `pivot_longer()`, which makes datasets **longer** by increasing rows and reducing columns, and `pivot_wider()` which makes datasets **wider** by increasing columns and reducing rows.
-`pivot_longer()` is very useful for tidying data; `pivot_wider()` is more useful for making non-tidy data (we'll come back to this in Section \@ref(rectangle-data)), but is occasionally also needed for tidying..
-
 The following sections work through the use of `pivot_longer()` and `pivot_wider()` to tackle a wide range of realistic datasets.
 These examples are drawn from `vignette("pivot", package = "tidyr")` which includes more variations and more challenging problems.
 
@@ -327,6 +326,18 @@ who2 |>
 
 An alternative to `names_sep` is `names_pattern`, which you can use to extract variables from more complicated naming scenarios, once you've learned about regular expressions in Chapter \@ref(regular-expressions).
 
+Conceptually, this is only a minor variation on the simple case as illustrated by Figure \@ref(fig:pivot-multiple-names).
+Now, instead of the column names pivoting into a single column, they pivot into multiple columns.
+
+```{r pivot-multiple-names}
+#| echo: FALSE
+#| out.width: NULL
+#| fig.cap: >
+#|   Pivotting with many variables in the column names means that each
+#|   column name now fills in values in multiple output columns.
+knitr::include_graphics("diagrams/tidy-data/multiple-names.png", dpi = 270)
+```
+
 ### Data and variable names in the column headers
 
 The next step up in complexity is when the column names include a mix of variable values and variable names.
@@ -354,6 +365,20 @@ household |>
 
 We again use `values_drop_na = TRUE`, since the shape of the input forces the creation of explicit missing variables (e.g. for families with only one child), and `parse_number()` to convert (e.g.) `child1` into 1.
 
+Figure \@ref(fig:pivot-names-and-values) illustrates what's happening in a simpler example.
+The column names in the input now contribute to both values and variable names in the output.
+
+```{r pivot-names-and-values}
+#| echo: FALSE
+#| out.width: NULL
+#| fig.cap: >
+#|   Pivoting with `names_to = c(".value", "id")` splits the column names
+#|   into a two components: the first part determines the output column
+#|   name (`x` or `y`), and the second part determines the value of the
+#|   `id` column.
+knitr::include_graphics("diagrams/tidy-data/multiple-names.png", dpi = 270)
+```
+
 ### Widening data
 
 So far we've used `pivot_longer()` to solves the common class of problems where values have ended up in column names.
@@ -375,10 +400,10 @@ cms_patient_experience |>
   distinct(measure_cd, measure_title)
 ```
 
-Neither of these variables make particularly great variable names: `measure_cd` doesn't hint at the meaning of the variable and `measure_title` is a long sentence containing spaces.
+Neither of these variables will make particularly great variable names: `measure_cd` doesn't hint at the meaning of the variable and `measure_title` is a long sentence containing spaces.
 We'll use `measure_cd` for now.
 
-`pivot_wider()` has the opposite interface to `pivot_longer()` we need to provide the existing columns that define the values (`values_from`) and the column name (`names_from)`:
+`pivot_wider()` has the opposite interface to `pivot_longer()`: we need to provide the existing columns that define the values (`values_from`) and the column name (`names_from)`:
 
 ```{r}
 cms_patient_experience |> 
@@ -388,8 +413,8 @@ cms_patient_experience |>
   )
 ```
 
-The output doesn't look quite right as we still seem to have multiple rows for each organistaion.
-That's because, by default, `pivot_wider()` will attempt to preservere all the existing columns including `measure_title` which has six distinct observations.
+The output doesn't look quite right as we still seem to have multiple rows for each organization.
+That's because, by default, `pivot_wider()` will attempt to preserve all the existing columns including `measure_title` which has six distinct observations.
 To fix this problem we need to tell `pivot_wider()` which columns identify each row; in this case that's the variables starting with `org`:
 
 ```{r}
@@ -401,41 +426,98 @@ cms_patient_experience |>
   )
 ```
 
-### Widening multiple variables
+### How does `pivot_wider()` work?
 
-`cms_patient_care` has a similar structure:
+To understand how `pivot_wider()` works, lets again start with a very simple dataset:
 
 ```{r}
-cms_patient_care
+df <- tribble(
+  ~id, ~name, ~value,
+  "A", "x", 1,
+  "B", "y", 2,
+  "B", "x", 3, 
+  "A", "y", 4,
+  "A", "z", 5,
+)
 ```
 
-Depending on what you want to do next I think there are three meaningful ways:
+We'll take the values from "value" and the names from "name":
 
 ```{r}
-cms_patient_care |> 
+df |> 
   pivot_wider(
-    names_from = type,
-    values_from = score
-  )
-
-cms_patient_care |> 
-  pivot_wider(
-    names_from = measure_abbr,
-    values_from = score
-  )
-
-cms_patient_care |> 
-  pivot_wider(
-    names_from = c(measure_abbr, type),
-    values_from = score
+    names_from = name,
+    values_from = value
   )
 ```
 
-We'll come back to this idea in the next section; for different analysis purposes you may want to consider different things to be variables
+The connection between the position of the row in the input and the cell in the output is much weaker than in `pivot_longer()` because the rows and columns are primarily determined by the values of variables, not their location.
+
+To being the process `pivot_wider()` needs to first figure what will go in the rows and columns.
+Finding the column names is easy: it's just the values of `name`.
+
+```{r}
+df |> 
+  distinct(name)
+```
+
+By default, the rows in the output are formed by all variables that aren't going into the names or the values.
+These are called the `id_cols` and we'll come back to this argument shortly.
+
+```{r}
+df |> 
+  select(-name, -value) |> 
+  distinct()
+```
+
+`pivot_wider()` then uses this data to generate an empty data frame:
+
+```{r}
+df |> 
+  select(-name, -value) |> 
+  distinct() |> 
+  mutate(x = NA, y = NA, z = NA)
+```
+
+And then fills in all the missing values from the data in the input.
+In this case, not every cell in the output has corresponding value in the input as there's no entry for id "B" and name "z", so that cell remains missing.
+It's interesting that `pivot_wider()` can turn implicit missing values into explicit missing values and we'll come back to this idea in Chapter \@ref(missing-values).
+
+You might also wonder what happens if there are are multiple rows in the input that correspond to one cell in the output.
+The example below has two rows that correspond to id "A" and name "x":
+
+```{r}
+df <- tribble(
+  ~id, ~name, ~value,
+  "A", "x", 1,
+  "A", "x", 2,
+  "A", "y", 3,
+  "B", "x", 4, 
+  "B", "y", 5, 
+)
+```
+
+If we attempt to pivot this we an output that contains list-columns, which you'll learn more about in Chapter \@ref(list-columns):
+
+```{r}
+df |> pivot_wider(
+  names_from = name,
+  values_from = value
+)
+```
+
+Since you don't know how to work this sort of data yet, you'll want to follow the hint in the warning to figure out where the problem is:
+
+```{r}
+df %>%
+  group_by(id, name) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  filter(n > 1L) 
+```
 
 ## Untidy data
 
-While I showed a couple of examples of using `pivot_wider()` to make tidy data, it's real strength is making **untidy** data.
+While `pivot_wider()` is occasionally useful for making tidy data, it's real strength is making **untidy** data.
 While that sounds like a bad thing, untidy isn't a pejorative term: there are many untidy data structures that are extremely useful.
 Tidy data is a great starting point for most analyses but it's not the only data format you'll even need.
 
@@ -584,3 +666,54 @@ It's totally fine to be pragmatic and to say a variable is whatever makes your a
 So if you're stuck figuring out how to do some computation, maybe it's time to switch up the organisation of your data.
 For computations involving a fixed number of values (like computing differences or ratios), it's usually easier if the data is columns; for those with a variable of number of values (like sums or means) it's usually easier in rows.
 Don't be afraid to untidy, transform, and re-tidy if needed.
+
+Let's explore this idea by looking at `cms_patient_care`, which has a similar structure to `cms_patient_experience`:
+
+```{r}
+cms_patient_care
+```
+
+It contains information about 9 measures (`beliefs_addressed`, `composite_process`, `dyspena_treatment`, ...) on 14 different facilities (identified by `ccn` with name given by `facility_name`).
+However, compared to `cms_patient_experience` each measurement is recorded with both a normalized score, which is the percentage of patients affected, and a denominator, which is the number patients.
+For example `beliefs_addressed`, which is the "documentation in the clinical record of a discussion of spiritual/religious concerns or documentation that the patient/caregiver did not want to discuss" records the percentage of patients in `observed` and the total number of patients that the metric applies to in `denominator`.
+
+Depending on what you want to do next you might finding any of the following three structures useful:
+
+-   If you want to compute the number of patients that had a positive answer to the question, you might pivot `type` into the columns:
+
+    ```{r}
+    cms_patient_care |> 
+      pivot_wider(
+        names_from = type,
+        values_from = score
+      ) |> 
+      mutate(
+        numerator = round(observed / 100 * denominator)
+      )
+    ```
+
+-   If you wanted to display the distribution of each metric, you might keep it as is:
+
+    ```{r}
+    cms_patient_care |> 
+      filter(type == "observed") |> 
+      ggplot(aes(score)) + 
+      geom_histogram(binwidth = 2) + 
+      facet_wrap(~ measure_abbr) + 
+      xlim(85, NA)
+    ```
+
+-   If you wanted to explore how different metrics are related, you might
+
+    ```{r}
+    cms_patient_care |> 
+      filter(type == "observed") |> 
+      select(-type) |> 
+      pivot_wider(
+        names_from = measure_abbr,
+        values_from = score
+      ) |> 
+      ggplot(aes(dyspnea_screening, dyspena_treatment)) + 
+      geom_point() + 
+      coord_equal()
+    ```
