@@ -26,7 +26,7 @@ status <- function(type) {
     polishing = "should be readable but is currently undergoing final polishing",
     restructuring = "is undergoing heavy restructuring and may be confusing or incomplete",
     drafting = "is currently a dumping ground for ideas, and we don't recommend reading it",
-    complete = "is largely complete",
+    complete = "is largely complete and just needs final proof reading",
     stop("Invalid `type`", call. = FALSE)
   )
 
