@@ -1,24 +1,29 @@
 # Factors
 
+```{r, results = "asis", echo = FALSE}
+status("complete")
+```
+
 ## Introduction
 
 Factors are used for categorical variables, variables that have a fixed and known set of possible values.
 They are also useful when you want to display character vectors in a non-alphabetical order.
 
-If, after reading this chapter, you want to learn more about factors, I recommend reading Amelia McNamara and Nicholas Horton's paper, [*Wrangling categorical data in R*](https://peerj.com/preprints/3163/).
+If you want to learn more about factors after reading this chapter, I recommend reading Amelia McNamara and Nicholas Horton's paper, [*Wrangling categorical data in R*](https://peerj.com/preprints/3163/).
 This paper lays out some of the history discussed in [*stringsAsFactors: An unauthorized biography*](https://simplystatistics.org/posts/2015-07-24-stringsasfactors-an-unauthorized-biography/) and [*stringsAsFactors = \<sigh\>*](http://notstatschat.tumblr.com/post/124987394001/stringsasfactors-sigh), and compares the tidy approaches to categorical data outlined in this book with base R methods.
 An early version of the paper helped motivate and scope the forcats package; thanks Amelia & Nick!
 
 ### Prerequisites
 
-To work with factors, we'll use the **forcats** package, which is part of the core tidyverse.
+Base R some basic tools for creating and manipulating factors.
+We'll supplement these with the **forcats** package, which is part of the core tidyverse.
 It provides tools for dealing with **cat**egorical variables (and it's an anagram of factors!) using a wide range of helpers for working with factors.
 
 ```{r setup, message = FALSE}
 library(tidyverse)
 ```
 
-## Creating factors
+## Factor basics
 
 Imagine that you have a variable that records month:
 
@@ -58,7 +63,7 @@ y1
 sort(y1)
 ```
 
-And any values not in the set will be silently converted to NA:
+And any values not in the level will be silently converted to NA:
 
 ```{r}
 y2 <- factor(x2, levels = month_levels)
@@ -107,7 +112,7 @@ gss_cat
 (Remember, since this dataset is provided by a package, you can get more information about the variables with `?gss_cat`.)
 
 When factors are stored in a tibble, you can't see their levels so easily.
-One way to see them is with `count()`:
+One way to view them is with `count()`:
 
 ```{r}
 gss_cat |>
@@ -123,26 +128,6 @@ Or with a bar chart:
 #|   15,000 with race "White".
 ggplot(gss_cat, aes(race)) +
   geom_bar()
-```
-
-By default, ggplot2 will drop levels that don't have any values.
-You can force them to display with:
-
-```{r}
-#> fig.alt: >
-#>   The same bar chart as the last plot, but now with an missing bar on
-#>   the far right with label "Not applicable".
-ggplot(gss_cat, aes(race)) +
-  geom_bar() +
-  scale_x_discrete(drop = FALSE)
-```
-
-These levels represent valid values that simply did not occur in this dataset.
-In dplyr::count() set the `.drop` option to `FALSE`, to show these.
-
-```{r}
-gss_cat |> 
-  count(race, .drop = FALSE)
 ```
 
 When working with factors, the two most common operations are changing the order of the levels, and changing the values of the levels.
@@ -183,7 +168,7 @@ ggplot(relig_summary, aes(tvhours, relig)) +
   geom_point()
 ```
 
-It is difficult to interpret this plot because there's no overall pattern.
+It is hard to read this plot because there's no overall pattern.
 We can improve it by reordering the levels of `relig` using `fct_reorder()`.
 `fct_reorder()` takes three arguments:
 
@@ -207,7 +192,9 @@ For example, you could rewrite the plot above as:
 
 ```{r, eval = FALSE}
 relig_summary |>
-  mutate(relig = fct_reorder(relig, tvhours)) |>
+  mutate(
+    relig = fct_reorder(relig, tvhours)
+  ) |>
   ggplot(aes(tvhours, relig)) +
   geom_point()
 ```
@@ -253,8 +240,8 @@ ggplot(rincome_summary, aes(age, fct_relevel(rincome, "Not applicable"))) +
 Why do you think the average age for "Not applicable" is so high?
 
 Another type of reordering is useful when you are coloring the lines on a plot.
-`fct_reorder2()` reorders the factor by the `y` values associated with the largest `x` values.
-This makes the plot easier to read because the line colurs line up with the legend.
+`fct_reorder2(f, x, y)` reorders the factor `f` by the `y` values associated with the largest `x` values.
+This makes the plot easier to read because the colors of the line at the far right of the plot will line up with the legend.
 
 ```{r, fig.align = "default", out.width = "50%", fig.width = 4}
 #| fig.alt: 
@@ -288,7 +275,7 @@ ggplot(by_age, aes(age, prop, colour = fct_reorder2(marital, age, prop))) +
 ```
 
 Finally, for bar plots, you can use `fct_infreq()` to order levels in increasing frequency: this is the simplest type of reordering because it doesn't need any extra variables.
-You may want to combine with `fct_rev()`.
+Combine it with `fct_rev()` if you want the largest values on the right, not the left.
 
 ```{r}
 #| fig.alt: >
@@ -324,6 +311,7 @@ gss_cat |> count(partyid)
 
 The levels are terse and inconsistent.
 Let's tweak them to be longer and use a parallel construction.
+Like most rename and recoding functions in the tidyverse, the new values go on the left and the old values go on the right:
 
 ```{r}
 gss_cat |>
@@ -340,7 +328,7 @@ gss_cat |>
   count(partyid)
 ```
 
-`fct_recode()` will leave levels that aren't explicitly mentioned as is, and will warn you if you accidentally refer to a level that doesn't exist.
+`fct_recode()` will the leave levels that aren't explicitly mentioned as is, and will warn you if you accidentally refer to a level that doesn't exist.
 
 To combine groups, you can assign multiple old levels to the same new level:
 
@@ -362,7 +350,7 @@ gss_cat |>
   count(partyid)
 ```
 
-You must use this technique with care: if you group together categories that are truly different you will end up with misleading results.
+Use this technique with care: if you group together categories that are truly different you will end up with misleading results.
 
 If you want to collapse a lot of levels, `fct_collapse()` is a useful variant of `fct_recode()`.
 For each new variable, you can provide a vector of old levels:
@@ -371,16 +359,16 @@ For each new variable, you can provide a vector of old levels:
 gss_cat |>
   mutate(
     partyid = fct_collapse(partyid,
-      other = c("No answer", "Don't know", "Other party"),
-      rep = c("Strong republican", "Not str republican"),
-      ind = c("Ind,near rep", "Independent", "Ind,near dem"),
-      dem = c("Not str democrat", "Strong democrat")
+      "other" = c("No answer", "Don't know", "Other party"),
+      "rep" = c("Strong republican", "Not str republican"),
+      "ind" = c("Ind,near rep", "Independent", "Ind,near dem"),
+      "dem" = c("Not str democrat", "Strong democrat")
     )
   ) |>
   count(partyid)
 ```
 
-Sometimes you just want to lump together all the small groups to make a plot or table simpler.
+Sometimes you just want to lump together the small groups to make a plot or table simpler.
 That's the job of the `fct_lump_*()` family of functions.
 `fct_lump_lowfreq()` is a simple starting point that progressively lumps the smallest groups categories into "Other", always keeping "Other" as the smallest category.
 
@@ -399,6 +387,8 @@ gss_cat |>
   count(relig, sort = TRUE) |>
   print(n = Inf)
 ```
+
+Read the documentation to learn about `fct_lump_min()` and `fct_lump_prop()` which are useful in other cases.
 
 ### Exercises
 
