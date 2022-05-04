@@ -1,27 +1,120 @@
 # Missing values {#missing-values}
 
 ```{r, results = "asis", echo = FALSE}
-status("drafting")
+status("restructuring")
 ```
 
 ## Introduction
 
-We have also discussed missing values earlier in the book in:
+We've touched on missing values in earlier in the the book.
+You first saw them in Section \@ref(summarise) where they interfered with computing summary statistics, and you learned about their their infectious nature and how to check for their presence in Section \@ref(na-comparison).
+Now we'll come back to them in more depth, so you can learn more of the details.
 
-TODO: add index of previous mentions
+We'll start by discussing some general tools for working with missing values that are explicitly recorded as `NA` in your data.
+We'll explore the idea of implicit missing values, values are that are simply absent from your data, and show some tools you can use to make them explicit.
+We'll finish off with a related discussion of empty groups, caused by factor levels that don't appear in the data.
 
 ### Prerequisites
+
+Most of the functions for working with missing values live in tidyr, but some are also in dplyr.
+So we'll load the whole tidyverse ando t
 
 ```{r setup, message = FALSE}
 library(tidyverse)
 library(nycflights13)
 ```
 
-## Explicit vs implicit missing values
+## Explicit missing values
 
-A value can be missing in one of two possible ways.
-It can be **explicitly** missing, i.e. flagged with `NA`, or it can be **implicitly**, missing i.e. simply not present in the data.
-Let's illustrate this important idea with a very simple data set, which records the price of a stock in each quarter.
+To begin, let's
+
+### Last observation carried forward
+
+Another place that missing values arise is as a data entry convenience.
+Sometimes when a data source has primarily been used for data entry, missing values indicate that the previous value should be carried forward:
+
+```{r}
+treatment <- tribble(
+  ~person,           ~treatment, ~response,
+  "Derrick Whitmore", 1,         7,
+  NA,                 2,         10,
+  NA,                 3,         9,
+  "Katherine Burke",  1,         4
+)
+```
+
+You can fill in these missing values with `tidyr::fill()`.
+It takes a set of columns where you want missing values to be replaced by the most recent non-missing value (sometimes called last observation carried forward).
+
+```{r}
+treatment |>
+  fill(person)
+```
+
+You can use the `direction` argument to fill in missing values that have been generated in more exotic ways.
+
+### Fixed values
+
+Some times missing values represent some fixed known value, mostly commonly 0.
+You can use `dplyr::coalesce()` to replace.
+
+```{r}
+x <- c(1, 4, 5, 7, NA)
+coalesce(x, 0)
+```
+
+You could apply this to every numeric column in a data frame with:
+
+```{r, eval = FALSE}
+df |> mutate(across(where(is.numeric), coalesce, 0))
+```
+
+### Sentinel values
+
+Sometimes you'll hit the opposite problem because some older software doesn't have an explicit way to represent missing values, so it might be recorded using some special sentinel value like 99 or -999.
+If possible, handle this when reading in the data, for example, by using the `na` argument to `read::read_csv()`.
+If you discover later, or from a data source that doesn't provide a way to handle on read, you can use `na_if()`
+
+```{r}
+x <- c(1, 4, 5, 7, -99)
+na_if(x, -99)
+```
+
+You could apply this to every numeric column in a data frame with:
+
+```{r, eval = FALSE}
+df |> mutate(across(where(is.numeric), na_if, -99))
+```
+
+### NaN
+
+There's one special type of missing value that you'll encounter from time-to-time, a `NaN` (pronounced "nan"), or **n**ot **a** **n**umber.
+It's not that important because it generally behaves just like `NA`:
+
+```{r}
+x <- c(NA, NaN)
+x * 10
+x == 1
+is.na(x)
+```
+
+While it's infectious, the NaN'ness isn't always preserved, and this varies from platform to platform and compiler to compiler, so you shouldn't rely on it.
+In the rare case you need to distinguish an `NA` from a `NaN`, you can use `is.nan(x)`.
+
+You'll generally encounter a `NaN` when you perform a mathematical operation that don't have a well defined answer:
+
+```{r}
+0 / 0 
+0 * Inf
+Inf - Inf
+sqrt(-1)
+```
+
+## Implicit missing values
+
+So far we've worked with missing values that are **explicitly** missing, i.e. flagged with `NA`.
+But missing values can also be **implicitly** missing, if they are simply not present in the data.
+Let's illustrate this idea with a simple data set, which records the price of a stock in each quarter.
 
 ```{r}
 stocks <- tibble(
@@ -43,6 +136,10 @@ One way to think about the difference is with this Zen-like koan:
 >
 > An implicit missing value is the absence of a presence.
 
+It's often useful to make implicit missings explicit so you have something physical that you can work with.
+In other cases, explicit missings are forced upon you by the structure of the data.
+The following sections discuss some tools for moving between implicit and explict.
+
 ### Pivoting
 
 You've already learned about one tool that can make implicit missings explicit and vice versa: pivoting.
@@ -57,58 +154,38 @@ stocks |>
   )
 ```
 
-Making data longer generally preserves explicit missing values, but you can make them implicit by setting `drop_na`.
-If we make that wider data longer, and specify `values_drop_na = TRUE` we can make both missing values implicit:
-
-```{r}
-stocks |>
-  pivot_wider(
-    names_from = year, 
-    values_from = price
-  ) |> 
-  pivot_longer(
-    cols = -qtr, 
-    names_to = "year", 
-    values_to = "price", 
-    values_drop_na = TRUE
-  )
-```
-
-Generally, however, you use `values_drop_na` because you have missing values that don't represent missing observations, but are forced to exist due to the representation of the data.
+Making data longer generally preserves explicit missing values, but you can make them implicit by setting `drop_na` if they are structural missing values that only exist because the data is not tidy.
 See the examples in Chapter \@ref(tidy-data) for more details.
 
 ### Complete
 
-A more direct way to implicit values into explicit values is with `complete()`:
+`tidyr::complete()` allows you to generate explicit missing values in tidy data by providing a set of variables that generates all rows that should exist:
 
 ```{r}
 stocks |>
   complete(year, qtr)
 ```
 
-`complete()` takes a set of columns, and finds all unique combinations.
-It then ensures the original dataset contains all those values, filling in explicit `NA`s where necessary.
-
-Typically, you'll work with the values in the dataset, filling in missing combinations.
-But sometimes the dataset is incomplete If you know that the range isn't correct, you can:
+Typically, you'll call `complete()` with the names of variables that already existing, just filling in missing combinations.
+However, sometimes the individual variables are themselves incomplete, so you can also provide your own data.
+For example, you might know that this dataset is supposed to run from 2021 to 2023, so you could explicitly supply those values for `year`:
 
 ```{r}
 stocks |>
-  complete(year = 2015:2017, qtr)
+  complete(year = 2021:2023, qtr)
 ```
 
-Or if the range is correct, but there might be missing values in the middle:
+If the range is correct, but not all values are present, you could use `full_seq(x, 1)` to generate all values from `min(x)` to `max(x)` spaced out by 1.
 
-```{r}
-stocks |>
-  complete(year = full_seq(year, 1), qtr = 1:4)
-```
-
-TODO: add discussion of `group_by()` plus nesting etc.
+In some cases, it won't be possible to generate the correct grid of all possible values.
+In that case, you can do manually what `complete()` does for you: create a data frame that contains all the rows that should exist, then combine it with your original dataset with `dplyr::full_join()`.
 
 ### Joins
 
-Other times missing values might be defined by another dataset.
+This brings us to another important way of revealing implicitly missing observations: joins.
+Often you can only know that values are missing from one dataset when you go to join it to another dataset.
+`dplyr::anti_join()` is particularly useful here.
+The following example shows how two `anti_join()`s reveals that we're missing information for four airports and 722 planes.
 
 ```{r}
 flights |> 
@@ -120,67 +197,13 @@ flights |>
   anti_join(planes)
 ```
 
-## When missings represent values
+If you're worried about a join failing to reveal the lack of a match, and you have dplyr 1.1.0 or newer, you can use the new `unmatched = "error"` argument to tell joins to error if they find any missing values.
 
-### Last observation carried forward
+### Exercises
 
-Another place that missing values arise is as a data entry convenience.
-Sometimes when a data source has primarily been used for data entry, missing values indicate that the previous value should be carried forward:
+1.  Can you find any relationship between the carrier and the missing planes?
 
-```{r}
-treatment <- tribble(
-  ~person,           ~treatment, ~response,
-  "Derrick Whitmore", 1,         7,
-  NA,                 2,         10,
-  NA,                 3,         9,
-  "Katherine Burke",  1,         4
-)
-```
-
-You can fill in these missing values with `fill()`.
-It takes a set of columns where you want missing values to be replaced by the most recent non-missing value (sometimes called last observation carried forward).
-
-```{r}
-treatment |>
-  fill(person)
-```
-
-You can use the `direction` argument to fill in missing values that have been generated in more exotic ways.
-
-### Fixed values
-
-Some times missing values represent some fixed known value, mostly commonly 0.
-You can use `coalesce()` to replace.
-
-```{r}
-x <- c(1, 4, 5, 7, NA)
-coalesce(x, 0)
-```
-
-You can apply this to every numeric column in a data frame with:
-
-```{r, eval = FALSE}
-df |> mutate(across(where(is.numeric), coalesce, 0))
-```
-
-### Sentinel values
-
-Sometimes you'll hit the opposite problem because some older software doesn't have an explicit way to represent missing values, so it might be recorded using some special sentinel value like 99 or -999.
-If possible, handle this when reading in the data, for example, by using the `na` argument to `read::read_csv()`.
-If you discover later, or from a data source that doesn't provide a way to handle on read, you can use `na_if()`
-
-```{r}
-x <- c(1, 4, 5, 7, -99)
-na_if(x, -99)
-```
-
-You can apply this to every numeric column in a data frame with:
-
-```{r, eval = FALSE}
-df |> mutate(across(where(is.numeric), na_if, -99))
-```
-
-## Factors
+## Factors and empty groups
 
 Another sort of missing value arises with factors.
 For example, imagine we have a dataset that contains some health information about people:
@@ -206,7 +229,29 @@ We can request to keep all the value, even if not seen in the data with `.drop =
 health |> count(smoker, .drop = FALSE)
 ```
 
-This argument also works with `group_by()`:
+Similarly, ggplot2's discrete axes will also drop levels that don't have any values.
+You can force them to display with by supplying `drop = FALSE` to the appropriate discrete axis:
+
+```{r}
+#| fig.align: default
+#| out.width: "50%"
+#| fig.width: 3
+#| fig.alt: 
+#| - >
+#|   A bar chart with a single value on the x-axis, "no".
+#| - >
+#|   The same bar chart as the last plot, but now with two values on
+#|   the x-axis, "yes" and "no". There is no bar for the "yes" category.
+ggplot(health, aes(smoker)) +
+  geom_bar() +
+  scale_x_discrete()
+
+ggplot(health, aes(smoker)) +
+  geom_bar() +
+  scale_x_discrete(drop = FALSE)
+```
+
+`.drop = TRUE` also works with `group_by()`:
 
 ```{r}
 health |> 
@@ -220,8 +265,20 @@ health |>
   )
 ```
 
-Summary functions generally work with zero-length vectors, but they may return results that are surprising at first glance.
-There's almost always some deeper logic behind them.
+We get some interesting results here because the summary functions are applied to zero-length vectors.
+These are different to vectors containing missing values;
+
+```{r}
+x1 <- c(NA, NA)
+length(x1)
+
+x2 <- numeric()
+length(x2)
+```
+
+Summary functions will work with zero-length vectors, but they may return results that are surprising at first glance.
+Here we see `mean(age)` returning `NaN` because `mean(age)` = `sum(age)/length(age)` which here is 0/0.
+`max()` and `min()` return -Inf and Inf for empty vectors so if you combine the results with a non-empty vector of new data and recompute you'll get min or max of the new data.
 
 A sometimes simpler approach is to perform the summary and then make the implicit missings explicit with `complete()`.
 
@@ -235,45 +292,7 @@ health |>
     max_age = max(age),
     sd_age = sd(age)
   ) |> 
-  complete(smoker, fill = list(n = 0))
+  complete(smoker)
 ```
 
-Main con of this approach is that you need to carefully specify the `fill` argument so that
-
-By default, ggplot2 will drop levels that don't have any values.
-You can force them to display with by using `drop = FALSE` on the discrete axis:
-
-```{r}
-#| fig.alt: >
-#|   The same bar chart as the last plot, but now with an missing bar on
-#|   the far right with label "Not applicable".
-ggplot(gss_cat, aes(race)) +
-  geom_bar() +
-  scale_x_discrete(drop = FALSE)
-```
-
-## NaN
-
-Special not a number.
-In general it behaves like an `NA`:
-
-```{r}
-x <- c(NA, NaN)
-is.na(x)
-is.nan(x)
-```
-
-You get these from mathematical operations that don't have a well defined answer
-
-```{r}
-0 / 0 
-0 * Inf
-Inf - Inf
-sqrt(-1)
-log(-1)
-```
-
-```{r}
-sqrt(-1 + 0i)
-log(-1 + 0i)
-```
+The main drawback of this approach is that you get an `NA` for the count, even though you know that's zero.
