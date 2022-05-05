@@ -6,12 +6,12 @@ status("restructuring")
 
 ## Introduction
 
-We've touched on missing values in earlier in the the book.
+You've already learned the basics of missing values earlier in the the book.
 You first saw them in Section \@ref(summarise) where they interfered with computing summary statistics, and you learned about their their infectious nature and how to check for their presence in Section \@ref(na-comparison).
 Now we'll come back to them in more depth, so you can learn more of the details.
 
-We'll start by discussing some general tools for working with missing values that are explicitly recorded as `NA` in your data.
-We'll explore the idea of implicit missing values, values are that are simply absent from your data, and show some tools you can use to make them explicit.
+We'll start by discussing some general tools for working with missing values recorded as `NA`s.
+We'll then explore the idea of implicitly missing values, values are that are simply absent from your data, and show some tools you can use to make them explicit.
 We'll finish off with a related discussion of empty groups, caused by factor levels that don't appear in the data.
 
 ### Prerequisites
@@ -90,8 +90,8 @@ df |>
 
 ### NaN
 
-There's one special type of missing value that you'll encounter from time-to-time, a `NaN` (pronounced "nan"), or **n**ot **a** **n**umber.
-It's not that important because it generally behaves just like `NA`:
+Before we continue, there's one special type of missing value that you'll encounter from time-to-time: a `NaN` (pronounced "nan"), or **n**ot **a** **n**umber.
+It's not that important to know about because it generally behaves just like `NA`:
 
 ```{r}
 x <- c(NA, NaN)
@@ -100,10 +100,9 @@ x == 1
 is.na(x)
 ```
 
-While it's infectious, the NaN'ness isn't always preserved, and this varies from platform to platform and compiler to compiler, so you shouldn't rely on it.
 In the rare case you need to distinguish an `NA` from a `NaN`, you can use `is.nan(x)`.
 
-You'll generally encounter a `NaN` when you perform a mathematical operation that don't have a well defined answer:
+You'll generally encounter a `NaN` when you perform a mathematical operation that has an indeterminate result:
 
 ```{r}
 0 / 0 
@@ -114,23 +113,23 @@ sqrt(-1)
 
 ## Implicit missing values
 
-So far we've worked with missing values that are **explicitly** missing, i.e. flagged with `NA`.
-But missing values can also be **implicitly** missing, if they are simply not present in the data.
-Let's illustrate this idea with a simple data set, which records the price of a stock in each quarter.
+So far we've talked with missing values that are **explicitly** missing, i.e. you can see them in your data as an `NA`.
+But missing values can also be **implicitly** missing, if an entire row of data is simply absent from the data.
+Let's illustrate this idea with a simple data set, which records the price of a stock in each quarter:
 
 ```{r}
 stocks <- tibble(
-  year  = c(2022, 2022, 2022, 2022, 2023, 2023, 2023),
+  year  = c(2020, 2020, 2020, 2020, 2021, 2021, 2021),
   qtr   = c(   1,    2,    3,    4,    2,    3,    4),
   price = c(1.88, 0.59, 0.35,   NA, 0.92, 0.17, 2.66)
 )
 ```
 
-There are two missing values in this dataset:
+This dataset has two missing observations:
 
--   The return for the fourth quarter of 2022 is explicitly missing, because the cell where its value should be instead contains `NA`.
+-   The `price` in the fourth quarter of 2021 is explicitly missing, because its value is `NA`.
 
--   The return for the first quarter of 2023 is implicitly missing, because it simply does not appear in the dataset.
+-   The `price` for the first quarter of 2022 is implicitly missing, because it simply does not appear in the dataset.
 
 One way to think about the difference is with this Zen-like koan:
 
@@ -144,19 +143,19 @@ The following sections discuss some tools for moving between implicit and explic
 
 ### Pivoting
 
-You've already learned about one tool that can make implicit missings explicit and vice versa: pivoting.
-Making data wider can make implicit missing values become explicit.
-For example, if we pivot `stocks` to put the `year` in the columns pivoting, we can make both missing values explicit:
+You've already seen one tool that can make implicit missings explicit and vice versa: pivoting.
+Making data wider can make implicit missing values explicit because every combination of the rows and new columns must have some value.
+For example, if we pivot `stocks` to put the `quarter` in the columns, both missing become values explicit:
 
 ```{r}
 stocks |>
   pivot_wider(
-    names_from = year, 
+    names_from = qtr, 
     values_from = price
   )
 ```
 
-Making data longer generally preserves explicit missing values, but you can make them implicit by setting `drop_na` if they are structural missing values that only exist because the data is not tidy.
+By default, making data longer preserves explicit missing values, but if they are structural missing values that only exist because the data is not tidy, you can drop them (make them implicit) by setting `drop_na = TRUE`.
 See the examples in Chapter \@ref(tidy-data) for more details.
 
 ### Complete
@@ -168,25 +167,25 @@ stocks |>
   complete(year, qtr)
 ```
 
-Typically, you'll call `complete()` with the names of variables that already existing, just filling in missing combinations.
+Typically, you'll call `complete()` with names of variables that already exist, filling in their missing combinations.
 However, sometimes the individual variables are themselves incomplete, so you can also provide your own data.
-For example, you might know that this dataset is supposed to run from 2021 to 2023, so you could explicitly supply those values for `year`:
+For example, you might know that this dataset is supposed to run from 2019 to 2021, so you could explicitly supply those values for `year`:
 
 ```{r}
 stocks |>
-  complete(year = 2021:2023, qtr)
+  complete(year = 2019:2021, qtr)
 ```
 
-If the range is correct, but not all values are present, you could use `full_seq(x, 1)` to generate all values from `min(x)` to `max(x)` spaced out by 1.
+If the range of a variable is correct, but not all values are present, you could use `full_seq(x, 1)` to generate all values from `min(x)` to `max(x)` spaced out by 1.
 
-In some cases, it won't be possible to generate the correct grid of all possible values.
-In that case, you can do manually what `complete()` does for you: create a data frame that contains all the rows that should exist, then combine it with your original dataset with `dplyr::full_join()`.
+In some cases, the complete set of observations can't be generated by a simple combination of variables with `complete()`.
+In that case, you can do manually what `complete()` does for you: create a data frame that contains all the rows that should exist (using whatever combination of techniques you need), then combine it with your original dataset with `dplyr::full_join()`.
 
 ### Joins
 
 This brings us to another important way of revealing implicitly missing observations: joins.
-Often you can only know that values are missing from one dataset when you go to join it to another dataset.
-`dplyr::anti_join()` is particularly useful here.
+Often you can only know that values are missing when from one dataset when you go to join it to another.
+`dplyr::anti_join()` is particularly useful at revealing these values.
 The following example shows how two `anti_join()`s reveals that we're missing information for four airports and 722 planes.
 
 ```{r}
@@ -201,15 +200,16 @@ flights |>
   anti_join(planes)
 ```
 
-If you're worried about a join failing to reveal the lack of a match, and you have dplyr 1.1.0 or newer, you can use the new `unmatched = "error"` argument to tell joins to error if they find any missing values.
+The default behavior of joins is to succeed if observations in `x` don't have a match in `y`.
+If you're worried about this, and you have dplyr 1.1.0 or newer, you can use the new `unmatched = "error"` argument to tell joins to error if any rows in `x` don't have a match in `y`.
 
 ### Exercises
 
-1.  Can you find any relationship between the carrier and the missing planes?
+1.  Can you find any relationship between the carrier and the rows that appear to be missing from `planes`?
 
 ## Factors and empty groups
 
-Another sort of missing value arises with factors.
+A final type of missingness is empty groups, groups that don't contain any observation, which can arise when working with factors.
 For example, imagine we have a dataset that contains some health information about people:
 
 ```{r}
@@ -227,13 +227,14 @@ health |> count(smoker)
 ```
 
 This dataset only contains non-smokers, but we know that smokers exist.
-We can request to keep all the value, even if not seen in the data with `.drop = FALSE`:
+The group of non-smoker is empty.
+We can request `count()` to keep all the groups, even those not seen in the data by using `.drop = FALSE`:
 
 ```{r}
 health |> count(smoker, .drop = FALSE)
 ```
 
-Similarly, ggplot2's discrete axes will also drop levels that don't have any values.
+The same principle applies to ggplot2's discrete axes, which will also drop levels that don't have any values.
 You can force them to display with by supplying `drop = FALSE` to the appropriate discrete axis:
 
 ```{r}
@@ -255,7 +256,8 @@ ggplot(health, aes(smoker)) +
   scale_x_discrete(drop = FALSE)
 ```
 
-`.drop = TRUE` also works with `dplyr::group_by()`:
+The same problem comes up more generally with `dplyr::group_by()`.
+You can request that all factor levels be preserved with `.drop = TRUE`:
 
 ```{r}
 health |> 
@@ -269,8 +271,8 @@ health |>
   )
 ```
 
-We get some interesting results here because the summary functions are applied to zero-length vectors.
-These are different to vectors containing missing values;
+We get some interesting results here because we are a summarizing an empty group, so the summary functions are applied to zero-length vectors.
+Zero-length vectors are empty, not missing:
 
 ```{r}
 x1 <- c(NA, NA)
@@ -280,7 +282,7 @@ x2 <- numeric()
 length(x2)
 ```
 
-Summary functions will work with zero-length vectors, but they may return results that are surprising at first glance.
+Summary functions do work with zero-length vectors, but they may return results that are surprising at first glance.
 Here we see `mean(age)` returning `NaN` because `mean(age)` = `sum(age)/length(age)` which here is 0/0.
 `max()` and `min()` return -Inf and Inf for empty vectors so if you combine the results with a non-empty vector of new data and recompute you'll get min or max of the new data.
 
@@ -299,4 +301,4 @@ health |>
   complete(smoker)
 ```
 
-The main drawback of this approach is that you get an `NA` for the count, even though you know that it's zero.
+The main drawback of this approach is that you get an `NA` for the count, even though you know that it should be zero.
