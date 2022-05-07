@@ -1,9 +1,13 @@
 # Tibbles
 
+```{r, results = "asis", echo = FALSE}
+status("complete")
+```
+
 ## Introduction
 
 Throughout this book we work with "tibbles" instead of R's traditional `data.frame`.
-Tibbles *are* data frames, but they tweak some older behaviours to make life a little easier.
+Tibbles *are* data frames, but they tweak some older behaviors to make your life a little easier.
 R is an old language, and some things that were useful 10 or 20 years ago now get in your way.
 It's difficult to change base R without breaking existing code, so most innovation occurs in packages.
 Here we will describe the **tibble** package, which provides opinionated data frames that make working in the tidyverse a little easier.
@@ -21,29 +25,69 @@ library(tidyverse)
 
 ## Creating tibbles
 
-Almost all of the functions that you'll use in this book produce tibbles, as tibbles are one of the unifying features of the tidyverse.
-Most other R packages use regular data frames, so you might want to coerce a data frame to a tibble.
-You can do that with `as_tibble()`:
+If you need to make a tibble "by hand", you can use `tibble()` or `tribble()`.
+`tibble()` works by assembling individual vectors:
+
+```{r}
+x <- c(1, 2, 5)
+y <- c("a", "b", "h")
+
+tibble(x, y)
+```
+
+You can also optionally name the inputs, provide data inline with `c()`, and perform computation:
+
+```{r}
+tibble(
+  x1 = x,
+  x2 = c(10, 15, 25),
+  y = sqrt(x1^2 + x2^2)
+)
+```
+
+Every column in a data frame or tibble must be same length, so you'll get an error if the lengths are different:
+
+```{r, error = TRUE}
+tibble(
+  x = c(1, 5),
+  y = c("a", "b", "c")
+)
+```
+
+As the error suggests, individual values will be recycled to the same length as everything else:
+
+```{r}
+tibble(
+  x = 1:5,
+  y = "a",
+  z = TRUE
+)
+```
+
+Another way to create a tibble is with `tribble()`, which short for **tr**ansposed tibble.
+`tribble()` is customized for data entry in code: column headings start with `~` and entries are separated by commas.
+This makes it possible to lay out small amounts of data in an easy to read form:
+
+```{r}
+tribble(
+  ~x, ~y, ~z,
+  "a", 2, 3.6,
+  "b", 1, 8.5
+)
+```
+
+Finally, if you have a regular `data.frame` you can turn it into to a tibble with `as_tibble()`:
 
 ```{r}
 as_tibble(mtcars)
 ```
 
-You can create a new tibble from individual vectors with `tibble()`.
-`tibble()` will automatically recycle inputs of length 1, and allows you to refer to variables that you just created, as shown below.
+The inverse of `as_tibble()` is `as.data.frame()`; it converts a tibble back into a regular `data.frame`.
 
-```{r}
-tibble(
-  x = 1:5, 
-  y = 1, 
-  z = x ^ 2 + y
-)
-```
+## Non-syntactic names
 
-If you're already familiar with `data.frame()`, note that `tibble()` does much less: it never changes the type of the inputs (e.g. it never converts strings to factors!), it never changes the names of variables, and it never creates row names.
-
-It's possible for a tibble to have column names that are not valid R variable names, aka **non-syntactic** names.
-For example, they might not start with a letter, or they might contain unusual characters like a space.
+It's possible for a tibble to have column names that are not valid R variable names, names that are **non-syntactic**.
+For example, the variables might not start with a letter or they might contain unusual characters like a space.
 To refer to these variables, you need to surround them with backticks, `` ` ``:
 
 ```{r}
@@ -57,30 +101,16 @@ tb
 
 You'll also need the backticks when working with these variables in other packages, like ggplot2, dplyr, and tidyr.
 
-Another way to create a tibble is with `tribble()`, short for **tr**ansposed tibble.
-`tribble()` is customised for data entry in code: column headings are defined by formulas (i.e. they start with `~`), and entries are separated by commas.
-This makes it possible to lay out small amounts of data in easy to read form.
-
-```{r}
-tribble(
-  ~x, ~y, ~z,
-  #--|--|----
-  "a", 2, 3.6,
-  "b", 1, 8.5
-)
-```
-
-I often add a comment (the line starting with `#`), to make it really clear where the header is.
-
 ## Tibbles vs. data.frame
 
 There are two main differences in the usage of a tibble vs. a classic `data.frame`: printing and subsetting.
+If these difference cause problems when working with older packages, you can turn a tibble back to a regular data frame with `as.data.frame()`.
 
 ### Printing
 
 Tibbles have a refined print method that shows only the first 10 rows, and all the columns that fit on screen.
 This makes it much easier to work with large data.
-In addition to its name, each column reports its type, a nice feature borrowed from `str()`:
+In addition to its name, each column reports its type, a nice feature inspired by `str()`:
 
 ```{r}
 tibble(
@@ -92,19 +122,28 @@ tibble(
 )
 ```
 
-Tibbles are designed so that you don't accidentally overwhelm your console when you print large data frames.
+Where possible, tibbles also use color to draw your eye to important differences.
+One of the most important distinctions is between the string `"NA"` and the missing value, `NA`:
+
+```{r}
+tibble(x = c("NA", NA))
+```
+
+Tibbles are designed to avoid overwhelming your console when you print large data frames.
 But sometimes you need more output than the default display.
 There are a few options that can help.
 
 First, you can explicitly `print()` the data frame and control the number of rows (`n`) and the `width` of the display.
 `width = Inf` will display all columns:
 
-```{r, eval = FALSE}
-nycflights13::flights %>% 
+```{r}
+library(nycflights13)
+
+flights |> 
   print(n = 10, width = Inf)
 ```
 
-You can also control the default print behaviour by setting options:
+You can also control the default print behavior by setting options:
 
 -   `options(tibble.print_max = n, tibble.print_min = m)`: if more than `n` rows, print only `m` rows.
     Use `options(tibble.print_min = Inf)` to always show all rows.
@@ -117,15 +156,13 @@ A final option is to use RStudio's built-in data viewer to get a scrollable view
 This is also often useful at the end of a long chain of manipulations.
 
 ```{r, eval = FALSE}
-nycflights13::flights %>% 
-  View()
+flights |> View()
 ```
 
-### Subsetting
+### Extracting variables
 
 So far all the tools you've learned have worked with complete data frames.
-If you want to pull out a single variable, you can use `pull()`.
-`pull()` also takes an optional `name` argument that specifies the column to be used as names for a named vector.
+If you want to pull out a single variable, you can use `dplyr::pull()`:
 
 ```{r}
 tb <- tibble(
@@ -134,11 +171,17 @@ tb <- tibble(
   y1  = 6:10
 )
 
-tb %>% pull(x1)
-tb %>% pull(x1, name = id)
+tb |> pull(x1) # by name
+tb |> pull(1)  # by position
 ```
 
-You can also use tools like `$` and `[[` to extract a variable.
+`pull()` also takes an optional `name` argument that specifies the column to be used as names for a named vector, which you'll learn about in Chapter \@ref(vectors).
+
+```{r}
+tb |> pull(x1, name = id)
+```
+
+You can also use the base R tools `$` and `[[`.
 `[[` can extract by name or position; `$` only extracts by name but is a little less typing.
 
 ```{r}
@@ -150,50 +193,37 @@ tb[["x1"]]
 tb[[1]]
 ```
 
-To use these in a pipe, you'll need to use the special placeholder `.`:
-
-```{r}
-tb %>% .$x1
-tb %>% .[["x1"]]
-```
-
 Compared to a `data.frame`, tibbles are more strict: they never do partial matching, and they will generate a warning if the column you are trying to access does not exist.
-In the following chunk `df` is a `data.frame` and `tb` is a `tibble`.
 
 ```{r}
+# Tibbles complain a lot:
+tb$x
+tb$z
+
+# Data frame use partial matching and don't complain if a column doesn't exist
 df <- as.data.frame(tb)
-
-# Partial match to existing variable name
-tb$x # Warning + no match
-df$x # Warning + partial match
-
-# Column doesn't exist
-tb$z # Warning
-df$z # No warning
+df$x
+df$z
 ```
 
-## Interacting with older code
+For this reason we sometimes joke that tibbles are lazy and surly: they do less and complain more.
 
-Some older functions don't work with tibbles.
-If you encounter one of these functions, use `as.data.frame()` to turn a tibble back to a `data.frame`:
+### Subsetting
 
-```{r}
-class(as.data.frame(tb))
-```
-
-The main reason that some older functions don't work with tibble is the `[` function.
-We don't use `[` much in this book because `dplyr::filter()` and `dplyr::select()` allow you to solve the same problems with clearer code (but you will learn a little about it in [vector subsetting](#vector-subsetting)).
-With base R data frames, `[` sometimes returns a data frame, and sometimes returns a vector.
+Lastly, there are some important differences when using `[`.
+With `data.frame`s, `[` sometimes returns a `data.frame`, and sometimes returns a vector, which is a common source of bugs.
 With tibbles, `[` always returns another tibble.
+This can sometimes cause problems when working with older code.
+If you hit one of those functions, just use `as.data.frame()` to turn your tibble back to a `data.frame`.
 
-## Exercises
+### Exercises
 
 1.  How can you tell if an object is a tibble?
-    (Hint: try printing `mtcars`, which is a regular data frame).
+    (Hint: try printing `mtcars`, which is a regular `data.frame`).
 
 2.  Compare and contrast the following operations on a `data.frame` and equivalent tibble.
     What is different?
-    Why might the default data frame behaviours cause you frustration?
+    Why might the default `data.frame` behaviours cause you frustration?
 
     ```{r, eval = FALSE}
     df <- data.frame(abc = 1, xyz = "a")

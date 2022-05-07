@@ -482,7 +482,7 @@ It also makes it easier to understand your solutions to old problems when you re
 1.  Read the documentation for `apply()`.
     In the 2d case, what two for loops does it generalise?
 
-2.  Adapt `col_summary()` so that it only applies to numeric columns You might want to start with an `is_numeric()` function that returns a logical vector that has a TRUE corresponding to each numeric column.
+2.  Adapt `col_summary()` so that it only applies to numeric columns You might want to start with an `is_numeric()` function that returns a logical vector that has a `TRUE` corresponding to each numeric column.
 
 ## The map functions
 
@@ -520,9 +520,9 @@ Compared to using a for loop, focus is on the operation being performed (i.e. `m
 This is even more apparent if we use the pipe:
 
 ```{r}
-df %>% map_dbl(mean)
-df %>% map_dbl(median)
-df %>% map_dbl(sd)
+df |> map_dbl(mean)
+df |> map_dbl(median)
+df |> map_dbl(sd)
 ```
 
 There are a few differences between `map_*()` and `col_summary()`:
@@ -533,7 +533,7 @@ There are a few differences between `map_*()` and `col_summary()`:
 -   The second argument, `.f`, the function to apply, can be a formula, a character vector, or an integer vector.
     You'll learn about those handy shortcuts in the next section.
 
--   `map_*()` uses ... ([dot dot dot]) to pass along additional arguments to `.f` each time it's called:
+-   `map_*()` uses ... (\[dot dot dot\]) to pass along additional arguments to `.f` each time it's called:
 
     ```{r}
     map_dbl(df, mean, trim = 0.5)
@@ -553,16 +553,16 @@ Imagine you want to fit a linear model to each group in a dataset.
 The following toy example splits up the `mtcars` dataset into three pieces (one for each value of cylinder) and fits the same linear model to each piece:
 
 ```{r}
-models <- mtcars %>% 
-  split(.$cyl) %>% 
+models <- mtcars |> 
+  split(mtcars$cyl) |> 
   map(function(df) lm(mpg ~ wt, data = df))
 ```
 
 The syntax for creating an anonymous function in R is quite verbose so purrr provides a convenient shortcut: a one-sided formula.
 
 ```{r}
-models <- mtcars %>% 
-  split(.$cyl) %>% 
+models <- mtcars |> 
+  split(mtcars$cyl) |> 
   map(~lm(mpg ~ wt, data = .x))
 ```
 
@@ -574,16 +574,16 @@ To do that we need to first run `summary()` and then extract the component calle
 We could do that using the shorthand for anonymous functions:
 
 ```{r}
-models %>% 
-  map(summary) %>% 
-  map_dbl(~.x$r.squared)
+models |> 
+  map(summary) |> 
+  map_dbl(~ .x$r.squared)
 ```
 
 But extracting named components is a common operation, so purrr provides an even shorter shortcut: you can use a string.
 
 ```{r}
-models %>% 
-  map(summary) %>% 
+models |> 
+  map(summary) |> 
   map_dbl("r.squared")
 ```
 
@@ -591,7 +591,7 @@ You can also use an integer to select elements by position:
 
 ```{r}
 x <- list(list(1, 2, 3), list(4, 5, 6), list(7, 8, 9))
-x %>% map_dbl(2)
+x |> map_dbl(2)
 ```
 
 ### Base R
@@ -616,8 +616,8 @@ If you're familiar with the apply family of functions in base R, you might have 
     )
 
     threshold <- function(x, cutoff = 0.8) x[x > cutoff]
-    x1 %>% sapply(threshold) %>% str()
-    x2 %>% sapply(threshold) %>% str()
+    x1 |> sapply(threshold) |> str()
+    x2 |> sapply(threshold) |> str()
     ```
 
 -   `vapply()` is a safe alternative to `sapply()` because you supply an additional argument that defines the type.
@@ -684,7 +684,7 @@ When the function fails, the `result` element is `NULL` and the `error` element 
 
 ```{r}
 x <- list(1, 10, "a")
-y <- x %>% map(safely(log))
+y <- x |> map(safely(log))
 str(y)
 ```
 
@@ -692,16 +692,16 @@ This would be easier to work with if we had two lists: one of all the errors and
 That's easy to get with `purrr::transpose()`:
 
 ```{r}
-y <- y %>% transpose()
+y <- y |> transpose()
 str(y)
 ```
 
 It's up to you how to deal with the errors, but typically you'll either look at the values of `x` where `y` is an error, or work with the values of `y` that are ok:
 
 ```{r}
-is_ok <- y$error %>% map_lgl(is_null)
+is_ok <- y$error |> map_lgl(is_null)
 x[!is_ok]
-y$result[is_ok] %>% flatten_dbl()
+y$result[is_ok] |> flatten_dbl()
 ```
 
 Purrr provides two other useful adverbs:
@@ -711,14 +711,14 @@ Purrr provides two other useful adverbs:
 
     ```{r}
     x <- list(1, 10, "a")
-    x %>% map_dbl(possibly(log, NA_real_))
+    x |> map_dbl(possibly(log, NA_real_))
     ```
 
 -   `quietly()` performs a similar role to `safely()`, but instead of capturing errors, it captures printed output, messages, and warnings:
 
     ```{r}
     x <- list(1, -1)
-    x %>% map(quietly(log)) %>% str()
+    x |> map(quietly(log)) |> str()
     ```
 
 ## Mapping over multiple arguments
@@ -731,8 +731,8 @@ You know how to do that with `map()`:
 
 ```{r}
 mu <- list(5, 10, -3)
-mu %>% 
-  map(rnorm, n = 5) %>% 
+mu |> 
+  map(rnorm, n = 5) |> 
   str()
 ```
 
@@ -741,8 +741,8 @@ One way to do that would be to iterate over the indices and index into vectors o
 
 ```{r}
 sigma <- list(1, 5, 10)
-seq_along(mu) %>% 
-  map(~rnorm(5, mu[[.x]], sigma[[.x]])) %>% 
+seq_along(mu) |> 
+  map(~rnorm(5, mu[[.x]], sigma[[.x]])) |> 
   str()
 ```
 
@@ -750,7 +750,7 @@ But that obfuscates the intent of the code.
 Instead we could use `map2()` which iterates over two vectors in parallel:
 
 ```{r}
-map2(mu, sigma, rnorm, n = 5) %>% str()
+map2(mu, sigma, rnorm, n = 5) |> str()
 ```
 
 `map2()` generates this series of function calls:
@@ -780,8 +780,8 @@ You might use that if you wanted to vary the mean, standard deviation, and numbe
 ```{r}
 n <- list(1, 3, 5)
 args1 <- list(n, mu, sigma)
-args1 %>%
-  pmap(rnorm) %>% 
+args1 |>
+  pmap(rnorm) |> 
   str()
 ```
 
@@ -796,8 +796,8 @@ That's a little fragile, and makes the code harder to read, so it's better to na
 
 ```{r, eval = FALSE}
 args2 <- list(mean = mu, sd = sigma, n = n)
-args2 %>% 
-  pmap(rnorm) %>% 
+args2 |> 
+  pmap(rnorm) |> 
   str()
 ```
 
@@ -816,7 +816,7 @@ params <- tribble(
    10,     5,  3,
    -3,    10,  5
 )
-params %>% 
+params |> 
   pmap(rnorm)
 ```
 
@@ -838,7 +838,7 @@ param <- list(
 To handle this case, you can use `invoke_map()`:
 
 ```{r}
-invoke_map(f, param, n = 5) %>% str()
+invoke_map(f, param, n = 5) |> str()
 ```
 
 ```{r, echo = FALSE, out.width = NULL}
@@ -858,7 +858,7 @@ sim <- tribble(
   "rnorm", list(sd = 5),
   "rpois", list(lambda = 10)
 )
-sim %>% 
+sim |> 
   mutate(sim = invoke_map(f, params, n = 10))
 ```
 
@@ -871,7 +871,7 @@ Here's a very simple example:
 ```{r}
 x <- list(1, "a", 3)
 
-x %>% 
+x |> 
   walk(print)
 ```
 
@@ -880,8 +880,8 @@ For example, if you had a list of plots and a vector of file names, you could us
 
 ```{r, eval = FALSE}
 library(ggplot2)
-plots <- mtcars %>% 
-  split(.$cyl) %>% 
+plots <- mtcars |> 
+  split(.$cyl) |> 
   map(~ggplot(.x, aes(mpg, wt)) + geom_point())
 paths <- stringr::str_c(names(plots), ".pdf")
 
@@ -905,12 +905,12 @@ A number of functions work with **predicate** functions that return either a sin
 `keep()` and `discard()` keep elements of the input where the predicate is `TRUE` or `FALSE` respectively:
 
 ```{r}
-gss_cat %>% 
-  keep(is.factor) %>% 
+gss_cat |> 
+  keep(is.factor) |> 
   str()
 
-gss_cat %>% 
-  discard(is.factor) %>% 
+gss_cat |> 
+  discard(is.factor) |> 
   str()
 ```
 
@@ -919,10 +919,10 @@ gss_cat %>%
 ```{r}
 x <- list(1:5, letters, list(10))
 
-x %>% 
+x |> 
   some(is_character)
 
-x %>% 
+x |> 
   every(is_vector)
 ```
 
@@ -932,20 +932,20 @@ x %>%
 x <- sample(10)
 x
 
-x %>% 
+x |> 
   detect(~ .x > 5)
 
-x %>% 
+x |> 
   detect_index(~ .x > 5)
 ```
 
 `head_while()` and `tail_while()` take elements from the start or end of a vector while a predicate is true:
 
 ```{r}
-x %>% 
+x |> 
   head_while(~ .x > 5)
 
-x %>% 
+x |> 
   tail_while(~ .x > 5)
 ```
 
@@ -962,7 +962,7 @@ dfs <- list(
   trt = tibble(name = "Mary", treatment = "A")
 )
 
-dfs %>% reduce(full_join)
+dfs |> reduce(full_join)
 ```
 
 Or maybe you have a list of vectors, and want to find the intersection:
@@ -974,7 +974,7 @@ vs <- list(
   c(1, 2, 3, 4, 8, 9, 10)
 )
 
-vs %>% reduce(intersect)
+vs |> reduce(intersect)
 ```
 
 `reduce()` takes a "binary" function (i.e. a function with two primary inputs), and applies it repeatedly to a list until there is only a single element left.
@@ -985,7 +985,7 @@ You could use it to implement a cumulative sum:
 ```{r}
 x <- sample(10)
 x
-x %>% accumulate(`+`)
+x |> accumulate(`+`)
 ```
 
 ### Exercises

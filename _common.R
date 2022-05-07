@@ -4,10 +4,9 @@ knitr::opts_chunk$set(
   comment = "#>",
   collapse = TRUE,
   # cache = TRUE,
-  out.width = "70%",
-  fig.align = 'center',
+  fig.retina = 2,
   fig.width = 6,
-  fig.asp = 0.618,  # 1 / phi
+  fig.asp = 2/3,
   fig.show = "hold"
 )
 
@@ -20,19 +19,22 @@ options(
   stringr.html = FALSE
 )
 
+ggplot2::theme_set(ggplot2::theme_gray(12))
 
 status <- function(type) {
   status <- switch(type,
-    restructuring = "undergoing heavy restructuring and may be confusing or incomplete",
-    drafting = "currently a dumping ground for ideas, and we don't recommend reading it",
+    polishing = "should be readable but is currently undergoing final polishing",
+    restructuring = "is undergoing heavy restructuring and may be confusing or incomplete",
+    drafting = "is currently a dumping ground for ideas, and we don't recommend reading it",
+    complete = "is largely complete and just needs final proof reading",
     stop("Invalid `type`", call. = FALSE)
   )
 
   cat(paste0(
     "::: {.rmdnote}\n",
     "You are reading the work-in-progress second edition of R for Data Science. ",
-    "This chapter is currently ", status, ". ",
-    "You can find the polished first edition at <https://r4ds.had.co.nz>.\n",
+    "This chapter ", status, ". ",
+    "You can find the complete first edition at <https://r4ds.had.co.nz>.\n",
     ":::\n"
   ))
 }

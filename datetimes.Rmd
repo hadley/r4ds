@@ -112,15 +112,15 @@ Instead of a single string, sometimes you'll have the individual components of t
 This is what we have in the flights data:
 
 ```{r}
-flights %>% 
+flights |> 
   select(year, month, day, hour, minute)
 ```
 
 To create a date/time from this sort of input, use `make_date()` for dates, or `make_datetime()` for date-times:
 
 ```{r}
-flights %>% 
-  select(year, month, day, hour, minute) %>% 
+flights |> 
+  select(year, month, day, hour, minute) |> 
   mutate(departure = make_datetime(year, month, day, hour, minute))
 ```
 
@@ -133,14 +133,14 @@ make_datetime_100 <- function(year, month, day, time) {
   make_datetime(year, month, day, time %/% 100, time %% 100)
 }
 
-flights_dt <- flights %>% 
-  filter(!is.na(dep_time), !is.na(arr_time)) %>% 
+flights_dt <- flights |> 
+  filter(!is.na(dep_time), !is.na(arr_time)) |> 
   mutate(
     dep_time = make_datetime_100(year, month, day, dep_time),
     arr_time = make_datetime_100(year, month, day, arr_time),
     sched_dep_time = make_datetime_100(year, month, day, sched_dep_time),
     sched_arr_time = make_datetime_100(year, month, day, sched_arr_time)
-  ) %>% 
+  ) |> 
   select(origin, dest, ends_with("delay"), ends_with("time"))
 
 flights_dt
@@ -149,7 +149,7 @@ flights_dt
 With this data, I can visualise the distribution of departure times across the year:
 
 ```{r}
-flights_dt %>% 
+flights_dt |> 
   ggplot(aes(dep_time)) + 
   geom_freqpoly(binwidth = 86400) # 86400 seconds = 1 day
 ```
@@ -157,8 +157,8 @@ flights_dt %>%
 Or within a single day:
 
 ```{r}
-flights_dt %>% 
-  filter(dep_time < ymd(20130102)) %>% 
+flights_dt |> 
+  filter(dep_time < ymd(20130102)) |> 
   ggplot(aes(dep_time)) + 
   geom_freqpoly(binwidth = 600) # 600 s = 10 minutes
 ```
@@ -237,8 +237,8 @@ wday(datetime, label = TRUE, abbr = FALSE)
 We can use `wday()` to see that more flights depart during the week than on the weekend:
 
 ```{r}
-flights_dt %>% 
-  mutate(wday = wday(dep_time, label = TRUE)) %>% 
+flights_dt |> 
+  mutate(wday = wday(dep_time, label = TRUE)) |> 
   ggplot(aes(x = wday)) +
     geom_bar()
 ```
@@ -247,12 +247,12 @@ There's an interesting pattern if we look at the average departure delay by minu
 It looks like flights leaving in minutes 20-30 and 50-60 have much lower delays than the rest of the hour!
 
 ```{r}
-flights_dt %>% 
-  mutate(minute = minute(dep_time)) %>% 
-  group_by(minute) %>% 
+flights_dt |> 
+  mutate(minute = minute(dep_time)) |> 
+  group_by(minute) |> 
   summarise(
     avg_delay = mean(dep_delay, na.rm = TRUE),
-    n = n()) %>% 
+    n = n()) |> 
   ggplot(aes(minute, avg_delay)) +
     geom_line()
 ```
@@ -260,9 +260,9 @@ flights_dt %>%
 Interestingly, if we look at the *scheduled* departure time we don't see such a strong pattern:
 
 ```{r}
-sched_dep <- flights_dt %>% 
-  mutate(minute = minute(sched_dep_time)) %>% 
-  group_by(minute) %>% 
+sched_dep <- flights_dt |> 
+  mutate(minute = minute(sched_dep_time)) |> 
+  group_by(minute) |> 
   summarise(
     avg_delay = mean(arr_delay, na.rm = TRUE),
     n = n())
@@ -287,8 +287,8 @@ Each function takes a vector of dates to adjust and then the name of the unit ro
 This, for example, allows us to plot the number of flights per week:
 
 ```{r}
-flights_dt %>% 
-  count(week = floor_date(dep_time, "week")) %>% 
+flights_dt |> 
+  count(week = floor_date(dep_time, "week")) |> 
   ggplot(aes(week, n)) +
     geom_line()
 ```
@@ -320,17 +320,17 @@ update(datetime, year = 2020, month = 2, mday = 2, hour = 2)
 If values are too big, they will roll-over:
 
 ```{r}
-ymd("2015-02-01") %>% 
+ymd("2015-02-01") |> 
   update(mday = 30)
-ymd("2015-02-01") %>% 
+ymd("2015-02-01") |> 
   update(hour = 400)
 ```
 
 You can use `update()` to show the distribution of flights across the course of the day for every day of the year:
 
 ```{r}
-flights_dt %>% 
-  mutate(dep_hour = update(dep_time, yday = 1)) %>% 
+flights_dt |> 
+  mutate(dep_hour = update(dep_time, yday = 1)) |> 
   ggplot(aes(dep_hour)) +
     geom_freqpoly(binwidth = 300)
 ```
@@ -474,7 +474,7 @@ Let's use periods to fix an oddity related to our flight dates.
 Some planes appear to have arrived at their destination *before* they departed from New York City.
 
 ```{r}
-flights_dt %>% 
+flights_dt |> 
   filter(arr_time < dep_time) 
 ```
 
@@ -483,7 +483,7 @@ We used the same date information for both the departure and the arrival times, 
 We can fix this by adding `days(1)` to the arrival time of each overnight flight.
 
 ```{r}
-flights_dt <- flights_dt %>% 
+flights_dt <- flights_dt |> 
   mutate(
     overnight = arr_time < dep_time,
     arr_time = arr_time + days(ifelse(overnight, 0, 1)),
@@ -494,7 +494,7 @@ flights_dt <- flights_dt %>%
 Now all of our flights obey the laws of physics.
 
 ```{r}
-flights_dt %>% 
+flights_dt |> 
   filter(overnight, arr_time < dep_time) 
 ```
 

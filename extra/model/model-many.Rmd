@@ -60,7 +60,7 @@ In this case study, we're going to focus on just three variables to answer the q
 A good place to start is with a plot:
 
 ```{r}
-gapminder %>% 
+gapminder |> 
   ggplot(aes(year, lifeExp, group = country)) +
     geom_line(alpha = 1/3)
 ```
@@ -79,20 +79,20 @@ You already know how to do that if we had a single country:
 
 ```{r, out.width = "33%", fig.asp = 1, fig.width = 3, fig.align='default'}
 nz <- filter(gapminder, country == "New Zealand")
-nz %>% 
+nz |> 
   ggplot(aes(year, lifeExp)) + 
   geom_line() + 
   ggtitle("Full data = ")
 
 nz_mod <- lm(lifeExp ~ year, data = nz)
-nz %>% 
-  add_predictions(nz_mod) %>%
+nz |> 
+  add_predictions(nz_mod) |>
   ggplot(aes(year, pred)) + 
   geom_line() + 
   ggtitle("Linear trend + ")
 
-nz %>% 
-  add_residuals(nz_mod) %>% 
+nz |> 
+  add_residuals(nz_mod) |> 
   ggplot(aes(year, resid)) + 
   geom_hline(yintercept = 0, colour = "white", size = 3) + 
   geom_line() + 
@@ -111,8 +111,8 @@ To do that, we need a new data structure: the **nested data frame**.
 To create a nested data frame we start with a grouped data frame, and "nest" it:
 
 ```{r}
-by_country <- gapminder %>% 
-  group_by(country, continent) %>% 
+by_country <- gapminder |> 
+  group_by(country, continent) |> 
   nest()
 
 by_country
@@ -163,7 +163,7 @@ In other words, instead of creating a new object in the global environment, we'r
 That's a job for `dplyr::mutate()`:
 
 ```{r}
-by_country <- by_country %>% 
+by_country <- by_country |> 
   mutate(model = map(data, country_model))
 by_country
 ```
@@ -172,9 +172,9 @@ This has a big advantage: because all the related objects are stored together, y
 The semantics of the data frame takes care of that for you:
 
 ```{r}
-by_country %>% 
+by_country |> 
   filter(continent == "Europe")
-by_country %>% 
+by_country |> 
   arrange(continent, country)
 ```
 
@@ -188,7 +188,7 @@ Now we have 142 data frames and 142 models.
 To compute the residuals, we need to call `add_residuals()` with each model-data pair:
 
 ```{r}
-by_country <- by_country %>% 
+by_country <- by_country |> 
   mutate(
     resids = map2(data, model, add_residuals)
   )
@@ -209,7 +209,7 @@ Note that each regular column is repeated once for each row of the nested tibble
 Now we have regular data frame, we can plot the residuals:
 
 ```{r}
-resids %>% 
+resids |> 
   ggplot(aes(year, resid)) +
     geom_line(aes(group = country), alpha = 1 / 3) + 
     geom_smooth(se = FALSE)
@@ -219,7 +219,7 @@ resids %>%
 Facetting by continent is particularly revealing:
 
 ```{r}
-resids %>% 
+resids |> 
   ggplot(aes(year, resid, group = country)) +
     geom_line(alpha = 1 / 3) + 
     facet_wrap(~continent)
@@ -245,9 +245,9 @@ broom::glance(nz_mod)
 We can use `mutate()` and `unnest()` to create a data frame with a row for each country:
 
 ```{r}
-glance <- by_country %>% 
-  mutate(glance = map(model, broom::glance)) %>% 
-  select(country, continent, glance) %>% 
+glance <- by_country |> 
+  mutate(glance = map(model, broom::glance)) |> 
+  select(country, continent, glance) |> 
   unnest(glance)
 glance
 ```
@@ -257,7 +257,7 @@ glance
 With this data frame in hand, we can start to look for models that don't fit well:
 
 ```{r}
-glance %>% 
+glance |> 
   arrange(r.squared)
 ```
 
@@ -266,7 +266,7 @@ Let's double check that with a plot.
 Here we have a relatively small number of observations and a discrete variable, so `geom_jitter()` is effective:
 
 ```{r}
-glance %>% 
+glance |> 
   ggplot(aes(continent, r.squared)) + 
     geom_jitter(width = 0.5)
 ```
@@ -276,8 +276,8 @@ We could pull out the countries with particularly bad $R^2$ and plot the data:
 ```{r}
 bad_fit <- filter(glance, r.squared < 0.25)
 
-gapminder %>% 
-  semi_join(bad_fit, by = "country") %>% 
+gapminder |> 
+  semi_join(bad_fit, by = "country") |> 
   ggplot(aes(year, lifeExp, colour = country)) +
     geom_line()
 ```
@@ -377,15 +377,15 @@ So far you've seen how to use it with a grouped data frame.
 When applied to a grouped data frame, `nest()` keeps the grouping columns as is, and bundles everything else into the list-column:
 
 ```{r}
-gapminder %>% 
-  group_by(country, continent) %>% 
+gapminder |> 
+  group_by(country, continent) |> 
   nest()
 ```
 
 You can also use it on an ungrouped data frame, specifying which columns you want to nest:
 
 ```{r}
-gapminder %>% 
+gapminder |> 
   nest(data = c(year:gdpPercap))
 ```
 
@@ -402,15 +402,15 @@ df <- tribble(
   "d,e,f,g"
 ) 
 
-df %>% 
+df |> 
   mutate(x2 = stringr::str_split(x1, ","))
 ```
 
 `unnest()` knows how to handle these lists of vectors:
 
 ```{r}
-df %>% 
-  mutate(x2 = stringr::str_split(x1, ",")) %>% 
+df |> 
+  mutate(x2 = stringr::str_split(x1, ",")) |> 
   unnest(x2)
 ```
 
@@ -427,11 +427,11 @@ sim <- tribble(
   "rpois", list(lambda = 10)
 )
 
-sim %>%
+sim |>
   mutate(sims = invoke_map(f, params, n = 10))
 ```
 
-Note that technically `sim` isn't homogeneous because it contains both double and integer vectors.
+Note that technically `sims` isn't homogeneous because it contains both double and integer vectors.
 However, this is unlikely to cause many problems since integers and doubles are both numeric vectors.
 
 ### From multivalued summaries
@@ -440,8 +440,8 @@ One restriction of `summarise()` is that it only works with summary functions th
 That means that you can't use it with functions like `quantile()` that return a vector of arbitrary length:
 
 ```{r, error = TRUE}
-mtcars %>% 
-  group_by(cyl) %>% 
+mtcars |> 
+  group_by(cyl) |> 
   summarise(q = quantile(mpg))
 ```
 
@@ -449,8 +449,8 @@ You can however, wrap the result in a list!
 This obeys the contract of `summarise()`, because each summary is now a list (a vector) of length 1.
 
 ```{r}
-mtcars %>% 
-  group_by(cyl) %>% 
+mtcars |> 
+  group_by(cyl) |> 
   summarise(q = list(quantile(mpg)))
 ```
 
@@ -458,9 +458,9 @@ To make useful results with unnest, you'll also need to capture the probabilitie
 
 ```{r}
 probs <- c(0.01, 0.25, 0.5, 0.75, 0.99)
-mtcars %>% 
-  group_by(cyl) %>% 
-  summarise(p = list(probs), q = list(quantile(mpg, probs))) %>% 
+mtcars |> 
+  group_by(cyl) |> 
+  summarise(p = list(probs), q = list(quantile(mpg, probs))) |> 
   unnest(c(p, q))
 ```
 
@@ -481,12 +481,12 @@ df <- enframe(x)
 df
 ```
 
-The advantage of this structure is that it generalises in a straightforward way - names are useful if you have character vector of metadata, but don't help if you have other types of data, or multiple vectors.
+The advantage of this structure is that it generalises in a straightforward way - names are useful if you have a character vector of metadata but don't help if you have other types of data, or multiple vectors.
 
 Now if you want to iterate over names and values in parallel, you can use `map2()`:
 
 ```{r}
-df %>% 
+df |> 
   mutate(
     smry = map2_chr(name, value, ~ stringr::str_c(.x, ": ", .y[1]))
   )
@@ -503,18 +503,18 @@ df %>%
     Why isn't that helpful here?
 
     ```{r}
-    mtcars %>% 
-      group_by(cyl) %>% 
-      summarise(q = list(quantile(mpg))) %>% 
+    mtcars |> 
+      group_by(cyl) |> 
+      summarise(q = list(quantile(mpg))) |> 
       unnest(q)
     ```
 
 4.  What does this code do?
-    Why might might it be useful?
+    Why might it be useful?
 
     ```{r, eval = FALSE}
-    mtcars %>% 
-      group_by(cyl) %>% 
+    mtcars |> 
+      group_by(cyl) |> 
       summarise_all(list(list))
     ```
 
@@ -542,7 +542,7 @@ df <- tribble(
   runif(5)
 )
   
-df %>% mutate(
+df |> mutate(
   type = map_chr(x, typeof),
   length = map_int(x, length)
 )
@@ -561,7 +561,7 @@ df <- tribble(
   list(a = 1, b = 2),
   list(a = 2, c = 4)
 )
-df %>% mutate(
+df |> mutate(
   a = map_dbl(x, "a"),
   b = map_dbl(x, "b", .null = NA_real_)
 )
@@ -573,7 +573,7 @@ df %>% mutate(
 For example, in the following very simple example we repeat the first row 4 times (because there the first element of `y` has length four), and the second row once:
 
 ```{r}
-tibble(x = 1:2, y = list(1:4, 1)) %>% unnest(y)
+tibble(x = 1:2, y = list(1:4, 1)) |> unnest(y)
 ```
 
 This means that you can't simultaneously unnest two columns that contain different number of elements:
@@ -587,7 +587,7 @@ df1 <- tribble(
    2, "c",           3
 )
 df1
-df1 %>% unnest(c(y, z))
+df1 |> unnest(c(y, z))
 
 # Doesn't work because y and z have different number of elements
 df2 <- tribble(
@@ -596,7 +596,7 @@ df2 <- tribble(
    2, c("b", "c"),   3
 )
 df2
-df2 %>% unnest(c(y, z))
+df2 |> unnest(c(y, z))
 ```
 
 The same principle applies when unnesting list-columns of data frames.
