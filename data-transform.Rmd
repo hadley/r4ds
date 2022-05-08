@@ -18,7 +18,9 @@ We'll come back these functions in more detail in later chapters, as we start to
 In this chapter we'll focus on the dplyr package, another core member of the tidyverse.
 We'll illustrate the key ideas using data from the nycflights13 package, and use ggplot2 to help us understand the data.
 
-```{r setup}
+```{r}
+#| label: setup
+
 library(nycflights13)
 library(tidyverse)
 ```
@@ -382,7 +384,7 @@ ggplot(flights, aes(air_time - airtime2)) + geom_histogram()
 
 So far you've learned about functions that work with rows and columns.
 dplyr gets even more powerful when you add in the ability to work with groups.
-In this section, we'll focus on the most important functions: `group_by()`, `summarise()`, and the slice family of functions.
+In this section, we'll focus on the most important functions: `group_by()`, `summarize()`, and the slice family of functions.
 
 ### `group_by()`
 
@@ -396,18 +398,18 @@ flights |>
 `group_by()` doesn't change the data but, if you look closely at the output, you'll notice that it's now "grouped by" month.
 This means subsequent operations will now work "by month".
 
-### `summarise()` {#summarise}
+### `summarize()` {#summarize}
 
 The most important grouped operation is a summary.
 It collapses each group to a single row[^data-transform-3].
 Here we compute the average departure delay by month:
 
-[^data-transform-3]: This is a slightly simplification; later on you'll learn how to use `summarise()` to produce multiple summary rows for each group.
+[^data-transform-3]: This is a slightly simplification; later on you'll learn how to use `summarize()` to produce multiple summary rows for each group.
 
 ```{r}
 flights |> 
   group_by(month) |> 
-  summarise(
+  summarize(
     delay = mean(dep_delay)
   )
 ```
@@ -419,18 +421,18 @@ We'll come back to discuss missing values in Chapter \@ref(missing-values), but 
 ```{r}
 flights |> 
   group_by(month) |> 
-  summarise(
+  summarize(
     delay = mean(dep_delay, na.rm = TRUE)
   )
 ```
 
-You can create any number of summaries in a single call to `summarise()`.
+You can create any number of summaries in a single call to `summarize()`.
 You'll learn various useful summaries in the upcoming chapters, but one very useful summary is `n()`, which returns the number of rows in each group:
 
 ```{r}
 flights |> 
   group_by(month) |> 
-  summarise(
+  summarize(
     delay = mean(dep_delay, na.rm = TRUE), 
     n = n()
   )
@@ -462,7 +464,7 @@ This is similar to computing the max delay with `summarize()`, but you get the w
 ```{r}
 flights |> 
   group_by(dest) |> 
-  summarise(max_delay = max(arr_delay, na.rm = TRUE))
+  summarize(max_delay = max(arr_delay, na.rm = TRUE))
 ```
 
 ### Grouping by multiple variables
@@ -482,16 +484,18 @@ To make it obvious what's happening, dplyr displays a message that tells you how
 
 ```{r}
 daily_flights <- daily |> 
-  summarise(
+  summarize(
     n = n()
   )
 ```
 
 If you're happy with this behavior, you can explicitly request it in order to suppress the message:
 
-```{r, results = FALSE}
+```{r}
+#| results: false
+
 daily_flights <- daily |> 
-  summarise(
+  summarize(
     n = n(), 
     .groups = "drop_last"
   )
@@ -501,13 +505,13 @@ Alternatively, change the default behavior by setting a different value, e.g. `"
 
 ### Ungrouping
 
-You might also want to remove grouping outside of `summarise()`.
+You might also want to remove grouping outside of `summarize()`.
 You can do this with `ungroup()`.
 
 ```{r}
 daily |> 
   ungroup() |>
-  summarise(
+  summarize(
     delay = mean(dep_delay, na.rm = TRUE), 
     flights = n()
   )
@@ -520,7 +524,7 @@ As you can see, when you summarize an ungrouped data frame, you get a single row
 1.  Which carrier has the worst delays?
     Challenge: can you disentangle the effects of bad airports vs. bad carriers?
     Why/why not?
-    (Hint: think about `flights |> group_by(carrier, dest) |> summarise(n())`)
+    (Hint: think about `flights |> group_by(carrier, dest) |> summarize(n())`)
 
 2.  Find the most delayed flight to each destination.
 
@@ -539,15 +543,16 @@ That way, you can ensure that you're not drawing conclusions based on very small
 For example, let's look at the planes (identified by their tail number) that have the highest average delays:
 
 ```{r}
-#| fig.alt: >
+#| fig-alt: >
 #|   A frequency histogram showing the distribution of flight delays.
 #|   The distribution is unimodal, with a large spike around 0, and
 #|   asymmetric: very few flights leave more than 30 minutes early, 
 #|   but flights are delayed up to 5 hours.
+
 delays <- flights |>  
   filter(!is.na(arr_delay), !is.na(tailnum)) |> 
   group_by(tailnum) |> 
-  summarise(
+  summarize(
     delay = mean(arr_delay, na.rm = TRUE),
     n = n()
   )
@@ -560,11 +565,12 @@ Wow, there are some planes that have an *average* delay of 5 hours (300 minutes)
 That seems pretty surprising, so lets draw a scatterplot of number of flights vs. average delay:
 
 ```{r}
-#| fig.alt: >
+#| fig-alt: >
 #|   A scatterplot showing number of flights versus after delay. Delays
 #|   for planes with very small number of flights have very high variability
 #|   (from -50 to ~300), but the variability rapidly decreases as the 
 #|   number of flights increases.
+
 ggplot(delays, aes(n, delay)) + 
   geom_point(alpha = 1/10)
 ```
@@ -576,14 +582,16 @@ The shape of this plot is very characteristic: whenever you plot a mean (or othe
 
 When looking at this sort of plot, it's often useful to filter out the groups with the smallest numbers of observations, so you can see more of the pattern and less of the extreme variation in the smallest groups:
 
-```{r, warning = FALSE}
-#| fig.alt: >
+```{r}
+#| warning: false
+#| fig-alt: >
 #|   Now that the y-axis (average delay) is smaller (-20 to 60 minutes), 
 #|   we can see a more complicated story. The smooth line suggests
 #|   an initial decrease in average delay from 10 minutes to 0 minutes 
 #|   as number of flights per plane increases from 25 to 100.
 #|   This is followed by a gradual increase up to 10 minutes for 250 
 #|   flights, then a gradual decrease to ~5 minutes at 500 flights.
+
 delays |>  
   filter(n > 25) |> 
   ggplot(aes(n, delay)) + 
@@ -600,7 +608,7 @@ The following code uses data from the **Lahman** package to compare what proport
 ```{r}
 batters <- Lahman::Batting |> 
   group_by(playerID) |> 
-  summarise(
+  summarize(
     perf = sum(H, na.rm = TRUE) / sum(AB, na.rm = TRUE),
     n = sum(AB, na.rm = TRUE)
   )
@@ -613,13 +621,15 @@ When we plot the skill of the batter (measured by the batting average, `ba`) aga
 
 2.  There's a positive correlation between skill (`perf`) and opportunities to hit the ball (`n`) because obviously teams want to give their best batters the most opportunities to hit the ball.
 
-```{r, warning = FALSE}
-#| fig.alt: >
+```{r}
+#| warning: false
+#| fig-alt: >
 #|   A scatterplot of number of batting opportunites vs batting performance
 #|   overlaid with a smoothed line. Average performance increases sharply
 #|   from 0.2 at when n is 1 to 0.25 when n is ~1000. Average performance
 #|   continues to increase linearly at a much shallower slope reaching
 #|   ~0.3 when n is ~15,000.
+
 batters |> 
   filter(n > 100) |> 
   ggplot(aes(n, perf)) +
