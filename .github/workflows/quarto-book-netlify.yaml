@@ -1,0 +1,55 @@
+on:
+  push:
+    branches: main
+  pull_request:
+    branches: main
+  # to be able to trigger a manual build
+  workflow_dispatch:
+  schedule:
+    # run every day at 11 PM
+    - cron: '0 23 * * *'
+
+name: Render and deploy Book to Netlify
+
+env:
+  isExtPR: ${{ github.event.pull_request.head.repo.fork == true }}
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Install Quarto
+        uses: quarto-dev/quarto-actions/install-quarto@v1
+        with:
+          # To install LaTeX to build PDF book
+          tinytex: true
+          # uncomment below and fill to pin a version
+          # version: 0.9.105
+
+      # Install any computing dependency you may need, usually either python and Jupyter or R
+      # More specific examples will be shared on quarto-dev/quarto-actions project
+
+      - name: Render book to all format
+        # Add any command line argument needed
+        run: |
+          quarto render
+
+      - name: Deploy to Netlify
+        id: netlify-deploy
+        uses: nwtgck/actions-netlify@v1
+        with:
+          # The folder the action should deploy. Adapt if you changed in Quarto config
+          publish-dir: './_book'
+          production-branch: main
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          deploy-message:
+            'Deploy from GHA: ${{ github.event.pull_request.title || github.event.head_commit.message }} (${{ github.sha }})'
+          enable-pull-request-comment: true #  Comment on pull request
+          enable-commit-comment: true # Comment on GitHub commit
+          enable-commit-status: true # GitHub commit status
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+        timeout-minutes: 1
