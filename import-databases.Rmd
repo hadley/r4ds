@@ -6,10 +6,18 @@ status("drafting")
 
 ## Introduction
 
+A huge amount of data lives in databases, and it's essential that as a data scientist you know how to access it.
+It's sometimes possible to ask your database administrator (or DBA for short) to download a snapshot into a csv for you, but this is generally not desirable as the iteration speed is very slow.
+You want to be able to reach into the database directly to get the data you need, when you need it.
+That said, it's still a good idea to make friends with your local DBA because as your queries get more complicated they will be able to help you optimize them, either by adding new indices to the database or by helping your polish your SQL code.
+
 Show you how to connect to a database using DBI, and how to an execute a SQL query.
 You'll then learn about dbplyr, which automatically converts your dplyr code to SQL.
 We'll use that to teach you a little about SQL.
-You won't become a SQL master by the end of the chapter, but you'll be able to identify parts of SQL queries, understand the basics, and maybe ever write some of your own.
+You won't become a SQL master by the end of the chapter, but you'll be able to identify the important components of SQL queries, understand the basic structure of the clauses, and maybe even write a little of your own.
+
+Main focus will be working with data that already exists in a database, i.e. data that someone else has collected for you, as this represents the most common case.
+But as we go along, we'll also point out a few tips and tricks for getting your own data into a database.
 
 ### Prerequisites
 
@@ -58,6 +66,9 @@ You'll get the details from your database administrator or IT department, or by 
 It's not unusual for the initial setup to take a little fiddling to get right, but it's generally something you'll only need to do once.
 See more at <https://db.rstudio.com/databases>.
 
+When you're done with the connection it's good practice to close it with `dbDisconnect()`.
+This frees up resources on the database server so that others can use them.
+
 ### In this book
 
 Setting up a database server would be a pain for this book, so here we'll use a database that allows you to work entirely locally: duckdb.
@@ -78,44 +89,57 @@ con <- DBI::dbConnect(duckdb::duckdb(), dbdir = "duckdb")
 
 duckdb is a high-performance database that's designed very much with the needs of the data scientist in mind, and the developers very much understand R and the types of real problems that R users face.
 As you'll see in this chapter, it's really easy to get started with but it can also handle very large datasets.
-We won't show them here, but if you're using duckdb in a real project, I highly recommend learning about `duckdb_read_csv()` and `duckdb_register_arrow()` which give you very powerful tools to quickly load data from disk directly into duckdb, without having to go via R.
-<https://duckdb.org/2021/12/03/duck-arrow.html>
 
 ### Load some data
 
 Since this is a temporary database, we need to start by adding some data.
 This is something that you won't usually need do; in most cases you're connecting to a database specifically because it has the data you need.
 
-I'll copy over mpg
+I'll copy over the the `mpg` and `diamonds` datasets from ggplot2:
 
 ```{r}
 dbWriteTable(con, "mpg", ggplot2::mpg)
 dbWriteTable(con, "diamonds", ggplot2::diamonds)
-dbListTables(con)
 ```
 
-And all the nycflights13 data.
-dbplyr has a helper to do this.
+And all data in the nycflights13 package.
+This is easy because dbplyr has a helper designed specifically for this case.
 
 ```{r}
 dbplyr::copy_nycflights13(con)
 ```
 
+We won't show them here, but if you're using duckdb in a real project, I highly recommend learning about `duckdb_read_csv()` and `duckdb_register_arrow()` which give you very powerful tools to quickly load data from disk directly into duckdb, without having to go via R.
+<https://duckdb.org/2021/12/03/duck-arrow.html>
+
 ## Database basics
 
-Now that we've connected to a database with some data in it, lets perform some basic operations.
+Now that we've connected to a database with some data in it, lets perform some basic operations with DBI.
+
+### What's there?
+
+```{r}
+dbListTables(con)
+dbExistsTable(con, "foo")
+```
 
 ### Extract some data
 
 The simplest way to get data out of a database is with `dbReadTable()`:
 
 ```{r}
-as_tibble(dbReadTable(con, "mpg"))
+as_tibble(dbReadTable(con, "mtcars"))
 as_tibble(dbReadTable(con, "diamonds"))
 ```
 
 Note that `dbReadTable()` returns a data frame.
 Here I'm using `as_tibble()` to convert it to a tibble because I prefer the way it prints.
+
+Notice something important with the diamonds dataset: the `cut`, `color`, and `clarity` columns were originally ordered factors, but now they're regular factors.
+This particulary case isn't very important since ordered factors are barely different to regular factors, but it's good to know that the way that the database represents data can be slightly different to the way R represents data.
+In this case, we're actually quite lucky because most databases don't support factors at all and would've converted the column to a string.
+Again, not that important, because most of the time you'll be working with data that lives in a database, but good to be aware of if you're storing your own data into a database.
+Generally you can expect numbers, strings, dates, and date-times to convert just fine, but other types may not.
 
 But in real life, it's rare that you'll use `dbReadTable()` because the whole reason you're using a database is that there's too much data to fit in a data frame, and you want to make use of the database to bring back only a small snippet.
 Instead, you'll want to write a SQL query.
@@ -124,69 +148,132 @@ Instead, you'll want to write a SQL query.
 
 The way that the vast majority of communication happens with a database is via `dbGetQuery()` which takes a database connection and some SQL code.
 SQL, short for structured query language, is the native language of databases.
-Here's a little example:
+Here's a little example.
+Don't worry if you've never see SQL before, I'll explain what it means shortly.
+But hopefully you can guess that it selects 5 columns of the diamonds datasets and all the rows where `price` is greater than 15,000.
 
 ```{r}
 as_tibble(dbGetQuery(con, "
   SELECT carat, cut, clarity, color, price 
   FROM diamonds 
-  WHERE price > 10000"
+  WHERE price > 15000"
 ))
 ```
 
-## SQL clauses
+Again I'm using I'm convert it to a tibble for ease of printing.
 
-You'll learn SQL through dbplyr.
+You'll need to be a little careful with `dbGetQuery()` since it can potentially return more data than you have memory.
+If you're dealing with very large datasets it's possible to deal with a "page" of data at a time.
+In this case, you'll use `dbSendQuery()` to get a "result set" which you can page through by calling `dbFetch()` until `dbHasCompleted()` returns `TRUE`.
+
+There are lots of other functions in DBI that you might find useful if managing your own data, but we're going to skip past them in the interests of staying focussed on working with data that others have collected.
+
+## dbplyr and SQL
+
+Rather than writing your own SQL, this chapter will focus on generating SQL using dbplyr.
 dbplyr is a backend for dplyr that instead of operating on data frames works with database tables by translating your R code in to SQL.
 
-You start by creating a `tbl()`,
+You start by creating a `tbl()`: this creates something that looks like a tibble, but is really a reference to a table in a database[^import-databases-1]:
+
+[^import-databases-1]: If you want to mix SQL and dbplyr, you can also create a tbl from a SQL query with `tbl(con, SQL("SELECT * FROM foo")).`
 
 ```{r}
 diamonds_db <- tbl(con, "diamonds")
 diamonds_db
 ```
 
+You can tell it's a database query because it prints the database name at the top, and typically won't be able to tell you the total number of rows.
+This is because finding the total number of rows often requires computing the entire query, which is an expensive operation.
+
 You can see the SQL generated by a dbplyr query by called `show_query()`.
-So we can create the SQL above with the following dplyr pipeline.
+We can create the SQL above with the following dplyr pipeline:
 
 ```{r}
-diamonds_db |> 
-  filter(price > 10000) |> 
-  select(carat:clarity, price) |> 
+big_diamonds_db <- diamonds_db |> 
+  filter(price > 15000) |> 
+  select(carat:clarity, price)
+big_diamonds_db
+```
+
+This captures the transformations you want to perform on the data but doesn't actually perform them yet.
+Instead, it translates your dplyr code into SQL, which you can see with `show_query()`:
+
+```{r}
+big_diamonds_db |>
   show_query()
 ```
 
-A SQL query is made up of clauses.
-Unlike R SQL is (mostly) case insensitive, but by convention, to make them stand out the clauses are usually capitalized like `SELECT`, `FROM`, and `WHERE` above.
-We will focus exclusively on `SELECT` queries because they are almost exclusively what you'll use as a data scientist.
-There are a large number of other types of queries (for inserting, modifying, and deleting data) and many other statements that modify the database structure (e.g. creating and deleting tables).
-In most cases, these will be handled by someone else; in the case that you need to update your own database, you can solve most problems with `dbWriteTable()` and/or `dbInsertTable()`.
+This SQL is a little different to what you might write by hand: dbplyr quotes every variable name and may include parentheses when they're not absolutely needed.
+If you were to write this by hand, you'd probably do:
 
-Unlike dplyr SQL clauses must come in a specific order.
+``` sql
+SELECT carat, cut, color, clarity, price
+FROM diamonds
+WHERE price > 15000
+```
 
 To get the data back into R, we call `collect()`.
 Behind the scenes, this generates the SQL, calls `dbGetQuery()`, and turns the result back into a tibble:
 
 ```{r}
-big_diamonds <- diamonds_db |> 
-  filter(price > 10000) |> 
-  select(carat:clarity, price) |> 
+big_diamonds <- big_diamonds_db |> 
   collect()
 big_diamonds
 ```
+
+### SQL basics
+
+The basic unit of composition in SQL is not a function, but a **statement**.
+Common statements include `INSERT` for adding new data, `CREATE` for making new tables, and `UPDATE` for modifying data, and `SELECT` for retrieving data.
+Unlike R SQL is (mostly) case insensitive, but by convention, to make them stand out the clauses are usually capitalized like `SELECT`, `FROM`, and `WHERE` above.
+
+We're going to focus on `SELECT` statements because they are almost exclusively what you'll use as a data scientist.
+The other statements will be handled by someone else; in the case that you need to update your own database, you can solve most problems with `dbWriteTable()` and/or `dbInsertTable()`.
+In fact, as a data scientist in most cases you won't even be able to run these statements because you only have read only access to the database.
+This ensures that there's no way for you to accidentally mess things up.
+
+A `SELECT` statement is often called a query, and a query is made up of clauses.
+Every query must have two clauses `SELECT` and `FROM`[^import-databases-2].
+The simplest query is something like `SELECT * FROM tablename` which will select all columns from `tablename`. Other optional clauses allow you
+
+[^import-databases-2]: Ok, technically, only the `SELECT` is required, since you can write queries like `SELECT 1+1` to perform basic calculation.
+    But if you want to work with data (as you always do!) you'll also need a `FROM` clause.
+
+The following sections work through the most important optional clauses.
+Unlike in R, SQL clauses must come in a specific order: `SELECT`, `FROM`, `WHERE`, `GROUP BY`, `ORDER BY`.
 
 ### SELECT and FROM
 
 The two most important clauses are `FROM`, which determines the source table or tables, and `SELECT` which determines which columns are in the output.
 There's no real equivalent to `FROM` in dbplyr; it's just the name of the data frame.
 
-`SELECT`, however, is a powerful tool that encompasses `select()`, `mutate()`, `rename()`, and `relocate()`:
+`SELECT` is the workhorse of SQL queries, and is used for `select()`, `mutate()`, `rename()`, and `relocate()`.
+In the next section, you'll see that `SELECT` is *also* used for `summarize()` when paired with `GROUP BY`.
+
+`select()`, `rename()`, and `relocate()` have very direct translations to `SELECT` --- they just change the number and order of the variables, renaming where necessary with `AS`.
+Unlike R, the old name is on the left and the new name is on the right.
 
 ```{r}
 diamonds_db |> select(cut:carat) |> show_query()
-diamonds_db |> mutate(price_per_carat = price/carat) |> show_query()
 diamonds_db |> rename(colour = color) |> show_query()
 diamonds_db |> relocate(x:z) |> show_query()
+```
+
+The translations for `mutate()` are similarly straightforward.
+We'll come back to the translation of individual components in Section \@ref(sql-expressions).
+
+```{r}
+diamonds_db |> mutate(price_per_carat = price / carat) |> show_query()
+```
+
+### WHERE
+
+`filter()` is translated to `WHERE`:
+
+```{r}
+diamonds_db |> 
+  filter(carat > 1, colour == "J") |> 
+  show_query()
 ```
 
 ### GROUP BY
@@ -203,18 +290,10 @@ diamonds_db |>
   show_query()
 ```
 
-Note the warning: unlike R, missing values (called `NA` not `NULL` in SQL) are not infectious in summary statistics.
+Note the warning: unlike R, missing values (called `NULL` instead of `NA` in SQL) are not infectious in summary statistics.
 We'll come back to this challenge a bit later in Section \@ref(sql-expressions).
 
-### WHERE
-
-`filter()` is translated to `WHERE`:
-
-```{r}
-diamonds_db |> 
-  filter(carat > 1, colour == "J") |> 
-  show_query()
-```
+### 
 
 ### ORDER BY
 
@@ -225,6 +304,8 @@ diamonds_db |>
   arrange(carat, desc(price)) |> 
   show_query()
 ```
+
+And `desc()` becomes `DESC` --- and now you know the inspiration for the function name 😄.
 
 ### Subqueries
 
@@ -331,22 +412,23 @@ Now that you understand the big picture of a SQL query and the equivalence betwe
 dbplyr::translate_sql(a + 1)
 ```
 
--   Most mathematical operators are the same. The exception is `^`:
+-   Most mathematical operators are the same.
+    The exception is `^`:
 
     ```{r}
     dbplyr::translate_sql(1 + 2 * 3 / 4 ^ 5)
     ```
 
-```{=html}
 <!-- -->
-```
+
 -   In R strings are surrounded by `"` or `'` and variable names (if needed) use `` ` ``. In SQL, strings only use `'` and most databases use `"` for variable names.
 
     ```{r}
     dbplyr::translate_sql(x == "x")
     ```
 
--   In R, the default for a number is to be a double, i.e. `2` is a double and `2L` is an integer. In SQL, the default is for a number to be an integer unless you put a `.0` after it:
+-   In R, the default for a number is to be a double, i.e. `2` is a double and `2L` is an integer.
+    In SQL, the default is for a number to be an integer unless you put a `.0` after it:
 
     ```{r}
     dbplyr::translate_sql(2 + 2L)
