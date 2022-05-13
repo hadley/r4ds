@@ -31,7 +31,7 @@ status <- function(type) {
   )
 
   cat(paste0(
-    "::: {.rmdnote}\n",
+    "::: status\n",
     "You are reading the work-in-progress second edition of R for Data Science. ",
     "This chapter ", status, ". ",
     "You can find the complete first edition at <https://r4ds.had.co.nz>.\n",
