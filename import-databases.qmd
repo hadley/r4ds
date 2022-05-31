@@ -269,15 +269,18 @@ options(dplyr.strict_sql = TRUE)
 
 Instead of functions, like R, SQL has **statements**.
 Common statements include `CREATE` for defining new tables, `INSERT` for adding data, and `SELECT` for retrieving data.
-We're going to focus on `SELECT` statements, aka **queries**, because they are almost exclusively what you'll use as a data scientist.
+We're going to focus on `SELECT` statements, which are commonly called **queries**, because they are almost exclusively what you'll use as a data scientist.
 Your job is usually to analyse existing data, and in most cases you won't even have permission to modify the data.
 
 A query is made up of **clauses**.
-Every query must have two clauses `SELECT` and `FROM`[^import-databases-4].
-The simplest query is uses `SELECT * FROM tablename` to select columns from the specified table.
-This is what dplyr generates for an adulterated table:
+Every query must have two clauses: `SELECT`[^import-databases-4] and `FROM`[^import-databases-5]. The simplest query is `SELECT * FROM tablename`, which selects all columns from the specified table
+. This is what dplyr generates for an adulterated table
+:
 
-[^import-databases-4]: Ok, technically, only the `SELECT` is required, since you can write queries like `SELECT 1+1` to perform basic calculation.
+[^import-databases-4]: Confusingly, depending on the context, `SELECT` is either a statement or a clause.
+    To avoid this confusion, we'll generally use query instead of `SELECT` statement.
+
+[^import-databases-5]: Ok, technically, only the `SELECT` is required, since you can write queries like `SELECT 1+1` to perform basic calculations.
     But if you want to work with data (as you always do!) you'll also need a `FROM` clause.
 
 ```{r}
@@ -285,12 +288,12 @@ flights |> show_query()
 planes |> show_query()
 ```
 
-There are three other important clauses: `WHERE`, `ORDER BY`, and `GROUP BY`. `WHERE` and `ORDER BY` control which rows are included in the result and how they are ordered:
+There are three other important clauses: `WHERE`, `ORDER BY`, and `GROUP BY`. `WHERE` and `ORDER BY` control which rows are included and how they are ordered:
 
 ```{r}
 flights |> 
   filter(dest == "IAH") |> 
-  arrange(dep_delay) |> 
+  arrange(dep_delay) |>
   show_query()
 ```
 
@@ -305,22 +308,21 @@ flights |>
 
 There are two important differences between dplyr verbs and SELECT clauses:
 
--   SQL, unlike R, is **case** **insensitive** so you can write `select`, `SELECT`, or even `SeLeCt`. In this book we'll stick with the common convention of writing SQL keywords in uppercase to distinguish them from table or variables names.
--   In SQL, order matters. Unlike dplyr, where you can call the verbs in whatever order makes the most sense to you, SQL clauses must come in a specific order: `SELECT`, `FROM`, `WHERE`, `GROUP BY`, `ORDER BY`. Confusingly, this order doesn't match how they are actually evaluated, which is `FROM`, `WHERE`, `GROUP BY`, `SELECT`, `ORDER BY`.
+-   In SQL, case doesn't matter: you can write `select`, `SELECT`, or even `SeLeCt`. In this book we'll stick with the common convention of writing SQL keywords in uppercase to distinguish them from table or variables names.
+-   In SQL, order matters: you must always write the clauses in the order `SELECT`, `FROM`, `WHERE`, `GROUP BY`, `ORDER BY`. Confusingly, this order doesn't match how they clauses actually evaluated which is first `FROM`, then `WHERE`, `GROUP BY`, `SELECT`, and `ORDER BY`.
 
-The following sections will explore each clause in more detail.
+The following sections explore each clause in more detail.
 
 ::: callout-note
-Note that every database uses a slightly different dialect of SQL.
-For the vast majority of simple examples in this chapter, you won't see any differences.
-But as you start to write more complex SQL you'll discover that what works on what database might not work on another.
-Fortunately, dbplyr will take care a lot of this for you, as it automatically varies the SQL that it generates based on the database you're using.
-It's not perfect, but if you discover the dbplyr creates SQL that works on one database but not another, please file an issue so we can try to make it better.
+Note that while SQL is a standard, it is an extremely complex standard and no database follows it exactly.
+This means that while the main components that we'll focus on in this book are very similar between DBMSs, there are a lot of minor variations.
+Fortunately, dbplyr knows about this problem and generates different translations for different databases.
+It's not perfect, but it's continually improving, and if you hit a problem you can file an issue at [on GitHub](https://github.com/tidyverse/dbplyr/issues/) to help us improve it.
 :::
 
 ### SELECT
 
-`SELECT` is the workhorse of SQL queries, and is equivalent to `select()`, `mutate()`, `rename()`, `relocate()`, and, as you'll learn in the next section, `summarize()`.
+The `SELECT` clause is the workhorse of queries, and is equivalent to `select()`, `mutate()`, `rename()`, `relocate()`, and, as you'll learn in the next section, `summarize()`.
 `select()`, `rename()`, and `relocate()` have very direct translations to `SELECT` as they affect where a column appears (if at all) along with its name:
 
 ```{r}
@@ -341,8 +343,7 @@ This example also shows you how SQL does renaming.
 In SQL terminology renaming is called **aliasing** and is done with `AS`.
 Note that unlike with `mutate()`, the old name is on the left and the new name is on the right.
 
-The translations for `mutate()` are similarly straightforward.
-We'll come back to the translation of individual components in @sec-sql-expressions.
+The translations for `mutate()` are similarly straightforward:
 
 ```{r}
 diamonds_db |> 
@@ -350,28 +351,32 @@ diamonds_db |>
   show_query()
 ```
 
+We'll come back to the translation of individual components (like `/`) in @sec-sql-expressions.
+
 ::: callout-note
-When working with other databases you're likely to see variable names wrapped in some sort of quote, e.g.
+When working with other databases you're likely to see variable names wrapped in some sort of quote, like this:
 
 ``` sql
 SELECT "year", "month", "day", "dep_time", "dep_delay"
 FROM "flights"
 ```
 
-Or maybe
+Or maybe:
 
 ``` sql
 SELECT `year`, `month`, `day`, `dep_time`, `dep_delay`
 FROM `flights`
 ```
 
-Technically, you only need to quote special **reserved words** like `SELECT` or `FROM`.
-But only a handle of DBMS clients, like duckdb, actually know the complete list of reserved words, so most clients quote everything just to be safe.
+You only need quote to **reserved words** like `SELECT` or `FROM` to avoid confusion between column/tables names and SQL operators.
+But only a handle of client packages, like duckdb, know what all the reserved words are, so most packages with quote everything just to be safe.
 :::
 
 ### GROUP BY
 
-When paired with `group_by()`, `summarise()` is also translated to `SELECT`:
+`group_by()` is translated to the `GROUP BY`[^import-databases-6] clause and `summarise()` is translated to the `SELECT` clause:
+
+[^import-databases-6]: This is no coincidence: the dplyr function name was inspired by the SQL clause.
 
 ```{r}
 diamonds_db |> 
@@ -383,13 +388,11 @@ diamonds_db |>
   show_query()
 ```
 
-We'll come back to the translations of `n()` and `mean()` in @sec-sql-expressions.
-But it's no coincidence that `group_by()` is translated to `GROUP BY`: the SQL clause inspired the R function name.
+We'll come back to what's happening with translation `n()` and `mean()` in @sec-sql-expressions.
 
 ### WHERE
 
-`filter()` is translated to `WHERE`.
-`|` becomes `OR` and `&` becomes `AND:`
+`filter()` is translated to the `WHERE` clause:
 
 ```{r}
 flights |> 
@@ -401,11 +404,13 @@ flights |>
   show_query()
 ```
 
-Note that SQL uses `=` for comparison, not `==`.
-This is super annoying if you're switching between writing R code and SQL!
-Also note that SQL always uses `''` for strings --- you can't use `""` in because it's equivalent to ``` `` ``` in R!
+There are a few important details to note here:
 
-Another useful SQL function is `IN`, which is very close to R's `%in%`:
+-   `|` becomes `OR` and `&` becomes `AND`.
+-   SQL uses `=` for comparison, not `==`. SQL doesn't have assignment, so there's no potential for confusion there.
+-   SQL uses only `''` for strings, not `""`. In SQL, `""` is generally equivalent to R's ``` `` ```.
+
+Another useful SQL operator is `IN`, which is very close to R's `%in%`:
 
 ```{r}
 flights |> 
@@ -413,8 +418,18 @@ flights |>
   show_query()
 ```
 
-SQL doesn't have `NA`s, but instead it has `NULL`s.
-They behave very similarly to `NA`s, including their "infectious" properties.
+SQL uses `NULL` instead of `NA`.
+`NULL`s behave similarly to `NA`s.
+The main difference is that while they're "infectious" in comparisons and arithmetic, they are silently dropped when summarizing.
+dbplyr will remind you about this behaviour the first time you hit it:
+
+```{r}
+flights |> 
+  group_by(dest) |> 
+  summarise(delay = mean(arr_delay))
+```
+
+Otherwise, you can work with `NULL`s using the functions you'd use for `NA`s in R:
 
 ```{r}
 flights |> 
@@ -422,8 +437,8 @@ flights |>
   show_query()
 ```
 
-This SQL query illustrates one of the drawbacks of dbplyr: it doesn't always generate the simplest SQL.
-In this case, the parentheses are redundant and you could use the special form `IS NOT NULL` yielding:
+This SQL query illustrates one of the drawbacks of dbplyr: while the SQL is correct, it isn't as simple as you might write by hand.
+In this case, you could drop the parentheses and use a special operator that's easier to read:
 
 ``` sql
 WHERE "dep_delay" IS NOT NULL
@@ -431,7 +446,7 @@ WHERE "dep_delay" IS NOT NULL
 
 ### ORDER BY
 
-Ordering rows involes a straightforward translation from `arrange()` to `ORDER BY`:
+Ordering rows involves a straightforward translation from `arrange()` to the `ORDER BY` clause:
 
 ```{r}
 flights |> 
@@ -439,43 +454,46 @@ flights |>
   show_query()
 ```
 
-Note that `desc()` becomes `DESC`; this is another R function whose named was directly inspired by SQL.
+Notice how `desc()` is translated to `DESC`: this is another dplyr function whose name was directly inspired by SQL.
 
 ### Subqueries
 
-Sometimes it's not possible to express what you want in a single query.
-For example, in `SELECT` you can only refer to columns that exist in the `FROM`, not columns that you have just created.
+Sometimes it's not possible to translate a dplyr pipeline into a single `SELECT` statement and you need to use a subquery.
+A **subquery** is just a query used as a data source in the `FROM` clause, instead of the usual table.
 
-So if you modify a column that you just created, dbplyr will need to create a subquery:
+dplyr typically uses subqueries to work around limitations of SQL.
+For example, expressions in the `SELECT` clause can't refer to columns that were just created.
+That means that the following (silly) dplyr pipeline needs to happen in two steps: the first (inner) query computes `year1` and then the second (outer) query can compute `year2`:
 
 ```{r}
-diamonds_db |> 
-  select(carat) |> 
+flights |> 
   mutate(
-    carat2 = carat + 2, 
-    carat3 = carat2 + 1
+    year1 = year + 1,
+    year2 = year1 + 1
   ) |> 
   show_query()
 ```
 
-A subquery is just a query that's nested inside of `FROM`, so instead of a table being used as the source, the new query is.
-
-Another similar restriction is that `WHERE`, like `SELECT` can only operate on variables in `FROM`, so if you try and filter based on a variable that you just created, you'll need to create a subquery.
+You'll also see this if you attempted to `filter()` a variable that you just created.
+Remember, even though `WHERE` is written after `SELECT`, it's evaluated before it, so we need a subquery for this similarly simple case:
 
 ```{r}
-diamonds_db |> 
-  select(carat) |> 
-  mutate(carat2 = carat + 2) |> 
-  filter(carat2 > 1) |> 
+flights |> 
+  mutate(year1 = year + 1) |> 
+  filter(year1 == 2014) |> 
   show_query()
 ```
 
-Sometimes dbplyr uses a subquery where strictly speaking it's not necessary.
-For example, take this pipeline that filters on a summary value.
+Sometimes dbplyr will create a subquery where it's not needed because it doesn't yet know how to optimize that translation.
+As dbplyr improves over time, these cases will get rarer and rarer but will probably never go away.
 
 ### Joins
 
-SQL joins are straightforward, but dbplyr's current translations are rather verbose (we're working on doing better in the future, so if you're lucky it'll be better by the time you're reading this):
+If you're familiar with dplyr's joins, SQL joins are very similar.
+Unfortunately, dbplyr's current translations are rather verbose[^import-databases-7].
+Here's a simple example:
+
+[^import-databases-7]: We're working on doing better in the future, so if you're lucky it'll be better by the time you're reading this 😃
 
 ```{r}
 flights |> 
@@ -483,7 +501,7 @@ flights |>
   show_query()
 ```
 
-You'd typically write this more like:
+If you were writing this by hand, you'd probably write this as:
 
 ``` sql
 SELECT flights.*, "type", manufacturer, model, engines, seats, speed
@@ -491,9 +509,15 @@ FROM flights
 LEFT JOIN planes ON (flights.tailnum = planes.tailnum)
 ```
 
-You might guess that this is the SQL you'd use for `right_join()` and `full_join()`
+The main thing to notice here is the syntax: SQL joins use sub-clauses of the `FROM` clause to bring in additional tables, using `ON` to define how the tables are related.
+
+dplyr's names for these functions are so closely connected to SQL that you can easily guess the equivalent SQL for `inner_join()`, `right_join()`, and `full_join():`
 
 ``` sql
+SELECT flights.*, "type", manufacturer, model, engines, seats, speed
+FROM flights
+INNER JOIN planes ON (flights.tailnum = planes.tailnum)
+
 SELECT flights.*, "type", manufacturer, model, engines, seats, speed
 FROM flights
 RIGHT JOIN planes ON (flights.tailnum = planes.tailnum)
@@ -503,34 +527,21 @@ FROM flights
 FULL JOIN planes ON (flights.tailnum = planes.tailnum)
 ```
 
-And you'd be right!
-The names for dbplyrs join functions were directly inspired by SQL.
-
-### Temporary data
-
-Sometimes it's useful to perform a join or semi/anti join with data that you have locally.
-How can you get that data into the database?
-There are a few ways to do so.
-You can set `copy = TRUE` to automatically copy.
-There are two other ways that give you a little more control:
-
-`copy_to()` --- this works very similarly to `DBI::dbWriteTable()` but returns a `tbl` so you don't need to create one after the fact.
-By default this creates a temporary table, which will only be visible to the current connection (not to other people using the database), and will automatically be deleted when the connection finishes.
-Most database will allow you to create temporary tables, even if you don't otherwise have write access to the data.
-
-`copy_inline()` --- new in the latest version of db.
-Rather than copying the data to the database, it builds SQL that generates the data inline.
-It's useful if you don't have permission to create temporary tables, and is faster than `copy_to()` for small datasets.
+When you're working with data from a databases, you're likely to need many more joins that with data from other sources.
+That's because database tables are often stored in a highly normalized form, where each "fact" is stored in a single place.
+Typically, this involves of complex network of tables connected by primary and foreign keys.
+If you hit this scenario, the [dm package](https://cynkra.github.io/dm/), by Tobias Schieferdecker, Kirill Müller, and Darko Bergant, can be a life saver.
+It can automatically determine the connections between tables in a database using the constraints the DBAs often supply, automatically visualize them so you can see what's going on, and automatically generate the joins you need to connect one table to another.
 
 ### Other verbs
 
-dbplyr provides translation for other dplyr verbs like `distinct()`, `slice_*()`, and `intersect()`, and a growing selection of tidyr functions like `pivot_longer()` and `pivot_wider()`.
+dbplyr also translates other verbs like `distinct()`, `slice_*()`, and `intersect()`, and a growing selection of tidyr functions like `pivot_longer()` and `pivot_wider()`.
 The easiest way to see the full set of what's currently available is to visit the dbplyr website: <https://dbplyr.tidyverse.org/reference/>.
 
 ## Function translations {#sec-sql-expressions}
 
-So far we've focussed on the big picture of how dplyr verbs are translated in to `SELECT` clauses.
-Now we're going to zoom in a little and talk about how individual R functions are translated, i.e. what happens when you use `mean(x)` in a `summarize()`?
+So far we've focused on the big picture of how dplyr verbs are translated in to `SELECT` clauses.
+Now we're going to zoom in a little and talk about how individual the R functions that work with individual columns are translated, e.g. what happens when you use `mean(x)` in a `summarize()`?
 The translation is certainly not perfect, and there are many R functions that aren't converted to SQL, but dbplyr does a surprisingly good job covering the functions that you'll use most of the time.
 
 To explore these translations I'm going to make a couple of little helper functions that run a `summarise()` or `mutate()` and return the generated SQL.
