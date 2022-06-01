@@ -429,6 +429,8 @@ flights |>
   summarise(delay = mean(arr_delay))
 ```
 
+If you want to learn more about how NULLs work, I recomend "[*Three valued logic*](https://modern-sql.com/concept/three-valued-logic)" by Markus Winand,
+
 Otherwise, you can work with `NULL`s using the functions you'd use for `NA`s in R:
 
 ```{r}
@@ -541,60 +543,100 @@ The easiest way to see the full set of what's currently available is to visit th
 ## Function translations {#sec-sql-expressions}
 
 So far we've focused on the big picture of how dplyr verbs are translated in to `SELECT` clauses.
-Now we're going to zoom in a little and talk about how individual the R functions that work with individual columns are translated, e.g. what happens when you use `mean(x)` in a `summarize()`?
-The translation is certainly not perfect, and there are many R functions that aren't converted to SQL, but dbplyr does a surprisingly good job covering the functions that you'll use most of the time.
+Now we're going to zoom in a little and talk about the translation of the R functions that work with individual columns, e.g. what happens when you use `mean(x)` in a `summarize()`?
+You can generally trust dbplyr's translations, but again it's a good way to learn a bit more about SQL.
 
-To explore these translations I'm going to make a couple of little helper functions that run a `summarise()` or `mutate()` and return the generated SQL.
-That'll make it a little easier to explore some variations.
+To help you see what's going on, I'm going to make a couple of little helper functions that run a `summarise()` or `mutate()` and show the generated SQL.
+That'll make it a little easier to explore a few variations and see how summaries and transformations can differ.
 
 ```{r}
-show_summarize <- function(df, ...) {
+summarize_query <- function(df, ...) {
   df |> 
     summarise(...) |> 
     show_query()
 }
-show_mutate <- function(df, ...) {
+mutate_query <- function(df, ...) {
   df |> 
-    mutate(...) |> 
+    mutate(..., .keep = "none") |> 
     show_query()
 }
 ```
 
+Let's dive in with some summaries!
+Some summary functions have a relatively simple translation, like `mean()` which becomes `avg()`.
+Other summary functions like `median()` have a much longer translation.
+
 ```{r}
-flights |> show_summarize(
-  mean = mean(arr_delay, na.rm = TRUE),
-  # sd = sd(arr_delay, na.rm = TRUE),
-  median = median(arr_delay, na.rm = TRUE)
-)
+flights |> 
+  group_by(year, month, day) |>  
+  summarize_query(
+    mean = mean(arr_delay, na.rm = TRUE),
+    median = median(arr_delay, na.rm = TRUE)
+  )
 ```
 
--   Most mathematical operators are the same.
-    The exception is `^`:
+The syntax looks a more complicated when you summary functions inside a `mutate()` because we now need a **window function**.
+You can turn an ordinary aggregation function into a window function by adding `OVER` after it:
 
-    ```{r}
-    flights |> show_mutate(x = 1 + 2 * 3 / 4 ^ 5)
-    ```
+```{r}
+flights |> 
+  group_by(year, month, day) |>  
+  mutate_query(
+    mean = mean(arr_delay, na.rm = TRUE),
+  )
+```
 
--   In R, the default for a number is to be a double, i.e. `2` is a double and `2L` is an integer.
-    In SQL, the default is for a number to be an integer unless you put a `.0` after it:
+You can see here that the grouping moves from a `GROUP BY` clause to the `PARTITION BY` argument to `OVER`.
 
-    ```{r}
-    flights |> show_mutate(2 + 2L)
-    ```
+Window functions encompass all functions that look forward or backwards, like `lead()` and `lag()`:
 
-    This is more important in SQL than in R because if you do `(x + y) / 2` in SQL it will use integer division.
+```{r}
+flights |> 
+  group_by(dest) |>  
+  arrange(time_hour) |> 
+  mutate_query(
+    lead = lead(arr_delay),
+    lag = lag(arr_delay)
+  )
+```
 
--   `ifelse()` and `case_when()` are translated to CASE WHEN:
+Here it's important to `arrange()` the data, because SQL tables have no intrinsic order.
+In fact, if you don't use `arrange()` you might get the rows back in a different order every time!
+Notice for window functions, the ordering information is used in two places.
+That's because the `ORDER BY` clause of the main query isn't automatically inherited by `OVER`.
 
-    ```{r}
-    flights |> show_mutate(if_else(x > 5, "big", "small"))
-    ```
+Moving back to regular transformation, another really important SQL function is `CASE WHEN`. It's used for `if_else()` and it also inspired dplyr's `case_when()` function.
+Here's a couple of simple examples:
 
--   String functions
+```{r}
+flights |> 
+  mutate_query(
+    description = if_else(arr_deay > 0, "delayed", "on-time")
+  )
+flights |> 
+  mutate_query(
+    description = 
+      case_when(
+        arr_delay < -5 ~ "early", 
+        arr_delay < 5 ~ "on-time",
+        arr_delay >= 5 ~ "late"
+      )
+  )
+```
 
-    ```{r}
-    flights |> show_mutate(paste0("Greetings ", name))
-    ```
+`CASE WHEN` is also used for some other functions that don't have a direct translation from R to SQL.
+A good example of this is `cut()`:
 
-dbplyr also translates common string and date-time manipulation functions.
-You can learn more about these functions in `vignette("translation-function", package = "dbplyr")`.
+```{r}
+flights |> 
+  mutate_query(
+    description =  cut(
+      arr_delay, 
+      breaks = c(-Inf, -5, 5, Inf), 
+      labels = c("early", "on-time", "late")
+    )
+  )
+```
+
+dbplyr also translates common string and date-time manipulation functions, which you can learn about in `vignette("translation-function", package = "dbplyr")`.
+dbplyr's translation are certainly not perfect, and there are many R functions that aren't translated yet, but dbplyr does a surprisingly good job covering the functions that you'll use most of the time.
