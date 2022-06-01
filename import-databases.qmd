@@ -63,7 +63,7 @@ To connect to the database from R, you'll use a pair of packages:
 
 -   You'll always use DBI (**d**ata**b**ase **i**nterface), provides a set of generic functions that perform connect to the database, upload data, run queries, and so on.
 
--   You'll also use a package specific to the DBMS you're connecting to.
+-   You'll also use a DBMS client package package specific to the DBMS you're connecting to.
     This package translates the generic commands into the specifics needed for a given DBMS.
     For example, if you're connecting to Postgres you'll use the RPostgres package.
     If you're connecting to MariaDB or MySQL, you'll use the RMariaDB package.
@@ -252,6 +252,8 @@ It will hopefully help you understand the parallels between SQL and dplyr but it
 For that, I'd recommend [*SQL for Data Scientists*](https://sqlfordatascientists.com)by Renée M. P. Teate.
 It's an introduction to SQL designed specifically for the needs of data scientists, and includes examples of the sort of highly interconnected data you're likely to encounter in real organizations.
 
+Luckily, if you understand dplyr you're in a great place to quickly pick up SQL because so many of the concepts are the same.
+
 We'll explore the relationship between dplyr and SQL using a couple of old friends from the nycflights dataset, the `flights` and `planes` tibbles.
 These are easy to get into our learning database because dbplyr has a function designed for this exact scenario.
 
@@ -259,6 +261,8 @@ These are easy to get into our learning database because dbplyr has a function d
 dbplyr::copy_nycflights13(con)
 flights <- tbl(con, "flights")
 planes <- tbl(con, "planes")
+
+options(dplyr.strict_sql = TRUE)
 ```
 
 ### SQL basics
@@ -306,6 +310,14 @@ There are two important differences between dplyr verbs and SELECT clauses:
 
 The following sections will explore each clause in more detail.
 
+::: callout-note
+Note that every database uses a slightly different dialect of SQL.
+For the vast majority of simple examples in this chapter, you won't see any differences.
+But as you start to write more complex SQL you'll discover that what works on what database might not work on another.
+Fortunately, dbplyr will take care a lot of this for you, as it automatically varies the SQL that it generates based on the database you're using.
+It's not perfect, but if you discover the dbplyr creates SQL that works on one database but not another, please file an issue so we can try to make it better.
+:::
+
 ### SELECT
 
 `SELECT` is the workhorse of SQL queries, and is equivalent to `select()`, `mutate()`, `rename()`, `relocate()`, and, as you'll learn in the next section, `summarize()`.
@@ -337,6 +349,25 @@ diamonds_db |>
   mutate(price_per_carat = price / carat) |> 
   show_query()
 ```
+
+::: callout-note
+When working with other databases you're likely to see variable names wrapped in some sort of quote, e.g.
+
+``` sql
+SELECT "year", "month", "day", "dep_time", "dep_delay"
+FROM "flights"
+```
+
+Or maybe
+
+``` sql
+SELECT `year`, `month`, `day`, `dep_time`, `dep_delay`
+FROM `flights`
+```
+
+Technically, you only need to quote special **reserved words** like `SELECT` or `FROM`.
+But only a handle of DBMS clients, like duckdb, actually know the complete list of reserved words, so most clients quote everything just to be safe.
+:::
 
 ### GROUP BY
 
@@ -372,6 +403,7 @@ flights |>
 
 Note that SQL uses `=` for comparison, not `==`.
 This is super annoying if you're switching between writing R code and SQL!
+Also note that SQL always uses `''` for strings --- you can't use `""` in because it's equivalent to ``` `` ``` in R!
 
 Another useful SQL function is `IN`, which is very close to R's `%in%`:
 
@@ -399,7 +431,7 @@ WHERE "dep_delay" IS NOT NULL
 
 ### ORDER BY
 
-`arrange()` is translated to `ORDER BY`:
+Ordering rows involes a straightforward translation from `arrange()` to `ORDER BY`:
 
 ```{r}
 flights |> 
@@ -413,6 +445,7 @@ Note that `desc()` becomes `DESC`; this is another R function whose named was di
 
 Sometimes it's not possible to express what you want in a single query.
 For example, in `SELECT` you can only refer to columns that exist in the `FROM`, not columns that you have just created.
+
 So if you modify a column that you just created, dbplyr will need to create a subquery:
 
 ```{r}
@@ -442,7 +475,7 @@ For example, take this pipeline that filters on a summary value.
 
 ### Joins
 
-SQL joins are straightforward, but dbplyr's current translation requires spelling out
+SQL joins are straightforward, but dbplyr's current translations are rather verbose (we're working on doing better in the future, so if you're lucky it'll be better by the time you're reading this):
 
 ```{r}
 flights |> 
@@ -450,11 +483,28 @@ flights |>
   show_query()
 ```
 
-Instead we'll create some dummy data:
+You'd typically write this more like:
 
-```{r}
-
+``` sql
+SELECT flights.*, "type", manufacturer, model, engines, seats, speed
+FROM flights
+LEFT JOIN planes ON (flights.tailnum = planes.tailnum)
 ```
+
+You might guess that this is the SQL you'd use for `right_join()` and `full_join()`
+
+``` sql
+SELECT flights.*, "type", manufacturer, model, engines, seats, speed
+FROM flights
+RIGHT JOIN planes ON (flights.tailnum = planes.tailnum)
+
+SELECT flights.*, "type", manufacturer, model, engines, seats, speed
+FROM flights
+FULL JOIN planes ON (flights.tailnum = planes.tailnum)
+```
+
+And you'd be right!
+The names for dbplyrs join functions were directly inspired by SQL.
 
 ### Temporary data
 
@@ -472,40 +522,53 @@ Most database will allow you to create temporary tables, even if you don't other
 Rather than copying the data to the database, it builds SQL that generates the data inline.
 It's useful if you don't have permission to create temporary tables, and is faster than `copy_to()` for small datasets.
 
-### Other statements
+### Other verbs
 
-in the case that you need to update your own database, you can solve most problems with `dbWriteTable()` and/or `dbInsertTable()`.
-In fact, as a data scientist in most cases you won't even be able to run these statements because you only have read only access to the database.
-This ensures that there's no way for you to accidentally mess things up.
+dbplyr provides translation for other dplyr verbs like `distinct()`, `slice_*()`, and `intersect()`, and a growing selection of tidyr functions like `pivot_longer()` and `pivot_wider()`.
+The easiest way to see the full set of what's currently available is to visit the dbplyr website: <https://dbplyr.tidyverse.org/reference/>.
 
-## SQL expressions {#sec-sql-expressions}
+## Function translations {#sec-sql-expressions}
 
-https://dbplyr.tidyverse.org/articles/translation-function.html
+So far we've focussed on the big picture of how dplyr verbs are translated in to `SELECT` clauses.
+Now we're going to zoom in a little and talk about how individual R functions are translated, i.e. what happens when you use `mean(x)` in a `summarize()`?
+The translation is certainly not perfect, and there are many R functions that aren't converted to SQL, but dbplyr does a surprisingly good job covering the functions that you'll use most of the time.
 
-Now that you understand the big picture of a SQL query and the equivalence between the SELECT clauses and dplyr verbs, it's time to look more at the details of the conversion of the individual expressions, i.e. what happens when you use `mean(x)` in a `summarize()`?
+To explore these translations I'm going to make a couple of little helper functions that run a `summarise()` or `mutate()` and return the generated SQL.
+That'll make it a little easier to explore some variations.
 
 ```{r}
-dbplyr::translate_sql(a + 1)
+show_summarize <- function(df, ...) {
+  df |> 
+    summarise(...) |> 
+    show_query()
+}
+show_mutate <- function(df, ...) {
+  df |> 
+    mutate(...) |> 
+    show_query()
+}
+```
+
+```{r}
+flights |> show_summarize(
+  mean = mean(arr_delay, na.rm = TRUE),
+  # sd = sd(arr_delay, na.rm = TRUE),
+  median = median(arr_delay, na.rm = TRUE)
+)
 ```
 
 -   Most mathematical operators are the same.
     The exception is `^`:
 
     ```{r}
-    dbplyr::translate_sql(1 + 2 * 3 / 4 ^ 5)
-    ```
-
--   In R strings are surrounded by `"` or `'` and variable names (if needed) use `` ` ``. In SQL, strings only use `'` and most databases use `"` for variable names.
-
-    ```{r}
-    dbplyr::translate_sql(x == "x")
+    flights |> show_mutate(x = 1 + 2 * 3 / 4 ^ 5)
     ```
 
 -   In R, the default for a number is to be a double, i.e. `2` is a double and `2L` is an integer.
     In SQL, the default is for a number to be an integer unless you put a `.0` after it:
 
     ```{r}
-    dbplyr::translate_sql(2 + 2L)
+    flights |> show_mutate(2 + 2L)
     ```
 
     This is more important in SQL than in R because if you do `(x + y) / 2` in SQL it will use integer division.
@@ -513,38 +576,14 @@ dbplyr::translate_sql(a + 1)
 -   `ifelse()` and `case_when()` are translated to CASE WHEN:
 
     ```{r}
-    dbplyr::translate_sql(if_else(x > 5, "big", "small"))
+    flights |> show_mutate(if_else(x > 5, "big", "small"))
     ```
 
 -   String functions
 
     ```{r}
-    dbplyr::translate_sql(paste0("Greetings ", name))
+    flights |> show_mutate(paste0("Greetings ", name))
     ```
 
 dbplyr also translates common string and date-time manipulation functions.
-
-### SQL dialects
-
-Note that every database uses a slightly different dialect of SQL.
-For the vast majority of simple examples in this chapter, you won't see any differences.
-But as you start to write more complex SQL you'll discover that what works on what database might not work on another.
-
-Fortunately, dbplyr will take care a lot of this for you, as it automatically varies the SQL that it generates based on the database you're using.
-It's not perfect, but if you discover the dbplyr creates SQL that works on one database but not another, please file an issue so we can try to make it better.
-
-If you just want to see the SQL dbplyr generates for different databases, you can create a special simulated data frame.
-This is mostly useful for the developers of dbplyr, but it also gives you an easy way to experiment with SQL variants.
-
-```{r}
-lf1 <- dbplyr::lazy_frame(name = "Hadley", con = dbplyr::simulate_oracle())
-lf2 <- dbplyr::lazy_frame(name = "Hadley", con = dbplyr::simulate_postgres())
-
-lf1 |> 
-  mutate(greet = paste("Hello", name)) |> 
-  head()
-
-lf2 |> 
-  mutate(greet = paste("Hello", name)) |> 
-  head()
-```
+You can learn more about these functions in `vignette("translation-function", package = "dbplyr")`.
