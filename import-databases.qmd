@@ -161,7 +161,7 @@ con |>
 
 `dbReadTable()` returns a `data.frame` so I use `as_tibble()` to convert it into a tibble so that it prints nicely.
 
-In real life, it's rare that you'll use `dbReadTable()` because the whole reason you're using a database is that there's too much data to fit in a data frame, and you want to use the database to bring back only a subset of the rows and columns.
+In real life, it's rare that you'll use `dbReadTable()` because often database tables are too big to fit in memory, and you want bring back only a subset of the rows and columns.
 
 ### Run a query {#sec-dbGetQuery}
 
@@ -169,13 +169,12 @@ The way you'll usually retrieve data is with `dbGetQuery()`.
 It takes a database connection and some SQL code and returns a data frame:
 
 ```{r}
-con |> 
-  dbGetQuery("
-    SELECT carat, cut, clarity, color, price 
-    FROM diamonds 
-    WHERE price > 15000
-  ") |> 
-  as_tibble()
+sql <- "
+  SELECT carat, cut, clarity, color, price 
+  FROM diamonds 
+  WHERE price > 15000
+"
+as_tibble(dbGetQuery(con, sql))
 ```
 
 Don't worry if you've never seen SQL before; you'll learn more about it shortly.
@@ -194,14 +193,31 @@ Now that you've learned the low-level basics for connecting to a database and ru
 dbplyr is a dplyr **backend**, which means that you keep writing dplyr code but the backend executes it differently.
 In this, dbplyr translates to SQL; other backends include [dtplyr](https://dtplyr.tidyverse.org) which translates to [data.table](https://r-datatable.com), and [multidplyr](https://multidplyr.tidyverse.org) which executes your code on multiple cores.
 
-To use dbplyr, you must first use `tbl()` to create an object that represents a database table[^import-databases-4]:
-
-[^import-databases-4]: If you want to mix SQL and dbplyr, you can also create a tbl from a SQL query with `tbl(con, sql("SELECT * FROM foo")).`
+To use dbplyr, you must first use `tbl()` to create an object that represents a database table:
 
 ```{r}
 diamonds_db <- tbl(con, "diamonds")
 diamonds_db
 ```
+
+::: callout-note
+There are two other common way to a database.
+First, many corporate databases are very large so need some hierarchy to keep all the tables organised.
+In that case you might need to supply a schema, or a catalog and a schema, in order to pick the table you're interested in:
+
+```{r}
+#| eval: false
+diamonds_db <- tbl(con, in_schema("sales", "diamonds"))
+diamonds_db <- tbl(con, in_catalog("north_america", "sales", "diamonds"))
+```
+
+Other times you might want to use your own SQL query as a starting point:
+
+```{r}
+#| eval: false
+diamonds_db <- tbl(con, sql("SELECT * FROM diamonds"))
+```
+:::
 
 This object is **lazy**; when you use dplyr verbs on it, dplyr doesn't do any work: it just records the sequence of operations that you want to perform and only performs them when needed.
 For example, take the following pipeline:
@@ -233,6 +249,9 @@ big_diamonds <- big_diamonds_db |>
 big_diamonds
 ```
 
+Typically, you'll use dbplyr to select the data you want from the database, performing basic filtering and aggregation using the translations described below.
+Then, once you're ready to analyse the data with functions that are unique to R, you'll `collect()` the data to get an in-memory tibble, and continue your work with pure R code.
+
 ## SQL
 
 The rest of the chapter will teach you a little SQL through the lens of dbplyr.
@@ -260,14 +279,14 @@ Common statements include `CREATE` for defining new tables, `INSERT` for adding 
 We will on focus on `SELECT` statements, also called **queries**, because they are almost exclusively what you'll use as a data scientist.
 
 A query is made up of **clauses**.
-There are five important clauses: `SELECT`, `FROM`, `WHERE`, `ORDER BY`, and `GROUP BY`. Every query must have the `SELECT`[^import-databases-5] and `FROM`[^import-databases-6] clauses and the simplest query is `SELECT * FROM table`, which selects all columns from the specified table
+There are five important clauses: `SELECT`, `FROM`, `WHERE`, `ORDER BY`, and `GROUP BY`. Every query must have the `SELECT`[^import-databases-4] and `FROM`[^import-databases-5] clauses and the simplest query is `SELECT * FROM table`, which selects all columns from the specified table
 . This is what dplyr generates for an adulterated table
 :
 
-[^import-databases-5]: Confusingly, depending on the context, `SELECT` is either a statement or a clause.
+[^import-databases-4]: Confusingly, depending on the context, `SELECT` is either a statement or a clause.
     To avoid this confusion, we'll generally use query instead of `SELECT` statement.
 
-[^import-databases-6]: Ok, technically, only the `SELECT` is required, since you can write queries like `SELECT 1+1` to perform basic calculations.
+[^import-databases-5]: Ok, technically, only the `SELECT` is required, since you can write queries like `SELECT 1+1` to perform basic calculations.
     But if you want to work with data (as you always do!) you'll also need a `FROM` clause.
 
 ```{r}
@@ -364,9 +383,9 @@ But only a handful of client packages, like duckdb, know what all the reserved w
 
 ### GROUP BY
 
-`group_by()` is translated to the `GROUP BY`[^import-databases-7] clause and `summarise()` is translated to the `SELECT` clause:
+`group_by()` is translated to the `GROUP BY`[^import-databases-6] clause and `summarise()` is translated to the `SELECT` clause:
 
-[^import-databases-7]: This is no coincidence: the dplyr function name was inspired by the SQL clause.
+[^import-databases-6]: This is no coincidence: the dplyr function name was inspired by the SQL clause.
 
 ```{r}
 diamonds_db |> 
@@ -482,10 +501,10 @@ As dbplyr improves over time, these cases will get rarer but will probably never
 ### Joins
 
 If you're familiar with dplyr's joins, SQL joins are very similar.
-Unfortunately, dbplyr's current translations are rather verbose[^import-databases-8].
+Unfortunately, dbplyr's current translations are rather verbose[^import-databases-7].
 Here's a simple example:
 
-[^import-databases-8]: We're working on doing better in the future, so if you're lucky it'll be better by the time you're reading this 😃
+[^import-databases-7]: We're working on doing better in the future, so if you're lucky it'll be better by the time you're reading this 😃
 
 ```{r}
 flights |> 
