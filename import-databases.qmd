@@ -47,8 +47,9 @@ There are three high level differences between data frames and database tables:
     Much like the index of a book, a database index makes it possible to quickly find rows of interest without having to look at every single row.
     Data frames and tibbles don't have indexes, but data.tables do, which is one of the reasons that they're so fast.
 
--   Most classical databases are optimized for rapidly collecting data, not analyzing existing data.
-    These databases are called **row-oriented** because the data is stored row-by-row, rather than column-by-column like R.
+-   Most classical databases are optimized for rapidly collecting data and not analyzing data.
+    These databases are called **row-oriented** because the data is stored row-by-row ~, rather than column-by-column like R~.
+    # I find statement above confusing. Almost all R functions assume the data exists in a new row and not on a new column.
     More recently, there's been much development of **column-oriented** databases that make analyzing the existing data much faster.
 
 Databases are run by database management systems (**DBMS**'s for short), which come in three basic forms:
@@ -66,7 +67,7 @@ To connect to the database from R, you'll use a pair of packages:
 -   You'll also use a package tailored for the DBMS you're connecting to.
     This package translates the generic DBI commands into the specifics needed for a given DBMS.
     There's usually one package for each DMBS, e.g.
-    RPostgres for Postgres and RMariaDB for MySQL.
+    RPostgres for Postgres and RMariaDB for MySQL and MariaDB.
 
 If you can't find a specific package for your DBMS, you can usually use the odbc package instead.
 This uses the ODBC protocol supported by many DBMS.
@@ -139,7 +140,72 @@ Now that we've connected to a database with some data in it, lets perform some b
 
 ### What's there?
 
-The most important database objects for data scientists are tables.
+The most important database objects for data scientists are tables, views and stored procedures. They each have their use cases, even though you may be using tables often but it important to understand when to use each of them.
+
+#### Views
+Views are database object that store a `SELECT` query. The queries are not executed until you invoke the view. You can execute most queries you would on a table on a view. The creation of views are quite simple: 
+`
+CREATE VIEW myView as ( SELECT col1, col2 FROM table WHERE condition1 = condition)
+`
+Once the view has been created, you can query it as if you were querying a table.
+`
+SELECT col1 FROM table
+`
+The power of views come in when you have to join multiple tables and you have to run that query severally. By creating the view, you would only need to write the query once and subsequently query the view for the columns that you need. Views are very powerful intermediary objects when querying complex data, including self-joining a table. Views also have security usage but that may have to be enforced by your DB Admin. Databases often index views making them faster than having to write a query each time on a table. A view can also be created on a view.
+
+#### Stored Procedures
+This is yet another powerful feature of SQL. For Data Scientists, stored procedures can make life quite easier. They behave like views, in the sense that you store a query in the stored procedure and call them later. The difference is that, stored procedures are invoked differently from views. A stored procedure return data faster than a view because the stored procedured is automatically `optimized` by the database engine. Another difference is that a stored procedure can be paramterized, unlike a view. A paramter to a view can only be used by specifying a where clause on invocation but a stored procedure can use a parameter even before the paramter value is given. 
+
+A stored procedure is created like:
+
+<b>SQL(MySQL/MariaDB)</b>
+`
+CREATE PROCEDURE myProc (IN param INT)
+(
+    SELECT col1, col2
+    FROM table
+    WHERE condition1 = param
+)
+
+/* To call this procedure*/
+
+CALL myProc('parameter')
+`
+In this query, the name of the stored procedure is `myProc`. This stored procedure defines a parameter called `param`. The `IN` before the paramter means it is incoming and `INT` means the paramter is of the SQL data type INT for INTEGER. Notice the param is used in the `WHERE` clause to filter the results. The paramter must be specified on invocation or the query will return an error.
+
+<b>T-SQL (Microsoft SQL Server)</b>
+`
+CREATE PROCEDURE myProce @param int, @param2 varchar(50) as 
+(
+    SELECT col1, col2
+    FROM table
+    WHERE condition1 = @param AND condition2 = @param2
+)
+
+EXECUTE myProc 3 
+/*-- 3 as the paramter value*/
+/* If the call to the stored procedure is the only line being executed, you can exclude the EXECUTE keyword
+`
+Note there is no need to specify the `IN` keyword with SQL Server. Unlike a view, you cannot select the columns that would be returned from a stored procedure, they are `deterministic`. A stored procedure cannot be based on another stored procedure like a view.
+
+Also note that, stored procedures are not supported by `SQLite`
+
+Stored procedures offer some security but that probably is being managed by the DB Admin as well.
+
+Both stored procedures and views can be used to reduce the reduce the length of the query to be written in R. If you had a long query, sometimes over 5 lines (when trying to indent it for easy reading), the R script quickly becomes ugly. Writing the query in the database as a stored procedure or view can improve the appearance of the R script.
+
+#### Use cases for views or stored procedures
+- Use a view if you want to 
+- select different columns for different purposes at different times
+- Joining data from the view of other views or tables
+
+- Use a stored procedure if you want to 
+- filter the query at the time of execution
+- improve query speed
+
+#### Tables
+Tables are the main database objects. All data is stored in a table in a database and hence, queried from a table: whether you are querying from a stored procedure or a view.
+
 DBI provides two useful functions to either list all the tables in the database[^import-databases-3] or to check if a specific table already exists:
 
 [^import-databases-3]: At least, all the tables that you have permission to see.
@@ -279,7 +345,7 @@ Common statements include `CREATE` for defining new tables, `INSERT` for adding 
 We will on focus on `SELECT` statements, also called **queries**, because they are almost exclusively what you'll use as a data scientist.
 
 A query is made up of **clauses**.
-There are five important clauses: `SELECT`, `FROM`, `WHERE`, `ORDER BY`, and `GROUP BY`. Every query must have the `SELECT`[^import-databases-4] and `FROM`[^import-databases-5] clauses and the simplest query is `SELECT * FROM table`, which selects all columns from the specified table
+There are five important clauses: `SELECT`, `FROM`, `WHERE`, `ORDER BY`, and `GROUP BY` `HAVING`. Every query must have the `SELECT`[^import-databases-4] and `FROM`[^import-databases-5] clauses and the simplest query is `SELECT * FROM table`, which selects all columns from the specified table
 . This is what dplyr generates for an adulterated table
 :
 
@@ -294,7 +360,7 @@ flights |> show_query()
 planes |> show_query()
 ```
 
-`WHERE` and `ORDER BY` control which rows are included and how they are ordered:
+`WHERE`, `HAVING`, and `ORDER BY` control which rows are included and how they are ordered:
 
 ```{r}
 flights |> 
@@ -315,7 +381,7 @@ flights |>
 There are two important differences between dplyr verbs and SELECT clauses:
 
 -   In SQL, case doesn't matter: you can write `select`, `SELECT`, or even `SeLeCt`. In this book we'll stick with the common convention of writing SQL keywords in uppercase to distinguish them from table or variables names.
--   In SQL, order matters: you must always write the clauses in the order `SELECT`, `FROM`, `WHERE`, `GROUP BY`, `ORDER BY`. Confusingly, this order doesn't match how the clauses actually evaluated which is first `FROM`, then `WHERE`, `GROUP BY`, `SELECT`, and `ORDER BY`.
+-   In SQL, order matters: you must always write the clauses in the order `SELECT`, `FROM`, `WHERE`, `GROUP BY`, `HAVING`, `ORDER BY`. Confusingly, this order doesn't match how the clauses actually evaluated which is first `FROM`, then `WHERE`, `GROUP BY`, `SELECT`, and `ORDER BY`.
 
 The following sections explore each clause in more detail.
 
@@ -377,6 +443,13 @@ SELECT `year`, `month`, `day`, `dep_time`, `dep_delay`
 FROM `flights`
 ```
 
+Or sometimes like this:
+
+``` sql
+SELECT [year], [month], [day], [dep_time], [dep_delay]
+FROM [lights]
+```
+
 Quoting is only required for **reserved words** like `SELECT` or `FROM` to avoid confusion between column/tables names and SQL operators.
 But only a handful of client packages, like duckdb, know what all the reserved words are, so most packages quote everything just to be safe.
 :::
@@ -412,6 +485,22 @@ flights |>
   filter(arr_delay > 0 & arr_delay < 20) |> 
   show_query()
 ```
+
+### HAVING
+`HAVING` is used to filter aggregations. It functions almost the same way as the `WHERE` clause except you cannot use an aggregation function in a `WHERE` clause but you can use it in a `HAVING` clause. ~There is no direct translation of the `HAVING` clause in dplyr but it is a very powerful feature if you are writing direct SQL~. `HAVING` clauses are translated as sub-queries.
+
+`
+/* INVALID SQL */
+SELECT col1, SUM(col2)
+FROM table
+WHERE SUM(col2) > value
+
+/* VALID STATEMENT USING THE HAVING CLAUSE */
+SELECT col1, SUM(col2) as col2
+FROM table
+GROUP BY col1
+HAVING SUM(col2) > value
+`
 
 There are a few important details to note here:
 
@@ -465,7 +554,7 @@ flights |>
   show_query()
 ```
 
-Notice how `desc()` is translated to `DESC`: this is one of the many dplyr functions whose name was directly inspired by SQL.
+Notice how `desc()` is translated to `DESC`: this is one of the many dplyr functions whose name was directly inspired by SQL. `ORDER BY` is extremely important when using a limiting function, in `LIMIT n`/`TOP n` in SQL and T-SQL respectively and care should be taken when ordering your results. The `ORDER BY` is executed before the `SELECT` when a limiting function is specified.
 
 ### Subqueries
 
@@ -546,10 +635,9 @@ FROM flights
 FULL JOIN planes ON (flights.tailnum = planes.tailnum)
 ```
 
-You're likely to need many joins when working with data from a database.
-That's because database tables are often stored in a highly normalized form, where each "fact" is stored in a single place and to keep a complete dataset for analysis you need to navigate a complex network of tables connected by primary and foreign keys.
+You're likely to need many joins when working with data from a database and that is where using a view or a stored procedure can make life quite simply for the data scientist. That's because database tables are often stored in a highly normalized form, where each "fact" is stored in a single place and to keep a complete dataset for analysis you need to navigate a complex network of tables connected by primary and foreign keys.
 If you hit this scenario, the [dm package](https://cynkra.github.io/dm/), by Tobias Schieferdecker, Kirill Müller, and Darko Bergant, is a life saver.
-It can automatically determine the connections between tables using the constraints that DBAs often supply, visualize the connections so you can see what's going on, and generate the joins you need to connect one table to another.
+It can automatically determine the connections between tables using the constraints that DBAs often supply, visualize the connections so you can see what's going on, and generate the joins you need to connect one table to another. Once that is done, you can store the data as a view or stored procedure.
 
 ### Other verbs
 
