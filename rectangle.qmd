@@ -4,22 +4,389 @@
 #| results: "asis"
 #| echo: false
 source("_common.R")
+status("drafting")
 ```
 
 ## Introduction
 
-<!--# TO DO: Write introduction. -->
+Often you have to deal with data that is fundamentally tree-like --- rather than a rectangular structure of rows and columns, you have items that with one or more children.
+In this chapter, you'll learn the art of "rectangling", taking complex hierarchical data and turning it into a data frame that you can easily work with using the tools you learned earlier in the book.
+
+We'll start by talking about lists, an new type of vector that makes hierarchical data possible.
+Then you'll learn about three key functions for rectangling from tidyr: `tidyr::unnest_longer()`, `tidyr::unnest_wider()e`, and `tidyr::hoist()`.
+Then see how these ideas apply to some real data from the repurrrsive package.
+Finish off by talkign about JSON, source of many hierarchical dataset.
 
 ### Prerequisites
 
 In this chapter we'll continue using tidyr, which also provides a bunch of tools to rectangle your datasets.
 tidyr is a member of the core tidyverse.
+We'll also use repurrrsive to supply some interesting datasets to practice your rectangling skills.
 
 ```{r}
 #| label: setup
 #| message: false
 
 library(tidyverse)
+library(repurrrsive)
 ```
 
-<!--# TO DO: Write chapter around unnest, hoist, etc. -->
+## Lists
+
+So far we've focused on the simple vectors like integers, numbers, characters, date-times, and factors.
+These all share the property that they're flat and homogeneous: every element is of the same type.
+The next step up in complexity are lists, which can contain any vector.
+You create a list with `list()`:
+
+```{r}
+x1 <- list(1:4, "a", TRUE)
+x1
+```
+
+It's also common to name the components of a list, which works much like naming the columns of a tibble:
+
+```{r}
+x2 <- list(a = 1:2, b = 1:3, c = 1:4)
+x2
+```
+
+Even for these very simple lists, printing takes up quite a lot of space, and it gets even worse as the lists get more complex.
+A very useful alternative is `str()`, short for structure, because it focuses on a compact display of**str**ucture, demphasising the contents:
+
+```{r}
+str(x1)
+str(x2)
+```
+
+`str()` display each element (or **child**) of a list on its own line.
+It displays the name if present, then an abbreviation of the type, then a sample of the values.
+
+### Hierarchy
+
+Lists can even contain other lists!
+This makes them suitable for representing hierarchical or tree-like structures.
+
+```{r}
+x3 <- list(list(1, 2), list(3, 4))
+str(x3)
+```
+
+You can see how `str()` starts to get even more useful as the lists get more complex, and you can easily see the multiple layers at a glance.
+
+```{r}
+x4 <- list(1, list(2, list(3, list(4, list(5)))))
+str(x4)
+```
+
+However, at some point, even `str()` starts to fail, if you're working with deeply nested lists in RStudio, you may need to switch to `View()`.
+@fig-view-collapsed shows the result of calling `View(x4)`.
+The viewer starts by showing just the top level of the list, but you can interactively expand any of the components to see more, as in @fig-view-expand-1. You can do this as many times as needed and RStudio will also show you the subsetting code you need to access that element, as in @fig-view-expand-2. We'll come back to how this code works in @sec-vector-subsetting.
+
+```{r}
+#| label: fig-view-collapsed
+#| fig.cap: >
+#|   The RStudio allows you to interactively explore a complex list.  
+#|   The viewer opens showing only the top level of the list.
+#| echo: false
+#| out-width: NULL
+knitr::include_graphics("screenshots/View-1.png", dpi = 220)
+```
+
+```{r}
+#| label: fig-view-expand-1
+#| fig.cap: >
+#|   Clicking on the rightward facing triangle expands that component
+#|   of the list so that you can also see its children.
+#| echo: false
+#| out-width: NULL
+knitr::include_graphics("screenshots/View-2.png", dpi = 220)
+```
+
+```{r}
+#| label: fig-view-expand-2
+#| fig.cap: >
+#|   You can repeat this operation as many times as needed to get to the 
+#|   data you're interested in. Note the bottom-right corner: if you click
+#|   an element of the list, RStudio will give you the subsetting code needed
+#|   to access it.
+#| echo: false
+#| out-width: NULL
+knitr::include_graphics("screenshots/View-3.png", dpi = 220)
+```
+
+### List columns
+
+You can even put lists in the column of a tibble:
+
+```{r}
+df <- tibble(
+  x = 1:2, 
+  y = c("a", "b"),
+  z = list(1:3, 4:5)
+)
+df
+```
+
+This is a powerful idea because it allows you to store arbitrarily complex objects in a data frame; even things that wouldn't typically belong there.
+This idea is used a lot in tidymodels, because it allows you to store things like models or resamples in a data frame.
+
+And those things are carried along like any other column:
+
+```{r}
+df |> 
+  filter(x == 1)
+```
+
+The default print method just displays a rough summary of the contents.
+The list column could be arbitrarily complex, so there's no good way to print it.
+If you want to see it, you'll need to pull the list-column out and apply of the techniques that you learned above:
+
+```{r}
+df |> 
+  filter(x == 1) |> 
+  pull(z) |> 
+  str()
+```
+
+Similarly, if you `View()` a data frame in RStudio, you'll get the standard tabular view, which doesn't allow you to selectively expand list columns.
+To explore those fields you'll need to `pull()` and view, e.g.
+`View(pull(df, z))`
+
+::: callout-note
+## Base R
+
+It's possible to put a list in a column of a `data.frame`, but it's a lot fiddlier.
+List-columns are implicit in the definition of the data frame: a data frame is a named list of equal length vectors.
+A list is a vector, so it's always been legitimate to use a list as a column of a data frame.
+However, base R doesn't make it easy to create list-columns because `data.frame()` treats a list as a list of columns:
+
+```{r}
+data.frame(x = list(1:3, 3:5))
+```
+
+You can prevent `data.frame()` from doing this with `I()`, but the result doesn't print particularly well:
+
+```{r}
+data.frame(
+  x = I(list(1:3, 3:5)), 
+  y = c("1, 2", "3, 4, 5")
+)
+```
+
+Tibbles make it easier to work with list-columns because `tibble()` doesn't modify its inputs and the print method is designed with lists in mind.
+:::
+
+## Unnesting
+
+Now that you've learned the basics of lists and how you can use them as a column of a data frame, lets start to see how you can turn them back into regular columns and rows so you can use them with the tidyverse functions you've already learned about.
+We'll start with very simple sample data so you can get the idea of how things work, and then in the next section switch to more realistic examples.
+
+Lists tend to come in two basic forms:
+
+-   A named list where every row has the same number of children with the same names.
+-   An unnamed list where the number of children varies from row to row.
+
+The following code creates an example of each.
+In `df1`, every element of list-column `y` has two elements named `a` and `b`.
+If `df2`, the elements of list-column `y` are unnamed and vary in length.
+
+```{r}
+df1 <- tribble(
+  ~x, ~y,
+  1, list(a = 11, b = 12),
+  2, list(a = 21, b = 21),
+  3, list(a = 31, b = 32)
+)
+
+df2 <- tribble(
+  ~x, ~y,
+  1, c(11, 12, 13),
+  2, 21,
+  3, c(31, 32)
+)
+```
+
+We'll use two complementary tools from tidyr to deal with them: `unnest_wider()` and `unnest_longer()`.
+Their suffixes have the same meaning as `pivot_wider()` and `pivot_longer()`: `_wider()` adds more rows and `_longer()` adds more columns.
+
+The main difference between these simple examples and real data is that there's only one level of nesting here.
+In real-life, there will often be many, and you'll need to use multiple calls to `unnest_wider()` and `unnest_longer()` to handle it.
+
+### `unnest_wider()`
+
+When each row has the same number of elements with the same names, it's natural to put each component into its own column with `unnest_wider()`:
+
+```{r}
+df1 |> unnest_wider(y)
+```
+
+By default, the names of the new columns come exclusively from the names of the list, but you can use the `names_sep` argument to request that they combine the original column with the new column.
+As you'll learn in the next section, this is useful for disambiguating repeated names.
+
+```{r}
+df1 |> unnest_wider(y, names_sep = "_")
+```
+
+For the purposes of completeness, we can also use `unnest_wider()` with `df2`.
+It's not as naturally well suited it's not clear what we should call the columns so tidy just numbers them:
+
+```{r}
+df2 |> unnest_wider(y, names_sep = "_")
+```
+
+You'll notice that `unnested_wider()`, much like `pivot_wider()`, produces explicit missing values that previously didn't exist in the dataset.
+And if you're working with live data, you won't know exactly how many columns you'll end up with.
+
+### `unnest_longer()`
+
+When each row contains an unnamed list, it's most natural to put each element into a row with `unnest_longer()`:
+
+```{r}
+df2 |> unnest_longer(y)
+```
+
+Again, we can apply the same operation to `df1`:
+
+```{r}
+df1 |> unnest_longer(y)
+```
+
+Because the elements are named, and those names might be useful data, tidyr keeps them in the result data in a new column with the `_id` suffix.
+You can suppress this with `indices_include = FALSE`, or use `indices_include = TRUE` to force inclusion when they're unnamed:
+
+```{r}
+df2 |> unnest_longer(y, indices_include = TRUE)
+```
+
+### Other functions
+
+There are two other useful functions that we're not going to talk about here:
+
+-   (`unnest()` also exists but is now reserved for the case where you want to simultaneously make the data frame longer and wider which happens when the list column contains data frames. That's out of scope for this book)
+-   `hoist()` allows you to reach into a deeply nested list and extract just the components that you need. Mostly equivalent to (possibly repeated) `unnest_wider()` + `select()`.
+-   `unnest_auto()` guess
+
+The other advantage of hoist is that you can pull out a component that's arbitrarily deep.
+
+## Case studies
+
+See `vignette("rectangling", package = "tidyr")` for more.
+
+### Very wide data
+
+`gh_repos` --- needs to cover how to work with data frame with many names.
+
+```{r}
+repos <- tibble(repo = gh_repos)
+repos
+
+repos |> 
+  unnest_longer(repo) |> 
+  unnest_wider(repo) |> 
+  unnest_wider(owner, names_sep = "_")
+```
+
+Then show hoist to simplify a little.
+
+### Relational data
+
+```{r}
+chars <- tibble(char = got_chars)
+chars |> 
+  unnest_wider(char) |> 
+  select(id, titles) |> 
+  unnest_longer(titles) |> 
+  filter(titles != "") |> 
+  rename(title = titles)
+
+chars |> 
+  unnest_wider(char) |> 
+  select(where(is.list))
+
+chars |> 
+  unnest_wider(char) |> 
+  select(id, aliases) |> 
+  unnest_longer(aliases) |> 
+  filter(aliases != "") |> 
+  rename(alias = aliases)
+
+chars |> 
+  unnest_wider(char) |> 
+  select(name, books, tvSeries) %>% 
+  pivot_longer(c(books, tvSeries), names_to = "media", values_to = "value") %>% 
+  unnest_longer(value)
+```
+
+### Deeply nested
+
+## JSON
+
+In this chapter, we'll focus mostly on JSON data, since this is a common way that you'll encounter deeply nested hierarchical data.
+JSON, short for javascript object notation, is a data format that grew out of the javascript programming language and has become an extremely common way of representing data.
+
+(Fortunately, once you've learned the basic ideas with JSON, you'll be able to apply them to any hierarchical data structure that you might encounter in R, as long as it gets turned into a list. You can also use these skills to selectively extract parts of data structures created by other R packages.)
+
+``` json
+{
+  "name1": "value1",
+  "name2": "value2"
+}
+```
+
+Which in R you might represent as:
+
+```{r}
+list(
+  name1 = "value1",
+  name2 = "value2"
+)
+```
+
+There are five types of things that JSON can represent
+
+``` json
+{
+  "strings": "are surrounded by double doubles",
+  "numbers": 123456,
+  "boolean": [false, true],
+  "arrays": [1, 2, 3, 4, 5],
+  "objects": {
+    "name1": "value1",
+    "name2": "value2"
+  },
+  "null": null
+}
+```
+
+You'll notice that these types don't embrace many of the types you've learned earlier in the book like factors, dates, date-times, and tibbles.
+This is important and we'll come back to it later.
+
+Most of the time you won't deal with JSON directly, instead you'll use the jsonlite package, by Jeroen Oooms, to load it into R as a nested list.
+
+### Data frames
+
+JSON doesn't have any 2-dimension data structures, so how would you represent a data frame?
+
+```{r}
+df <- tribble(
+  ~x, ~y,
+  "a", 10,
+  "x", 3
+)
+```
+
+There are two ways: you can either make an struct of arrays, or an array of structs.
+
+``` json
+{
+  "x": ["a", "x"],
+  "y": [10, 3]
+}
+```
+
+``` {.json .josn}
+[
+  {"x": "a", "y": 10},
+  {"x": "x", "y": 3}
+]
+```
