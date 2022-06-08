@@ -80,7 +80,9 @@ str(x4)
 
 However, at some point, even `str()` starts to fail, if you're working with deeply nested lists in RStudio, you may need to switch to `View()`.
 @fig-view-collapsed shows the result of calling `View(x4)`.
-The viewer starts by showing just the top level of the list, but you can interactively expand any of the components to see more, as in @fig-view-expand-1. You can do this as many times as needed and RStudio will also show you the subsetting code you need to access that element, as in @fig-view-expand-2. We'll come back to how this code works in @sec-vector-subsetting.
+The viewer starts by showing just the top level of the list, but you can interactively expand any of the components to see more, as in @fig-view-expand-1.
+You can do this as many times as needed and RStudio will also show you the subsetting code you need to access that element, as in @fig-view-expand-2.
+We'll come back to how this code works in @sec-vector-subsetting.
 
 ```{r}
 #| label: fig-view-collapsed
@@ -206,15 +208,16 @@ df2 <- tribble(
 )
 ```
 
-We'll use two complementary tools from tidyr to deal with them: `unnest_wider()` and `unnest_longer()`.
-Their suffixes have the same meaning as `pivot_wider()` and `pivot_longer()`: `_wider()` adds more rows and `_longer()` adds more columns.
+These two cases correspond to two tools from tidyr: `unnest_wider()` and `unnest_longer()`.
+Their suffixes have the same meaning as `pivot_wider()` and `pivot_longer()`: `_wider()` adds more columns and `_longer()` adds more rows.
+If your situation isn't as clear cut as these cases, you'll still need to use one of `unnest_longer()` and `unnest_wider()`; you'll just need to do a bit more thinking and experimentation to figure out which one is best.
 
 The main difference between these simple examples and real data is that there's only one level of nesting here.
 In real-life, there will often be many, and you'll need to use multiple calls to `unnest_wider()` and `unnest_longer()` to handle it.
 
 ### `unnest_wider()`
 
-When each row has the same number of elements with the same names, it's natural to put each component into its own column with `unnest_wider()`:
+When each row has the same number of elements with the same names, like `df1`, it's natural to put each component into its own column with `unnest_wider()`:
 
 ```{r}
 df1 |> unnest_wider(y)
@@ -225,6 +228,17 @@ As you'll learn in the next section, this is useful for disambiguating repeated 
 
 ```{r}
 df1 |> unnest_wider(y, names_sep = "_")
+```
+
+If the names aren't consistent from row-to-row, `unnest_wider()` will create the superset of column names, filling in with `NA` as needed:
+
+```{r}
+df3 <- tribble(
+  ~x, ~y,
+  "a", list(a = 1, b = 2),
+  "b", list(b = 2, c = 3)
+)
+df3 |> unnest_wider(y)
 ```
 
 For the purposes of completeness, we can also use `unnest_wider()` with `df2`.
@@ -260,16 +274,28 @@ df2 |> unnest_longer(y, indices_include = TRUE)
 
 ### Other functions
 
-There are two other useful functions that we're not going to talk about here:
+There are few other useful rectangling functions that we're not going to talk about here:
 
--   (`unnest()` also exists but is now reserved for the case where you want to simultaneously make the data frame longer and wider which happens when the list column contains data frames. That's out of scope for this book)
--   `hoist()` allows you to reach into a deeply nested list and extract just the components that you need. Mostly equivalent to (possibly repeated) `unnest_wider()` + `select()`.
--   `unnest_auto()` guess
+-   `unnest_auto()` automatically picks between `unnest_longer()` and `unnest_wider()`based on the structure of the list-column. It's a great for rapid exploration, but I think it's ultimately a bad idea because it doesn't force you to understand how your data is structured, and makes your code harder to understand.
+-   `unnest()` modifies rows and columns simultaneously. It's useful when you have a list-column that contains a 2d structure like a data frame (which we often call a nested data frame), which we don't otherwise use in this book.
+-   `hoist()` allows you to reach into a deeply nested list and extract just the components that you need. It's mostly equivalent to repeated invocations of `unnest_wider()` + `select()` so you should read up on it if there's just a couple of important variables that you want to pull out, embedded in a bunch of data that you don't care about.
 
-The other advantage of hoist is that you can pull out a component that's arbitrarily deep.
+### Exercises
+
+1.  From time-to-time you encounter data frames with multiple list-columns with aligned values. For example, in the following data frame, the values of `y` and `z` are aligned (i.e. `y` and `z` will always have the same length within a row, and the first value of `y` corresponds to the first value of `z`). What happens if you apply two `unnest_longer()` calls to this data frame? How can you preserve the relationship between `x` and `y`? (Hint: carefully read the docs).
+
+    ```{r}
+    df4 <- tribble(
+      ~x, ~y, ~z,
+      "a", list("y-a-1", "y-a-2"), list("z-a-1", "z-a-2"),
+      "b", list("y-b-1", "y-b-2", "y-b-3"), list("z-b-1", "z-b-2", "z-b-3")
+    )
+    ```
 
 ## Case studies
 
+Now that you understand the basics of `unnest_wider()` and `unnest_longer()` lets use them to tackle some real rectangling challenges.
+These challenges share the common feature that they're mostly just a sequence of multiple `unnest_wider()` and/or `unnest_longer()` calls, with a little dash of dplyr where needed.
 See `vignette("rectangling", package = "tidyr")` for more.
 
 ### Very wide data
