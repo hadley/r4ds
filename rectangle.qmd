@@ -13,15 +13,16 @@ Often you have to deal with data that is fundamentally tree-like --- rather than
 In this chapter, you'll learn the art of "rectangling", taking complex hierarchical data and turning it into a data frame that you can easily work with using the tools you learned earlier in the book.
 
 We'll start by talking about lists, an new type of vector that makes hierarchical data possible.
-Then you'll learn about three key functions for rectangling from tidyr: `tidyr::unnest_longer()`, `tidyr::unnest_wider()e`, and `tidyr::hoist()`.
+Then you'll learn about three key functions for rectangling from tidyr: `tidyr::unnest_longer()`, `tidyr::unnest_wider()`, and `tidyr::hoist()`.
 Then see how these ideas apply to some real data from the repurrrsive package.
-Finish off by talkign about JSON, source of many hierarchical dataset.
+Finish off by talking about JSON, source of many hierarchical datasets.
 
 ### Prerequisites
 
 In this chapter we'll continue using tidyr, which also provides a bunch of tools to rectangle your datasets.
 tidyr is a member of the core tidyverse.
 We'll also use repurrrsive to supply some interesting datasets to practice your rectangling skills.
+We'll finish up with a little jsonlite, since JSON is a typical source of deeply nested data.
 
 ```{r}
 #| label: setup
@@ -29,6 +30,8 @@ We'll also use repurrrsive to supply some interesting datasets to practice your 
 
 library(tidyverse)
 library(repurrrsive)
+library(jsonlite)
+
 ```
 
 ## Lists
@@ -51,7 +54,7 @@ x2
 ```
 
 Even for these very simple lists, printing takes up quite a lot of space, and it gets even worse as the lists get more complex.
-A very useful alternative is `str()`, short for structure, because it focuses on a compact display of**str**ucture, demphasising the contents:
+A very useful alternative is `str()`, short for structure, because it focuses on a compact display of **str**ucture, de-emphasizing the contents:
 
 ```{r}
 str(x1)
@@ -196,15 +199,15 @@ If `df2`, the elements of list-column `y` are unnamed and vary in length.
 df1 <- tribble(
   ~x, ~y,
   1, list(a = 11, b = 12),
-  2, list(a = 21, b = 21),
-  3, list(a = 31, b = 32)
+  2, list(a = 21, b = 22),
+  3, list(a = 31, b = 32),
 )
 
 df2 <- tribble(
   ~x, ~y,
-  1, c(11, 12, 13),
-  2, 21,
-  3, c(31, 32)
+  1, list(11, 12, 13),
+  2, list(21),
+  3, list(31, 32),
 )
 ```
 
@@ -220,56 +223,55 @@ In real-life, there will often be many, and you'll need to use multiple calls to
 When each row has the same number of elements with the same names, like `df1`, it's natural to put each component into its own column with `unnest_wider()`:
 
 ```{r}
-df1 |> unnest_wider(y)
+df1 |> 
+  unnest_wider(y)
 ```
 
 By default, the names of the new columns come exclusively from the names of the list, but you can use the `names_sep` argument to request that they combine the original column with the new column.
 As you'll learn in the next section, this is useful for disambiguating repeated names.
 
 ```{r}
-df1 |> unnest_wider(y, names_sep = "_")
+df1 |> 
+  unnest_wider(y, names_sep = "_")
 ```
 
-If the names aren't consistent from row-to-row, `unnest_wider()` will create the superset of column names, filling in with `NA` as needed:
+We can also use `unnest_wider()` with unnamed list-columns, as in `df2`.
+It's not as naturally well suited, because it's not clear what the columns should be named.
+So `unnest_wider()` gives them numbers:
 
 ```{r}
-df3 <- tribble(
-  ~x, ~y,
-  "a", list(a = 1, b = 2),
-  "b", list(b = 2, c = 3)
-)
-df3 |> unnest_wider(y)
+df2 |> 
+  unnest_wider(y, names_sep = "_")
 ```
 
-For the purposes of completeness, we can also use `unnest_wider()` with `df2`.
-It's not as naturally well suited it's not clear what we should call the columns so tidy just numbers them:
-
-```{r}
-df2 |> unnest_wider(y, names_sep = "_")
-```
-
-You'll notice that `unnested_wider()`, much like `pivot_wider()`, produces explicit missing values that previously didn't exist in the dataset.
-And if you're working with live data, you won't know exactly how many columns you'll end up with.
+You'll notice that `unnested_wider()`, much like `pivot_wider()`, turns implicit missing values in to explicit missing values.
+Another challenge is that if you're working with live data, you won't know exactly how many columns you'll end up with.
 
 ### `unnest_longer()`
 
-When each row contains an unnamed list, it's most natural to put each element into a row with `unnest_longer()`:
+When each row contains an unnamed list, it's most natural to put each element into its own row with `unnest_longer()`:
 
 ```{r}
-df2 |> unnest_longer(y)
+df2 |> 
+  unnest_longer(y)
 ```
 
-Again, we can apply the same operation to `df1`:
+You can also apply the same operation to named list-columns, like `df1$y`:
 
 ```{r}
-df1 |> unnest_longer(y)
+df1 |> 
+  unnest_longer(y)
 ```
 
+Note the new `y_id` column.
 Because the elements are named, and those names might be useful data, tidyr keeps them in the result data in a new column with the `_id` suffix.
-You can suppress this with `indices_include = FALSE`, or use `indices_include = TRUE` to force inclusion when they're unnamed:
+You can suppress this with `indices_include = FALSE`.
+
+You might also use `indices_include = TRUE` if the position of the elements is important in the unnamed case:
 
 ```{r}
-df2 |> unnest_longer(y, indices_include = TRUE)
+df2 |> 
+  unnest_longer(y, indices_include = TRUE)
 ```
 
 ### Other functions
@@ -282,7 +284,11 @@ There are few other useful rectangling functions that we're not going to talk ab
 
 ### Exercises
 
-1.  From time-to-time you encounter data frames with multiple list-columns with aligned values. For example, in the following data frame, the values of `y` and `z` are aligned (i.e. `y` and `z` will always have the same length within a row, and the first value of `y` corresponds to the first value of `z`). What happens if you apply two `unnest_longer()` calls to this data frame? How can you preserve the relationship between `x` and `y`? (Hint: carefully read the docs).
+1.  From time-to-time you encounter data frames with multiple list-columns with aligned values.
+    For example, in the following data frame, the values of `y` and `z` are aligned (i.e. `y` and `z` will always have the same length within a row, and the first value of `y` corresponds to the first value of `z`).
+    What happens if you apply two `unnest_longer()` calls to this data frame?
+    How can you preserve the relationship between `x` and `y`?
+    (Hint: carefully read the docs).
 
     ```{r}
     df4 <- tribble(
@@ -300,57 +306,270 @@ See `vignette("rectangling", package = "tidyr")` for more.
 
 ### Very wide data
 
-`gh_repos` --- needs to cover how to work with data frame with many names.
+We'll start with `gh_repos` --- this is some data about GitHub repositories retrived from GitHub API. It's a very deeply nested list so it's hard for me to display in this book; you might want to explore a little on your own with `View(gh_repos)` before we continue.
+To make it more manageable I'm going to put it in a tibble in a column called `json` (for reasons we'll get to later)
 
 ```{r}
-repos <- tibble(repo = gh_repos)
+repos <- tibble(json = gh_repos)
 repos
+```
 
+There are row rows, and each row contains a unnamed list with either 26 or 30 rows.
+Since these are unnamed, we'll start with an `unnest_longer()` to put each child in its own row:
+
+```{r}
 repos |> 
-  unnest_longer(repo) |> 
-  unnest_wider(repo) |> 
+  unnest_longer(json)
+```
+
+At first glance, it might seem like we haven't improved the situation --- while we have more rows now (176 instead of 6) it seems like each element of `json` is still a list.
+However, there's an important difference: now each element is a **named** list so we can use `unnamed_wider()` to put each element into its own column:
+
+```{r}
+repos |> 
+  unnest_longer(json) |> 
+  unnest_wider(json) 
+```
+
+This is a bit overwhelming --- there are so many columns that tibble doesn't even print all of them!
+We can see them all with `names()`:
+
+```{r}
+repos |> 
+  unnest_longer(json) |> 
+  unnest_wider(json) |> 
+  names()
+```
+
+Let's select a few that look interesting:
+
+```{r}
+repos |> 
+  unnest_longer(json) |> 
+  unnest_wider(json) |> 
+  select(id, full_name, owner, description)
+```
+
+`owner` is another list-column, and since it contains named list, we can use `unnest_wider()` to get at the values:
+
+```{r, error = TRUE}
+repos |> 
+  unnest_longer(json) |> 
+  unnest_wider(json) |> 
+  select(id, full_name, owner, description) |> 
+  unnest_wider(owner)
+```
+
+Uh oh, this list column also contains an `id` column and we can't have two `id` columns in the same data frame.
+Rather than following the advice to use `names_repair` (which would also work), I'll instead use `names_sep`:
+
+```{r}
+repos |> 
+  unnest_longer(json) |> 
+  unnest_wider(json) |> 
+  select(id, full_name, owner, description) |> 
   unnest_wider(owner, names_sep = "_")
 ```
 
-Then show hoist to simplify a little.
-
 ### Relational data
 
+When you get nested data, it's not uncommon for it to contain data that we'd normally spread out into multiple data frames.
+Take `got_chars`
+
 ```{r}
-chars <- tibble(char = got_chars)
+chars <- tibble(json = got_chars)
+chars
+```
+
+The `json` column contains named values, so we'll start by widening it:
+
+```{r}
 chars |> 
-  unnest_wider(char) |> 
+  unnest_wider(json)
+```
+
+And selecting a few columns just to make it easier to read:
+
+```{r}
+characters <- chars |> 
+  unnest_wider(json) |> 
+  select(id, name, gender, culture, born, died, alive)
+characters
+```
+
+There are also many list-columns:
+
+```{r}
+chars |> 
+  unnest_wider(json) |> 
+  select(id, where(is.list))
+```
+
+Lets explore a couple, starting with `titles`:
+
+```{r}
+chars |> 
+  unnest_wider(json) |> 
+  select(id, titles) |> 
+  unnest_longer(titles)
+```
+
+You might expect to see this in its own table:
+
+```{r}
+titles <- chars |> 
+  unnest_wider(json) |> 
   select(id, titles) |> 
   unnest_longer(titles) |> 
   filter(titles != "") |> 
   rename(title = titles)
-
-chars |> 
-  unnest_wider(char) |> 
-  select(where(is.list))
-
-chars |> 
-  unnest_wider(char) |> 
-  select(id, aliases) |> 
-  unnest_longer(aliases) |> 
-  filter(aliases != "") |> 
-  rename(alias = aliases)
-
-chars |> 
-  unnest_wider(char) |> 
-  select(name, books, tvSeries) %>% 
-  pivot_longer(c(books, tvSeries), names_to = "media", values_to = "value") %>% 
-  unnest_longer(value)
+titles
 ```
+
+Because you could then join it on as needed.
+For example, we find all the characters that are captains:
+
+```{r}
+captains <- titles |> filter(str_detect(title, "Captain"))
+captains
+
+characters |> 
+  semi_join(captains)
+```
+
+You could imagine creating a table like this for each of the list-columns, and then using joins to combine when needed.
+
+### Text analysis
+
+```{r}
+titles |> 
+  mutate(word = str_split(title, " "), .keep = "unused") |> 
+  unnest_longer(word) |> 
+  count(word, sort = TRUE)
+```
+
+The tidytext package uses this idea.
+Learn more at <https://www.tidytextmining.com>.
 
 ### Deeply nested
 
+We'll finish off with an that is very deeply nested and requires repeated rounds of `unnest_wider()` and `unnest_longer()` to unravel: `gmaps_cities`.
+This is a two column tibble containing five cities names and the results of using Google's [geocoding API](https://developers.google.com/maps/documentation/geocoding) to determine their location:
+
+```{r}
+gmaps_cities
+```
+
+`json` is list-column with internal names, so we start with an `unnest_wider()`:
+
+```{r}
+gmaps_cities |> 
+  unnest_wider(json)
+```
+
+This gives us a status column and the actual results.
+We'll drop the status column since they're all `OK`.
+In a real analysis, you'd also want separately capture all the rows where `status != "OK"` so you could figure out what went wrong.
+`results` is an unnamed list, with either one or two elements.
+We'll figure to out why shortly.
+
+```{r}
+gmaps_cities |> 
+  unnest_wider(json) |> 
+  select(-status) |> 
+  unnest_longer(results)
+```
+
+Now results is a named list, so we'll `unnest_wider()`:
+
+```{r}
+locations <- gmaps_cities |> 
+  unnest_wider(json) |> 
+  select(-status) |> 
+  unnest_longer(results) |> 
+  unnest_wider(results)
+locations
+```
+
+Now we can see why Washington and Arlington got two results: Washington matched both the state and the city (DC), and Arlington matched Arlington Virginia and Arlington Texas.
+
+There are few different places we could go from here.
+We might want to determine the exact location of the match stored in the `geometry` list-column:
+
+```{r}
+locations |> 
+  select(city, formatted_address, geometry) |> 
+  unnest_wider(geometry)
+```
+
+That gives us new `bounds` (which gives a rectangular region) and the midpoint in `location`, which we can unnest to get latitude (`lat`) and longitude (`lng`):
+
+```{r}
+locations |> 
+  select(city, formatted_address, geometry) |> 
+  unnest_wider(geometry) |> 
+  unnest_wider(location)
+```
+
+Extracting the bounds requires a few more steps
+
+```{r}
+locations |> 
+  select(city, formatted_address, geometry) |> 
+  unnest_wider(geometry) |> 
+  # focus on the variables of interest
+  select(!location:viewport) |>
+  unnest_wider(bounds)
+```
+
+I then rename `southwest` and `northeast` (the corners of the rectangle) so I can use `names_sep` to create short but evocative names:
+
+```{r}
+locations |> 
+  select(city, formatted_address, geometry) |> 
+  unnest_wider(geometry) |> 
+  select(!location:viewport) |>
+  unnest_wider(bounds) |> 
+  rename(ne = northeast, sw = southwest) |> 
+  unnest_wider(c(ne, sw), names_sep = "_") 
+```
+
+Note that I take advantage of the fact that you can unnest multiple columns at a time by supplying a vector of variable names to `unnest_wider()`.
+
+This one place where `hoist()`, which we mentioned briefly above can be useful.
+Once you've discovered the path to get to the components you're interested in, you can extract them directly using `hoist()`:
+
+```{r}
+locations |> 
+  select(city, formatted_address, geometry) |> 
+  hoist(
+    geometry,
+    ne_lat = c("bounds", "northeast", "lat"),
+    sw_lat = c("bounds", "southwest", "lat"),
+    ne_lng = c("bounds", "northeast", "lng"),
+    sw_lng = c("bounds", "southwest", "lng"),
+  )
+```
+
+### Exercises
+
+1.  The `owner` column of `gh_repo` contains a lot of duplicated information because each owner can have many repos. Can you construct a `owners` data frame that contains one row for each owner? (Hint: does `distinct()` work with `list-cols`?)
+
+2.  Explain the following code. Why is it interesting? Why does it work for this dataset but might not work in general?
+
+    ```{r}
+    tibble(json = got_chars) |> 
+      unnest_wider(json) |> 
+      select(id, where(is.list)) %>% 
+      pivot_longer(where(is.list), names_to = "media", values_to = "value") %>% 
+      unnest_longer(value)
+    ```
+
 ## JSON
 
-In this chapter, we'll focus mostly on JSON data, since this is a common way that you'll encounter deeply nested hierarchical data.
+All of the case studies in the previous section came originally as JSON, one of the most common sources of hierarchical data.
+In this section, you'll learn more about JSON and some common problems you might have.
 JSON, short for javascript object notation, is a data format that grew out of the javascript programming language and has become an extremely common way of representing data.
-
-(Fortunately, once you've learned the basic ideas with JSON, you'll be able to apply them to any hierarchical data structure that you might encounter in R, as long as it gets turned into a list. You can also use these skills to selectively extract parts of data structures created by other R packages.)
 
 ``` json
 {
