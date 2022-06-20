@@ -33,17 +33,16 @@ library(jsonlite)
 
 ## Lists
 
-So far we've used simple vectors, like integers, numbers, characters, date-times, and factors.
-These vectors are all homogeneous: every element must be the same type.
-If you want to store element of different types, you need a **list**.
-You can create a list with `list()`:
+So far we've used simple vectors like integers, numbers, characters, date-times, and factors.
+These vectors are simple because they're homogeneous: every element is same type.
+If you want to store element of different types, you need a **list**, which you create with `list()`:
 
 ```{r}
 x1 <- list(1:4, "a", TRUE)
 x1
 ```
 
-It's often convenient to name the components of a list, which you can do in the same way as naming the columns of a tibble:
+It's often convenient to name the components, or **children**, of a list, which you can do in the same way as naming the columns of a tibble:
 
 ```{r}
 x2 <- list(a = 1:2, b = 1:3, c = 1:4)
@@ -51,15 +50,15 @@ x2
 ```
 
 Even for these very simple lists, printing takes up quite a lot of space.
-A very useful alternative is `str()`, short for structure, which generates a compact display of the **str**ucture, de-emphasizing the contents:
+A useful alternative is `str()`, which generates a compact display of the **str**ucture, de-emphasizing the contents:
 
 ```{r}
 str(x1)
 str(x2)
 ```
 
-`str()` display each element (or **child**) of a list on its own line.
-It displays the name if present, then an abbreviation of the type, then the first few values.
+As you can see, `str()` displays each child on its own line.
+It displays the name, if present, then an abbreviation of the type, then the first few values.
 
 ### Hierarchy
 
@@ -71,24 +70,26 @@ x3 <- list(list(1, 2), list(3, 4))
 str(x3)
 ```
 
-This is different to `c()`, which generates a flat vector:
+This is notably different to `c()`, which generates a flat vector:
 
 ```{r}
 c(c(1, 2), c(3, 4))
-```
 
-You can see how `str()` starts to get even more useful as the lists get more complex, and how it allows you to see the hierarchy at a glance.
-
-```{r}
-x4 <- list(1, list(2, list(3, list(4, list(5)))))
+x4 <- c(list(1, 2), list(3, 4))
 str(x4)
 ```
 
-At some point, however, even `str()` starts to fail, and if you're working with deeply nested lists in RStudio, I highly recommend using `View()`.
-@fig-view-collapsed shows the result of calling `View(x4)`.
-The viewer starts by showing just the top level of the list, but you can interactively expand any of the components to see more, as in @fig-view-expand-1.
-RStudio will also show you the code you need to access that element, as in @fig-view-expand-2.
-We'll come back to how this code works in @sec-vector-subsetting.
+As lists get more complex, `str()` gets more useful, as it lets you see the hierarchy at a glance:
+
+```{r}
+x5 <- list(1, list(2, list(3, list(4, list(5)))))
+str(x5)
+```
+
+As lists get even large and more complex, even `str()` starts to fail, you'll need to switch to `View()`[^rectangle-1].
+@fig-view-collapsed shows the result of calling `View(x4)`. The viewer starts by showing just the top level of the list, but you can interactively expand any of the components to see more, as in @fig-view-expand-1. RStudio will also show you the code you need to access that element, as in @fig-view-expand-2. We'll come back to how this code works in @sec-vector-subsetting.
+
+[^rectangle-1]: This is an RStudio feature.
 
 ```{r}
 #| label: fig-view-collapsed
@@ -122,9 +123,13 @@ knitr::include_graphics("screenshots/View-2.png", dpi = 220)
 knitr::include_graphics("screenshots/View-3.png", dpi = 220)
 ```
 
-### List columns
+### List-columns
 
-You can put lists in the column of a tibble:
+Lists can also live inside a tibble, where we call them list-columns.
+List-columns are useful because they allow you to shoehorn in objects that wouldn't wouldn't usually belong in a data frame.
+List-columns are are used a lot in the tidymodels ecosystem, because it allows you to store things like models or resamples in a data frame.
+
+Here's a simple example of a list-column:
 
 ```{r}
 df <- tibble(
@@ -135,15 +140,14 @@ df <- tibble(
 df
 ```
 
-This is a powerful idea because it allows you to store arbitrarily complex objects in a data frame; even things that wouldn't typically belong there.
-This idea is used a lot in tidymodels, because it allows you to store things like models or resamples in a data frame.
-
-And those things are carried along like any other column:
+There's nothing special about lists in a tibble; they behave like any other column:
 
 ```{r}
 df |> 
   filter(x == 1)
 ```
+
+Computing with them is harder, but that's because computing with lists is a harder; we'll come back to that in @sec-iteration.
 
 The default print method just displays a rough summary of the contents.
 The list column could be arbitrarily complex, so there's no good way to print it.
@@ -158,21 +162,19 @@ df |>
 
 Similarly, if you `View()` a data frame in RStudio, you'll get the standard tabular view, which doesn't allow you to selectively expand list columns.
 To explore those fields you'll need to `pull()` and view, e.g.
-`View(pull(df, z))`
+`View(pull(df, z))`.
 
 ::: callout-note
 ## Base R
 
 It's possible to put a list in a column of a `data.frame`, but it's a lot fiddlier.
-List-columns are implicit in the definition of the data frame: a data frame is a named list of equal length vectors.
-A list is a vector, so it's always been legitimate to use a list as a column of a data frame.
 However, base R doesn't make it easy to create list-columns because `data.frame()` treats a list as a list of columns:
 
 ```{r}
 data.frame(x = list(1:3, 3:5))
 ```
 
-You can prevent `data.frame()` from doing this with `I()`, but the result doesn't print particularly well:
+You can prevent `data.frame()` from doing this with `I()`, but the result doesn't print particularly informatively:
 
 ```{r}
 data.frame(
@@ -186,16 +188,12 @@ Tibbles make it easier to work with list-columns because `tibble()` doesn't modi
 
 ## Unnesting
 
-Now that you've learned the basics of lists and how you can use them as a column of a data frame, lets start to see how you can turn them back into regular columns and rows so you can use them with the tidyverse functions you've already learned about.
-We'll start with very simple sample data so you can get the idea of how things work, and then in the next section switch to more realistic examples.
+Now that you've learned the basics of lists and list-columns, lets explore how you can turn them back into regular rows and columns.
+We'll start with very simple sample data so you can get the basic idea, and then in the next section switch to more realistic examples.
 
-Lists tend to come in two basic forms:
-
--   A named list where every row has the same number of children with the same names. Every name has the same type.
--   An unnamed list where the number of children varies from row to row, and all the types are the same.
-
-More complicated examples just combine these in multiple ways.
-
+List-columns tend to come in two basic forms: named and unnamed.
+When the children are **named**, they tend to have the same names in every row.
+When the children are **unnamed**, the number of elements tends to vary from row-to-row.
 The following code creates an example of each.
 In `df1`, every element of list-column `y` has two elements named `a` and `b`.
 If `df2`, the elements of list-column `y` are unnamed and vary in length.
@@ -216,12 +214,10 @@ df2 <- tribble(
 )
 ```
 
-These two cases correspond to two tools from tidyr: `unnest_wider()` and `unnest_longer()`.
-Their suffixes have the same meaning as `pivot_wider()` and `pivot_longer()`: `_wider()` adds more columns and `_longer()` adds more rows.
-If your situation isn't as clear cut as these cases, you'll still need to use one of `unnest_longer()` and `unnest_wider()`; you'll just need to do a bit more thinking and experimentation to figure out which one is best.
-
-The main difference between these simple examples and real data is that there's only one level of nesting here.
-In real-life, there will often be many, and you'll need to use multiple calls to `unnest_wider()` and `unnest_longer()` to handle it.
+Named list-columns naturally unnest into columns: each named element becomes a new named column.
+Unnamed list-columns naturally unnested in to rows: you'll get one row for each child.
+tidyr provides two functions for these two case: `unnest_wider()` and `unnest_longer()`.
+The following sections explain how they work.
 
 ### `unnest_wider()`
 
@@ -232,8 +228,8 @@ df1 |>
   unnest_wider(y)
 ```
 
-By default, the names of the new columns come exclusively from the names of the list, but you can use the `names_sep` argument to request that they combine the original column with the new column.
-As you'll learn in the next section, this is useful for disambiguating repeated names.
+By default, the names of the new columns come exclusively from the names of the list, but you can use the `names_sep` argument to request that they combine the column name and the list names.
+This is useful for disambiguating repeated names.
 
 ```{r}
 df1 |> 
@@ -241,8 +237,7 @@ df1 |>
 ```
 
 We can also use `unnest_wider()` with unnamed list-columns, as in `df2`.
-It's not as naturally well suited, because it's not clear what the columns should be named.
-So `unnest_wider()` gives them numbers:
+Since columns require names but the list lacks them, `unnest_wider()` will label them with consecutive integers:
 
 ```{r}
 df2 |> 
@@ -250,7 +245,6 @@ df2 |>
 ```
 
 You'll notice that `unnested_wider()`, much like `pivot_wider()`, turns implicit missing values in to explicit missing values.
-Another challenge is that if you're working with live data, you won't know exactly how many columns you'll end up with.
 
 ### `unnest_longer()`
 
@@ -261,26 +255,8 @@ df2 |>
   unnest_longer(y)
 ```
 
-You can also apply the same operation to named list-columns, like `df1$y`:
-
-```{r}
-df1 |> 
-  unnest_longer(y)
-```
-
-Note the new `y_id` column.
-Because the elements are named, and those names might be useful data, tidyr keeps them in the result data in a new column with the `_id` suffix.
-You can suppress this with `indices_include = FALSE`.
-
-You might also use `indices_include = TRUE` if the position of the elements is important in the unnamed case:
-
-```{r}
-df2 |> 
-  unnest_longer(y, indices_include = TRUE)
-```
-
-The output contains one row for each element inside the list-column.
-So what happens if the list-column is empty?
+Note how `x` is duplicated for each element inside of `y`: we get one row of output for each element inside the list-column.
+But what happens if the list-column is empty, as in the following example?
 
 ```{r}
 df6 <- tribble(
@@ -292,14 +268,30 @@ df6 <- tribble(
 df6 |> unnest_longer(y)
 ```
 
-The row goes away!
---- <https://github.com/tidyverse/tidyr/issues/1339>.
+We get zero rows in the output, so the row effectively disappears.
+Once <https://github.com/tidyverse/tidyr/issues/1339> is fixed, you'll be able to keep this row, replacing `y` with `NA` by setting `keep_empty = TRUE`.
+
+You can also unnest named list-columns, like `df1$y` into the rows.
+Because the elements are named, and those names might be useful data, puts them in a new column with the suffix`_id`:
+
+```{r}
+df1 |> 
+  unnest_longer(y)
+```
+
+If you don't want these `ids`, you can suppress this with `indices_include = FALSE`.
+On the other hand, it's sometimes useful to retain the position of unnamed elements in unnamed list-columns.
+You can do this with `indices_include = TRUE`:
+
+```{r}
+df2 |> 
+  unnest_longer(y, indices_include = TRUE)
+```
 
 ### Inconsistent types
 
-What happens if you attempt to unnest a column that doesn't contain only one type of thing.
-For example, what happens if we take this data set and unnest into rows?
-`y` will contain two numbers, a factor, a logical, which can't normally be mixed in a single column:
+What happens if you unnest a list-column contains different types of vector?
+For example, take the following dataset where the list-column `y` contains two numbers, a factor, and a logical, which can't normally be mixed in a single column.
 
 ```{r}
 df4 <- tribble(
@@ -309,25 +301,27 @@ df4 <- tribble(
 )
 ```
 
-An important invariant for `unnest_longer()` is that the columns say the same but the number of rows change.
+`unnest_longer()` always keeps the set of columns change, while changing the number of rows.
 So what happens?
 How does `unnest_longer()` produce five rows while keeping everything in `y`?
 
 ```{r}
-df4 |> unnest_longer(y)
+df4 |> 
+  unnest_longer(y)
 ```
 
-We still get a list-column, but every element of the list-column contains a single element.
-When `unnest_longer()` can't find a common type, it keeps the original types by using a list-column.
-You might wonder if this breaks the commandment that every element of a column must be the same type --- not quite, because every element is a still a list, but each component of a list can contain something different.
+As you can see, the output contains a list-column, but every element of the list-column contains a single element.
+Because `unnest_longer()` can't find a common type of vector, it keeps the original types in a list-column.
+You might wonder if this breaks the commandment that every element of a column must be the same type --- not quite, because every element is a still a list, and each component of that list contains something different.
 
 What happens if you find this problem in a dataset you're trying to rectangle?
 I think there are two basic options.
-You could try and coerce to a class that is meaningful for all the rows using the `transform` argument.
+You could use the `transform` argument to coerce all inputs to a common type.
 It's not particularly useful here because there's only really one class that these five class can be converted to: character.
 
 ```{r}
-df4 |> unnest_longer(y, transform = as.character)
+df4 |> 
+  unnest_longer(y, transform = as.character)
 ```
 
 Another option would be to filter down to the rows that have values of a specific type:
@@ -351,11 +345,11 @@ df4 |>
 
 ### Other functions
 
-There are few other useful rectangling functions that we're not going to talk about here:
+tidyr has a few other useful rectangling functions that we're not going to cover in this book:
 
--   `unnest_auto()` automatically picks between `unnest_longer()` and `unnest_wider()`based on the structure of the list-column. It's a great for rapid exploration, but I think it's ultimately a bad idea because it doesn't force you to understand how your data is structured, and makes your code harder to understand.
--   `unnest()` modifies rows and columns simultaneously. It's useful when you have a list-column that contains a 2d structure like a data frame (which we often call a nested data frame), which we don't otherwise use in this book.
--   `hoist()` allows you to reach into a deeply nested list and extract just the components that you need. It's mostly equivalent to repeated invocations of `unnest_wider()` + `select()` so you should read up on it if there's just a couple of important variables that you want to pull out, embedded in a bunch of data that you don't care about.
+-   `unnest_auto()` automatically picks between `unnest_longer()` and `unnest_wider()` based on the structure of the list-column. It's a great for rapid exploration, but I think it's ultimately a bad idea because it doesn't force you to understand how your data is structured, and makes your code harder to understand.
+-   `unnest()` expands both rows and columns. It's useful when you have a list-column that contains a 2d structure like a data frame, which we don't see in this book.
+-   `hoist()` allows you to reach into a deeply nested list and extract just the components that you need. It's mostly equivalent to repeated invocations of `unnest_wider()` + `select()` so you read up on it if you're trying to extract just a couple of important variables embedded in a bunch of data that you don't care about.
 
 ### Exercises
 
@@ -375,21 +369,28 @@ There are few other useful rectangling functions that we're not going to talk ab
 
 ## Case studies
 
-Now that you understand the basics of `unnest_wider()` and `unnest_longer()` lets use them to tackle some real rectangling challenges.
-These challenges share the common feature that they're mostly just a sequence of multiple `unnest_wider()` and/or `unnest_longer()` calls, with a little dash of dplyr where needed.
-See `vignette("rectangling", package = "tidyr")` for more.
+So far you've learned about the simplest case of list-columns, where you need only a single call to `unnest_longer()` or `unnest_wider()`.
+The main difference between real data and these simple examples, is with real data you'll see multiple levels of nesting.
+For example, you might see named list nested inside an unnested list, or an unnamed list nested inside of another unnamed list nested inside a named list.
+To handle these case you'll need to chain together multiple calls to `unnest_wider()` and/or `unnest_longer()`.
+
+This section will work through some real rectangling challenges using datasets from the repurrrsive package that are inspired by datasets that we've encountered in the wild.
+These challenges share the common feature that they're mostly just a sequence of multiple `unnest_wider()` and/or `unnest_longer()` calls, with a dash of dplyr where needed.
 
 ### Very wide data
 
-We'll start with `gh_repos` --- this is some data about GitHub repositories retrived from GitHub API. It's a very deeply nested list so it's hard for me to display in this book; you might want to explore a little on your own with `View(gh_repos)` before we continue.
-To make it more manageable I'm going to put it in a tibble in a column called `json` (for reasons we'll get to later)
+We'll start by exploring `gh_repos` which contains data about some GitHub repositories retrived from the GitHub API. It's a very deeply nested list so it's to show the structure in this book; you might want to explore a little on your own with `View(gh_repos)` before we continue.
+
+`gh_repos` is a list, but our tools work with list-columns, so we'll begin by putting it a tibble.
+I call the column call `json` for reasons we'll get to later.
 
 ```{r}
 repos <- tibble(json = gh_repos)
 repos
 ```
 
-There are row rows, and each row contains a unnamed list with either 26 or 30 rows.
+This tibble contains 6 rows, one row for each child of `gh_repos`.
+Each row contains a unnamed list with either 26 or 30 rows.
 Since these are unnamed, we'll start with an `unnest_longer()` to put each child in its own row:
 
 ```{r}
@@ -397,7 +398,7 @@ repos |>
   unnest_longer(json)
 ```
 
-At first glance, it might seem like we haven't improved the situation --- while we have more rows now (176 instead of 6) it seems like each element of `json` is still a list.
+At first glance, it might seem like we haven't improved the situation: while we have more rows (176 instead of 6) each element of `json` is still a list.
 However, there's an important difference: now each element is a **named** list so we can use `unnamed_wider()` to put each element into its own column:
 
 ```{r}
@@ -406,7 +407,7 @@ repos |>
   unnest_wider(json) 
 ```
 
-This is a bit overwhelming --- there are so many columns that tibble doesn't even print all of them!
+This has worked but the result is a little overwhelming: there are so many columns that tibble doesn't even print all of them!
 We can see them all with `names()`:
 
 ```{r}
@@ -425,7 +426,9 @@ repos |>
   select(id, full_name, owner, description)
 ```
 
-`owner` is another list-column, and since it contains named list, we can use `unnest_wider()` to get at the values:
+You can use this to work back to understand `gh_repos`: each child was a GitHub user containing a list of up to 30 GitHub repositories that they created.
+
+`owner` is another list-column, and since it a contains named list, we can use `unnest_wider()` to get at the values:
 
 ```{r}
 #| error: true
@@ -447,10 +450,13 @@ repos |>
   unnest_wider(owner, names_sep = "_")
 ```
 
+This gives another wide dataset, but you can see that `owner` appears to contain a lot of additional data about the person who "owns" the repository.
+
 ### Relational data
 
 When you get nested data, it's not uncommon for it to contain data that we'd normally spread out into multiple data frames.
-Take `got_chars`
+Take `got_chars`, for example.
+Like `gh_repos` it's a list, so we start by turning it into a list-column of a tibble:
 
 ```{r}
 chars <- tibble(json = got_chars)
@@ -481,7 +487,8 @@ chars |>
   select(id, where(is.list))
 ```
 
-Lets explore a couple, starting with `titles`:
+Lets explore the `titles` column.
+It's an unnamed list-column, so we'll unnest it into rows:
 
 ```{r}
 chars |> 
@@ -490,7 +497,8 @@ chars |>
   unnest_longer(titles)
 ```
 
-You might expect to see this in its own table:
+You might expect to see this data in its own table because you could then join back to the characters data as needed.
+To make this table I'll do a little cleaning; removing the rows contain empty strings and renaming `titles` to `title` since each row now only contains a single title.
 
 ```{r}
 titles <- chars |> 
@@ -502,23 +510,24 @@ titles <- chars |>
 titles
 ```
 
-Because you could then join it on as needed.
-For example, we find all the characters that are captains:
+Now, for example, we could use this table to all the characters that are captains and see all their titles:
 
 ```{r}
 captains <- titles |> filter(str_detect(title, "Captain"))
 captains
 
 characters |> 
-  semi_join(captains)
+  semi_join(captains) |> 
+  select(id, name) |> 
+  left_join(titles)
 ```
 
-You could imagine creating a table like this for each of the list-columns, and then using joins to combine when needed.
+You could imagine creating a table like this for each of the list-columns, then using joins to combine them with the character data as you need it.
 
 ### A dash of text analysis
 
 What if we wanted to find the most common words in the title?
-There are plenty of sophisticated ways to do this, but one simple way starts by breaking each element of `title` up into words by spitting on `" "`:
+There are plenty of sophisticated ways to do this, but one simple way starts by using `str_split()` to break each element of `title` up into words by spitting on `" "`:
 
 ```{r}
 titles |> 
@@ -530,7 +539,7 @@ This creates a unnamed variable length list-column, so we can use `unnest_longer
 ```{r}
 titles |> 
   mutate(word = str_split(title, " "), .keep = "unused") |> 
-  unnest_longer(word) 
+  unnest_longer(word)
 ```
 
 And then we can count that column to find the most common:
@@ -542,13 +551,30 @@ titles |>
   count(word, sort = TRUE)
 ```
 
+Some of those words are not very interesting so we could create a list of common words to drop.
+In text analysis this is commonly called stop words.
+
+```{r}
+stop_words <- tribble(
+  ~ word,
+  "of",
+  "the"
+)
+
+titles |> 
+  mutate(word = str_split(title, " "), .keep = "unused") |> 
+  unnest_longer(word) |> 
+  anti_join(stop_words) |> 
+  count(word, sort = TRUE)
+```
+
 Breaking up text into individual fragments is a powerful idea that underlies much of text analysis.
-For more, I'd recommend reading [Text Mining with R](https://www.tidytextmining.com).
+If this sounds interesting, I'd recommend reading [Text Mining with R](https://www.tidytextmining.com) by Julia Silge and David Robinson.
 
 ### Deeply nested
 
-We'll finish off with an that is very deeply nested and requires repeated rounds of `unnest_wider()` and `unnest_longer()` to unravel: `gmaps_cities`.
-This is a two column tibble containing five cities names and the results of using Google's [geocoding API](https://developers.google.com/maps/documentation/geocoding) to determine their location:
+We'll finish off this case studies with a list-column that's very deeply nested and requires repeated rounds of `unnest_wider()` and `unnest_longer()` to unravel: `gmaps_cities`.
+This is a two column tibble containing five city names and the results of using Google's [geocoding API](https://developers.google.com/maps/documentation/geocoding) to determine their location:
 
 ```{r}
 gmaps_cities
@@ -561,11 +587,9 @@ gmaps_cities |>
   unnest_wider(json)
 ```
 
-This gives us a status column and the actual results.
-We'll drop the status column since they're all `OK`.
-In a real analysis, you'd also want separately capture all the rows where `status != "OK"` so you could figure out what went wrong.
-`results` is an unnamed list, with either one or two elements.
-We'll figure to out why shortly.
+This gives us the `status` and the `results`.
+We'll drop the status column since they're all `OK`; in a real analysis, you'd also want capture all the rows where `status != "OK"` and figure out what went wrong.
+`results` is an unnamed list, with either one or two elements (we'll see why shortly) so we'll unnest it into rows:
 
 ```{r}
 gmaps_cities |> 
@@ -574,7 +598,7 @@ gmaps_cities |>
   unnest_longer(results)
 ```
 
-Now results is a named list, so we'll `unnest_wider()`:
+Now `results` is a named list, so we'll use `unnest_wider()`:
 
 ```{r}
 locations <- gmaps_cities |> 
@@ -585,10 +609,10 @@ locations <- gmaps_cities |>
 locations
 ```
 
-Now we can see why Washington and Arlington got two results: Washington matched both the state and the city (DC), and Arlington matched Arlington Virginia and Arlington Texas.
+Now we can see why two cities got two results: Washington matched both the Washington state and Washington, DC, and Arlington matched Arlington, Virginia and Arlington, Texas.
 
 There are few different places we could go from here.
-We might want to determine the exact location of the match stored in the `geometry` list-column:
+We might want to determine the exact location of the match, which is stored in the `geometry` list-column:
 
 ```{r}
 locations |> 
@@ -628,9 +652,9 @@ locations |>
   unnest_wider(c(ne, sw), names_sep = "_") 
 ```
 
-Note that I take advantage of the fact that you can unnest multiple columns at a time by supplying a vector of variable names to `unnest_wider()`.
+Note that I unnest the two columns simultaneously by supplying a vector of variable names to `unnest_wider()`.
 
-This one place where `hoist()`, which we mentioned briefly above can be useful.
+This one place where `hoist()`, mentioned briefly above, can be useful.
 Once you've discovered the path to get to the components you're interested in, you can extract them directly using `hoist()`:
 
 ```{r}
@@ -645,13 +669,18 @@ locations |>
   )
 ```
 
+If these case studies have whetted your appetite for more real-life rectangling, you can see a few more examples in `vignette("rectangling", package = "tidyr")`.
+
 ### Exercises
 
-1.  The `owner` column of `gh_repo` contains a lot of duplicated information because each owner can have many repos.
+1.  Roughly estimate when `gh_repos` was created.
+    Why can you only roughly estimate the date?
+
+2.  The `owner` column of `gh_repo` contains a lot of duplicated information because each owner can have many repos.
     Can you construct a `owners` data frame that contains one row for each owner?
     (Hint: does `distinct()` work with `list-cols`?)
 
-2.  Explain the following code.
+3.  Explain the following code line-by-line.
     Why is it interesting?
     Why does it work for this dataset but might not work in general?
 
@@ -659,9 +688,19 @@ locations |>
     tibble(json = got_chars) |> 
       unnest_wider(json) |> 
       select(id, where(is.list)) %>% 
-      pivot_longer(where(is.list), names_to = "media", values_to = "value") %>% 
+      pivot_longer(
+        where(is.list), 
+        names_to = "name", 
+        values_to = "value"
+      ) %>% 
       unnest_longer(value)
     ```
+
+4.  In `gmaps_cities`, what does `address_components` contain?
+    Why does the length vary between rows?
+    Unnest it appropriately to figure it out.
+    (Hint: `types` always appears to contain two elements. Does `unnest_wider()` make it easier to work with than `unnest_longer()`?)
+    .
 
 ## JSON
 
