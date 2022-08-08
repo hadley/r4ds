@@ -19,7 +19,7 @@ devtools::install_github("hadley/r4ds")
 
 ### Omnigraffle drawings
 
--   Font: 12pt Ubuntu mono
+-   Font: 12pt Guardian Sans Condensed / Ubuntu mono
 -   Export as 300 dpi png.
 -   Website font is 18 px = 13.5 pt, so scale dpi to match font sizes: 270 = 300 \* 12 / 13.5
 -   Verified sizes are visually equivalent by screenshotting.
