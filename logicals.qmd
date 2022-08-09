@@ -15,7 +15,7 @@ It's relatively rare to find logical vectors in your raw data, but you'll create
 
 We'll begin by discussing the most common way of creating logical vectors: with numeric comparisons.
 Then you'll learn about how you can use Boolean algebra to combine different logical vectors, as well as some useful summaries.
-We'll finish off with some tools for making conditional changes, and a cool hack for turning logical vectors into groups.
+We'll finish off with some tools for making conditional changes, and a useful function for turning logical vectors into groups.
 
 ### Prerequisites
 
@@ -546,13 +546,12 @@ flights |>
 
 ## Making groups {#sec-groups-from-logical}
 
-Before we move on to the next chapter, we want to show you one last trick.
-We don't know exactly how to describe it, and it feels a little magical, but it's super handy so we wanted to make sure you knew about it.
-Sometimes you want to divide your dataset up into groups based on the occurrence of some event.
+Before we move on to the next chapter, we want to show you one last trick that's useful for grouping data.
+Sometimes you want to start a new group every time some event occurs.
 For example, when you're looking at website data, it's common to want to break up events into sessions, where a session is defined as a gap of more than x minutes since the last activity.
 
 Here's some made up data that illustrates the problem.
-We've computed the time lag between the events, and figured out if there's a gap that's big enough to qualify.
+So far computed the time lag between the events, and figured out if there's a gap that's big enough to qualify:
 
 ```{r}
 events <- tibble(
@@ -566,12 +565,32 @@ events <- events |>
 events
 ```
 
-How do we go from that logical vector to something that we can `group_by()`?
-You can use the cumulative sum, `cumsum(),` to turn this logical vector into a unique group identifier.
-Remember that whenever you use a logical vector in a numeric context `TRUE` becomes 1 and `FALSE` becomes 0, taking the cumulative sum of a logical vector creates a numeric index that increments every time it sees a `TRUE`.
+But how do we go from that logical vector to something that we can `group_by()`?
+`consecutive_id()` comes to the rescue:
 
 ```{r}
 events |> mutate(
-  group = cumsum(gap) + 1
+  group = consecutive_id(gap)
 )
+```
+
+`consecutive_id()` starts a new group every time one of its arguments changes.
+That makes it useful both here, with logical vectors, and in many other place.
+For example, inspired by [this stackoverflow question](https://stackoverflow.com/questions/27482712), imagine you have a data frame with a bunch of repeated values:
+
+```{r}
+df <- tibble(
+  x = c("a", "a", "a", "b", "c", "c", "d", "e", "a", "a", "b", "b"),
+  y = c(1, 2, 3, 2, 4, 1, 3, 9, 4, 8, 10, 199)
+)
+df
+```
+
+You want to keep the first row from each repeated `x`.
+That's easier to express with a combination of `consecutive_id()` and `slice_head()`:
+
+```{r}
+df |> 
+  group_by(id = consecutive_id(grp)) |> 
+  slice_head(n = 1)
 ```
