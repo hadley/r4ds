@@ -1,4 +1,4 @@
-# Data rectangling {#sec-rectangle-data}
+# Data rectangling {#sec-rectangling}
 
 ```{r}
 #| results: "asis"
@@ -699,63 +699,111 @@ If these case studies have whetted your appetite for more real-life rectangling,
 
 ## JSON
 
-All of the case studies in the previous section came from data stored in JSON format.
+All of the case studies in the previous section were sourced from wild-caught JSON files.
 JSON is short for **j**ava**s**cript **o**bject **n**otation and is the way that most web APIs return data.
-It's important to understand it because while JSON and R are pretty similar, there isn't a perfect 1-to-1 mapping between JSON and R data types.
-In this section, you'll learn a little more about JSON and how to read it into R; once you've done that you can use the rectangling tools described above to get it into a data frame for further analysis.
+It's important to understand it because while JSON and R's data types are pretty similar, there isn't a perfect 1-to-1 mapping, so it's good to understand a bit about JSON if things go wrong.
 
 ### Data types
 
 JSON is a simple format designed to be easily read and written by machines, not humans.
 It has six key data types.
-Four of them are scalars, which are similar to atomic vectors in R: there's no way to break them down further.
+Four of them are scalars:
 
--   The simplest type is `null`, which plays the same role as both `NULL` and `NA` in R. It represents the absence of data.
--   **Strings** are written much like in R, but can only use double quotes, not single quotes.
--   **Numbers** are similar to R's numbers: they can be integer (e.g. 123), decimal (e.g. 123.45), or scientific (e.g. 1.23e3). JSON doesn't support Inf, -Inf, or NaN.
--   **Booleans**, are similar to R's logical vectors, but use `true` and `false` instead of `TRUE` and `FALSE`.
+-   The simplest type is a null, which is written `null`, which plays the same role as both `NULL` and `NA` in R. It represents the absence of data.
+-   A **string** is much like a string in R, but must use double quotes, not single quotes.
+-   A **number** is similar to R's numbers: they can be use integer (e.g. 123), decimal (e.g. 123.45), or scientific (e.g. 1.23e3) notation. JSON doesn't support Inf, -Inf, or NaN.
+-   A **boolean** is similar to R's `TRUE` and `FALSE`, but use lower case `true` and `false`.
 
-The biggest different between JSON's scalars and atomic vectors is that scalars only represent a single item.
-To create a vector of multiple items you need to use of the two remaining two types, **arrays** and **objects**.
-An array is like an unnamed list in R, and is written with `[]`.
+JSON's strings, numbers, and booleans are pretty similar to R's character, numeric, and logical vectors.
+The main difference is that JSON's scalars can only represent a single value.
+To represent multiple values you need to use one of the two remaining two types, arrays and objects.
+
+Both arrays and objects are similar to lists in R; the difference is whether or not they're named.
+An **array** is like an unnamed list, and is written with `[]`.
 For example `[1, 2, 3]` is an array containing 3 numbers, and `[null, 1, "string", false]` is an array that contains a null, a number, a string, and a boolean.
-Objects are like a named list in R, and are written with `{}`.
+An **object** is like a named list, and they're written with `{}`.
 For example, `{"x": 1, "y": 2}` is an object that maps `x` to 1 and `y` to 2.
-
-You might already be starting to imagine some of the challenges converting JSON to R data structures.
 
 ### jsonlite
 
-Most of the time you won't deal with JSON directly, instead you'll use the jsonlite package, by Jeroen Oooms, to load it into R as a nested list.
-We'll focus on two functions from jsonlite.
-Most of the time you'll use `read_json()` to read a json file from disk, but sometimes you'll also need `parse_json()` which takes json stored in a string in R.
+To convert JSON into R data structures, we recommend that you use the jsonlite package, by Jeroen Oooms.
+We'll use only two jsonlite functions: `read_json()` and `parse_json()`.
+In real life, you'll use `read_json()` to read a JSON file from disk.
+For example, we the repurrsive package also provides the source for `gh_user` as a JSON file:
 
 ```{r}
+# A path to a json file inside the package:
+gh_users_json()
+
+# Read it with read_json()
+gh_users2 <- read_json(gh_users_json())
+
+# Check it's the same as the data we were using previously
+identical(gh_users, gh_users2)
+```
+
+In this book, I'll also use `parse_json()`, since it takes a string containing JSON, which makes it good for generating simple examples.
+To get started, here's three simple JSON datasets, starting with a number, then putting a few number in an array, then putting that array in an object:
+
+```{r}
+str(parse_json('1'))
 str(parse_json('[1, 2, 3]'))
 str(parse_json('{"x": [1, 2, 3]}'))
 ```
 
-Note that the rectangling approach described above is designed around the most common case where the API returns multiple "things", e.g. multiple pages, or multiple records, or multiple results.
-In this case, you just do `tibble(json)` and each element becomes a row.
-If the JSON returns a single "thing", then you'll need to do `tibble(json = list(json))` so you start with a data frame containing a single row.
+jsonlite has another important function called `fromJSON()`.
+We don't use it here because it performs automatic simplification (`simplifyVector = TRUE)`.
+This often works well, particularly in simple cases, but we think you're better off doing the rectangling yourself so you know exactly what's happening and can more easily handle the most complicated nested structures.
 
-Note that jsonlite has another important function called `fromJSON()`.
-We don't use it here because it uses `simplifyVector = TRUE` which attempts to automatically unnest the JSON in a data frame.
-This often works well, particularly in simple cases.
-But we think you're better off doing the rectangling yourself so you know exactly what's happening and can more easily handle the most complicated nested structures.
-Doing it yourself also means you'll use the standard tidyverse rules for recycling and vector coercion: there's nothing wrong with jsonlite's rules, but they're different and we don't want to get in to the details here.
+### Starting the rectangling process
+
+In most cases, JSON files contain a single top-level array, because they're designed to provide data about multiple "things", e.g. multiple pages, or multiple records, or multiple results.
+In this case, you'll start your rectangling with `tibble(json)` so that each element becomes a row:
+
+```{r}
+json <- '[
+  {"name": "John", "age": 34},
+  {"name": "Susan", "age": 27}
+]'
+df <- tibble(json = parse_json(json))
+df
+df |> 
+  unnest_wider(json)
+```
+
+In rarer cases, the JSON consists of a single top-level JSON object, representing one "thing".
+In this case, you'll need to kick off the rectangling process by wrapping it a list, before you put it in a tibble.
+
+```{r}
+json <- '{
+  "status": "OK", 
+  "results": [
+    {"name": "John", "age": 34},
+    {"name": "Susan", "age": 27}
+ ]
+}
+'
+df <- tibble(json = list(parse_json(json)))
+df
+df |> 
+  unnest_wider(json) |> 
+  unnest_longer(results) |> 
+  unnest_wider(results)
+```
+
+Alternatively, you can reach inside the parsed JSON and start with the bit that you actually care about:
+
+```{r}
+df <- tibble(results = parse_json(json)$results)
+df |> 
+  unnest_wider(results)
+```
 
 ### Translation challenges
 
-There isn't a perfect match between json's data types and R's data types.
-So when reading a json file into R, we have to make some assumptions:
-
-```{r}
-str(parse_json('[1, 2, 3]'))
-str(parse_json('[true, false, true]'))
-```
-
-JSON doesn't have any way to represent dates or date-times, so they're normally stored as ISO8601 date times in strings, and you'll need to use `readr::parse_date()` or `readr::parse_datetime()` to turn them into the correct data structure.
+Since JSON doesn't have any way to represent dates or date-times, they're often stored as ISO8601 date times in strings, and you'll need to use `readr::parse_date()` or `readr::parse_datetime()` to turn them into the correct data structure.
+Similarly, JSON's rules for representing floating point numbers in JSON are a little imprecise, so you'll also sometimes find numbers stored in strings.
+Apply `readr::parse_double()` as needed to the get correct variable type.
 
 ### Exercises
 
@@ -778,5 +826,5 @@ JSON doesn't have any way to represent dates or date-times, so they're normally 
     ')
 
     df_col <- tibble(json = list(json_col)) 
-    df_row <- tibble(json = list(json_row)) 
+    df_row <- tibble(json = json_row)
     ```
