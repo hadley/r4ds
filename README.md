@@ -2,7 +2,7 @@
 
 <!-- badges: start -->
 
-[![build_book](https://github.com/hadley/r4ds/actions/workflows/build_book.yaml/badge.svg)](https://github.com/hadley/r4ds/actions/workflows/build_book.yaml)
+[![Render and deploy Book to Netlify](https://github.com/hadley/r4ds/actions/workflows/quarto-book-netlify.yaml/badge.svg)](https://github.com/hadley/r4ds/actions/workflows/quarto-book-netlify.yaml)
 
 <!-- badges: end -->
 
@@ -34,3 +34,4 @@ devtools::install_github("hadley/r4ds")
 
 Please note that r4ds uses a [Contributor Code of Conduct](https://contributor-covenant.org/version/2/0/CODE_OF_CONDUCT.html).
 By contributing to this book, you agree to abide by its terms.
+
