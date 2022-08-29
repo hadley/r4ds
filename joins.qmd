@@ -25,7 +25,7 @@ There are two important types of joins.
 **Mutating joins** adds new variables to one data frame from matching observations in another.
 **Filtering joins**, which filters observations from one data frame based on whether or not they match an observation in another.
 
-If you're familiar with SQL, you should find these ideas very familiar as their instantiation in dplyr is very similar.
+If you're familiar with SQL, you should find these ideas very familiar as their realization in dplyr is very similar.
 We'll point out any important differences as we go.
 Don't worry if you're not familiar with SQL, we'll back to it in @sec-import-databases.
 
@@ -258,7 +258,7 @@ To help you learn how joins work, we'll use a visual representation:
 #|   column in each is the key and the second is the value. The contents of
 #|   these data frames are given in the subsequent code chunk.
 
-knitr::include_graphics("diagrams/join-setup.png")
+knitr::include_graphics("diagrams/join/setup.png")
 ```
 
 ```{r}
@@ -290,7 +290,7 @@ The following diagram shows each potential match as an intersection of a pair of
 #|   moved up front in y so that the key variable in x and key variable 
 #|   in y appear next to each other.
 
-knitr::include_graphics("diagrams/join-setup2.png")
+knitr::include_graphics("diagrams/join/setup2.png")
 ```
 
 If you look closely, you'll notice that we've switched the order of the key and value columns in `x`.
@@ -310,7 +310,7 @@ The number of dots = the number of matches = the number of rows in the output.
 #|   key, val_x, and val_y. Values in the key column are 1 and 2, the matched 
 #|   values.
 
-knitr::include_graphics("diagrams/join-inner.png")
+knitr::include_graphics("diagrams/join/inner.png")
 ```
 
 ### Inner join {#sec-inner-join}
@@ -324,7 +324,7 @@ An inner join matches pairs of observations whenever their keys are equal:
 #| out-width: null
 #| opts.label: true
 
-knitr::include_graphics("diagrams/join-inner.png")
+knitr::include_graphics("diagrams/join/inner.png")
 ```
 
 (To be precise, this is an inner **equijoin** because the keys are matched using the equality operator. Since most joins are equijoins we usually drop that specification.)
@@ -377,11 +377,13 @@ Graphically, that looks like:
 #|   val_y and key 4, val_x are NAs since those keys aren't present in their 
 #|   respective data frames.
 
-knitr::include_graphics("diagrams/join-outer.png")
+knitr::include_graphics("diagrams/join/outer.png")
 ```
 
 The most commonly used join is the left join: you use this whenever you look up additional data from another data frame, because it preserves the original observations even when there isn't a match.
 The left join should be your default join: use it unless you have a strong reason to prefer one of the others.
+
+<!--# TODO: mention unmatch argument -->
 
 Another way to depict the different types of joins is with a Venn diagram:
 
@@ -397,7 +399,7 @@ Another way to depict the different types of joins is with a Venn diagram:
 #|   with x. Right join: Only y is shaded, but not the area in x that doesn't 
 #|   intersect with y.
 
-knitr::include_graphics("diagrams/join-venn.png")
+knitr::include_graphics("diagrams/join/venn.png")
 ```
 
 However, this is not a great representation.
@@ -409,8 +411,6 @@ So far all the diagrams have assumed that the keys are unique.
 But that's not always the case.
 This section explains what happens when the keys are not unique.
 There are two possibilities:
-
-TODO: update for new warnings
 
 1.  One data frame has duplicate keys.
     This is useful when you want to add in additional information as there is typically a one-to-many relationship.
@@ -427,31 +427,34 @@ TODO: update for new warnings
     #|   (keys 1, 2, 2, and 1) and 3 columns (val_x, key, val_y). All values 
     #|   from x$val_x are carried along, values in y for key 1 and 2 are duplicated.
 
-    knitr::include_graphics("diagrams/join-one-to-many.png")
+    knitr::include_graphics("diagrams/join/one-to-many.png")
     ```
 
     Note that we've put the key column in a slightly different position in the output.
     This reflects that the key is a primary key in `y` and a foreign key in `x`.
 
     ```{r}
-    x <- tribble(
+    x2 <- tribble(
       ~key, ~val_x,
          1, "x1",
          2, "x2",
          2, "x3",
          1, "x4"
     )
-    y <- tribble(
+    y2 <- tribble(
       ~key, ~val_y,
          1, "y1",
          2, "y2"
     )
-    left_join(x, y, by = "key")
+    left_join(x2, y2, by = "key")
     ```
 
 2.  Both data frames have duplicate keys.
-    This is usually an error because in neither data frame do the keys uniquely identify an observation.
-    When you join duplicated keys, you get all possible combinations, the Cartesian product:
+    This is usually a mistake error because in neither data frame do the keys uniquely identify an observation.
+    When you join duplicated keys, you get all possible combinations, the Cartesian product.
+    dplyr will warn you about this situation so that you can fix the underlying data, pick a single match with `multiple = "any"`, or state that this is what you want with `multiple = "all"`.
+
+    <!--# TODO: polish -->
 
     ```{r}
     #| echo: false
@@ -465,25 +468,27 @@ TODO: update for new warnings
     #|   with 6 rows (keys 1, 2, 2, 2, 2, and 3) and 3 columns (key, val_x, 
     #|   val_y). All values from both datasets are included.
 
-    knitr::include_graphics("diagrams/join-many-to-many.png")
+    knitr::include_graphics("diagrams/join/many-to-many.png")
     ```
 
     ```{r}
-    x <- tribble(
+    x3 <- tribble(
       ~key, ~val_x,
          1, "x1",
          2, "x2",
          2, "x3",
          3, "x4"
     )
-    y <- tribble(
+    y3 <- tribble(
       ~key, ~val_y,
          1, "y1",
          2, "y2",
          2, "y3",
          3, "y4"
     )
-    left_join(x, y, by = "key")
+    left_join(x3, y3, by = "key")
+    left_join(x3, y3, by = "key", multiple = "any")
+    left_join(x3, y3, by = "key", multiple = "all")
     ```
 
 ### Defining the key columns {#sec-join-by}
@@ -573,11 +578,111 @@ You can use other values for `by` to connect the data frames in other ways:
 
 ## Non-equi joins
 
-`join_by()`
+So far we've focused on the so called "equi-joins" because the joins are defined by equality: the keys in x must be equal to the keys in y for the rows to match.
+This allows us to make an important simplification in both the diagrams and the return values of the join frames: we only ever include the join key from one table.
+We can request that dplyr keep both keys with `keep = TRUE`.
+This is shown in the code below and in @fig-inner-both.
 
-Rolling joins
+```{r}
+x |> left_join(y, by = "key", keep = TRUE)
+```
 
-Overlap joins
+```{r}
+#| label: fig-inner-both
+#| fig-cap: >
+#|   Inner join showing keys from both `x` and `y`. This is not the
+#|   default because for equi-joins, the keys are the same so showing
+#|   both doesn't add anything.
+#| echo: false
+#| out-width: null
+
+knitr::include_graphics("diagrams/join/inner-both.png", dpi = 270)
+```
+
+This distinction between the keys becomes much more important as we move away from equi-joins because the key values are much more likely to be different.
+Because of this, dplyr defaults to showing both keys.
+For example, instead of requiring that the `x` and `y` keys be equal, we could request that key from `x` be less than the key from `y`, as in the code below and @fig-join-lt.
+
+```{r}
+x |> inner_join(y, join_by(key < key))
+```
+
+```{r}
+#| label: fig-join-lt
+#| echo: false
+#| fig-cap: >
+#|   A non-equijoin where the `x` key must be less than the `y` key.
+knitr::include_graphics("diagrams/join/lt.png", dpi = 270)
+```
+
+The most important change in a non-equi join is that there's no longer a one-to-one match between the rows.
+
+### `join_by()`
+
+Let's circle back to the syntax --- to perform non-equi-joins you must use `join_by()`.
+You can use `join_by()` for equi-joins:
+
+-   `by = c("x", "y")` is equivalent to `join_by(x == x, y == y)`.
+-   `by = c("a" = "x", "b" = "y")` is equivalent to `join_by(a == x, b == y)`.
+
+Sometimes it feels a bit confusing to repeat the name of variable twice, so you can optionally declare which table it comes from by using `x$` or `y$`, e.g. `join_by(x$x == y$x)`
+
+But the real power comes from the three additional types of join that it provides:
+
+-   **Inequality-joins** use `<`, `<=`, `>`, `>=` instead of `==`.
+-   **Rolling joins** use `following(x, y)` and `preceding(x, y).`
+-   **Overlap joins** use `between(x$val, y$lower, y$upper)`, `within(x$lower, x$upper, y$lower, y$upper)` and `overlaps(x$lower, x$upper, y$lower, y$upper).`
+
+Each of these is described in more detail below.
+
+### Inequality joins
+
+Inequality joins are extremely general, so general that it's hard to find specific meaning use cases.
+One small useful technique is to generate all pairs:
+
+```{r}
+df <- tibble(id = 1:4, name = c("John", "Simon", "Tracy", "Max"))
+
+df |> left_join(df, join_by(id < id))
+```
+
+Here we perform a self-join (i.e we join a table to itself), then use the inequality join to ensure that we one of the two possible pairs (e.g. just (a, b) not also (b, a)) and don't match the same row.
+
+### Rolling joins
+
+Rolling joins are sort of a special type of inequality join --- instead of getting *every* row where `x > y` you just get the first row.
+They're particularly useful when you have two tables of dates that don't perfectly line up and you want to find (e.g.) the closest date in table 1 that matches some date in table 2.
+
+### Overlap joins
+
+Birthday party
+
+Find all flights in the air
+
+```{r}
+flights2 <- flights |> 
+  mutate(
+    dep_date_time = lubridate::make_datetime(year, month, day, dep_time %/% 100, dep_time %% 100),
+    arr_date_time = lubridate::make_datetime(year, month, day, arr_time %/% 100, arr_time %% 100),
+    arr_date_time = if_else(arr_date_time < dep_date_time, arr_date_time + lubridate::days(1), arr_date_time),
+    id = row_number()
+  ) |> 
+  select(id, dep_date_time, arr_date_time, origin, dest, carrier, flight)
+flights2
+
+flights2 |> 
+  inner_join(flights2, join_by(origin, dest, overlaps(dep_date_time, arr_date_time, dep_date_time, arr_date_time), id < id))
+```
+
+### Exercises
+
+1.  What's going on with the keys in the following `full_join()`?
+
+    ```{r}
+    x |> full_join(y, by = "key")
+
+    x |> full_join(y, by = "key", keep = TRUE)
+    ```
 
 ## Filtering joins {#sec-filtering-joins}
 
@@ -628,7 +733,7 @@ Graphically, a semi-join looks like this:
 #|   two results in a data frame with two rows and two columns (key and val_x), 
 #|   with keys 1 and 2 (the only keys that match between the two data frames).
 
-knitr::include_graphics("diagrams/join-semi.png")
+knitr::include_graphics("diagrams/join/semi.png")
 ```
 
 Only the existence of a match is important; it doesn't matter which observation is matched.
@@ -645,7 +750,7 @@ This means that filtering joins never duplicate rows like mutating joins do:
 #|   frame with four rows and two columns (key and val_x), with keys 1, 2, 2, 
 #|   and 3 (the matching keys, each appearing as many times as they do in x).
 
-knitr::include_graphics("diagrams/join-semi-many.png")
+knitr::include_graphics("diagrams/join/semi-many.png")
 ```
 
 The inverse of a semi-join is an anti-join.
@@ -661,7 +766,7 @@ An anti-join keeps the rows that *don't* have a match:
 #|   two results in a data frame with one row and two columns (key and val_x), 
 #|   with keys 3 only (the only key in x that is not in y).
 
-knitr::include_graphics("diagrams/join-anti.png")
+knitr::include_graphics("diagrams/join/anti.png")
 ```
 
 Anti-joins are useful for diagnosing join mismatches.
