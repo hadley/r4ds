@@ -9,25 +9,21 @@ status("restructuring")
 
 ## Introduction
 
-Waiting on <https://github.com/tidyverse/dplyr/pull/5910>
-
-<!-- TODO: redraw all diagrams to match O'Reilly style -->
+<!-- TODO: redraw all diagrams to match O'Reilly style. From one to many on -->
 
 It's rare that a data analysis involves only a single data frame.
 Typically you have many data frames, and you must **join** them together to answer the questions that you're interested in.
-
 All the verbs in this chapter use a pair of data frames.
-Fortunately this is enough, since you can combine three data frames by combining two pairs.
-Sometimes both elements of a pair will be the same data frame.
-This is needed if, for example, you have a data frame of people, and each person has a reference to their parents.
+Fortunately this is enough, since you can solve any more complex problem a pair at a time.
 
-There are two important types of joins.
-**Mutating joins** adds new variables to one data frame from matching observations in another.
-**Filtering joins**, which filters observations from one data frame based on whether or not they match an observation in another.
+You'll learn about important types of joins in this chapter:
 
-If you're familiar with SQL, you should find these ideas very familiar as their realization in dplyr is very similar.
+-   **Mutating joins** add new variables to one data frame from matching observations in another.
+-   **Filtering joins**, filters observations from one data frame based on whether or not they match an observation in another.
+
+If you're familiar with SQL, you should find the ideas in this chapter familiar, as their realization in dplyr is very similar.
 We'll point out any important differences as we go.
-Don't worry if you're not familiar with SQL, we'll back to it in @sec-import-databases.
+Don't worry if you're not familiar with SQL as you'll learn more about it in @sec-import-databases.
 
 ### Prerequisites
 
@@ -43,7 +39,7 @@ library(nycflights13)
 
 ## nycflights13 {#sec-nycflights13-relational}
 
-nycflights13 contains five tibbles : `airlines`, `airports`, `weather` and `planes` which are all related to the `flights` data frame that you used in @sec-data-transform on data transformation:
+As well as the `flights` data frame that you used in @sec-data-transform, four addition related tibbles:
 
 -   `airlines` lets you look up the full carrier name from its abbreviated code:
 
@@ -71,13 +67,13 @@ nycflights13 contains five tibbles : `airlines`, `airports`, `weather` and `plan
 
 These datasets are connected as follows:
 
--   `flights` connects to `planes` via a single variable, `tailnum`.
+-   `flights` connects to `planes` through the `tailnum`.
 
 -   `flights` connects to `airlines` through the `carrier` variable.
 
--   `flights` connects to `airports` in two ways: via the `origin` and `dest` variables.
+-   `flights` connects to `airports` in two ways: through the origin (`origin)` and through the destination (`dest)`.
 
--   `flights` connects to `weather` via `origin` (the location), and `year`, `month`, `day` and `hour` (the time).
+-   `flights` connects to `weather` through two variables at the same time: the location (`origin)` and the time (`time_hour`).
 
 One way to show the relationships between the different data frames is with a diagram, as in @fig-flights-relationships.
 This diagram is a little overwhelming, but it's simple compared to some you'll see in the wild!
@@ -87,20 +83,22 @@ You don't need to understand the whole thing; you just need to understand the ch
 ```{r}
 #| label: fig-flights-relationships
 #| echo: false
+#| out-width: ~
 #| fig-cap: >
-#|   Connections between all six data frames in the nycflights package.
+#|   Connections between all five data frames in the nycflights package.
 #| fig-alt: >
 #|   Diagram showing the relationships between airports, planes, flights, 
 #|   weather, and airlines datasets from the nycflights13 package. The faa
 #|   variable in the airports data frame is connected to the origin and dest
 #|   variables in the flights data frame. The tailnum variable in the planes
-#|   data frame is connected to the tailnum variable in flights. The year,
-#|   month, day, hour, and origin variables are connected to the variables
-#|   with the same name in the flights data frame. And finally the carrier
-#|   variables in the airlines data frame is connected to the carrier
-#|   variable in the flights data frame. There are no direct connections
-#|   between airports, planes, airlines, and weather data frames.
-knitr::include_graphics("diagrams/relational-nycflights.png")
+#|   data frame is connected to the tailnum variable in flights. The
+#|   time_hour and origin variables in the weather data frame are connected
+#|   to the variables with the same name in the flights data frame. And
+#|   finally the carrier variables in the airlines data frame is connected
+#|   to the carrier variable in the flights data frame. There are no direct
+#|   connections between airports, planes, airlines, and weather data 
+#|   frames.
+knitr::include_graphics("diagrams/relational.png", dpi = 270)
 ```
 
 ### Exercises
@@ -122,7 +120,7 @@ A key is a variable (or set of variables) that uniquely identifies an observatio
 In simple cases, a single variable is sufficient to identify an observation.
 For example, each plane is uniquely identified by its `tailnum`.
 In other cases, multiple variables may be needed.
-For example, to identify an observation in `weather` you need five variables: `year`, `month`, `day`, `hour`, and `origin`.
+For example, to identify an observation in `weather` you need two variables: `time_hour` and `origin`.
 
 There are two types of keys:
 
@@ -144,26 +142,22 @@ planes |>
   filter(n > 1)
 
 weather |> 
-  count(year, month, day, hour, origin) |> 
+  count(time_hour, origin) |> 
   filter(n > 1)
 ```
 
-Sometimes a data frame doesn't have an explicit primary key: each row is an observation, but no combination of variables reliably identifies it.
-For example, what's the primary key in the `flights` data frame?
-You might think it would be the date plus the flight or tail number, but neither of those are unique:
+Sometimes a data frame doesn't have an explicit primary key and only an unwieldy combination of variables reliably identifies an observation.
+For example, to uniquely identify a flight, we need the hour the flight departs, the carrier, and the flight number:
 
 ```{r}
 flights |> 
-  count(year, month, day, flight) |> 
-  filter(n > 1)
-
-flights |> 
-  count(year, month, day, tailnum) |> 
+  count(time_hour, carrier, flight) |> 
   filter(n > 1)
 ```
 
 When starting to work with this data, we had naively assumed that each flight number would be only used once per day: that would make it much easier to communicate problems with a specific flight.
-Unfortunately that is not the case!
+Unfortunately that is not the case, and we have to assume that flight number will never to re-used within a hour.
+
 If a data frame lacks a primary key, it's sometimes useful to add one with `mutate()` and `row_number()`.
 That makes it easier to match observations if you've done some filtering and want to check back in with the original data.
 This is called a **surrogate key**.
@@ -180,12 +174,15 @@ For example, in this data there's a many-to-many relationship between airlines a
 
 1.  Add a surrogate key to `flights`.
 
-2.  We know that some days of the year are "special", and fewer people than usual fly on them.
+2.  The year, month, day, hour, and origin variables almost form a compound key for weather, but there's one hour that has duplicate observations.
+    Can you figure out what's special about this time?
+
+3.  We know that some days of the year are "special", and fewer people than usual fly on them.
     How might you represent that data as a data frame?
     What would be the primary keys of that data frame?
     How would it connect to the existing data frames?
 
-3.  Identify the keys in the following datasets
+4.  Identify the keys in the following datasets
 
     a.  `Lahman::Batting`
     b.  `babynames::babynames`
@@ -195,7 +192,7 @@ For example, in this data there's a many-to-many relationship between airlines a
 
     (You might need to install some packages and read some documentation.)
 
-4.  Draw a diagram illustrating the connections between the `Batting`, `People`, and `Salaries` data frames in the Lahman package.
+5.  Draw a diagram illustrating the connections between the `Batting`, `People`, and `Salaries` data frames in the Lahman package.
     Draw another diagram that shows the relationship between `People`, `Managers`, `AwardsManagers`.
 
     How would you characterise the relationship between the `Batting`, `Pitching`, and `Fielding` data frames?
