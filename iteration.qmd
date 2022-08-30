@@ -8,7 +8,7 @@ source("_common.R")
 
 ## Introduction
 
-In [Chapter -@sec-functions], we talked about how important it is to reduce duplication in your code by creating functions instead of copying-and-pasting.
+In @sec-functions, we talked about how important it is to reduce duplication in your code by creating functions instead of copying-and-pasting.
 Reducing code duplication has three main benefits:
 
 1.  It's easier to see the intent of your code, because your eyes are drawn to what's different, not what stays the same.
@@ -20,9 +20,10 @@ Reducing code duplication has three main benefits:
 
 One tool for reducing duplication is functions, which reduce duplication by identifying repeated patterns of code and extract them out into independent pieces that can be easily reused and updated.
 Another tool for reducing duplication is **iteration**, which helps you when you need to do the same thing to multiple inputs: repeating the same operation on different columns, or on different datasets.
-In this chapter you'll learn about two important iteration paradigms: imperative programming and functional programming.
+
+In this chapter you'll learn about two important iteration paradigms: **imperative** and **functional**.
 On the imperative side you have tools like for loops and while loops, which are a great place to start because they make iteration very explicit, so it's obvious what's happening.
-However, for loops are quite verbose, and require quite a bit of bookkeeping code that is duplicated for every for loop.
+However, for loops are quite verbose because they require bookkeeping code that is duplicated for every for loop.
 Functional programming (FP) offers tools to extract out this duplicated code, so each common for loop pattern gets its own function.
 Once you master the vocabulary of FP, you can solve many common iteration problems with less code, more ease, and fewer errors.
 
@@ -267,7 +268,7 @@ str(output)
 ```
 
 But this is not very efficient because in each iteration, R has to copy all the data from the previous iterations.
-In technical terms you get "quadratic" ($O(n^2)$) behaviour which means that a loop with three times as many elements would take nine ($3^2$) times as long to run.
+In technical terms you get "quadratic" ($O(n^2)$) behavior which means that a loop with three times as many elements would take nine ($3^2$) times as long to run.
 
 A better solution to save the results in a list, and then combine into a single vector after the loop is done:
 
@@ -282,12 +283,11 @@ str(unlist(out))
 ```
 
 Here we've used `unlist()` to flatten a list of vectors into a single vector.
-A stricter option is to use `purrr::flatten_dbl()` --- it will throw an error if the input isn't a list of doubles.
 
 This pattern occurs in other places too:
 
 1.  You might be generating a long string.
-    Instead of `paste()`ing together each iteration with the previous, save the output in a character vector and then combine that vector into a single string with `paste(output, collapse = "")`.
+    Instead of `paste()`ing together each iteration with the previous, save the output in a character vector and then combine that vector into a single string with `str_flatten()`.
 
 2.  You might be generating a big data frame.
     Instead of sequentially `rbind()`ing in each iteration, save the output in a list, then use `dplyr::bind_rows(output)` to combine the output into a single data frame.
@@ -453,7 +453,7 @@ col_sd <- function(df) {
 ```
 
 Uh oh!
-You've copied-and-pasted this code twice, so it's time to think about how to generalise it.
+You've copied-and-pasted this code twice, so it's time to think about how to generalize it.
 Notice that most of this code is for-loop boilerplate and it's hard to see the one thing (`mean()`, `median()`, `sd()`) that is different between the functions.
 
 What would you do if you saw a set of functions like this:
@@ -470,7 +470,7 @@ Hopefully, you'd notice that there's a lot of duplication, and extract it out in
 f <- function(x, i) abs(x - mean(x)) ^ i
 ```
 
-You've reduced the chance of bugs (because you now have 1/3 of the original code), and made it easy to generalise to new situations.
+You've reduced the chance of bugs (because you now have 1/3 of the original code), and made it easy to generalize to new situations.
 
 We can do exactly the same thing with `col_mean()`, `col_median()` and `col_sd()` by adding an argument that supplies the function to apply to each column:
 
@@ -486,7 +486,7 @@ col_summary(df, median)
 col_summary(df, mean)
 ```
 
-The idea of passing a function to another function is an extremely powerful idea, and it's one of the behaviours that makes R a functional programming language.
+The idea of passing a function to another function is an extremely powerful idea, and it's one of the behaviors that makes R a functional programming language.
 It might take you a while to wrap your head around the idea, but it's worth the investment.
 In the rest of the chapter, you'll learn about and use the **purrr** package, which provides functions that eliminate the need for many common for loops.
 The apply family of functions in base R (`apply()`, `lapply()`, `tapply()`, etc) solve a similar problem, but purrr is more consistent and thus is easier to learn.
@@ -610,25 +610,6 @@ But extracting named components is a common operation, so purrr provides an even
 models |> 
   map(summary) |> 
   map_dbl("r.squared")
-```
-
-Another way to obtain R squared is by using the broom package. Instead of using `split()` from base R, you can use `nest()` from tidyr:
-
-```{r}
-mtcars |>
-  nest(data = -cyl) |>
-  arrange(cyl) |>
-  mutate(mod = map(data, ~lm(mpg ~ wt, data = .)),
-         glanced = map(mod, broom::glance)) |>
-  unnest(glanced) %>%
-  pull(r.squared)
-```
-
-You can also use an integer to select elements by position:
-
-```{r}
-x <- list(list(1, 2, 3), list(4, 5, 6), list(7, 8, 9))
-x |> map_dbl(2)
 ```
 
 ### Base R
@@ -866,51 +847,6 @@ params |>
 ```
 
 As soon as your code gets complicated, we think a data frame is a good approach because it ensures that each column has a name and is the same length as all the other columns.
-
-### Invoking different functions
-
-There's one more step up in complexity - as well as varying the arguments to the function you might also vary the function itself:
-
-```{r}
-f <- c("runif", "rnorm", "rpois")
-param <- list(
-  list(min = -1, max = 1), 
-  list(sd = 5), 
-  list(lambda = 10)
-)
-```
-
-To handle this case, you can use `invoke_map()`:
-
-```{r}
-invoke_map(f, param, n = 5) |> str()
-```
-
-```{r}
-#| echo: false
-#| out-width: null
-
-knitr::include_graphics("diagrams/lists-invoke.png")
-```
-
-The first argument is a list of functions or character vector of function names.
-The second argument is a list of lists giving the arguments that vary for each function.
-The subsequent arguments are passed on to every function.
-
-And again, you can use `tribble()` to make creating these matching pairs a little easier:
-
-```{r}
-#| eval: false
-
-sim <- tribble(
-  ~f,      ~params,
-  "runif", list(min = -1, max = 1),
-  "rnorm", list(sd = 5),
-  "rpois", list(lambda = 10)
-)
-sim |> 
-  mutate(sim = invoke_map(f, params, n = 10))
-```
 
 ## Walk {#sec-walk}
 
