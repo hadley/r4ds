@@ -51,4 +51,3 @@ devtools::install_github("hadley/r4ds")
 
 Please note that r4ds uses a [Contributor Code of Conduct](https://contributor-covenant.org/version/2/0/CODE_OF_CONDUCT.html).
 By contributing to this book, you agree to abide by its terms.
-

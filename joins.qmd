@@ -9,8 +9,6 @@ status("restructuring")
 
 ## Introduction
 
-<!-- TODO: redraw all diagrams to match O'Reilly style. From one to many on -->
-
 It's rare that a data analysis involves only a single data frame.
 Typically you have many data frames, and you must **join** them together to answer the questions that you're interested in.
 All the verbs in this chapter use a pair of data frames.
@@ -245,18 +243,10 @@ Finally, you'll learn how to tell dplyr which variables are the keys for a given
 
 ## Join types
 
-To help you learn how joins work, we'll use a visual representation:
-
-```{r}
-#| echo: false
-#| out-width: null
-#| fig-alt: >
-#|   x and y are two data frames with 2 columns and 3 rows each. The first
-#|   column in each is the key and the second is the value. The contents of
-#|   these data frames are given in the subsequent code chunk.
-
-knitr::include_graphics("diagrams/join/setup.png")
-```
+To help you learn how joins work, we'll use a colourful representation of the two tibbles defined below as in Figure @fig-join-setup.
+The coloured column represents the keys of the two data frames, here literally called `key`.
+The grey column represents the "value" column that is carried along for the ride.
+In these examples we'll use a single key variable, but the idea generalizes to multiple keys and multiple values.
 
 ```{r}
 x <- tribble(
@@ -273,33 +263,49 @@ y <- tribble(
 )
 ```
 
-The coloured column represents the "key" variable: these are used to match the rows between the data frames.
-The grey column represents the "value" column that is carried along for the ride.
-In these examples we've shown a single key variable, but the idea generalises in a straightforward way to multiple keys and multiple values.
-
-A join is a way of connecting each row in `x` to zero, one, or more rows in `y`.
-The following diagram shows each potential match as an intersection of a pair of lines.
-
 ```{r}
+#| label: fig-join-setup
 #| echo: false
+#| out-width: ~
+#| fig-cap: >
+#|   Graphical representation of two simple tables
 #| fig-alt: >
-#|   x and y data frames placed next to each other. with the key variable 
-#|   moved up front in y so that the key variable in x and key variable 
-#|   in y appear next to each other.
+#|   x and y are two data frames with 2 columns and 3 rows each. The first
+#|   column in each is the key and the second is the value. The contents of
+#|   these data frames are given in the subsequent code chunk.
 
-knitr::include_graphics("diagrams/join/setup2.png")
+knitr::include_graphics("diagrams/join/setup.png", dpi = 270)
 ```
 
+A join is a way of connecting each row in `x` to zero, one, or more rows in `y`.
+@fig-join-setup2 shows each potential match as an intersection of a pair of lines.
 If you look closely, you'll notice that we've switched the order of the key and value columns in `x`.
 This is to emphasize that joins match based on the key; the other columns are just carried along for the ride.
 
-In an actual join, matches will be indicated with dots.
+```{r}
+#| label: fig-join-setup2
+#| echo: false
+#| out-width: ~
+#| fig-cap: > 
+#|   To prepare to show how joins work we create a grid showing every 
+#|   possible match between the two tibbles.
+#| fig-alt: >
+#|   x and y data frames placed next to each other, with the key variable 
+#|   moved up front in y so that the key variable in x and key variable 
+#|   in y appear next to each other.
+
+knitr::include_graphics("diagrams/join/setup2.png", dpi = 270)
+```
+
+In an actual join, matches will be indicated with dots, as in @fig-join-inner.
 The number of dots = the number of matches = the number of rows in the output.
 
 ```{r}
-#| label: join-inner
+#| label: fig-join-inner
 #| echo: false
-#| out-width: null
+#| out-width: ~
+#| fig-cap: >
+#|   A join showing which rows in the x table match rows in the y table.
 #| fig-alt: >
 #|   Keys 1 and 2 in x and y data frames are matched and indicated with lines 
 #|   joining these rows with dot in the middle. Hence, there are two dots in 
@@ -307,25 +313,13 @@ The number of dots = the number of matches = the number of rows in the output.
 #|   key, val_x, and val_y. Values in the key column are 1 and 2, the matched 
 #|   values.
 
-knitr::include_graphics("diagrams/join/inner.png")
+knitr::include_graphics("diagrams/join/inner.png", dpi = 270)
 ```
 
 ### Inner join {#sec-inner-join}
 
 The simplest type of join is the **inner join**.
-An inner join matches pairs of observations whenever their keys are equal:
-
-```{r}
-#| ref.label: join-inner
-#| echo: false
-#| out-width: null
-#| opts.label: true
-
-knitr::include_graphics("diagrams/join/inner.png")
-```
-
-(To be precise, this is an inner **equijoin** because the keys are matched using the equality operator. Since most joins are equijoins we usually drop that specification.)
-
+An inner join matches pairs of observations whenever their keys are equal, and is the type of join shown in @fig-join-inner.
 The output of an inner join is a new data frame that contains the key, the x values, and the y values.
 We use `by` to tell dplyr which variable is the key:
 
@@ -336,57 +330,97 @@ x |>
 
 The most important property of an inner join is that unmatched rows are not included in the result.
 This means that generally inner joins are usually not appropriate for use in analysis because it's too easy to lose observations.
+You have two options to avoid this problem.
+You can switch to an outer join, described next, or you can make the failure to match an error by setting `unmatched = "error"`:
+
+```{r}
+#| error: true
+x |> 
+  inner_join(y, by = "key", unmatched = "error")
+```
 
 ### Outer joins {#sec-outer-join}
 
 An inner join keeps observations that appear in both data frames.
 An **outer join** keeps observations that appear in at least one of the data frames.
+These joins work by adding an additional "virtual" observation to each data frame.
+This observation has a key that matches if no other key matches, and values filled with `NA`.
+
 There are three types of outer joins:
 
--   A **left join** keeps all observations in `x`.
--   A **right join** keeps all observations in `y`.
--   A **full join** keeps all observations in `x` and `y`.
+-   A **left join** keeps all observations in `x`, @fig-join-left.
 
-These joins work by adding an additional "virtual" observation to each data frame.
-This observation has a key that always matches (if no other key matches), and a value filled with `NA`.
+    ```{r}
+    #| label: fig-join-left
+    #| echo: false
+    #| out-width: ~
+    #| fig-cap: > 
+    #|   A visual representation of the left join. Every row of `x` is
+    #|   preserved in the output because it can fallback to matching a 
+    #|   row of `NA`s in `y`.
+    #| fig-alt: >
+    #|   Left join: keys 1 and 2 from x are matched to those in y, key 3 is
+    #|   also carried along to the joined result since it's on the left data
+    #|   frame, but key 4 from y is not carried along since it's on the right
+    #|   but not on the left. The result has 3 rows: keys 1, 2, and 3,
+    #|   all values from val_x, and the corresponding values from val_y for
+    #|   keys 1 and 2 with an NA for key 3, val_y. 
 
-Graphically, that looks like:
+    knitr::include_graphics("diagrams/join/left.png", dpi = 270)
+    ```
 
-```{r}
-#| echo: false
-#| out-width: null
-#| fig-alt: >
-#|   Three diagrams for left, right, and full joins. In each diagram data frame 
-#|   x is on the left and y is on the right. The result of the join is always a 
-#|   data frame with three columns (key, val_x, and val_y). Left join: keys 1 
-#|   and 2 from x are matched to those in y, key 3 is also carried along to the 
-#|   joined result since it's on the left data frame, but key 4 from y is not 
-#|   carried along since it's on the right but not on the left. The result is 
-#|   a data frame with 3 rows: keys 1, 2, and 3, all values from val_x, and 
-#|   the corresponding values from val_y for keys 1 and 2 with an NA for key 3, 
-#|   val_y. Right join: keys 1 and 2 from x are matched to those in y, key 4 is 
-#|   also carried along to the joined result since it's on the right data frame, 
-#|   but key 3 from x is not carried along since it's on the left but not on the 
-#|   right. The result is a data frame with 3 rows: keys 1, 2, and 4, all values 
-#|   from val_y, and the corresponding values from val_x for keys 1 and 2 with 
-#|   an NA for key 4, val_x. Full join: The resulting data frame has 4 rows: 
-#|   keys 1, 2, 3, and 4 with all values from val_x and val_y, however key 2, 
-#|   val_y and key 4, val_x are NAs since those keys aren't present in their 
-#|   respective data frames.
+-   A **right join** keeps all observations in `y`, @fig-join-right.
 
-knitr::include_graphics("diagrams/join/outer.png")
-```
+    ```{r}
+    #| label: fig-join-right
+    #| echo: false
+    #| out-width: ~
+    #| fig-cap: > 
+    #|   A visual representation of the right join. Every row of `y` is
+    #|   preserved in the output because it can fallback to matching a 
+    #|   row of `NA`s in `x`.
+    #| fig-alt: >
+    #|   Keys 1 and 2 from x are matched to those in y, key 4 is 
+    #|   also carried along to the joined result since it's on the right data frame, 
+    #|   but key 3 from x is not carried along since it's on the left but not on the 
+    #|   right. The result is a data frame with 3 rows: keys 1, 2, and 4, all values 
+    #|   from val_y, and the corresponding values from val_x for keys 1 and 2 with 
+    #|   an NA for key 4, val_x. 
+
+    knitr::include_graphics("diagrams/join/right.png", dpi = 270)
+    ```
+
+-   A **full join** keeps all observations in `x` and `y`, @fig-join-full.
+
+    ```{r}
+    #| label: fig-join-full
+    #| echo: false
+    #| out-width: ~
+    #| fig-cap: > 
+    #|   A visual representation of the full join. Every row of `x` and `y`
+    #|   is included in the output because both `x` and `y` have a fallback
+    #|   row of `NA`s.
+    #| fig-alt: >
+    #|   The result has 4 rows: keys 1, 2, 3, and 4 with all values 
+    #|   from val_x and val_y, however key 2, val_y and key 4, val_x are NAs since
+    #|   those keys aren't present in their  respective data frames.
+
+    knitr::include_graphics("diagrams/join/full.png", dpi = 270)
+    ```
 
 The most commonly used join is the left join: you use this whenever you look up additional data from another data frame, because it preserves the original observations even when there isn't a match.
 The left join should be your default join: use it unless you have a strong reason to prefer one of the others.
 
-<!--# TODO: mention unmatch argument -->
-
-Another way to depict the different types of joins is with a Venn diagram:
+Another way to show how the outer joins differ is with a Venn diagram, @fig-join-venn.
+This, however, is not a great representation because while it might jog your memory about which rows are preserved, it fails to illustrate what's happening with the columns.
 
 ```{r}
+#| label: fig-join-venn
 #| echo: false
-#| out-width: null
+#| out-width: ~
+#| fig-cap: >
+#|   Venn diagrams showing the difference between inner, left, right, and
+#|   full joins.
 #| fig-alt: >
 #|   Venn diagrams for inner, full, left, and right joins. Each join represented 
 #|   with two intersecting circles representing data frames x and y, with x on 
@@ -396,97 +430,114 @@ Another way to depict the different types of joins is with a Venn diagram:
 #|   with x. Right join: Only y is shaded, but not the area in x that doesn't 
 #|   intersect with y.
 
-knitr::include_graphics("diagrams/join/venn.png")
+knitr::include_graphics("diagrams/join/venn.png", dpi = 270)
 ```
 
-However, this is not a great representation.
-It might jog your memory about which join preserves the observations in which data frame, but it suffers from a major limitation: a Venn diagram can't show what happens when keys don't uniquely identify an observation.
+### Many-to-one joins {#sec-join-matches}
 
-### Duplicate keys {#sec-join-matches}
+So far all the diagrams have assumed that the keys are unique so there's a one-to-one match between the two tables.
+That's not usually the case so this and the following sections explore what happens when the keys aren't unique.
 
-So far all the diagrams have assumed that the keys are unique.
-But that's not always the case.
-This section explains what happens when the keys are not unique.
-There are two possibilities:
+A **many-to-one** join arises when one data frame (usually `x`) has duplicate keys, as in @fig-join-one-to-many.
+This is probably the most common type of join because it arises when the key in `x` is a foreign key that matches a primary key in `y`.
 
-1.  One data frame has duplicate keys.
-    This is useful when you want to add in additional information as there is typically a one-to-many relationship.
+```{r}
+#| label: fig-join-one-to-many
+#| echo: false
+#| out-width: ~
+#| fig-cap: >
+#|   A one-to-many join where each row in `x` matches a single row in `y`
+#|   but rows in `y` are matched multiple times. We've put the key column 
+#|   in a slightly different position in the output. This is because
+#|   in most joins of this nature, the key is a primary key in y and a
+#|   foreign key in x.
+#| fig-alt: >
+#|   Diagram describing a left join where one of the data frames (x) has 
+#|   duplicate keys. Data frame x is on the left, has 4 rows and 2 columns 
+#|   (key, val_x), and has the keys 1, 2, 2, and 1. Data frame y is on the 
+#|   right, has 2 rows and 2 columns (key, val_y), and has the keys 1 and 2. 
+#|   Left joining these two data frames yields a data frame with 4 rows 
+#|   (keys 1, 2, 2, and 1) and 3 columns (val_x, key, val_y). All values 
+#|   from x$val_x are carried along, values in y for key 1 and 2 are duplicated.
 
-    ```{r}
-    #| echo: false
-    #| out-width: null
-    #| fig-alt: >
-    #|   Diagram describing a left join where one of the data frames (x) has 
-    #|   duplicate keys. Data frame x is on the left, has 4 rows and 2 columns 
-    #|   (key, val_x), and has the keys 1, 2, 2, and 1. Data frame y is on the 
-    #|   right, has 2 rows and 2 columns (key, val_y), and has the keys 1 and 2. 
-    #|   Left joining these two data frames yields a data frame with 4 rows 
-    #|   (keys 1, 2, 2, and 1) and 3 columns (val_x, key, val_y). All values 
-    #|   from x$val_x are carried along, values in y for key 1 and 2 are duplicated.
+knitr::include_graphics("diagrams/join/one-to-many.png", dpi = 270)
+```
 
-    knitr::include_graphics("diagrams/join/one-to-many.png")
-    ```
+One-to-many joins arise commonly with the flights data.
+For example, the following code shows how we might the carrier name or plane information to the flights dataset:
 
-    Note that we've put the key column in a slightly different position in the output.
-    This reflects that the key is a primary key in `y` and a foreign key in `x`.
+```{r}
+flights |> 
+  select(carrier, flight) |> 
+  left_join(airlines, by = "carrier")
 
-    ```{r}
-    x2 <- tribble(
-      ~key, ~val_x,
-         1, "x1",
-         2, "x2",
-         2, "x3",
-         1, "x4"
-    )
-    y2 <- tribble(
-      ~key, ~val_y,
-         1, "y1",
-         2, "y2"
-    )
-    left_join(x2, y2, by = "key")
-    ```
+flights |> 
+  select(time_hour, carrier, flight, tailnum) |> 
+  left_join(planes, by = "tailnum")
+```
 
-2.  Both data frames have duplicate keys.
-    This is usually a mistake error because in neither data frame do the keys uniquely identify an observation.
-    When you join duplicated keys, you get all possible combinations, the Cartesian product.
-    dplyr will warn you about this situation so that you can fix the underlying data, pick a single match with `multiple = "any"`, or state that this is what you want with `multiple = "all"`.
+A **one-to-many** join is the same as a many-to-one join with `x` and `y` swapped.
+It answers a slight different question, e.g. tell me all the flights that each plane flew.
 
-    <!--# TODO: polish -->
+<!--# TODO: resolve this -->
 
-    ```{r}
-    #| echo: false
-    #| out-width: null
-    #| fig-alt: >
-    #|   Diagram describing a left join where both data frames (x and y) have 
-    #|   duplicate keys. Data frame x is on the left, has 4 rows and 2 columns 
-    #|   (key, val_x), and has the keys 1, 2, 2, and 3. Data frame y is on the 
-    #|   right, has 4 rows and 2 columns (key, val_y), and has the keys 1, 2, 2, 
-    #|   and 3 as well. Left joining these two data frames yields a data frame 
-    #|   with 6 rows (keys 1, 2, 2, 2, 2, and 3) and 3 columns (key, val_x, 
-    #|   val_y). All values from both datasets are included.
+```{r}
+planes |> 
+  select(tailnum, type, engines) |> 
+  left_join(flights, by = "tailnum")
+```
 
-    knitr::include_graphics("diagrams/join/many-to-many.png")
-    ```
+### Many-to-many joins
 
-    ```{r}
-    x3 <- tribble(
-      ~key, ~val_x,
-         1, "x1",
-         2, "x2",
-         2, "x3",
-         3, "x4"
-    )
-    y3 <- tribble(
-      ~key, ~val_y,
-         1, "y1",
-         2, "y2",
-         2, "y3",
-         3, "y4"
-    )
-    left_join(x3, y3, by = "key")
-    left_join(x3, y3, by = "key", multiple = "any")
-    left_join(x3, y3, by = "key", multiple = "all")
-    ```
+A **many-to-many** join arises when when both data frames have duplicate keys, as in @fig-join-many-to-many. When duplicated keys match, they generate all possible combinations, the Cartesian product.
+
+```{r}
+#| label: fig-join-many-to-many
+#| echo: false
+#| out-width: ~
+#| fig-cap: > 
+#|   A many-to-many join is usually undesired because it produces an
+#|   explosion of new rows.
+#| fig-alt: >
+#|   Diagram describing a left join where both data frames (x and y) have 
+#|   duplicate keys. Data frame x is on the left, has 4 rows and 2 columns 
+#|   (key, val_x), and has the keys 1, 2, 2, and 3. Data frame y is on the 
+#|   right, has 4 rows and 2 columns (key, val_y), and has the keys 1, 2, 2, 
+#|   and 3 as well. Left joining these two data frames yields a data frame 
+#|   with 6 rows (keys 1, 2, 2, 2, 2, and 3) and 3 columns (key, val_x, 
+#|   val_y). All values from both datasets are included.
+
+knitr::include_graphics("diagrams/join/many-to-many.png", dpi = 270)
+```
+
+Many-to-many joins are usually a mistake because you get all possible combinations, increasing the total number of rows.
+If you do a many-to-many join in dplyr, you'll get a warning:
+
+```{r}
+x3 <- tribble(
+  ~key, ~val_x,
+     1, "x1",
+     2, "x2",
+     2, "x3",
+     3, "x4"
+)
+y3 <- tribble(
+  ~key, ~val_y,
+     1, "y1",
+     2, "y2",
+     2, "y3",
+     3, "y4"
+)
+x3 |> 
+  left_join(y3, by = "key")
+```
+
+Silence the warning by fixing the underlying data, or if you really do want a many-to-many join (which can be useful in some circumstances), set `multiple = "all"`.
+
+```{r}
+x3 |> 
+  left_join(y3, by = "key", multiple = "all")
+```
 
 ### Defining the key columns {#sec-join-by}
 
@@ -591,28 +642,28 @@ x |> left_join(y, by = "key", keep = TRUE)
 #|   default because for equi-joins, the keys are the same so showing
 #|   both doesn't add anything.
 #| echo: false
-#| out-width: null
+#| out-width: ~
 
 knitr::include_graphics("diagrams/join/inner-both.png", dpi = 270)
 ```
 
 This distinction between the keys becomes much more important as we move away from equi-joins because the key values are much more likely to be different.
 Because of this, dplyr defaults to showing both keys.
-For example, instead of requiring that the `x` and `y` keys be equal, we could request that key from `x` be less than the key from `y`, as in the code below and @fig-join-lt.
+For example, instead of requiring that the `x` and `y` keys be equal, we could request that key from `x` be less than the key from `y`, as in the code below and @fig-join-gte.
 
 ```{r}
-x |> inner_join(y, join_by(key < key))
+x |> inner_join(y, join_by(key >= key))
 ```
 
 ```{r}
-#| label: fig-join-lt
+#| label: fig-join-gte
 #| echo: false
 #| fig-cap: >
 #|   A non-equijoin where the `x` key must be less than the `y` key.
-knitr::include_graphics("diagrams/join/lt.png", dpi = 270)
+knitr::include_graphics("diagrams/join/gte.png", dpi = 270)
 ```
 
-The most important change in a non-equi join is that there's no longer a one-to-one match between the rows.
+As you'll also see, it's also very common for non-equijoins to produce multiple matches.
 
 ### `join_by()`
 
@@ -646,6 +697,16 @@ df |> left_join(df, join_by(id < id))
 Here we perform a self-join (i.e we join a table to itself), then use the inequality join to ensure that we one of the two possible pairs (e.g. just (a, b) not also (b, a)) and don't match the same row.
 
 ### Rolling joins
+
+```{r}
+#| label: fig-join-following
+#| echo: false
+#| out-width: ~
+#| fig-cap: >
+#|   A following join is similar to a greater-than-or-equal inequality join
+#|   but only matches the first value.
+knitr::include_graphics("diagrams/join/following.png", dpi = 270)
+```
 
 Rolling joins are sort of a special type of inequality join --- instead of getting *every* row where `x > y` you just get the first row.
 They're particularly useful when you have two tables of dates that don't perfectly line up and you want to find (e.g.) the closest date in table 1 that matches some date in table 2.
@@ -718,11 +779,17 @@ flights |>
   semi_join(top_dest)
 ```
 
-Graphically, a semi-join looks like this:
+@fig-join-semi shows what semi-join looks.
+Only the existence of a match is important; it doesn't matter which observation is matched.
+This means that filtering joins never duplicate rows like mutating joins do.
 
 ```{r}
+#| label: fig-join-semi
 #| echo: false
 #| out-width: null
+#| fig-cap: >
+#|   In a semi-join it only matters that there is a match; otherwise
+#|   values in `y` don't affect the output.
 #| fig-alt: >
 #|   Diagram of a semi join. Data frame x is on the left and has two columns 
 #|   (key and val_x) with keys 1, 2, and 3. Diagram y is on the right and also 
@@ -733,39 +800,8 @@ Graphically, a semi-join looks like this:
 knitr::include_graphics("diagrams/join/semi.png")
 ```
 
-Only the existence of a match is important; it doesn't matter which observation is matched.
-This means that filtering joins never duplicate rows like mutating joins do:
-
-```{r}
-#| echo: false
-#| out-width: null
-#| fig-alt: >
-#|   Diagram of a semi join with data frames with duplicated keys. Data frame 
-#|   x is on the left and has two columns (key and val_x) with keys 1, 2, 2, 
-#|   and 3. Diagram y is on the right and also has two columns (key and val_y) 
-#|   with keys 1, 2, 2, and 3 as well. Semi joining these two results in a data 
-#|   frame with four rows and two columns (key and val_x), with keys 1, 2, 2, 
-#|   and 3 (the matching keys, each appearing as many times as they do in x).
-
-knitr::include_graphics("diagrams/join/semi-many.png")
-```
-
 The inverse of a semi-join is an anti-join.
-An anti-join keeps the rows that *don't* have a match:
-
-```{r}
-#| echo: false
-#| out-width: null
-#| fig-alt: >
-#|   Diagram of an anti join. Data frame x is on the left and has two columns 
-#|   (key and val_x) with keys 1, 2, and 3. Diagram y is on the right and also 
-#|   has two columns (key and val_y) with keys 1, 2, and 4. Anti joining these 
-#|   two results in a data frame with one row and two columns (key and val_x), 
-#|   with keys 3 only (the only key in x that is not in y).
-
-knitr::include_graphics("diagrams/join/anti.png")
-```
-
+An anti-join keeps the rows that *don't* have a match, as shown in @fig-join-anti.
 Anti-joins are useful for diagnosing join mismatches.
 For example, when connecting `flights` and `planes`, you might be interested to know that there are many `flights` that don't have a match in `planes`:
 
@@ -773,6 +809,23 @@ For example, when connecting `flights` and `planes`, you might be interested to 
 flights |>
   anti_join(planes, by = "tailnum") |>
   count(tailnum, sort = TRUE)
+```
+
+```{r}
+#| label: fig-join-anti
+#| echo: false
+#| out-width: null
+#| fig-cap: >
+#|   An anti-join is the inverse of a semi-join, dropping rows from `x`
+#|   that have a match in `y`.
+#| fig-alt: >
+#|   Diagram of an anti join. Data frame x is on the left and has two columns 
+#|   (key and val_x) with keys 1, 2, and 3. Diagram y is on the right and also 
+#|   has two columns (key and val_y) with keys 1, 2, and 4. Anti joining these 
+#|   two results in a data frame with one row and two columns (key and val_x), 
+#|   with keys 3 only (the only key in x that is not in y).
+
+knitr::include_graphics("diagrams/join/anti.png", dpi = 270)
 ```
 
 ### Exercises
@@ -822,3 +875,4 @@ Your own data is unlikely to be so nice, so there are a few things that you shou
 
 Be aware that simply checking the number of rows before and after the join is not sufficient to ensure that your join has gone smoothly.
 If you have an inner join with duplicate keys in both data frames, you might get unlucky as the number of dropped rows might exactly equal the number of duplicated rows!
+
