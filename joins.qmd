@@ -708,12 +708,77 @@ Here we perform a self-join (i.e we join a table to itself), then use the inequa
 knitr::include_graphics("diagrams/join/following.png", dpi = 270)
 ```
 
-Rolling joins are sort of a special type of inequality join --- instead of getting *every* row where `x > y` you just get the first row.
-They're particularly useful when you have two tables of dates that don't perfectly line up and you want to find (e.g.) the closest date in table 1 that matches some date in table 2.
+Rolling joins are a special type of inequality join where instead of getting *every* row that satisfies the inequality, you get one row.
+They're particularly useful when you have two tables of dates that don't perfectly line up and you want to find (e.g.) the closest date in table 1 that comes before (or after) some date in table 2.
+
+There are two `joinby()` functions that perform rolling joins:
+
+-   `following(x, y)` is equivalent to getting the first match for `x <= y`.
+-   `following(x, y, inclusive = FALSE)` is equivalent to getting the first match for `x < y`.
+-   `preceding(x, y)` is equivalent to getting the first match for `x >= y`.
+-   `preceding(x, y, inclusive = TRUE)` is equivalent to getting the first match for `x >= y`.
+
+For example, imagine that you're in charge of office birthdays.
+Your company is rather stingy so instead of having individual parties, you only have a party once each quarter.
+Parties are always on a Monday, and you skip the first week of January since a lot of people are on holiday and the first Monday of Q3 is July 4, so that has to be pushed back a week.
+That leads to the following party days:
+
+```{r}
+parties <- tibble(
+  q = 1:4,
+  party = lubridate::ymd(c("2022-01-10", "2022-04-04", "2022-07-11", "2022-10-03"))
+)
+```
+
+Then we have a table of employees along with their birthdays:
+
+```{r}
+set.seed(1014)
+employees <- tibble(
+  name = wakefield::name(100),
+  birthday = lubridate::ymd("2022-01-01") + (sample(365, 100, replace = TRUE) - 1)
+)
+employees
+```
+
+To find out which party each employee will use to celebrate their birthday, we can use a rolling join.
+We want to find the first party that's before their birthday so we can use following:
+
+```{r}
+employees |> 
+  left_join(parties, join_by(preceding(birthday, party)))
+```
 
 ### Overlap joins
 
-Birthday party
+There's one problem with the strategy uses for assigning birthday parties above: there's no party preceding the birthdays Jan 1-9.
+So maybe we'd be better off being explicit about the date ranges that each party spans, and make a special case for those early bithdays:
+
+```{r}
+parties <- tibble(
+  q = 1:4,
+  party = lubridate::ymd(c("2022-01-10", "2022-04-04", "2022-07-11", "2022-10-03")),
+  start = lubridate::ymd(c("2022-01-01", "2022-04-04", "2022-07-11", "2022-10-03")),
+  end = lubridate::ymd(c("2022-04-03", "2022-07-11", "2022-10-02", "2022-12-31"))
+)
+parties
+```
+
+This is a good place to use `unmatched = "error"` because I want to find out if any employees didn't get assigned a birthday.
+
+```{r}
+employees |> 
+  inner_join(parties, join_by(between(birthday, start, end)), unmatched = "error")
+```
+
+We could also flip the question around and ask which employees will celebrate in each party:
+
+I'm hopelessly bad at data entry so I also want to check that my party periods don't overlap.
+
+```{r}
+parties |> 
+  inner_join(parties, join_by(overlaps(start, end, start, end), q < q))
+```
 
 Find all flights in the air
 
@@ -875,4 +940,3 @@ Your own data is unlikely to be so nice, so there are a few things that you shou
 
 Be aware that simply checking the number of rows before and after the join is not sufficient to ensure that your join has gone smoothly.
 If you have an inner join with duplicate keys in both data frames, you might get unlucky as the number of dropped rows might exactly equal the number of duplicated rows!
-
