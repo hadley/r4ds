@@ -5,6 +5,9 @@
 #| echo: false
 source("_common.R")
 status("polishing")
+
+# https://github.com/tidyverse/lubridate/issues/1058
+options(warnPartialMatchArgs = FALSE)
 ```
 
 ## Introduction
@@ -13,15 +16,14 @@ This chapter will show you how to work with dates and times in R.
 At first glance, dates and times seem simple.
 You use them all the time in your regular life, and they don't seem to cause much confusion.
 However, the more you learn about dates and times, the more complicated they seem to get.
-To warm up, try these three seemingly simple questions:
+To warm up think about how many days there are in a year, and how many hours there are in a day.
 
--   Does every year have 365 days?
--   Does every day have 24 hours?
--   Does every minute have 60 seconds?
+You probably remembered that most years have 365 days, but leap years have 366.
+Do you know the full rule for determining if a year is a leap year[^datetimes-1]?
+The number of hours in a day is a little less obvious: most days have 24 hours, but if you use daylight saving time (DST), one day each year has 23 hours and another has 25.
 
-I'm sure you know that not every year has 365 days, but do you know the full rule for determining if a year is a leap year?
-(It has three parts.) You might have remembered that many parts of the world use daylight savings time (DST), so that some days have 23 hours, and others have 25.
-You might not have known that some minutes have 61 seconds because every now and then leap seconds are added because the Earth's rotation is gradually slowing down.
+[^datetimes-1]: A year is a leap year if it's divisible by 4, unless it's also divisible by 100, except if it's also divisible by 400.
+    In other words, in every set of 400 years, there's 97 leap years.
 
 Dates and times are hard because they have to reconcile two physical phenomena (the rotation of the Earth and its orbit around the sun) with a whole raft of geopolitical phenomena including months, time zones, and DST.
 This chapter won't teach you every last detail about dates and times, but it will give you a solid grounding of practical skills that will help you with common data analysis challenges.
@@ -34,7 +36,6 @@ We will also need nycflights13 for practice data.
 
 ```{r}
 #| message: false
-
 library(tidyverse)
 
 library(lubridate)
@@ -53,9 +54,9 @@ There are three types of date/time data that refer to an instant in time:
 
 -   A **date-time** is a date plus a time: it uniquely identifies an instant in time (typically to the nearest second).
     Tibbles print this as `<dttm>`.
-    Elsewhere in R these are called POSIXct, but I don't think that's a very useful name.
+    Base R calls these POSIXct, but doesn't exactly trip off the tongue.
 
-In this chapter we are only going to focus on dates and date-times as R doesn't have a native class for storing times.
+In this chapter we are going to focus on dates and date-times as R doesn't have a native class for storing times.
 If you need one, you can use the **hms** package.
 
 You should always use the simplest possible data type that works for your needs.
@@ -93,14 +94,6 @@ mdy("January 31st, 2017")
 dmy("31-Jan-2017")
 ```
 
-These functions also take unquoted numbers.
-This is the most concise way to create a single date/time object, as you might need when filtering date/time data.
-`ymd()` is short and unambiguous:
-
-```{r}
-ymd(20170131)
-```
-
 `ymd()` and friends create dates.
 To create a date-time, add an underscore and one or more of "h", "m", and "s" to the name of the parsing function:
 
@@ -112,13 +105,13 @@ mdy_hm("01/31/2017 08:01")
 You can also force the creation of a date-time from a date by supplying a timezone:
 
 ```{r}
-ymd(20170131, tz = "UTC")
+ymd("2017-01-31", tz = "UTC")
 ```
 
 ### From individual components
 
 Instead of a single string, sometimes you'll have the individual components of the date-time spread across multiple columns.
-This is what we have in the flights data:
+This is what we have in the `flights` data:
 
 ```{r}
 flights |> 
@@ -135,7 +128,7 @@ flights |>
 
 Let's do the same thing for each of the four time columns in `flights`.
 The times are represented in a slightly odd format, so we use modulus arithmetic to pull out the hour and minute components.
-Once I've created the date-time variables, I focus in on the variables we'll explore in the rest of the chapter.
+Once we've created the date-time variables, we focus in on the variables we'll explore in the rest of the chapter.
 
 ```{r}
 make_datetime_100 <- function(year, month, day, time) {
@@ -155,9 +148,17 @@ flights_dt <- flights |>
 flights_dt
 ```
 
-With this data, I can visualise the distribution of departure times across the year:
+With this data, we can visualize the distribution of departure times across the year:
 
 ```{r}
+#| fig.alt: >
+#|   A frequency polyon with departure time (Jan-Dec 2013) on the x-axis
+#|   and number of flights on the y-axis (0-1000). The frequency polygon
+#|   is binned by day so you see a time series of flights by day. The
+#|   pattern is dominated by a weekly pattern; there are fewer flights 
+#|   on weekends. The are few days that stand out as having a surprisingly
+#|   few flights in early Februrary, early July, late November, and late
+#|   December.
 flights_dt |> 
   ggplot(aes(dep_time)) + 
   geom_freqpoly(binwidth = 86400) # 86400 seconds = 1 day
@@ -166,6 +167,12 @@ flights_dt |>
 Or within a single day:
 
 ```{r}
+#| fig.alt: >
+#|   A frequency polygon with departure time (6am - midnight Jan 1) on the
+#|   x-axis, number of flights on the y-axis (0-17), binned into 10 minute
+#|   increments. It's hard to see much pattern because of high variability,
+#|   but most bins have 8-12 flights, and there are markedly fewer flights 
+#|   before 6am and after 8pm.
 flights_dt |> 
   filter(dep_time < ymd(20130102)) |> 
   ggplot(aes(dep_time)) + 
@@ -227,7 +234,7 @@ The next section will look at how arithmetic works with date-times.
 You can pull out individual parts of the date with the accessor functions `year()`, `month()`, `mday()` (day of the month), `yday()` (day of the year), `wday()` (day of the week), `hour()`, `minute()`, and `second()`.
 
 ```{r}
-datetime <- ymd_hms("2016-07-08 12:34:56")
+datetime <- ymd_hms("2026-07-08 12:34:56")
 
 year(datetime)
 month(datetime)
@@ -248,6 +255,12 @@ wday(datetime, label = TRUE, abbr = FALSE)
 We can use `wday()` to see that more flights depart during the week than on the weekend:
 
 ```{r}
+#| fig-alt: >
+#|   A bar chart with days of the week on the x-axis and number of 
+#|   flights on the y-axis. Monday-Friday have roughly the same number of
+#|   flights, ~48,0000, decreasingly slightly over the course of the week.
+#|   Sunday is a little lower (~45,000), and Saturday is much lower 
+#|   (~38,000).
 flights_dt |> 
   mutate(wday = wday(dep_time, label = TRUE)) |> 
   ggplot(aes(x = wday)) +
@@ -258,6 +271,13 @@ There's an interesting pattern if we look at the average departure delay by minu
 It looks like flights leaving in minutes 20-30 and 50-60 have much lower delays than the rest of the hour!
 
 ```{r}
+#| fig-alt: > 
+#|   A line chart with minute of actual departure (0-60) on the x-axis and
+#|   average delay (4-20) on the y-axis. Average delay starts at (0, 12),
+#|   steadily increases to (18, 20), then sharply drops, hitting at minimum
+#|   at ~23 minute past the hour and 9 minutes of delay. It then increases
+#|   again to (17, 35), and sharply decreases to (55, 4). It finishes off
+#|   with an increase to (60, 9).
 flights_dt |> 
   mutate(minute = minute(dep_time)) |> 
   group_by(minute) |> 
@@ -271,6 +291,11 @@ flights_dt |>
 Interestingly, if we look at the *scheduled* departure time we don't see such a strong pattern:
 
 ```{r}
+#| fig-alt: > 
+#|   A line chart with minute of scheduled departure (0-60) on the x-axis
+#|   and average delay (4-16). There is relatively little pattern, just a
+#|   small suggestion that the average delay decreases from maybe 10 minutes
+#|   to 8 minutes over the course of the hour.
 sched_dep <- flights_dt |> 
   mutate(minute = minute(sched_dep_time)) |> 
   group_by(minute) |> 
@@ -287,6 +312,12 @@ Well, like much data collected by humans, there's a strong bias towards flights 
 Always be alert for this sort of pattern whenever you work with data that involves human judgement!
 
 ```{r}
+#| fig-alt: >
+#|   A line plot with departure minute (0-60) on the x-axis and number of
+#|   flights (0-60000) on the y-axis. Most flights are scheduled to depart
+#|   on either the hour (~60,000) or the half hour (~35,000). Otherwise,
+#|   all most all flights are scheduled to depart on multiples of five, 
+#|   with a few extra at 15, 45, and 55 minutes.
 ggplot(sched_dep, aes(minute, n)) +
   geom_line()
 ```
@@ -298,22 +329,55 @@ Each function takes a vector of dates to adjust and then the name of the unit ro
 This, for example, allows us to plot the number of flights per week:
 
 ```{r}
+#| fig-alt: >
+#|   A line plot with week (Jan-Dec 2013) on the x-axis and number of
+#|   flights (2,000-7,000) on the y-axis. The pattern is fairly flat from
+#|   February to November with around 7,000 flights per week. There are
+#|   far fewer flights on the first (approximately 4,500 flights) and last
+#|   weeks of the year (approximately 2,500 flights).
 flights_dt |> 
   count(week = floor_date(dep_time, "week")) |> 
   ggplot(aes(week, n)) +
-    geom_line()
+  geom_line() + 
+  geom_point()
 ```
 
-Computing the difference between a rounded and unrounded date can be particularly useful.
-
-### Setting components
-
-You can also use each accessor function to set the components of a date/time:
+You can use rounding to show the distribution of flights across the course of a day by computing the difference between `dep_time` and the earliest instant of that day:
 
 ```{r}
-(datetime <- ymd_hms("2016-07-08 12:34:56"))
+#| fig-alt: >
+#|   A line plot with depature time on the x-axis. This is units of seconds
+#|   since midnight so it's hard to interpret.
+flights_dt |> 
+  mutate(dep_hour = dep_time - floor_date(dep_time, "day")) |> 
+  ggplot(aes(dep_hour)) +
+    geom_freqpoly(binwidth = 60 * 30)
+```
 
-year(datetime) <- 2020
+Computing the difference between a pair of date-times yields a difftime (more on that in @sec-intervals). We can convert that to an `hms` object to get a more useful x-axis:
+
+```{r}
+#| fig-alt: >
+#|   A line plot with depature time (midnight to midnight) on the x-axis
+#|   and number of flights on the y-axis (0 to 15,000). There are very few
+#|   (<100) flights before 5am. The number of flights then rises rapidly 
+#|   to 12,000 / hour, peaking at 15,000 at 9am, before falling to around
+#|   8,000 / hour for 10am to 2pm. Number of flights then increases to
+#|   around 12,000 per hour until 8pm, when they rapidly drop again. 
+flights_dt |> 
+  mutate(dep_hour = hms::as_hms(dep_time - floor_date(dep_time, "day"))) |> 
+  ggplot(aes(dep_hour)) +
+    geom_freqpoly(binwidth = 60 * 30)
+```
+
+### Modifying components
+
+You can also use each accessor function to modify the components of a date/time:
+
+```{r}
+(datetime <- ymd_hms("2026-07-08 12:34:56"))
+
+year(datetime) <- 2030
 datetime
 month(datetime) <- 01
 datetime
@@ -321,32 +385,19 @@ hour(datetime) <- hour(datetime) + 1
 datetime
 ```
 
-Alternatively, rather than modifying in place, you can create a new date-time with `update()`.
-This also allows you to set multiple values at once.
+Alternatively, rather than modifying an existing variabke, you can create a new date-time with `update()`.
+This also allows you to set multiple values in one step:
 
 ```{r}
-update(datetime, year = 2020, month = 2, mday = 2, hour = 2)
+update(datetime, year = 2030, month = 2, mday = 2, hour = 2)
 ```
 
 If values are too big, they will roll-over:
 
 ```{r}
-ymd("2015-02-01") |> 
-  update(mday = 30)
-ymd("2015-02-01") |> 
-  update(hour = 400)
+update(ymd("2023-02-01"), mday = 30)
+update(ymd("2023-02-01"), hour = 400)
 ```
-
-You can use `update()` to show the distribution of flights across the course of the day for every day of the year:
-
-```{r}
-flights_dt |> 
-  mutate(dep_hour = update(dep_time, yday = 1)) |> 
-  ggplot(aes(dep_hour)) +
-    geom_freqpoly(binwidth = 300)
-```
-
-Setting larger components of a date to a constant is a powerful technique that allows you to explore patterns in the smaller components.
 
 ### Exercises
 
@@ -386,7 +437,7 @@ In R, when you subtract two dates, you get a difftime object:
 
 ```{r}
 # How old is Hadley?
-h_age <- today() - ymd(19791014)
+h_age <- today() - ymd("1979-10-14")
 h_age
 ```
 
@@ -409,7 +460,10 @@ dyears(1)
 ```
 
 Durations always record the time span in seconds.
-Larger units are created by converting minutes, hours, days, weeks, and years to seconds at the standard rate (60 seconds in a minute, 60 minutes in an hour, 24 hours in day, 7 days in a week, 365 days in a year).
+Larger units are created by converting minutes, hours, days, weeks, and years to seconds: 60 seconds in a minute, 60 minutes in an hour, 24 hours in a day, and 7 days in a week.
+Larger time units are more problematic.
+A year is uses the "average" number of days in a year, i.e. 365.25.
+There's no way to convert a month to a duration, because there's just too much variation.
 
 You can add and multiply durations:
 
@@ -428,15 +482,15 @@ last_year <- today() - dyears(1)
 However, because durations represent an exact number of seconds, sometimes you might get an unexpected result:
 
 ```{r}
-one_pm <- ymd_hms("2016-03-12 13:00:00", tz = "America/New_York")
+one_pm <- ymd_hms("2026-03-12 13:00:00", tz = "America/New_York")
 
 one_pm
 one_pm + ddays(1)
 ```
 
-Why is one day after 1pm on March 12, 2pm on March 13?!
+Why is one day after 1pm March 12, 2pm March 13?
 If you look carefully at the date you might also notice that the time zones have changed.
-Because of DST, March 12 only has 23 hours, so if we add a full days worth of seconds we end up with a different time.
+March 12 only has 23 hours because it's when DST starts, so if we add a full days worth of seconds we end up with a different time.
 
 ### Periods
 
@@ -452,13 +506,9 @@ one_pm + days(1)
 Like durations, periods can be created with a number of friendly constructor functions.
 
 ```{r}
-seconds(15)
-minutes(10)
 hours(c(12, 24))
 days(7)
 months(1:6)
-weeks(3)
-years(1)
 ```
 
 You can add and multiply periods:
@@ -473,8 +523,8 @@ Compared to durations, periods are more likely to do what you expect:
 
 ```{r}
 # A leap year
-ymd("2016-01-01") + dyears(1)
-ymd("2016-01-01") + years(1)
+ymd("2024-01-01") + dyears(1)
+ymd("2024-01-01") + years(1)
 
 # Daylight Savings Time
 one_pm + ddays(1)
@@ -497,7 +547,7 @@ We can fix this by adding `days(1)` to the arrival time of each overnight flight
 flights_dt <- flights_dt |> 
   mutate(
     overnight = arr_time < dep_time,
-    arr_time = arr_time + days(ifelse(overnight, 0, 1)),
+    arr_time = arr_time + days(if_else(overnight, 0, 1)),
     sched_arr_time = sched_arr_time + days(overnight * 1)
   )
 ```
@@ -509,31 +559,37 @@ flights_dt |>
   filter(overnight, arr_time < dep_time) 
 ```
 
-### Intervals
+### Intervals {#sec-intervals}
 
 It's obvious what `dyears(1) / ddays(365)` should return: one, because durations are always represented by a number of seconds, and a duration of a year is defined as 365 days worth of seconds.
 
 What should `years(1) / days(1)` return?
 Well, if the year was 2015 it should return 365, but if it was 2016, it should return 366!
 There's not quite enough information for lubridate to give a single clear answer.
-What it does instead is give an estimate, with a warning:
+What it does instead is give an estimate:
 
 ```{r}
 years(1) / days(1)
 ```
 
 If you want a more accurate measurement, you'll have to use an **interval**.
-An interval is a duration with a starting point: that makes it precise so you can determine exactly how long it is:
+An interval is a pair of starting and ending date times, or you can think of it as a duration with a starting point.
+
+You can create an interval by writing `start %--% end`:
 
 ```{r}
-next_year <- today() + years(1)
-(today() %--% next_year) / ddays(1)
+y2023 <- ymd("2023-01-01") %--% ymd("2024-01-01")
+y2024 <- ymd("2024-01-01") %--% ymd("2025-01-01")
+
+y2023
+y2024
 ```
 
-To find out how many periods fall into an interval, you need to use integer division:
+You could then divide it by `days()` to find out how many days fit in the year:
 
 ```{r}
-(today() %--% next_year) %/% days(1)
+y2023 / days(1)
+y2024 / days(1)
 ```
 
 ### Summary
@@ -541,17 +597,6 @@ To find out how many periods fall into an interval, you need to use integer divi
 How do you pick between duration, periods, and intervals?
 As always, pick the simplest data structure that solves your problem.
 If you only care about physical time, use a duration; if you need to add human times, use a period; if you need to figure out how long a span is in human units, use an interval.
-
-@fig-dt-algebra summarizes permitted arithmetic operations between the different data types.
-
-```{r}
-#| label: fig-dt-algebra
-#| echo: false
-#| fig-cap: >
-#|   The allowed arithmetic operations between pairs of date/time classes.
-
-knitr::include_graphics("diagrams/datetimes-arithmetic.png")
-```
 
 ### Exercises
 
@@ -570,20 +615,22 @@ knitr::include_graphics("diagrams/datetimes-arithmetic.png")
 Time zones are an enormously complicated topic because of their interaction with geopolitical entities.
 Fortunately we don't need to dig into all the details as they're not all important for data analysis, but there are a few challenges we'll need to tackle head on.
 
+<!--# https://www.ietf.org/timezones/tzdb-2018a/theory.html -->
+
 The first challenge is that everyday names of time zones tend to be ambiguous.
 For example, if you're American you're probably familiar with EST, or Eastern Standard Time.
 However, both Australia and Canada also have EST!
 To avoid confusion, R uses the international standard IANA time zones.
-These use a consistent naming scheme "<area>/<location>", typically in the form "\<continent\>/\<city\>" (there are a few exceptions because not every country lies on a continent).
+These use a consistent naming scheme `{area}/{location}`, typically in the form `{continent}/{city}` or `{ocean}/{city}`.
 Examples include "America/New_York", "Europe/Paris", and "Pacific/Auckland".
 
 You might wonder why the time zone uses a city, when typically you think of time zones as associated with a country or region within a country.
 This is because the IANA database has to record decades worth of time zone rules.
-In the course of decades, countries change names (or break apart) fairly frequently, but city names tend to stay the same.
-Another problem is that the name needs to reflect not only the current behaviour, but also the complete history.
+Over the course of decades, countries change names (or break apart) fairly frequently, but city names tend to stay the same.
+Another problem is that the name needs to reflect not only the current behavior, but also the complete history.
 For example, there are time zones for both "America/New_York" and "America/Detroit".
 These cities both currently use Eastern Standard Time but in 1969-1972 Michigan (the state in which Detroit is located), did not follow DST, so it needs a different name.
-It's worth reading the raw time zone database (available at <http://www.iana.org/time-zones>) just to read some of these stories!
+It's worth reading the raw time zone database (available at <https://www.iana.org/time-zones>) just to read some of these stories!
 
 You can find out what R thinks your current time zone is with `Sys.timezone()`:
 
@@ -604,9 +651,14 @@ In R, the time zone is an attribute of the date-time that only controls printing
 For example, these three objects represent the same instant in time:
 
 ```{r}
-(x1 <- ymd_hms("2015-06-01 12:00:00", tz = "America/New_York"))
-(x2 <- ymd_hms("2015-06-01 18:00:00", tz = "Europe/Copenhagen"))
-(x3 <- ymd_hms("2015-06-02 04:00:00", tz = "Pacific/Auckland"))
+x1 <- ymd_hms("2024-06-01 12:00:00", tz = "America/New_York")
+x1
+
+x2 <- ymd_hms("2024-06-01 18:00:00", tz = "Europe/Copenhagen")
+x2
+
+x3 <- ymd_hms("2024-06-02 04:00:00", tz = "Pacific/Auckland")
+x3
 ```
 
 You can verify that they're the same time using subtraction:
@@ -617,7 +669,7 @@ x1 - x3
 ```
 
 Unless otherwise specified, lubridate always uses UTC.
-UTC (Coordinated Universal Time) is the standard time zone used by the scientific community and roughly equivalent to its predecessor GMT (Greenwich Mean Time).
+UTC (Coordinated Universal Time) is the standard time zone used by the scientific community and is roughly equivalent to GMT (Greenwich Mean Time).
 It does not have DST, which makes a convenient representation for computation.
 Operations that combine date-times, like `c()`, will often drop the time zone.
 In that case, the date-times will display in your local time zone:

@@ -1,4 +1,4 @@
-# Joins {#sec-relational-data}
+# Joins {#sec-joins}
 
 ```{r}
 #| results: "asis"
@@ -9,29 +9,23 @@ status("restructuring")
 
 ## Introduction
 
-Waiting on <https://github.com/tidyverse/dplyr/pull/5910>
-
-<!-- TODO: redraw all diagrams to match O'Reilly style -->
-
 It's rare that a data analysis involves only a single data frame.
 Typically you have many data frames, and you must **join** them together to answer the questions that you're interested in.
+This chapter will introduce you to two important types of joins:
 
-All the verbs in this chapter use a pair of data frames.
-Fortunately this is enough, since you can combine three data frames by combining two pairs.
-Sometimes both elements of a pair will be the same data frame.
-This is needed if, for example, you have a data frame of people, and each person has a reference to their parents.
+-   Mutating joins, add new variables to one data frame from matching observations in another.
+-   Filtering joins, filter observations from one data frame based on whether or not they match an observation in another.
 
-There are two important types of joins.
-**Mutating joins** adds new variables to one data frame from matching observations in another.
-**Filtering joins**, which filters observations from one data frame based on whether or not they match an observation in another.
+We'll begin by discussing keys, the variables used to connect a pair of data frames in a join.
+You'll then see how to use joins to a variety of challenges from the nycflights13 dataset.
+Next we'll discuss how joins work, focusing on their action on the rows.
+We'll finish up by with a discussion of non-equi-joins, a family of joins that provide a more flexible way of matching keys than the default equality relationship.
 
-If you're familiar with SQL, you should find these ideas very familiar as their instantiation in dplyr is very similar.
-We'll point out any important differences as we go.
-Don't worry if you're not familiar with SQL, we'll back to it in @sec-import-databases.
+If you're familiar with SQL, you should find the ideas in this chapter familiar, as their realization in dplyr is very similar.
 
 ### Prerequisites
 
-We will explore relational data from nycflights13 using the join functions from dplyr.
+We'll explore the five related datasets from nycflights13 using the join functions from dplyr.
 
 ```{r}
 #| label: setup
@@ -41,45 +35,57 @@ library(tidyverse)
 library(nycflights13)
 ```
 
-## nycflights13 {#sec-nycflights13-relational}
+## Keys
 
-nycflights13 contains five tibbles : `airlines`, `airports`, `weather` and `planes` which are all related to the `flights` data frame that you used in @sec-data-transform on data transformation:
+To understand joins, you need to first understand how two tables might be connected.
+The connection between a pair of tables is defined by a pair of keys, which each consist of one or more variables.
+In this section, you'll learn about the two types of key and their realization in the datasets of the nycflights13 package.
+You'll also learn how to check that your keys are valid, and what to do if your table lacks a key.
 
--   `airlines` lets you look up the full carrier name from its abbreviated code:
+### Primary and foreign keys
+
+Every join involves a pair of keys: a primary key and a foreign key.
+A **primary key** is a variable (or group of variables) that uniquely identifies an observation.
+A **foreign key** is the value of a primary key in another table so can be used to lookup the corresponding observation.
+Let's make those terms concrete by looking at four of the data frames in nycfights13:
+
+-   `airlines` lets you look up the full carrier name from its abbreviated code.
+    Its primary key is the two letter `carrier` code.
 
     ```{r}
     airlines
     ```
 
--   `airports` gives information about each airport, identified by the `faa` airport code:
+-   `airports` gives information about each airport.
+    Its primary key is the three `faa` airport code.
 
     ```{r}
     airports
     ```
 
--   `planes` gives information about each plane, identified by its `tailnum`:
+-   `planes` gives information about each plane.
+    It's primary key is the `tailnum`.
 
     ```{r}
     planes
     ```
 
--   `weather` gives the weather at each NYC airport for each hour:
+-   `weather` gives the weather at each NYC airport for each hour.
+    It has a compound primary key; to uniquely identify each observation you need to know both `origin` (the location) and `time_hour` (the time).
 
     ```{r}
     weather
     ```
 
-These datasets are connected as follows:
+These datasets are all connected via the `flights` data frame because the `tailnum`, `carrier`, `origin`, `dest`, and `time_hour` variables are all foreign keys:
 
--   `flights` connects to `planes` via a single variable, `tailnum`.
+-   `flights$tailnum` connects to primary key `planes$tailnum`.
+-   `flights$carrier` connects to primary key `airlines$carrer`.
+-   `flights$origin` connects to primary key `airports$faa`.
+-   `flights$dest` connects to primary key `airports$faa` .
+-   `flights$origin`-`flights$time_hour` connects to primary key `weather$origin`-`weather$time_hour`.
 
--   `flights` connects to `airlines` through the `carrier` variable.
-
--   `flights` connects to `airports` in two ways: via the `origin` and `dest` variables.
-
--   `flights` connects to `weather` via `origin` (the location), and `year`, `month`, `day` and `hour` (the time).
-
-One way to show the relationships between the different data frames is with a diagram, as in @fig-flights-relationships.
+We can also draw these relationships, as in @fig-flights-relationships.
 This diagram is a little overwhelming, but it's simple compared to some you'll see in the wild!
 The key to understanding diagrams like this is that you'll solve real problems by working with pairs of data frames.
 You don't need to understand the whole thing; you just need to understand the chain of connections between the two data frames that you're interested in.
@@ -87,56 +93,31 @@ You don't need to understand the whole thing; you just need to understand the ch
 ```{r}
 #| label: fig-flights-relationships
 #| echo: false
+#| out-width: ~
 #| fig-cap: >
-#|   Connections between all six data frames in the nycflights package.
+#|   Connections between all five data frames in the nycflights13 package.
+#|   Variables making up a primary key are coloured grey, and are connected
+#|   to their correpsonding foreign keys with arrows.
 #| fig-alt: >
 #|   Diagram showing the relationships between airports, planes, flights, 
 #|   weather, and airlines datasets from the nycflights13 package. The faa
 #|   variable in the airports data frame is connected to the origin and dest
 #|   variables in the flights data frame. The tailnum variable in the planes
-#|   data frame is connected to the tailnum variable in flights. The year,
-#|   month, day, hour, and origin variables are connected to the variables
-#|   with the same name in the flights data frame. And finally the carrier
-#|   variables in the airlines data frame is connected to the carrier
-#|   variable in the flights data frame. There are no direct connections
-#|   between airports, planes, airlines, and weather data frames.
-knitr::include_graphics("diagrams/relational-nycflights.png")
+#|   data frame is connected to the tailnum variable in flights. The
+#|   time_hour and origin variables in the weather data frame are connected
+#|   to the variables with the same name in the flights data frame. And
+#|   finally the carrier variables in the airlines data frame is connected
+#|   to the carrier variable in the flights data frame. There are no direct
+#|   connections between airports, planes, airlines, and weather data 
+#|   frames.
+knitr::include_graphics("diagrams/relational.png", dpi = 270)
 ```
 
-### Exercises
+### Checking primary keys
 
-1.  Imagine you wanted to draw (approximately) the route each plane flies from its origin to its destination.
-    What variables would you need?
-    What data frames would you need to combine?
-
-2.  I forgot to draw the relationship between `weather` and `airports`.
-    What is the relationship and how should it appear in the diagram?
-
-3.  `weather` only contains information for the origin (NYC) airports.
-    If it contained weather records for all airports in the USA, what additional relation would it define with `flights`?
-
-## Keys
-
-The variables used to connect each pair of data frames are called **keys**.
-A key is a variable (or set of variables) that uniquely identifies an observation.
-In simple cases, a single variable is sufficient to identify an observation.
-For example, each plane is uniquely identified by its `tailnum`.
-In other cases, multiple variables may be needed.
-For example, to identify an observation in `weather` you need five variables: `year`, `month`, `day`, `hour`, and `origin`.
-
-There are two types of keys:
-
--   A **primary key** uniquely identifies an observation in its own data frame.
-    For example, `planes$tailnum` is a primary key because it uniquely identifies each plane in the `planes` data frame.
-
--   A **foreign key** uniquely identifies an observation in another data frame.
-    For example, `flights$tailnum` is a foreign key because it appears in the `flights` data frame where it matches each flight to a unique plane.
-
-A variable can be both a primary key *and* a foreign key.
-For example, `origin` is part of the `weather` primary key, and is also a foreign key for the `airports` data frame.
-
-Once you've identified the primary keys in your data frames, it's good practice to verify that they do indeed uniquely identify each observation.
-One way to do that is to `count()` the primary keys and look for entries where `n` is greater than one:
+That that we've identified the primary keys in each table, it's good practice to verify that they do indeed uniquely identify each observation.
+One way to do that is to `count()` the primary keys and look for entries where `n` is greater than one.
+This reveals that `planes` and `weather` both look good:
 
 ```{r}
 planes |> 
@@ -144,415 +125,259 @@ planes |>
   filter(n > 1)
 
 weather |> 
-  count(year, month, day, hour, origin) |> 
+  count(time_hour, origin) |> 
   filter(n > 1)
 ```
 
-Sometimes a data frame doesn't have an explicit primary key: each row is an observation, but no combination of variables reliably identifies it.
-For example, what's the primary key in the `flights` data frame?
-You might think it would be the date plus the flight or tail number, but neither of those are unique:
+You should also check for missing values in your primary keys --- if a value is missing then it can't identify an observation!
+
+```{r}
+planes |> 
+  filter(is.na(tailnum))
+
+weather |> 
+  filter(is.na(time_hour) | is.na(origin))
+```
+
+### Surrogate keys
+
+So far we haven't talked about the primary key for `flights`.
+It's not super important here, because there are no data frames that use it as a foreign key, but it's still useful to consider because it's easier to work with observations if have some way to describe them to others.
+
+After a little thinking and experimentation we discovered that there are three variables that together uniquely identifies each flight:
 
 ```{r}
 flights |> 
-  count(year, month, day, flight) |> 
-  filter(n > 1)
-
-flights |> 
-  count(year, month, day, tailnum) |> 
+  count(time_hour, carrier, flight) |> 
   filter(n > 1)
 ```
 
-When starting to work with this data, we had naively assumed that each flight number would be only used once per day: that would make it much easier to communicate problems with a specific flight.
-Unfortunately that is not the case!
-If a data frame lacks a primary key, it's sometimes useful to add one with `mutate()` and `row_number()`.
-That makes it easier to match observations if you've done some filtering and want to check back in with the original data.
-This is called a **surrogate key**.
+Does the absence of duplicates automatically make `time_hour`-`carrier`-`flight` a primary key?
+It's certainly a good start, but it doesn't guarantee it.
+For example, are altitude and longitude a good primary key for `airports`?
 
-A primary key and the corresponding foreign key in another data frame form a **relation**.
-Relations are typically one-to-many.
-For example, each flight has one plane, but each plane has many flights.
-In other data, you'll occasionally see a 1-to-1 relationship.
-You can think of this as a special case of 1-to-many.
-You can model many-to-many relations with a many-to-1 relation plus a 1-to-many relation.
-For example, in this data there's a many-to-many relationship between airlines and airports: each airline flies to many airports; each airport hosts many airlines.
+```{r}
+airports |> 
+  count(alt, lat) |> 
+  filter(n > 1)
+```
 
-### Exercises
+Identifying an airport by it's altitude and latitude is clearly a bad idea, and in general it's not possible to know from the data alone whether or not a combination of variables makes a good a primary key.
+But for flights, the combination of `time_hour`, `carrier`, and `flight` seems reasonable because it would be really confusing for an airline and its customers if there were multiple flights with the same number in the air at the same time.
 
-1.  Add a surrogate key to `flights`.
-
-2.  We know that some days of the year are "special", and fewer people than usual fly on them.
-    How might you represent that data as a data frame?
-    What would be the primary keys of that data frame?
-    How would it connect to the existing data frames?
-
-3.  Identify the keys in the following datasets
-
-    a.  `Lahman::Batting`
-    b.  `babynames::babynames`
-    c.  `nasaweather::atmos`
-    d.  `fueleconomy::vehicles`
-    e.  `ggplot2::diamonds`
-
-    (You might need to install some packages and read some documentation.)
-
-4.  Draw a diagram illustrating the connections between the `Batting`, `People`, and `Salaries` data frames in the Lahman package.
-    Draw another diagram that shows the relationship between `People`, `Managers`, `AwardsManagers`.
-
-    How would you characterise the relationship between the `Batting`, `Pitching`, and `Fielding` data frames?
-
-## Mutating joins {#sec-mutating-joins}
-
-The first tool we'll look at for combining a pair of data frames is the **mutating join**.
-A mutating join allows you to combine variables from two data frames.
-It first matches observations by their keys, then copies across variables from one data frame to the other.
-
-Like `mutate()`, the join functions add variables to the right, so if you have a lot of variables already, the new variables won't get printed out.
-For these examples, we'll make it easier to see what's going on in the examples by creating a narrower dataset:
+That said, we might be better off introducing a simple numeric surrogate key using the row number:
 
 ```{r}
 flights2 <- flights |> 
-  select(year:day, hour, origin, dest, tailnum, carrier)
+  mutate(id = row_number(), .before = 1)
 flights2
 ```
 
-(Remember, when you're in RStudio, you can also use `View()` to avoid this problem.)
-
-Imagine you want to add the full airline name to the `flights2` data.
-You can combine the `airlines` and `flights2` data frames with `left_join()`:
-
-```{r}
-flights2 |>
-  select(!origin, !dest) |> 
-  left_join(airlines, by = "carrier")
-```
-
-The result of joining airlines to flights2 is an additional variable: `name`.
-This is why I call this type of join a mutating join.
-In this case, you could get the same result using `mutate()` and a pair of base R functions, `[` and `match()`:
-
-```{r}
-flights2 |>
-  select(!origin, !dest) |> 
-  mutate(
-    name = airlines$name[match(carrier, airlines$carrier)]
-  )
-```
-
-But this is hard to generalize when you need to match multiple variables, and takes close reading to figure out the overall intent.
-
-The following sections explain, in detail, how mutating joins work.
-You'll start by learning a useful visual representation of joins.
-We'll then use that to explain the four mutating join functions: the inner join, and the three outer joins.
-When working with real data, keys don't always uniquely identify observations, so next we'll talk about what happens when there isn't a unique match.
-Finally, you'll learn how to tell dplyr which variables are the keys for a given join.
-
-## Join types
-
-To help you learn how joins work, I'm going to use a visual representation:
-
-```{r}
-#| echo: false
-#| out-width: null
-#| fig-alt: >
-#|   x and y are two data frames with 2 columns and 3 rows each. The first
-#|   column in each is the key and the second is the value. The contents of
-#|   these data frames are given in the subsequent code chunk.
-
-knitr::include_graphics("diagrams/join-setup.png")
-```
-
-```{r}
-x <- tribble(
-  ~key, ~val_x,
-     1, "x1",
-     2, "x2",
-     3, "x3"
-)
-y <- tribble(
-  ~key, ~val_y,
-     1, "y1",
-     2, "y2",
-     4, "y3"
-)
-```
-
-The coloured column represents the "key" variable: these are used to match the rows between the data frames.
-The grey column represents the "value" column that is carried along for the ride.
-In these examples I'll show a single key variable, but the idea generalises in a straightforward way to multiple keys and multiple values.
-
-A join is a way of connecting each row in `x` to zero, one, or more rows in `y`.
-The following diagram shows each potential match as an intersection of a pair of lines.
-
-```{r}
-#| echo: false
-#| fig-alt: >
-#|   x and y data frames placed next to each other. with the key variable 
-#|   moved up front in y so that the key variable in x and key variable 
-#|   in y appear next to each other.
-
-knitr::include_graphics("diagrams/join-setup2.png")
-```
-
-If you look closely, you'll notice that we've switched the order of the key and value columns in `x`.
-This is to emphasize that joins match based on the key; the other columns are just carried along for the ride.
-
-In an actual join, matches will be indicated with dots.
-The number of dots = the number of matches = the number of rows in the output.
-
-```{r}
-#| label: join-inner
-#| echo: false
-#| out-width: null
-#| fig-alt: >
-#|   Keys 1 and 2 in x and y data frames are matched and indicated with lines 
-#|   joining these rows with dot in the middle. Hence, there are two dots in 
-#|   this diagram. The resulting joined data frame has two rows and 3 columns: 
-#|   key, val_x, and val_y. Values in the key column are 1 and 2, the matched 
-#|   values.
-
-knitr::include_graphics("diagrams/join-inner.png")
-```
-
-### Inner join {#sec-inner-join}
-
-The simplest type of join is the **inner join**.
-An inner join matches pairs of observations whenever their keys are equal:
-
-```{r}
-#| ref.label: join-inner
-#| echo: false
-#| out-width: null
-#| opts.label: true
-
-knitr::include_graphics("diagrams/join-inner.png")
-```
-
-(To be precise, this is an inner **equijoin** because the keys are matched using the equality operator. Since most joins are equijoins we usually drop that specification.)
-
-The output of an inner join is a new data frame that contains the key, the x values, and the y values.
-We use `by` to tell dplyr which variable is the key:
-
-```{r}
-x |> 
-  inner_join(y, by = "key")
-```
-
-The most important property of an inner join is that unmatched rows are not included in the result.
-This means that generally inner joins are usually not appropriate for use in analysis because it's too easy to lose observations.
-
-### Outer joins {#sec-outer-join}
-
-An inner join keeps observations that appear in both data frames.
-An **outer join** keeps observations that appear in at least one of the data frames.
-There are three types of outer joins:
-
--   A **left join** keeps all observations in `x`.
--   A **right join** keeps all observations in `y`.
--   A **full join** keeps all observations in `x` and `y`.
-
-These joins work by adding an additional "virtual" observation to each data frame.
-This observation has a key that always matches (if no other key matches), and a value filled with `NA`.
-
-Graphically, that looks like:
-
-```{r}
-#| echo: false
-#| out-width: null
-#| fig-alt: >
-#|   Three diagrams for left, right, and full joins. In each diagram data frame 
-#|   x is on the left and y is on the right. The result of the join is always a 
-#|   data frame with three columns (key, val_x, and val_y). Left join: keys 1 
-#|   and 2 from x are matched to those in y, key 3 is also carried along to the 
-#|   joined result since it's on the left data frame, but key 4 from y is not 
-#|   carried along since it's on the right but not on the left. The result is 
-#|   a data frame with 3 rows: keys 1, 2, and 3, all values from val_x, and 
-#|   the corresponding values from val_y for keys 1 and 2 with an NA for key 3, 
-#|   val_y. Right join: keys 1 and 2 from x are matched to those in y, key 4 is 
-#|   also carried along to the joined result since it's on the right data frame, 
-#|   but key 3 from x is not carried along since it's on the left but not on the 
-#|   right. The result is a data frame with 3 rows: keys 1, 2, and 4, all values 
-#|   from val_y, and the corresponding values from val_x for keys 1 and 2 with 
-#|   an NA for key 4, val_x. Full join: The resulting data frame has 4 rows: 
-#|   keys 1, 2, 3, and 4 with all values from val_x and val_y, however key 2, 
-#|   val_y and key 4, val_x are NAs since those keys aren't present in their 
-#|   respective data frames.
-
-knitr::include_graphics("diagrams/join-outer.png")
-```
-
-The most commonly used join is the left join: you use this whenever you look up additional data from another data frame, because it preserves the original observations even when there isn't a match.
-The left join should be your default join: use it unless you have a strong reason to prefer one of the others.
-
-Another way to depict the different types of joins is with a Venn diagram:
-
-```{r}
-#| echo: false
-#| out-width: null
-#| fig-alt: >
-#|   Venn diagrams for inner, full, left, and right joins. Each join represented 
-#|   with two intersecting circles representing data frames x and y, with x on 
-#|   the right and y on the left. Shading indicates the result of the join. 
-#|   Inner join: Only intersection is shaded. Full join: Everything is shaded. 
-#|   Left join: Only x is shaded, but not the area in y that doesn't intersect 
-#|   with x. Right join: Only y is shaded, but not the area in x that doesn't 
-#|   intersect with y.
-
-knitr::include_graphics("diagrams/join-venn.png")
-```
-
-However, this is not a great representation.
-It might jog your memory about which join preserves the observations in which data frame, but it suffers from a major limitation: a Venn diagram can't show what happens when keys don't uniquely identify an observation.
-
-### Duplicate keys {#sec-join-matches}
-
-So far all the diagrams have assumed that the keys are unique.
-But that's not always the case.
-This section explains what happens when the keys are not unique.
-There are two possibilities:
-
-TODO: update for new warnings
-
-1.  One data frame has duplicate keys.
-    This is useful when you want to add in additional information as there is typically a one-to-many relationship.
-
-    ```{r}
-    #| echo: false
-    #| out-width: null
-    #| fig-alt: >
-    #|   Diagram describing a left join where one of the data frames (x) has 
-    #|   duplicate keys. Data frame x is on the left, has 4 rows and 2 columns 
-    #|   (key, val_x), and has the keys 1, 2, 2, and 1. Data frame y is on the 
-    #|   right, has 2 rows and 2 columns (key, val_y), and has the keys 1 and 2. 
-    #|   Left joining these two data frames yields a data frame with 4 rows 
-    #|   (keys 1, 2, 2, and 1) and 3 columns (val_x, key, val_y). All values 
-    #|   from x$val_x are carried along, values in y for key 1 and 2 are duplicated.
-
-    knitr::include_graphics("diagrams/join-one-to-many.png")
-    ```
-
-    Note that I've put the key column in a slightly different position in the output.
-    This reflects that the key is a primary key in `y` and a foreign key in `x`.
-
-    ```{r}
-    x <- tribble(
-      ~key, ~val_x,
-         1, "x1",
-         2, "x2",
-         2, "x3",
-         1, "x4"
-    )
-    y <- tribble(
-      ~key, ~val_y,
-         1, "y1",
-         2, "y2"
-    )
-    left_join(x, y, by = "key")
-    ```
-
-2.  Both data frames have duplicate keys.
-    This is usually an error because in neither data frame do the keys uniquely identify an observation.
-    When you join duplicated keys, you get all possible combinations, the Cartesian product:
-
-    ```{r}
-    #| echo: false
-    #| out-width: null
-    #| fig-alt: >
-    #|   Diagram describing a left join where both data frames (x and y) have 
-    #|   duplicate keys. Data frame x is on the left, has 4 rows and 2 columns 
-    #|   (key, val_x), and has the keys 1, 2, 2, and 3. Data frame y is on the 
-    #|   right, has 4 rows and 2 columns (key, val_y), and has the keys 1, 2, 2, 
-    #|   and 3 as well. Left joining these two data frames yields a data frame 
-    #|   with 6 rows (keys 1, 2, 2, 2, 2, and 3) and 3 columns (key, val_x, 
-    #|   val_y). All values from both datasets are included.
-
-    knitr::include_graphics("diagrams/join-many-to-many.png")
-    ```
-
-    ```{r}
-    x <- tribble(
-      ~key, ~val_x,
-         1, "x1",
-         2, "x2",
-         2, "x3",
-         3, "x4"
-    )
-    y <- tribble(
-      ~key, ~val_y,
-         1, "y1",
-         2, "y2",
-         2, "y3",
-         3, "y4"
-    )
-    left_join(x, y, by = "key")
-    ```
-
-### Defining the key columns {#sec-join-by}
-
-So far, the pairs of data frames have always been joined by a single variable, and that variable has the same name in both data frames.
-That constraint was encoded by `by = "key"`.
-You can use other values for `by` to connect the data frames in other ways:
-
--   The default, `by = NULL`, uses all variables that appear in both data frames, the so called **natural** join.
-    For example, the flights and weather data frames match on their common variables: `year`, `month`, `day`, `hour` and `origin`.
-
-    ```{r}
-    flights2 |> 
-      left_join(weather)
-    ```
-
--   A character vector, `by = "x"`.
-    This is like a natural join, but uses only some of the common variables.
-    For example, `flights` and `planes` have `year` variables, but they mean different things so we only want to join by `tailnum`.
-
-    ```{r}
-    flights2 |> 
-      left_join(planes, by = "tailnum")
-    ```
-
-    Note that the `year` variables (which appear in both input data frames, but are not constrained to be equal) are disambiguated in the output with a suffix.
-
--   A named character vector: `by = c("a" = "b")`.
-    This will match variable `a` in data frame `x` to variable `b` in data frame `y`.
-    The variables from `x` will be used in the output.
-
-    For example, if we want to draw a map we need to combine the flights data with the airports data which contains the location (`lat` and `lon`) of each airport.
-    Each flight has an origin and destination `airport`, so we need to specify which one we want to join to:
-
-    ```{r}
-    flights2 |> 
-      left_join(airports, c("dest" = "faa"))
-
-    flights2 |> 
-      left_join(airports, c("origin" = "faa"))
-    ```
+Surrogate keys can be particular useful when communicating to other humans: it's much easier to tell someone to take a look at flight 2001 than to say look at the UA430 which departed 9am 2013-01-03.
 
 ### Exercises
 
-1.  Compute the average delay by destination, then join on the `airports` data frame so you can show the spatial distribution of delays.
+1.  We forgot to draw the relationship between `weather` and `airports` in @fig-flights-relationships.
+    What is the relationship and how should it appear in the diagram?
+
+2.  `weather` only contains information for the three origin airport in NYC.
+    If it contained weather records for all airports in the USA, what additional connection would it make to `flights`?
+
+3.  The `year`, `month`, `day`, `hour`, and `origin` variables almost form a compound key for `weather`, but there's one hour that has duplicate observations.
+    Can you figure out what's special about that hour?
+
+4.  We know that some days of the year are "special" and fewer people than usual fly on them.
+    How might you represent that data as a data frame?
+    What would be the primary key?
+    How would it connect to the existing data frames?
+
+5.  Draw a diagram illustrating the connections between the `Batting`, `People`, and `Salaries` data frames in the Lahman package.
+    Draw another diagram that shows the relationship between `People`, `Managers`, `AwardsManagers`.
+    How would you characterise the relationship between the `Batting`, `Pitching`, and `Fielding` data frames?
+
+## Basic joins {#sec-mutating-joins}
+
+Now that you understand how data frames are connected via keys, we can start using joins to better understand the `flights` dataset.
+dplyr provides six join functions: `left_join()`, `inner_join()`, `right_join()`, `semi_join()`, and `anti_join()`.
+They all the same interface: they take a pair of data frames `x` and `y` and return a data frame.
+The order of the rows and columns in the output is primarily determined by `x`.
+
+In this section, you'll learn how to use one mutating joins, `left_join()`, and two filtering joins, `semi_join()` and `anti_join()`.
+In the next section, you'll learn exactly how these functions work, and about the remaining `inner_join()`, `right_join()` and `full_join()`.
+
+### Mutating joins
+
+A **mutating join** allows you to combine variables from two data frames: it first matches observations by their keys, then copies across variables from one data frame to the other.
+Like `mutate()`, the join functions add variables to the right, so if your dataset has many variables, you won't see the new ones.
+For these examples, we'll make it easier to see what's going on by creating a narrower dataset:
+
+```{r}
+flights2 <- flights |> 
+  select(year, time_hour, origin, dest, tailnum, carrier)
+flights2
+```
+
+(Remember that in RStudio you can also use `View()` to avoid this problem.)
+
+There are four types of mutating join, but there's one that you'll use almost all of the time: `left_join()`.
+It's special because the output will always have the same rows as `x`[^joins-1].
+The primary use of `left_join()` is to add in additional metadata.
+For example, we can use `left_join()` to add the full airline name to the `flights2` data:
+
+[^joins-1]: That's not 100% true, but you'll get a warning whenever it isn't.
+
+```{r}
+flights2 |>
+  left_join(airlines)
+```
+
+Or we could find out the temperature and wind speed when each plane departed:
+
+```{r}
+flights2 |> 
+  left_join(weather |> select(origin, time_hour, temp, wind_speed))
+```
+
+Or what size of plane was flying:
+
+```{r}
+flights2 |> 
+  left_join(planes |> select(tailnum, type, engines, seats))
+```
+
+When `left_join()` fails to find a match for a row in `x`, it fills in the new variables with missing values.
+For example, there's no information about the plane with `N3ALAA` so the `type`, `engines`, and `seats` will be missing:
+
+```{r}
+flights2 |> 
+  filter(tailnum == "N3ALAA") |> 
+  left_join(planes |> select(tailnum, type, engines, seats))
+```
+
+We'll come back to this problem a few times in the rest of the chapter.
+
+### Specifying join keys
+
+By default, `left_join()` will use all variables that appear in both data frames as the join key, the so called **natural** join.
+This is a useful heuristic, but it doesn't always work.
+For example, what happens if we try to join `flights2` with the complete `planes`?
+
+```{r}
+flights2 |> 
+  left_join(planes)
+```
+
+We get a lot of missing matches our join is trying to use both `tailnum` and `year`.
+Both `flights` and `planes` have a `year` column but they mean different things: `flights$year` is year the flight occurred and `planes$year` is the year the plane was built.
+We only want to join on `tailnum` so we need to provide an explicit specification with `join_by()`:
+
+```{r}
+flights2 |> 
+  left_join(planes, join_by(tailnum))
+```
+
+Note that the `year` variables are disambiguated in the output with a suffix, which you can control with the `suffix` argument.
+
+`join_by(tailnum)` is short for `join_by(tailnum == tailnum)`.
+This fuller form is important because it's how you specify different join keys in each table.
+For example, there are two ways to join the `flight2` and `airports` table: either by `dest` or `origin:`
+
+```{r}
+flights2 |> 
+  left_join(airports, join_by(dest == faa))
+
+flights2 |> 
+  left_join(airports, join_by(origin == faa))
+```
+
+In older code you might see a different way of specifying the join keys, using a character vector:
+
+-   `by = "x"` corresponds to `join_by(x)`.
+-   `by = c("a" = "x")` corresponds to `join_by(a == x)`.
+
+Now that it exists, we prefer `join_by()` since provides a more flexible specification that supports more types of join, as you'll learn in @sec-non-equi-joins.
+
+### Filtering joins
+
+As you might guess the primary action of a **filtering join** is to filter the rows.
+There are two types: semi-joins and anti-joins.
+**Semi-joins** keep all rows in `x` that have a match in `y`.
+For example, we could use to filter the `airports` dataset to show just the origin airports:
+
+```{r}
+airports |> 
+  semi_join(flights2, join_by(faa == origin))
+```
+
+Or just the destinations:
+
+```{r}
+airports |> 
+  semi_join(flights2, join_by(faa == dest))
+```
+
+**Anti-joins** are the opposite: they return all rows in `x` that don't have a match in `y`.
+They're useful for figuring out what's missing.
+For example, we can figure out which flights are missing information about the destination airport:
+
+```{r}
+flights2 |> 
+  anti_join(airports, join_by(dest == faa)) 
+```
+
+Or which flights lack metadata about the plane that flew them:
+
+```{r}
+flights2 |>
+  anti_join(planes, join_by(tailnum)) |> 
+  distinct(tailnum)
+```
+
+### Exercises
+
+1.  Find the 48 hours (over the course of the whole year) that have the worst delays.
+    Cross-reference it with the `weather` data.
+    Can you see any patterns?
+
+2.  Imagine you've found the top 10 most popular destinations using this code:
+
+    ```{r}
+    top_dest <- flights2 |>
+      count(dest, sort = TRUE) |>
+      head(10)
+    ```
+
+    How can you find all flights to that destination?
+
+3.  Does every departing flight have corresponding weather data for that hour?
+
+4.  What do the tail numbers that don't have a matching record in `planes` have in common?
+    (Hint: one variable explains \~90% of the problems.)
+
+5.  Add a column to `planes` that lists every `carrier` that has flown that plane.
+    You might expect that there's an implicit relationship between plane and airline, because each plane is flown by a single airline.
+    Confirm or reject this hypothesis using the tools you've learned in previous chapters.
+
+6.  Add the location of the origin *and* destination (i.e. the `lat` and `lon`) to `flights`.
+    Is it easier to rename the columns before or after the join?
+
+7.  Compute the average delay by destination, then join on the `airports` data frame so you can show the spatial distribution of delays.
     Here's an easy way to draw a map of the United States:
 
     ```{r}
     #| eval: false
 
     airports |>
-      semi_join(flights, c("faa" = "dest")) |>
+      semi_join(flights, join_by(faa == dest)) |>
       ggplot(aes(lon, lat)) +
         borders("state") +
         geom_point() +
         coord_quickmap()
     ```
 
-    (Don't worry if you don't understand what `semi_join()` does --- you'll learn about it next.)
-
     You might want to use the `size` or `colour` of the points to display the average delay for each airport.
 
-2.  Add the location of the origin *and* destination (i.e. the `lat` and `lon`) to `flights`.
-
-3.  Is there a relationship between the age of a plane and its delays?
-
-4.  What weather conditions make it more likely to see a delay?
-
-5.  What happened on June 13 2013?
+8.  What happened on June 13 2013?
     Display the spatial pattern of delays, and then use Google to cross-reference with the weather.
 
     ```{r}
@@ -571,56 +396,290 @@ You can use other values for `by` to connect the data frames in other ways:
         coord_quickmap()
     ```
 
-## Non-equi joins
+## How do joins work?
 
-`join_by()`
-
-Rolling joins
-
-Overlap joins
-
-## Filtering joins {#sec-filtering-joins}
-
-Filtering joins match observations in the same way as mutating joins, but affect the observations, not the variables.
-There are two types:
-
--   `semi_join(x, y)` **keeps** all observations in `x` that have a match in `y`.
--   `anti_join(x, y)` **drops** all observations in `x` that have a match in `y`.
-
-Semi-joins are useful for matching filtered summary data frames back to the original rows.
-For example, imagine you've found the top ten most popular destinations:
+Now that you've used joins a few times it's time to learn more about how they work, focusing on how each row in `x` matches zero, one, or more rows in `y`.
+We'll begin by using @fig-join-setup to introduce a visual representation of the two simple tibbles defined below.
+In these examples we'll use a single key called `key` and a single value column (`val_x` and `val_y)`, but the ideas all generalize to multiple keys and multiple values.
 
 ```{r}
-top_dest <- flights |>
-  count(dest, sort = TRUE) |>
-  head(10)
-top_dest
+x <- tribble(
+  ~key, ~val_x,
+     1, "x1",
+     2, "x2",
+     3, "x3"
+)
+y <- tribble(
+  ~key, ~val_y,
+     1, "y1",
+     2, "y2",
+     4, "y3"
+)
 ```
 
-Now you want to find each flight that went to one of those destinations.
-You could construct a filter yourself:
-
 ```{r}
-flights |> 
-  filter(dest %in% top_dest$dest)
+#| label: fig-join-setup
+#| echo: false
+#| out-width: ~
+#| fig-cap: >
+#|   Graphical representation of two simple tables. The coloured `key`
+#|   columns map background colour to key value. The grey columns represents
+#|   the "value" columns that is carried along for the ride. 
+#| fig-alt: >
+#|   x and y are two data frames with 2 columns and 3 rows each. The first
+#|   column in each is the key and the second is the value. The contents of
+#|   these data frames are given in the previous code chunk.
+
+knitr::include_graphics("diagrams/join/setup.png", dpi = 270)
 ```
 
-But it's difficult to extend that approach to multiple variables.
-For example, imagine that you'd found the 10 days with highest average delays.
-How would you construct the filter statement that used `year`, `month`, and `day` to match it back to `flights`?
-
-Instead you can use a semi-join, which connects the two data frames like a mutating join, but instead of adding new columns, only keeps the rows in `x` that have a match in `y`:
+@fig-join-setup2 shows all potential matches between `x` and `y` with an intersection of a pair of lines.
+The rows and columns in the output are primarily determined by `x`, so the `x` table is horizontal and lines up with the output.
 
 ```{r}
-flights |> 
-  semi_join(top_dest)
+#| label: fig-join-setup2
+#| echo: false
+#| out-width: ~
+#| fig-cap: > 
+#|   To understand how joins work, it's useful to think of every possible
+#|   match. Here we show that by drawing a grid of connecting lines.
+#| fig-alt: >
+#|   x and y are placed at right-angles, with horizonal lines extending 
+#|   from x and vertical lines extending from y. There are 3 rows in x and 
+#|   3 rows in y leading to 9 intersections that represent nine potential
+#|   matches.
+
+knitr::include_graphics("diagrams/join/setup2.png", dpi = 270)
 ```
 
-Graphically, a semi-join looks like this:
+In an actual join, matches will be indicated with dots, as in @fig-join-inner.
+The number of dots equals the number of matches, which in turn equals the number of rows in the output, a new data frame that contains the key, the x values, and the y values.
+The join shown here is a so-called **inner join**, where rows match if the keys are equal, so that the output contains only the rows with keys that appear in both `x` and `y`.
 
 ```{r}
+#| label: fig-join-inner
+#| echo: false
+#| out-width: ~
+#| fig-cap: >
+#|   An inner join matches rows in `x` to rows in `y` that have the
+#|   same value of `key`. Each match becomes a row in the output.
+#| fig-alt: >
+#|   Keys 1 and 2 appear in both x and y, so there values are equal and
+#|   we get a match, indicated by a dot. Each dot corresponds to a row
+#|   in the output, so the resulting joined data frame has two rows.
+
+knitr::include_graphics("diagrams/join/inner.png", dpi = 270)
+```
+
+An **outer join** keeps observations that appear in at least one of the data frames.
+These joins work by adding an additional "virtual" observation to each data frame.
+This observation has a key that matches if no other key matches, and values filled with `NA`.
+There are three types of outer joins:
+
+-   A **left join** keeps all observations in `x`, @fig-join-left.
+    Every row of `x` is preserved in the output because it can fall back to matching a row of `NA`s in `y`.
+
+    ```{r}
+    #| label: fig-join-left
+    #| echo: false
+    #| out-width: ~
+    #| fig-cap: > 
+    #|   A visual representation of the left join where row in `x` appears
+    #|   in the output.
+    #| fig-alt: >
+    #|   Compared to the inner join, the `y` table gets a new virtual row
+    #|   that will match any row in `x` that doesn't otherwise have a match.
+    #|   This means that the output now has three rows. For key = 3, which
+    #|   matches this virtual row, the value of val_y is NA.
+
+    knitr::include_graphics("diagrams/join/left.png", dpi = 270)
+    ```
+
+-   A **right join** keeps all observations in `y`, @fig-join-right.
+    Every row of `y` is preserved in the output because it can fall back to matching a row of `NA`s in `x`.
+    Note the output will consist of all `x` rows that match a row in `y` followed by all rows of `y` that didn't match in `x`.
+
+    ```{r}
+    #| label: fig-join-right
+    #| echo: false
+    #| out-width: ~
+    #| fig-cap: > 
+    #|   A visual representation of the right join where every row of `y` 
+    #|   appears in the output. 
+    #| fig-alt: >
+    #|   Keys 1 and 2 from x are matched to those in y, key 4 is 
+    #|   also carried along to the joined result since it's on the right data
+    #|   frame,  but key 3 from x is not carried along since it's on the left
+    #|   but not on the right. The result is a data frame with 3 rows: keys 
+    #|   1, 2, and 4, all values from val_y, and the corresponding values
+    #|   from val_x for keys 1 and 2 with an NA for key 4, val_x. 
+
+    knitr::include_graphics("diagrams/join/right.png", dpi = 270)
+    ```
+
+-   A **full join** keeps all observations that appear in `x` or `y`, @fig-join-full.
+    Every row of `x` and `y` `is` included in the output because both `x` and `y` have a fall back row of `NA`s.
+    Note the output will consist of all `x` rows followed by the remaining `y` rows.
+
+    ```{r}
+    #| label: fig-join-full
+    #| echo: false
+    #| out-width: ~
+    #| fig-cap: > 
+    #|   A visual representation of the full join where every row in `x`
+    #|   and `y` appears in the output.
+    #| fig-alt: >
+    #|   The result has 4 rows: keys 1, 2, 3, and 4 with all values 
+    #|   from val_x and val_y, however key 2, val_y and key 4, val_x are NAs
+    #|   since those keys don't have a match in the other data frames.
+
+    knitr::include_graphics("diagrams/join/full.png", dpi = 270)
+    ```
+
+Another way to show how the outer joins differ is with a Venn diagram, as in @fig-join-venn.
+However, this is not a great representation because while it might jog your memory about which rows are preserved, it fails to illustrate what's happening with the columns.
+
+```{r}
+#| label: fig-join-venn
+#| echo: false
+#| out-width: ~
+#| fig-cap: >
+#|   Venn diagrams showing the difference between inner, left, right, and
+#|   full joins.
+#| fig-alt: >
+#|   Venn diagrams for inner, full, left, and right joins. Each join
+#|   represented with two intersecting circles representing data frames x
+#|   and y, with x on the right and y on the left. Shading indicates the
+#|   result of the join. 
+#|
+#|   Inner join: Only intersection is shaded. 
+#|   Full join: Everything is shaded. 
+#|   Left join: All of x is shaded.
+#|   Right: All of y is shaded.
+
+knitr::include_graphics("diagrams/join/venn.png", dpi = 270)
+```
+
+### Row matching
+
+So far we've explored what happens if a row in `x` matches zero or one rows in `y`.
+What happens if it matches more than one row?
+To understand what's going let's first narrow our focus to the `inner_join()` and then draw a picture, @fig-join-match-types.
+
+```{r}
+#| label: fig-join-match-types
+#| echo: false
+#| out-width: ~
+#| fig-cap: > 
+#|   The three key ways a row in `x` can match. `x1` matches
+#|   one row in `y`, `x2` matches two rows in `y`, `x3` matches
+#|   zero rows in y. Note that while there are three rows in
+#|   `x` and three rows in the output, there isn't a direct
+#|   correspondence between the rows.
+#| fig-alt: >
+#|   A join diagram where x has key values 1, 2, and 3, and y has
+#|   key values 1, 2, 2. The output has three rows because key 1 matches
+#|   one row, key 2 matches two rows, and key 3 matches zero rows.
+
+knitr::include_graphics("diagrams/join/match-types.png", dpi = 270)
+```
+
+There are three possible outcomes for a row:
+
+-   If it doesn't match anything, it's dropped.
+-   If it matches 1 row, it's kept as is.
+-   If it matches more than 1 row, it's duplicated once for each match.
+
+In principle, this means that there are no guarantees about the number of rows in the output of an `inner_join()`:
+
+-   There might be fewer rows if some rows in `x` don't match any rows in `y`.
+-   There might be more rows if some rows in `x` match multiple rows in `y`.
+-   There might be the same number of rows if every row in `x` matches one row in `y`.
+-   There might be the same number of rows if some rows don't match any rows, and exactly the same number of rows match two rows in `y`!!
+
+Row expansion is a fundamental property of joins, but it's dangerous because it might by hidden.
+To avoid this problem, dplyr will warn whenever there are multiple matches:
+
+```{r}
+df1 <- tibble(key = c(1, 2, 3), val_x = c("x1", "x2", "x3"))
+df2 <- tibble(key = c(1, 2, 2), val_y = c("y1", "y2", "y3"))
+
+df1 |> 
+  inner_join(df2, join_by(key))
+```
+
+This is another reason we recommend `left_join()` --- if it runs without warning, you know that every row of the output corresponds to the same row in `x`.
+
+You can gain further control over row matching with two arguments:
+
+-   `unmatched` controls what happens when in `x` fails to match any rows in `y`. It defaults to `"drop"` which will silently drop any unmatched rows.
+-   `multiple` controls what happens when a row in `x` matches more than one row in `y`. For equi-joins, it defaults to `"warn"` which emits a warning message if any rows have multiple matches.
+
+There are two common cases in which you might want to override these defaults: enforcing a one-to-one mapping or deliberately allowing the rows to increase.
+
+### One-to-one mapping
+
+Both `unmatched` and `multiple` can take value `"error"` which means that the join will fail unless each row in `x` matches exactly one row in `y`:
+
+```{r}
+#| error: true
+df1 <- tibble(x = 1)
+df2 <- tibble(x = c(1, 1))
+df3 <- tibble(x = 3)
+
+df1 |> 
+  inner_join(df2, join_by(x), unmatched = "error", multiple = "error")
+df1 |> 
+  inner_join(df3, join_by(x), unmatched = "error", multiple = "error")
+```
+
+Note that `unmatched = "error"` is not useful with `left_join()` because, as described above, every row in `x` has a fallback match to a virtual row in `y`.
+
+### Allow multiple rows
+
+Sometimes it's useful to deliberately expand the number of rows in the output.
+This can come about naturally if "flip" the direction of the question you're asking.
+For example, as we've seen above, it's natural to supplement the `flights` data with information about the plane that flew each flight:
+
+```{r}
+#| results: false
+flights2 |> 
+  left_join(planes, by = "tailnum")
+```
+
+But it's also reasonable to ask what flights did each plane fly:
+
+```{r}
+plane_flights <- planes |> 
+  select(tailnum, type, engines, seats) |> 
+  left_join(flights2, by = "tailnum")
+```
+
+Since this duplicate rows in `x` (the planes), we need to explicitly say we're ok with the multiple matches by setting `multiple = "all"`:
+
+```{r}
+plane_flights <- planes |> 
+  select(tailnum, type, engines, seats) |> 
+  left_join(flights2, by = "tailnum", multiple = "all")
+
+plane_flights
+```
+
+### Filtering joins {#sec-non-equi-joins}
+
+The number of matches also determines the behavior of the filtering joins.
+The semi-join keeps rows in `x` that have one or more matches in `y`, as in @fig-join-semi.
+The anti-join keeps rows in `x` that don't have a match in `y`, as in @fig-join-anti.
+In both cases, only the existence of a match is important; it doesn't matter how many times its match.
+This means that filtering joins never duplicate rows like mutating joins do.
+
+```{r}
+#| label: fig-join-semi
 #| echo: false
 #| out-width: null
+#| fig-cap: >
+#|   In a semi-join it only matters that there is a match; otherwise
+#|   values in `y` don't affect the output.
 #| fig-alt: >
 #|   Diagram of a semi join. Data frame x is on the left and has two columns 
 #|   (key and val_x) with keys 1, 2, and 3. Diagram y is on the right and also 
@@ -628,32 +687,16 @@ Graphically, a semi-join looks like this:
 #|   two results in a data frame with two rows and two columns (key and val_x), 
 #|   with keys 1 and 2 (the only keys that match between the two data frames).
 
-knitr::include_graphics("diagrams/join-semi.png")
+knitr::include_graphics("diagrams/join/semi.png", dpi = 270)
 ```
 
-Only the existence of a match is important; it doesn't matter which observation is matched.
-This means that filtering joins never duplicate rows like mutating joins do:
-
 ```{r}
+#| label: fig-join-anti
 #| echo: false
 #| out-width: null
-#| fig-alt: >
-#|   Diagram of a semi join with data frames with duplicated keys. Data frame 
-#|   x is on the left and has two columns (key and val_x) with keys 1, 2, 2, 
-#|   and 3. Diagram y is on the right and also has two columns (key and val_y) 
-#|   with keys 1, 2, 2, and 3 as well. Semi joining these two results in a data 
-#|   frame with four rows and two columns (key and val_x), with keys 1, 2, 2, 
-#|   and 3 (the matching keys, each appearing as many times as they do in x).
-
-knitr::include_graphics("diagrams/join-semi-many.png")
-```
-
-The inverse of a semi-join is an anti-join.
-An anti-join keeps the rows that *don't* have a match:
-
-```{r}
-#| echo: false
-#| out-width: null
+#| fig-cap: >
+#|   An anti-join is the inverse of a semi-join, dropping rows from `x`
+#|   that have a match in `y`.
 #| fig-alt: >
 #|   Diagram of an anti join. Data frame x is on the left and has two columns 
 #|   (key and val_x) with keys 1, 2, and 3. Diagram y is on the right and also 
@@ -661,62 +704,240 @@ An anti-join keeps the rows that *don't* have a match:
 #|   two results in a data frame with one row and two columns (key and val_x), 
 #|   with keys 3 only (the only key in x that is not in y).
 
-knitr::include_graphics("diagrams/join-anti.png")
+knitr::include_graphics("diagrams/join/anti.png", dpi = 270)
 ```
 
-Anti-joins are useful for diagnosing join mismatches.
-For example, when connecting `flights` and `planes`, you might be interested to know that there are many `flights` that don't have a match in `planes`:
+## Non-equi joins
+
+So far you've only seen **equi-joins**, joins where the two rows match if the `x` keys equal the `y` keys.
+Now we're going to relax that restriction and discuss other ways of determining if a pair of rows match.
+
+But before we can do that, we need to revisit a simplification we made above.
+In equi-joins the `x` keys and `y` are always equal, so we only need to show one in the output.
+We can request that dplyr keep both keys with `keep = TRUE`, leading to the code below and the re-drawn `inner_join()` in @fig-inner-both.
 
 ```{r}
-flights |>
-  anti_join(planes, by = "tailnum") |>
-  count(tailnum, sort = TRUE)
+x |> left_join(y, by = "key", keep = TRUE)
+```
+
+```{r}
+#| label: fig-inner-both
+#| fig-cap: >
+#|   An inner join showing both `x` and `y` keys in the output.
+#| fig-alt: >
+#|   A join diagram showing an inner join betwen x and y. The result
+#|   now includes four columns: key.x, val_x, key.y, and val_y. The
+#|   values of key.x and key.y are identical, which is why we usually
+#|   omit one.
+#| echo: false
+#| out-width: ~
+
+knitr::include_graphics("diagrams/join/inner-both.png", dpi = 270)
+```
+
+When we move away from equi-joins we'll always show the keys, because the key values will often different.
+For example, instead matching when the `x$key` and `y$key` are equal, we could match whenever the `x$key` is greater than or equal the `y$key`, leading to @fig-join-gte.
+dplyr's join functions understand this distinction so will always show both keys when you perform a non-equi-join.
+
+```{r}
+#| label: fig-join-gte
+#| echo: false
+#| fig-cap: >
+#|   A non-equi join where the `x` key must greater than or equal to 
+#|   than the `y` key. Many rows generate multiple matches.
+#| fig-alt: >
+#|   A join diagram illustrating join_by(key >= key). The first row
+#|   of x matches one row of y and the second and thirds rows each match
+#|   two rows. This means the output has five rows containing each of the 
+#|   following (key.x, key.y) pairs: (1, 1), (2, 1), (2, 2), (3, 1),
+#|   (3, 2).
+knitr::include_graphics("diagrams/join/gte.png", dpi = 270)
+```
+
+Non-equi-join isn't a particularly useful term because it only tells you what the join is not, not what it is. dplyr helps by identifying four particularly useful types of non-equi-join:
+
+-   **Cross joins** match every pair of rows.
+-   **Inequality joins** use `<`, `<=`, `>`, `>=` instead of `==`.
+-   **Rolling joins** are similar to inequality joins but only find the closest match.
+-   **Overlap joins** are a special type of inequality join designed to work with ranges.
+
+Each of these is described in more detail in the following sections.
+
+### Cross joins
+
+A cross join matches everything, as in @fig-join-cross, generating the Cartesian product of rows.
+This means the output will have `nrow(x) * nrow(y)` rows.
+
+```{r}
+#| label: fig-join-cross
+#| echo: false
+#| out-width: ~
+#| fig-cap: >
+#|   A cross join matches each row in `x` with every row in `y`.
+#| fig-alt: >
+#|   A join diagram showing a dot for every combination of x and y.
+knitr::include_graphics("diagrams/join/cross.png", dpi = 270)
+```
+
+Cross joins are useful when generating permutations.
+For example, the code below generates every possible pair of names.
+Since we're joining `df` to itself, this is sometimes called a **self-join**.
+
+```{r}
+df <- tibble(name = c("John", "Simon", "Tracy", "Max"))
+df |> left_join(df, join_by())
+```
+
+### Inequality joins
+
+Inequality joins use `<`, `<=`, `>=`, or `>` to restrict the set of possible matches, as in @fig-join-gte and @fig-join-lt.
+
+```{r}
+#| label: fig-join-lt
+#| echo: false
+#| out-width: ~
+#| fig-cap: >
+#|   An inequality join where `x` is joined to `y` on rows where the key 
+#|   of `x` is less than the key of `y`.
+knitr::include_graphics("diagrams/join/lt.png", dpi = 270)
+```
+
+Inequality joins are extremely general, so general that it's hard to come up with meaningful specific use cases.
+One small useful technique is to use them to restrict the cross join so that instead of generating all permutations, we generate all combinations:
+
+```{r}
+df <- tibble(id = 1:4, name = c("John", "Simon", "Tracy", "Max"))
+
+df |> left_join(df, join_by(id < id))
+```
+
+### Rolling joins
+
+Rolling joins are a special type of inequality join where instead of getting *every* row that satisfies the inequality, you get just the closest row, as in @fig-join-closest. You can turn any inequality join into a rolling join by adding `closest()`.
+For example `join_by(closest(x <= y))` matches the smallest `y` that's greater than or equal to x, and `join_by(closest(x > y))` matches the biggest `y` that's less than `x`.
+
+```{r}
+#| label: fig-join-closest
+#| echo: false
+#| out-width: ~
+#| fig-cap: >
+#|   A following join is similar to a greater-than-or-equal inequality join
+#|   but only matches the first value.
+knitr::include_graphics("diagrams/join/closest.png", dpi = 270)
+```
+
+Rolling joins are particularly useful when you have two tables of dates that don't perfectly line up and you want to find (e.g.) the closest date in table 1 that comes before (or after) some date in table 2.
+
+For example, imagine that you're in charge of the party planning commission for your office.
+Your company is rather cheap so instead of having individual parties, you only have a party once each quarter.
+The rules for determining when a party will be held are a little complex: parties are always on a Monday, you skip the first week of January since a lot of people are on holiday, and the first Monday of Q3 2022 is July 4, so that has to be pushed back a week.
+That leads to the following party days:
+
+```{r}
+parties <- tibble(
+  q = 1:4,
+  party = lubridate::ymd(c("2022-01-10", "2022-04-04", "2022-07-11", "2022-10-03"))
+)
+```
+
+Now imagine that you have a table of employee birthdays:
+
+```{r}
+employees <- tibble(
+  name = wakefield::name(100),
+  birthday = lubridate::ymd("2022-01-01") + (sample(365, 100, replace = TRUE) - 1)
+)
+employees
+```
+
+And for each employee we want to find the first party date that comes after (or on) their birthday.
+We can express that with a rolling join:
+
+```{r}
+#| eval: false
+employees |> 
+  left_join(parties, join_by(closest(birthday >= party)))
+```
+
+```{r}
+#| echo: false
+employees |> 
+  left_join(parties, join_by(preceding(birthday, party)))
+```
+
+### Overlap joins
+
+Overlap joins provide three helpers that use inequality joins to make it easier to work with intervals:
+
+-   `between(x, y_lower, y_upper)` is short for `x >= y_lower, x <= y_upper`.
+-   `within(x_lower, x_upper, y_lower, y_upper)` is short for `x_lower >= y_lower, x_upper <= y_upper`.
+-   `overlaps(x_lower, x_upper, y_lower, y_upper)` is short for `x_lower <= y_upper, x_upper >= y_lower`.
+
+Let's continue the birthday example to see how you might use them.
+There's one problem with the strategy we used above: there's no party preceding the birthdays Jan 1-9.
+So it might be better to to be explicit about the date ranges that each party spans, and make a special case for those early birthdays:
+
+```{r}
+parties <- tibble(
+  q = 1:4,
+  party = lubridate::ymd(c("2022-01-10", "2022-04-04", "2022-07-11", "2022-10-03")),
+  start = lubridate::ymd(c("2022-01-01", "2022-04-04", "2022-07-11", "2022-10-03")),
+  end = lubridate::ymd(c("2022-04-03", "2022-07-11", "2022-10-02", "2022-12-31"))
+)
+parties
+```
+
+Hadley is hopelessly bad at data entry so he also wanted to check that the party periods don't overlap.
+You can perform an self-join and check to see if any start-end interval overlaps with any other:
+
+```{r}
+parties |> 
+  inner_join(parties, join_by(overlaps(start, end, start, end), q < q)) |> 
+  select(start.x, end.x, start.y, end.y)
+```
+
+Ooops, there is an overlap, so let's fix that problem and continue:
+
+```{r}
+parties <- tibble(
+  q = 1:4,
+  party = lubridate::ymd(c("2022-01-10", "2022-04-04", "2022-07-11", "2022-10-03")),
+  start = lubridate::ymd(c("2022-01-01", "2022-04-04", "2022-07-11", "2022-10-03")),
+  end = lubridate::ymd(c("2022-04-03", "2022-07-10", "2022-10-02", "2022-12-31"))
+)
+```
+
+Now we can match each employee to their party.
+This is a good place to use `unmatched = "error"` because I want to quickly find out if any employees didn't get assigned a party.
+
+```{r}
+employees |> 
+  inner_join(parties, join_by(between(birthday, start, end)), unmatched = "error")
 ```
 
 ### Exercises
 
-1.  What does it mean for a flight to have a missing `tailnum`?
-    What do the tail numbers that don't have a matching record in `planes` have in common?
-    (Hint: one variable explains \~90% of the problems.)
-
-2.  Filter flights to only show flights with planes that have flown at least 100 flights.
-
-3.  Combine `fueleconomy::vehicles` and `fueleconomy::common` to find only the records for the most common models.
-
-4.  Find the 48 hours (over the course of the whole year) that have the worst delays.
-    Cross-reference it with the `weather` data.
-    Can you see any patterns?
-
-5.  What does `anti_join(flights, airports, by = c("dest" = "faa"))` tell you?
-    What does `anti_join(airports, flights, by = c("faa" = "dest"))` tell you?
-
-6.  You might expect that there's an implicit relationship between plane and airline, because each plane is flown by a single airline.
-    Confirm or reject this hypothesis using the tools you've learned above.
-
-## Join problems
-
-The data you've been working with in this chapter has been cleaned up so that you'll have as few problems as possible.
-Your own data is unlikely to be so nice, so there are a few things that you should do with your own data to make your joins go smoothly.
-
-1.  Start by identifying the variables that form the primary key in each data frame.
-    You should usually do this based on your understanding of the data, not empirically by looking for a combination of variables that give a unique identifier.
-    If you just look for variables without thinking about what they mean, you might get (un)lucky and find a combination that's unique in your current data but the relationship might not be true in general.
-
-    For example, the altitude and longitude uniquely identify each airport, but they are not good identifiers!
+1.  Can you explain what's happening the keys in this equi-join?
+    Why are they different?
 
     ```{r}
-    airports |> count(alt, lon) |> filter(n > 1)
+    x |> full_join(y, by = "key")
+
+    x |> full_join(y, by = "key", keep = TRUE)
     ```
 
-2.  Check that none of the variables in the primary key are missing.
-    If a value is missing then it can't identify an observation!
+2.  When finding if any party period overlapped with another party period I used `q < q` in the `join_by()`?
+    Why?
+    What happens if you remove this inequality?
 
-3.  Check that your foreign keys match primary keys in another data frame.
-    The best way to do this is with an `anti_join()`.
-    It's common for keys not to match because of data entry errors.
-    Fixing these is often a lot of work.
+## Summary
 
-    If you do have missing keys, you'll need to be thoughtful about your use of inner vs. outer joins, carefully considering whether or not you want to drop rows that don't have a match.
+In this chapter, you've learned how to use mutating and filtering joins to combine data from a pair of data frames.
+Along the way you learned how to identify keys, and the between primary and foreign keys.
+You also understand how joins work and how to figure out how many rows the output will have.
+Finally, you've gained a glimpse into the power of non-equi-joins and seen a few interesting use cases.
 
-Be aware that simply checking the number of rows before and after the join is not sufficient to ensure that your join has gone smoothly.
-If you have an inner join with duplicate keys in both data frames, you might get unlucky as the number of dropped rows might exactly equal the number of duplicated rows!
+This chapter concludes the "Transform" part of the book where the focus was on the tools you could use with individual columns and tibbles.
+You learned about dplyr and base functions for working with logical vectors, numbers, and complete tables, stringr functions for working strings, lubridate functions for working with date-times, and forcats functions for working with factors.
+
+In the next part of the book, you'll learn more getting various types of data into R in a tidy form.
