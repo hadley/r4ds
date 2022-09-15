@@ -29,7 +29,8 @@ For example:
 -   To compute summary statistics for subgroups you can use `dplyr::group_by()` + `dplyr::summarise()`.
 -   To read every .csv file in a directory you can pass a vector to `readr::read_csv()`.
 -   To extract every element from a named list you can use `tidyr::unnest_wider()`.
--   
+
+In this section we'll show you three related sets of tools for manipulating each column in a data frame, reading each file in a directory, and saving objects.
 
 ### Prerequisites
 
@@ -43,6 +44,8 @@ library(tidyverse)
 ```
 
 ## For each column
+
+### Motivation
 
 Imagine you have this simple tibble:
 
@@ -77,27 +80,63 @@ df %>% summarise(
 )
 ```
 
+There are two arguments that you'll use every time:
+
 -   The first argument specifies which columns you want to iterate over. It uses the same syntax as `select()`.
 -   The second argument specifies what to do with each column.
 
+There's another argument, `.names` that's useful when use `across()` with `mutate()`, and two variations `if_any()` and `if_all()` that work with `filter()`.
+These are described in detail below.
+
 ### Which columns
 
-All the same specifications as `select()`.
-But there are two extras that we haven't discussed earlier:
+The first argument to `across()`, `.cols`, selects the columns to transform.
+This argument uses the same specifications as `select()`, @sec-select, so you can use functions like `starts_with()` and `ends_with()` to select variables based on their name.
+There are two other techniques that you can use with both `select()` and `across()` that we didn't discuss earlier because they're particularly useful for `across()`: `everything()` and `where()` .
 
--   `everything()` selects all columns.
--   `where(fun)` select all columns where `fun` returns `TRUE`. Most commonly used with functions like `is.numeric()`, `is.factor()`, `is.character()`, `lubridate::is.Date()`, `lubridate::is.POSIXt()`.
-
-### Extra arguments
-
-What happens if we have some missing values?
-It'd be nice to be able to pass along additional arguments to `median()`:
+`everything()` is straightforward: it selects every (non-grouping) column!
 
 ```{r}
 df <- tibble(
+  grp = sample(2, 10, replace = TRUE),
   a = rnorm(10),
   b = rnorm(10),
-  c = c(NA, rnorm(9)),
+  c = rnorm(10),
+  d = rnorm(10)
+)
+
+df %>% 
+  group_by(grp) |> 
+  summarise(across(everything(), median))
+```
+
+`where()` allows you to select columns based on their type:
+
+-   `where(is.numeric)` selects all numeric columns.
+-   `where(is.character)` selects all string columns.
+-   `where(is.Date)` selects all date columns.
+-   `where(is.POSIXct)` selects all date-time columns.
+-   `where(is.logical)` selects all logical columns.
+
+You can combine these in the usual `select()` way with Boolean algebra so that `!where(is.numeric)` selects all non-numeric columns and `starts_with("a") & where(is.logical)` selects all logical columns whose name starts with "a".
+
+### Extra arguments
+
+The second argument, `.funs`, determines what happens to each column selected by the first argument.
+In most cases, this will be the name of an existing function, but you can also create your own function inline, or supply multiple functions.
+
+Lets motivate this problem with an example: what happens if we have some missing values?
+It'd be nice to be able to pass along additional arguments to `median()`:
+
+```{r}
+rnorm_na <- function(n, n_na, mean = 0, sd = 1) {
+  sample(c(rnorm(n - n_na, mean = mean, sd = 1), rep(NA, n_na)))
+}
+
+df <- tibble(
+  a = rnorm_na(10, 2),
+  b = rnorm_na(10, 2),
+  c = rnorm_na(10, 4),
   d = rnorm(10)
 )
 df %>% summarise(
@@ -124,28 +163,8 @@ df %>% summarise(
 )
 ```
 
-### Mutating
-
-Similar problem if you want to modify the columns:
-
-```{r}
-df %>% mutate(
-  across(a:d, \(x) x + 1)
-)
-```
-
-By default the outputs of `across()` are given the same numbers as the inputs.
-This means that using `across()` inside of `mutate()` will replace the existing columns by default.
-If you'd like to instead create new columns, you can supply the `.names` argument which takes a glue specification where `{.col}` refers to the current column name.
-
-```{r}
-df %>% mutate(
-  across(a:d, \(x) x * 2, .names = "{.col}_2")
-)
-```
-
-The name specification is also important if you supply a list of multiple functions to `across()`.
-In this case the default specification is `{.col}_{.fun}`.
+As well as computing the median with out missing values, it'd be nice to know how many missing values there were.
+We can do that by supplying a named list of functions to `across()`:
 
 ```{r}
 df %>% summarise(
@@ -156,18 +175,62 @@ df %>% summarise(
 )
 ```
 
+Note that you could describe the name of the new columns using a glue specification (@sec-glue) like `{.col}_{.fn}` where `.col` is the name of the original column and `.fun` is the name of the function in the list.
+That's not a coincidence because you can use the `.names` argument to set these names.
+
+### Column names
+
+The result of `across()` is named according to the specification provided in the `.names` variable.
+We could specify our own if we wanted the name of the function to come first.
+(You can't currently change the order of the columns).
+
+```{r}
+df %>% summarise(
+  across(a:d, list(
+    median = \(x) median(x, na.rm = TRUE),
+    n_miss = \(x) sum(is.na(x))
+  ), .names = "{.fn}_{.col}")
+)
+```
+
+The `.names` argument is particularly important when you use `across()` with `mutate()`.
+By default the outputs of `across()` are given the same numbers as the inputs.
+This means that `across()` inside of `mutate()` will replace existing columns:
+
+```{r}
+df %>% mutate(
+  across(a:d, \(x) x + 1)
+)
+```
+
+If you'd like to instead create new columns, you can supply the `.names` argument which takes a glue specification where `{.col}` refers to the current column name.
+
+```{r}
+df %>% mutate(
+  across(a:d, \(x) x * 2, .names = "{.col}_2")
+)
+```
+
 ### Filtering
+
+`across()` is a great match for `summarise()` and `mutate()` but it's not such a great fit for `filter()` because you usually string together calls to multiple functions either with `|` or `&`.
+So dplyr provides two variants of `across()` called `if_any()` and `if_all()`:
 
 ```{r}
 df |> filter(is.na(a) | is.na(b) | is.na(c) | is.na(d))
-
+# same as:
 df |> filter(if_any(a:d, is.na))
+
+df |> filter(is.na(a) & is.na(b) & is.na(c) & is.na(d))
+# same as:
+df |> filter(if_all(a:d, is.na))
 ```
 
 ### Vs `pivot_longer()`
 
-Before we go on, it's worth pointing out an interesting connection to `pivot_longer()`.
+Before we go on, it's worth pointing out an interesting connection between `across()` and `pivot_longer()`.
 In many cases, you perform the same calculations by first pivoting the data and then performing the operations by group rather than by column.
+For example, we could rewrite our multiple summary `across()` as:
 
 ```{r}
 df |> 
@@ -179,10 +242,11 @@ df |>
   )
 ```
 
-Another place where you have to use `pivot_longer()` or similar is if you have pairs of variables that you need to compute with simultaneously:
+This is a useful technique to know about because sometimes you'll hit a problem that's not currently possible to solve with `across()`: when you have groups of variables that you want to compute with simultaneously.
+For example, imagine that our data frame contains both values and weights and we want to compute a weighted mean:
 
 ```{r}
-df <- tibble(
+df3 <- tibble(
   a_val = rnorm(10),
   a_w = runif(10),
   b_val = rnorm(10),
@@ -192,38 +256,76 @@ df <- tibble(
   d_val = rnorm(10),
   d_w = runif(10)
 )
+```
 
-df |> 
+There's currently no way to do this with `across()`[^iteration-1], but it's relatively straightforward with `pivot_longer()`:
+
+[^iteration-1]: Maybe there will be one day, but currently we don't see how.
+
+```{r}
+df3_long <- df3 |> 
   pivot_longer(
     everything(), 
     names_to = c("group", ".value"), 
     names_sep = "_"
-  ) |> 
+  )
+df3_long
+
+df3_long |> 
   group_by(group) |> 
   summarise(mean = weighted.mean(val, w))
 ```
 
-(You could `pivot_wider()` this back to the original form if that's the structure you need)
-
-One day `across()` or a friend might support this sort of computation directly, but currently we don't see how.
+If needed, you could `pivot_wider()` this back to the original form.
 
 ### Exercises
 
 1.  Compute the number of unique values in each column of `palmerpenguins::penguins`.
 2.  Compute the mean of every column in `mtcars`.
 3.  Group `diamonds` by `cut`, `clarity`, and `color` then count the number of observations and the mean of each numeric variable.
+4.  What happens if you use a list of functions, but don't name them? How is the output named?
+5.  It is possible to use `across()` inside `filter()` where it's equivalent to `if_all()`. Can you explain why?
 
 ## For each file
 
-`map()` similar to `across()`, but instead of doing something to each column in a data frame, it does something to each element of a list.
+Imagine you have a directory full of excel spreadsheets[^iteration-2] you want to read in.
+You could do it with copy and paste:
+
+[^iteration-2]: If you instead had a directory of csv files with the same format, you can use `read_csv()` directly: `read_csv(c("data/y2019.xls", "data/y2020.xls", "data/y2021.xls", "data/y2020.xls").`
+
+```{r}
+#| eval: false
+data2019 <- readr::read_excel("data/y2019.xls")
+data2020 <- readr::read_excel("data/y2020.xls")
+data2021 <- readr::read_excel("data/y2021.xls")
+data2022 <- readr::read_excel("data/y2022.xls")
+```
+
+And then use `dplyr::bind_rows()` to combine them all together:
+
+```{r}
+#| eval: false
+data <- bind_rows(data2019, data2020, data2021, data2022)
+```
+
+But you can imagine that this would get tedious quickly, since often you won't have four files, but more like 400.
+In this section you'll first learn a little bit about the base `dir()` function which allows you to list all the files in a directory.
+And then about `map()` which lets you repeatedly apply a function to each element of a vector, allowing you to read many files in one step.
+
+`map()` is similar to `across()`, but instead of doing something to each column in a data frame, it does something to each element of a vector.
+
+### Listing files in a directory
 
 `dir()`.
 Use `pattern`, a regular expression, to filter files.
 Always use `full.name`.
 
-If you're lucky you can just pass to `readr::read_csv(paths)`.
+```{r}
+#| eval: false
+paths <- dir("data", pattern = "\\.xls$", full.names = TRUE)
+```
 
-Otherwise you'll need to do it yourself.
+### Basic pattern
 
 Two steps --- read every file into a list.
 Then join the pieces back into a data frame.
@@ -232,9 +334,6 @@ You split the problem up into pieces (here paths), apply a function to each piec
 
 ```{r}
 #| eval: false
-
-paths <- dir(pattern = "\\.xls$")
-
 paths |> 
   map(\(path) readxl::read_excel(path)) |> 
   list_rbind()
@@ -242,17 +341,13 @@ paths |>
 
 ### Data in the path
 
-If the files have heterogeneous formats you might need to do more processing before you can successfully merge them.
-You can use `map_if()` or `map_at()` to selectively modify inputs.
-Use `map_if()` if its easier to select the elements to transform with a function; use `map_at()` if you can tell based on their names.
-
-If the path itself contains data, try:
+If the file name itself contains data, try:
 
 ```{r}
 #| eval: false
 paths |> 
-  set_names |> 
-  map(readxl::read_excel) |> 
+  set_names(basename) |> 
+  map(\(path) readxl::read_excel) |> 
   list_rbind(.id = "path")
 ```
 
@@ -279,7 +374,6 @@ process_file <- function(path) {
     pivot_longer(jan:dec, names_to = "month")
 }
 
-paths <- dir("data", full.names = TRUE)
 all <- paths |> 
   map(process_file) |> 
   list_rbind()
@@ -289,8 +383,6 @@ Alternatively, you could write
 
 ```{r}
 #| eval: false
-
-paths <- dir("data", full.names = TRUE)
 
 data <- paths |> 
   map(read_csv) |> 
@@ -307,22 +399,23 @@ If you need to do more work to get `list_rbind()` to work, you should do it, but
 This is particularly important if the structure of your data varies in some way because it's usually easier to understand the variations when you have them all in front of you.
 Much easier to interactively experiment and figure out what the right approach is.
 
-### Optimize iteration speed by saving your work
+### Heterogeneous data
 
-Even in that case, I'd suggest starting with one pass to load all the files:
+However, sometimes that's not possible because the data frames are sufficiently inconsistent that `list_rbind()` either fails or yields a data frame that's not very useful.
+In that case, start by loading all the files:
 
 ```{r}
 #| eval: false
-files <- paths |> map(read_csv) 
+files <- paths |> map(read_excel, .id = "id") 
 ```
 
-Then you can iteratively test your tidying code as you develop it.
+If the files have heterogeneous formats you might need to do more processing before you can successfully merge them.
+You can use `map_if()` or `map_at()` to selectively modify inputs.
+Use `map_if()` if its easier to select the elements to transform with a function; use `map_at()` if you can tell based on their names.
 
 After spending all this effort, save it to a new csv file.
 
 In terms of organising your analysis project, you might want to have a file called `0-cleanup.R` that generates nice csv files to be used by the rest of your project.
-
-### For really inconsistent data
 
 If the files are really inconsistent, one useful way to get some traction is to think about the structure of the files as data itself.
 
@@ -339,6 +432,14 @@ paths |>
 You could then think about pivotting or plotting this code to understand what the differences are.
 
 ### Handling failures
+
+Some times you might not be able
+
+```{r}
+#| eval: false
+paths |> 
+  map(safely(\(path) readxl::read_excel(path)))
+```
 
 When you use the map functions to repeat many operations, the chances are much higher that one of those operations will fail.
 When this happens, you'll get an error message, and no output.
@@ -402,7 +503,10 @@ y$result[is_ok] |> flatten_dbl()
 
 ## Writing multiple outputs
 
-Main challenge is that's there two important arguments: the object you want to save and the place you want to save it.
+So far we've focused on map, which is design for functions that return something.
+But some functions don't return data, they instead change the state of the world in some way.
+In this section, you'll learn about `map()`'s friend `walk()`, which is design to work with this sort of function.
+Along the way you'll see how to use it to load multiple csv files into a database and turn multiple plots into files.
 
 ### Very large data
 
@@ -419,34 +523,41 @@ Otherwise:
 
 ```{r}
 #| eval: false
-
 template <- read_csv(paths[[1]])
 DBI::dbWriteTable(con, "cars", filter(template, FALSE))
 
-read_write <- function(path) {
+append_csv <- function(path) {
   df <- read_csv(path)
   DBI::dbAppendTable(con, "cars", df)
 }
 
-paths |> walk(read_write)
+paths |> walk(append_csv)
 ```
 
 Or maybe you just write one clean csv for each file and then read with `arrow::open_dataset()`.
 
 ### Saving plots
 
+To save plots, we need to embrace a new challenge: there's now two important arguments: the object you want to save and the place you want to save it.
+So we're going to switch from `walk()` to `walk2()`.
+
 `walk2()`.
 It differs in two ways: it iterates over two arguments at the same time, and it hides the output.
+Let's first make some plots:
 
 ```{r}
-#| eval: false
-
 plots <- mtcars |> 
   group_split(cyl) |> 
   map(\(df) ggplot(df, aes(mpg, wt)) + geom_point())
-paths <- str_c(names(plots), ".pdf")
+```
 
-walk2(paths, plots, ggsave, path = tempdir())
+Then
+
+```{r}
+file_names <- str_c(names(plots), ".pdf")
+
+plots |> 
+  walk2(file_names, \(plot, name) ggsave(name, plot, path = tempdir()))
 ```
 
 ## For loops
