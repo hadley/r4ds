@@ -32,6 +32,10 @@ For example:
 
 In this section we'll show you three related sets of tools for manipulating each column in a data frame, reading each file in a directory, and saving objects.
 
+We're going to give the very basics of iteration, focusing on the places where it comes up in an analysis.
+But in general, iteration is a super power: one you solved one problem, you can apply iteration techniques to solve every similar problem.
+You can learn more in <https://purrr.tidyverse.org> and the [Functionals chapter](https://adv-r.hadley.nz/functionals.html) of *Advanced R*.
+
 ### Prerequisites
 
 We'll use a selection of useful iteration idioms from dplyr and purrr, both core members of the tidyverse.
@@ -43,7 +47,7 @@ We'll use a selection of useful iteration idioms from dplyr and purrr, both core
 library(tidyverse)
 ```
 
-## For each column
+## Modifying multiple columns
 
 ### Motivation
 
@@ -286,7 +290,7 @@ If needed, you could `pivot_wider()` this back to the original form.
 4.  What happens if you use a list of functions, but don't name them? How is the output named?
 5.  It is possible to use `across()` inside `filter()` where it's equivalent to `if_all()`. Can you explain why?
 
-## For each file
+## Reading multiple files
 
 Imagine you have a directory full of excel spreadsheets[^iteration-2] you want to read in.
 You could do it with copy and paste:
@@ -504,61 +508,182 @@ y$result[is_ok] |> flatten_dbl()
 ## Writing multiple outputs
 
 So far we've focused on map, which is design for functions that return something.
-But some functions don't return data, they instead change the state of the world in some way.
+But some functions don't return things, they instead do things (i.e. their return value isn't important).
+This sort of function includes:
+
+-   Saving data to a database.
+-   Saving data to disk, like `readr::read_csv()`.
+-   Saving plots to disk with `ggsave()`.
+
+they instead change the state of the world in some way.
 In this section, you'll learn about `map()`'s friend `walk()`, which is design to work with this sort of function.
 Along the way you'll see how to use it to load multiple csv files into a database and turn multiple plots into files.
 
-### Very large data
+### Writing to a databse
 
-Another exception to this rule is if you have very large data --- it might be impossible to store all the data in memory at once.
-If you're lucky, the database you're working with will have a function to load csv files directly into the database.
-For example, if you're using duckdb, you can:
+Sometimes when working with many files at once, it's not possible to load all your data into memory at once.
+If you can't `map(files, read_csv)` how can you work with your work?
+Well, one approach is to put it all into a database and then use dbplyr to access just the subsets that you need.
+
+Sometimes the database package will provide a handy function that will take a vector of paths and load them all into the datbase.
+This is the case with duckdb's `duckdb_read_csv()`:
 
 ```{r}
 #| eval: false
 duckdb::duckdb_read_csv(con, "cars", paths)
 ```
 
-Otherwise:
+But with other databases you'll need to do it yourself.
+The key idea is to write a function that loads you data then immediately appends to an existing table with `dbAppendTable()`:
 
 ```{r}
 #| eval: false
-template <- read_csv(paths[[1]])
-DBI::dbWriteTable(con, "cars", filter(template, FALSE))
-
 append_csv <- function(path) {
   df <- read_csv(path)
   DBI::dbAppendTable(con, "cars", df)
 }
+```
 
+Then you just need to create a table to fill in.
+Here I use a `filter()` that's guaranteed to select zero rows to create a table that will have the write column names and types.
+
+```{r}
+#| eval: false
+con <- DBI::dbConnect(RSQLite::SQLite(tempfile()))
+
+template <- read_csv(paths[[1]])
+DBI::dbWriteTable(con, "cars", filter(template, FALSE))
+```
+
+Then I need to call `append_csv()` once for each value of `path`.
+That's certainly possible with map:
+
+```{r}
+#| eval: false
+paths |> map(append_csv)
+```
+
+But we don't actually care about the output, so instead we can use `walk()`.
+This does exactly the same thing as `map()` but throws the output away.
+
+```{r}
+#| eval: false
 paths |> walk(append_csv)
 ```
 
-Or maybe you just write one clean csv for each file and then read with `arrow::open_dataset()`.
+### Writing csv files
+
+The same basic principle applies if we want to save out multiple csv files, one for each group.
+Let's imagine that we want to take the `ggplot2::diamonds` data and save our one csv file for each `clarity`.
+First we need to make those individual datasets.
+One way to do that is with dplyr's `group_split()`:
+
+```{r}
+by_clarity <- diamonds |> 
+  group_by(clarity) |> 
+  group_split()
+```
+
+This produces a list of length 8, containing one tibble for each unique value of `clarity`:
+
+```{r}
+length(by_clarity)
+
+by_clarity[[1]]
+```
+
+If we were going to save these data frames by hand, we might write something like:
+
+```{r}
+#| eval: false
+write_csv(by_clarity[[1]], "diamonds-I1.csv")
+write_csv(by_clarity[[2]], "diamonds-SI2.csv")
+write_csv(by_clarity[[3]], "diamonds-SI1.csv")
+...
+write_csv(by_clarity[[8]], "diamonds-IF.csv")
+```
+
+This is a little different compared our previous uses of `map()` because instead of changing one argument we're now changing two.
+This means that we'll need to use `map2()` instead of `map()`.
+
+We'll also need to generate the names for those files somehow.
+The most general way to do so is to use `dplyr::group_indices()`:
+
+```{r}
+keys <- diamonds |> 
+  group_by(clarity) |> 
+  group_keys()
+keys
+
+paths <- keys |> 
+  mutate(path = str_glue("diamonds-{clarity}.csv")) |> 
+  pull()
+paths
+```
+
+This feels a bit fiddly here because we're only working with a single group, but you can imagine this is very powerful if you want to group by multiple variables.
+
+Now that we have all the pieces in place, we can eliminate the need to copy and paste by running `walk2()`:
+
+```{r}
+#| eval: false
+walk2(by_clarity, paths, write_csv)
+```
 
 ### Saving plots
 
-To save plots, we need to embrace a new challenge: there's now two important arguments: the object you want to save and the place you want to save it.
-So we're going to switch from `walk()` to `walk2()`.
+We can take the same basic approach if you want to create many plots.
+We're jumping the gun here a bit because you won't learn how to save a single plot until @sec-ggsave, but hopefully
 
-`walk2()`.
-It differs in two ways: it iterates over two arguments at the same time, and it hides the output.
-Let's first make some plots:
+Let's first split up the data:
 
 ```{r}
-plots <- mtcars |> 
-  group_split(cyl) |> 
+by_cyl <- mtcars |> group_by(cyl)
+```
+
+Then create the plots using `map()` to call `ggplot()` repeatedly with different datasets.
+That gives us a list of plots[^iteration-3]:
+
+[^iteration-3]: You can print `plots` to get a crude animation --- you'll get one plot for each element of `plots`.
+
+```{r}
+plots <- by_cyl |>
+  group_split() |> 
   map(\(df) ggplot(df, aes(mpg, wt)) + geom_point())
 ```
 
-Then
+(If this was a more complicated plot you'd use a named function so there's more room for all the details.)
+
+Then you create the file names:
 
 ```{r}
-file_names <- str_c(names(plots), ".pdf")
-
-plots |> 
-  walk2(file_names, \(plot, name) ggsave(name, plot, path = tempdir()))
+paths <- by_cyl |> 
+  group_keys() |> 
+  mutate(path = str_glue("cyl-{cyl}.png")) |> 
+  pull()
+paths
 ```
+
+Then use `walk2()` with `ggsave()` to save each plot:
+
+```{r}
+walk2(plots, paths, \(plot, name) ggsave(name, plot, path = tempdir()))
+```
+
+This is short hand for:
+
+```{r}
+#| eval: false
+ggsave(plots[[1]], paths[[1]], path = tempdir())
+ggsave(plots[[2]], paths[[2]], path = tempdir())
+ggsave(plots[[3]], paths[[3]], path = tempdir())
+```
+
+It's barely necessary here, but you can imagine how useful this would be if you had to create hundreds of plot.
+
+### Exercises
+
+1.  Imagine you have a table of student data containing (amongst other variables) `school_name` and `student_id`. Sketch out what code you'd write if you want to save all the information for each student in file called `{student_id}.csv` in the `{school}` directory.
 
 ## For loops
 
