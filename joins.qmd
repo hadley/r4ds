@@ -45,9 +45,11 @@ You'll also learn how to check that your keys are valid, and what to do if your 
 ### Primary and foreign keys
 
 Every join involves a pair of keys: a primary key and a foreign key.
-A **primary key** is a variable (or group of variables) that uniquely identifies an observation.
-A **foreign key** is the corresponding variable (or groups of variables) in another table.
-Let's make those terms concrete by looking at four of the data frames in nycfights13:
+A **primary key** is a variable that uniquely identifies an observation.
+A **foreign key** is the corresponding variable in another table.
+Both primary and foreign keys can consist of more than one variable, which we'll call a **compound key**.
+
+Let's make those terms concrete by looking more of the data in nycfights13:
 
 -   `airlines` lets you look up the full carrier name from its abbreviated code.
     Its primary key is the two letter `carrier` code.
@@ -84,6 +86,11 @@ These datasets are all connected via the `flights` data frame because the `tailn
 -   `flights$origin` connects to primary key `airports$faa`.
 -   `flights$dest` connects to primary key `airports$faa` .
 -   `flights$origin`-`flights$time_hour` connects to primary key `weather$origin`-`weather$time_hour`.
+
+You'll notice a nice feature in the design of these keys: they almost all have the same name in both tables, which, as you'll see shortly, will make your joining life much easier.
+It's also worth noting the opposite relationship: almost every variable name used in multiple tables has the same meaning in each place.
+There's only one exception: `year` means year of departure in `flights` and year of manufacturer in `planes`.
+This will become important when we start actually joining tables together.
 
 We can also draw these relationships, as in @fig-flights-relationships.
 This diagram is a little overwhelming, but it's simple compared to some you'll see in the wild!
@@ -173,7 +180,7 @@ flights2 <- flights |>
 flights2
 ```
 
-Surrogate keys can be particular useful when communicating to other humans: it's much easier to tell someone to take a look at flight 2001 than to say look at the UA430 which departed 9am 2013-01-03.
+Surrogate keys can be particular useful when communicating to other humans: it's much easier to tell someone to take a look at flight 2001 than to say look at UA430 which departed 9am 2013-01-03.
 
 ### Exercises
 
@@ -279,7 +286,12 @@ flights2 |>
 Note that the `year` variables are disambiguated in the output with a suffix, which you can control with the `suffix` argument.
 
 `join_by(tailnum)` is short for `join_by(tailnum == tailnum)`.
-This fuller form is important because it's how you specify different join keys in each table.
+It's important to know about this fuller form for two reasons.
+Firstly, it describes the relationship between the two tables: the keys must be equal.
+That's why this type of join is often called an **equi-join**.
+You'll learn about non-equi-joins in @sec-non-equi-joins.
+
+Secondly, it's how you specify different join keys in each table.
 For example, there are two ways to join the `flight2` and `airports` table: either by `dest` or `origin:`
 
 ```{r}
@@ -295,7 +307,7 @@ In older code you might see a different way of specifying the join keys, using a
 -   `by = "x"` corresponds to `join_by(x)`.
 -   `by = c("a" = "x")` corresponds to `join_by(a == x)`.
 
-Now that it exists, we prefer `join_by()` since it provides a more flexible specification that supports more types of join, as you'll learn in @sec-non-equi-joins.
+Now that it exists, we prefer `join_by()` since it provides a clearer and more flexible specification.
 
 ### Filtering joins
 
@@ -317,15 +329,16 @@ airports |>
 ```
 
 **Anti-joins** are the opposite: they return all rows in `x` that don't have a match in `y`.
-They're useful for figuring out what's missing.
-For example, we can figure out which flights are missing information about the destination airport:
+They're useful for finding missing values that are **implicit** in the data, the topic of @sec-missing-implicit. Implicitly missing values don't show up as explicit `NA`s but instead only exist as an absence.
+For example, we can find rows that should be in `airports` by looking for flights that don't have a matching destination:
 
 ```{r}
 flights2 |> 
-  anti_join(airports, join_by(dest == faa)) 
+  anti_join(airports, join_by(dest == faa)) |> 
+  distinct(dest)
 ```
 
-Or which flights lack metadata about the plane that flew them:
+Or we can find which `tailnum`s are missing from `planes`:
 
 ```{r}
 flights2 |>
