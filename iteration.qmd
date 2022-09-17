@@ -49,8 +49,6 @@ library(tidyverse)
 
 ## Modifying multiple columns
 
-### Motivation
-
 Imagine you have this simple tibble:
 
 ```{r}
@@ -292,7 +290,7 @@ If needed, you could `pivot_wider()` this back to the original form.
 
 ## Reading multiple files
 
-Imagine you have a directory full of excel spreadsheets[^iteration-2] you want to read in.
+Imagine you have a directory full of excel spreadsheets[^iteration-2] you want to read.
 You could do it with copy and paste:
 
 [^iteration-2]: If you instead had a directory of csv files with the same format, you can use `read_csv()` directly: `read_csv(c("data/y2019.xls", "data/y2020.xls", "data/y2021.xls", "data/y2020.xls").`
@@ -314,9 +312,8 @@ data <- bind_rows(data2019, data2020, data2021, data2022)
 
 But you can imagine that this would get tedious quickly, since often you won't have four files, but more like 400.
 In this section you'll first learn a little bit about the base `dir()` function which allows you to list all the files in a directory.
-And then about `map()` which lets you repeatedly apply a function to each element of a vector, allowing you to read many files in one step.
-
-`map()` is similar to `across()`, but instead of doing something to each column in a data frame, it does something to each element of a vector.
+And then about `purrr::map()` which lets you repeatedly apply a function to each element of a vector, allowing you to read many files in one step.
+And then we'll finish up with `purrr::list_rbind()` which takes a list of data frames and combines them all together.
 
 ### Listing files in a directory
 
@@ -324,40 +321,128 @@ And then about `map()` which lets you repeatedly apply a function to each elemen
 Use `pattern`, a regular expression, to filter files.
 Always use `full.name`.
 
+Let's make this problem real with a folder of 12 excel spreadsheets that contain data from the gapminder package that contains some information about multiple countries over time:
+
 ```{r}
-#| eval: false
-paths <- dir("data", pattern = "\\.xls$", full.names = TRUE)
+paths <- dir("data/gapminder", pattern = "\\.xlsx$", full.names = TRUE)
+paths
 ```
 
 ### Basic pattern
 
-Two steps --- read every file into a list.
-Then join the pieces back into a data frame.
-Overall this framework is sometimes called split-apply-combine.
-You split the problem up into pieces (here paths), apply a function to each piece (read_csv), and then combine the pieces back together.
+Now that we have the paths, we want to call `read_excel()` with each path.
+Since in general we won't know how many elements there are, instead of putting each individual data frame in its own variable, we'll save them all into a list:
 
 ```{r}
 #| eval: false
+list(
+  readxl::read_excel("data/gapminder/1952.xls"),
+  readxl::read_excel("data/gapminder/1957.xls"),
+  readxl::read_excel("data/gapminder/1962.xls"),
+  ...,
+  readxl::read_excel("data/gapminder/2007.xls")
+)
+```
+
+The shortcut for this is the `map()` function.
+`map(x, f)` is short hand for:
+
+```{r}
+#| eval: false
+list(
+  f(x[[1]]),
+  f(x[[2]]),
+  ...,
+  f(x[[n]])
+)
+```
+
+`map()` is similar to `across()`, but instead of doing something to each column in a data frame, it does something to each element of a vector.
+
+We can use `map()` get a list of data frames in one step with:
+
+```{r}
+files <- map(paths, readxl::read_excel)
+length(files)
+
+files[[1]]
+```
+
+(This is another data structure that doesn't display particularly compactly with `str()` so you might want to load into RStudio and inspecting with `` View()` ``).
+
+Now we can to use `purrr::list_rbind()` to combine that list of data frames into a single data frame:
+
+```{r}
+list_rbind(files)
+```
+
+Or we could combine in a single pipeline like this:
+
+```{r}
+#| results: false
 paths |> 
-  map(\(path) readxl::read_excel(path)) |> 
+  map(readxl::read_excel) |> 
   list_rbind()
 ```
 
+What if we want to pass in extra arguments to `read_excel()`?
+We use the same trick that we used with across.
+For example, it's often useful to peak at just the first few rows of the data:
+
+```{r}
+paths |> 
+  map(\(path) readxl::read_excel(path, n_max = 1)) |> 
+  list_rbind()
+```
+
+This really hammers in something that you might've noticed earlier: each individual sheet doesn't contain the year.
+That's only recorded in the path.
+
 ### Data in the path
 
-If the file name itself contains data, try:
+Sometimes the name of the file is itself data.
+In this example, the file name contains the year, which is not otherwise recorded in the individual data frames.
+To get that column into the final data frame, we need to do two things.
+
+Firstly, we give the path vector names.
+The easiest way to do this is with the `set_names()` function, which can optionally take a function.
+Here we use `basename` to extract just the file name from the full path:
+
+```{r}
+paths <- paths |> set_names(basename) 
+paths
+```
+
+Those paths are automatically carried along by all the map functions, so the list of data frames will have those same names:
 
 ```{r}
 #| eval: false
 paths |> 
-  set_names(basename) |> 
-  map(\(path) readxl::read_excel) |> 
-  list_rbind(.id = "path")
+  map(readxl::read_excel) |> 
+  names()
 ```
 
-You can then use `tidyr::separate_by()` and friends to turn into useful columns.
+Then we use the `names_to` argument `list_rbind()` to tell it which column to save the names to:
 
-You can use `set_names(basename)` to just use the file name.
+```{r}
+paths |> 
+  set_names(basename) |> 
+  map(readxl::read_excel) |> 
+  list_rbind(names_to = "year") |> 
+  mutate(year = parse_number(year))
+```
+
+Here I used `readr::parse_number()` to turn year into a proper number.
+
+If the path contains more data, do `paths <- paths |> set_names()` to set the names to the full path, and then use `tidyr::separate_by()` and friends to turn them into useful columns.
+
+```{r}
+paths |> 
+  set_names() |> 
+  map(readxl::read_excel) |> 
+  list_rbind(names_to = "year") |> 
+  separate(year, into = c(NA, "directory", "file", "ext"), sep = "[/.]")
+```
 
 ### Get to a single data frame as quickly as possible
 
