@@ -21,16 +21,12 @@ Writing a function has three big advantages over using copy-and-paste:
 
 Writing good functions is a lifetime journey.
 Even after using R for many years we still learn new techniques and better ways of approaching old problems.
-The goal of this chapter is to get you started on your journey with functions with two pragmatic and useful types of functions:
+The goal of this chapter is to get you started on your journey with functions with two useful types of functions:
 
--   Vector functions work with individual vectors and reduce duplication within your `summarise()` and `mutate()` calls.
--   Data frame functions work with entire data frames and reduce duplication within your large data analysis pipelines.
+-   Vector functions take one or more vectors as input and return a vector as output.
+-   Data frame functions take a data frame as input and return a data frame as output.
 
-The chapter concludes with some also gives you some suggestions for how to style your code.
-Good code style is like correct punctuation.
-Youcanmanagewithoutit, but it sure makes things easier to read!
-As with styles of punctuation, there are many possible variations.
-Here we present the style we use in our code, but the most important thing is to be consistent.
+The chapter concludes with some also gives you some suggestions for how to style your functions.
 
 ### Prerequisites
 
@@ -39,6 +35,10 @@ library(tidyverse)
 ```
 
 ## Vector functions
+
+We'll begin with vector functions: functions that take one or more vectors and return a vector result.
+
+### Getting started
 
 You should consider writing a function whenever you've copied and pasted a block of code more than twice (i.e. you now have three copies of the same code).
 For example, take a look at this code.
@@ -66,51 +66,24 @@ df |> mutate(
 
 You might be able to puzzle out that this rescales each column to have a range from 0 to 1.
 But did you spot the mistake?
-Hadley made an error when copying-and-pasting the code for `b`: he forgot to change an `a` to a `b`.
-Extracting repeated code out into a function is a good idea because it prevents you from making this type of mistake.
+When Hadley wrote this code he made an error when copying-and-pasting and forgot to change an `a` to a `b`.
+Preventing this type of mistake of is one very good reason to learn how to write functions.
 
-To write a function you need to first analyse the code.
-How many inputs does it have?
+To write a function you need to first analyse the code to figure out what's the same and what's different:
 
 ```{r}
 #| eval: false
 
-(df$a - min(df$a, na.rm = TRUE)) /
-  (max(df$a, na.rm = TRUE) - min(df$a, na.rm = TRUE))
+(a - min(a, na.rm = TRUE)) / (max(a, na.rm = TRUE) - min(a, na.rm = TRUE))
+(b - min(b, na.rm = TRUE)) / (max(b, na.rm = TRUE) - min(b, na.rm = TRUE))
+(c - min(c, na.rm = TRUE)) / (max(c, na.rm = TRUE) - min(c, na.rm = TRUE))
+(d - min(d, na.rm = TRUE)) / (max(d, na.rm = TRUE) - min(d, na.rm = TRUE))  
 ```
 
-This code only has one input: `df$a`.
-(If you're surprised that `TRUE` is not an input, you can explore why in the exercise below.) To make the inputs more clear, it's a good idea to rewrite the code using temporary variables with general names.
-Here this code only requires a single numeric vector, so we'll call it `x`:
+The only thing that changes on each line is the name of the variable.
+That will become the argument to our function: the arguments to a function are the things that can change each time you call it.
 
-```{r}
-x <- df$a
-(x - min(x, na.rm = TRUE)) / (max(x, na.rm = TRUE) - min(x, na.rm = TRUE))
-```
-
-There is some duplication in this code.
-We're computing the range of the data three times, so it makes sense to do it in one step:
-
-```{r}
-rng <- range(x, na.rm = TRUE)
-(x - rng[1]) / (rng[2] - rng[1])
-```
-
-Pulling out intermediate calculations into named variables is a good practice because it makes it more clear what the code is doing.
-
-### Creating a new function
-
-Now that we've simplified the code, and checked that it still works, we can turn it into a function:
-
-```{r}
-rescale01 <- function(x) {
-  rng <- range(x, na.rm = TRUE)
-  (x - rng[1]) / (rng[2] - rng[1])
-}
-rescale01(c(0, 5, 10))
-```
-
-There are three key steps to creating a new function:
+Creating function always looks like `name <- function(arguments) body`:
 
 1.  You need to pick a **name** for the function.
     Here we used `rescale01` because this function rescales a vector to lie between 0 and 1.
@@ -121,21 +94,20 @@ There are three key steps to creating a new function:
 
 3.  You place the code you have developed in the **body** of the function, a `{` block that immediately follows `function(...)`.
 
-Note the overall process: we only made the function after we'd figured out how to make it work with a simple input.
-It's easier to start with working code and turn it into a function; it's harder to create a function and then try to make it work.
+```{r}
+rescale01 <- function(x) {
+  (x - min(x, na.rm = TRUE)) / (max(x, na.rm = TRUE) - min(x, na.rm = TRUE))
+}
+```
 
-At this point it's a good idea to check your function with a few different inputs:
+At this point you might test with a few simple inputs:
 
 ```{r}
 rescale01(c(-10, 0, 10))
 rescale01(c(1, 2, 3, NA, 5))
 ```
 
-As you write more and more functions you'll eventually want to convert these informal, interactive tests into formal, automated tests.
-That process is called unit testing.
-Unfortunately, it's beyond the scope of this book, but you can learn about it in <https://r-pkgs.org/testing-basics.html>.
-
-We can simplify the original example now that we have a function:
+Now we can rewrite the original code as:
 
 ```{r}
 df |> mutate(
@@ -146,14 +118,19 @@ df |> mutate(
 )
 ```
 
-Compared to the original, this code is easier to understand and we've eliminated one class of copy-and-paste errors.
-There is still quite a bit of duplication since we're doing the same thing to multiple columns.
-We could reduce that duplication with `across()` which you'll learn more about in @sec-iteration:
+(In @sec-iteration, you'll learn how to use `across()` to reduce the duplication even further so you can write `df |> mutate(across(a:d, rescale))`).
+
+You might notice that our function contains some duplication in this code.
+We're computing the range of the data three times, so it makes sense to do it in one step using `range()` with computes both the minimum and maximum in one step:
 
 ```{r}
-df |> 
-  mutate(across(a:d, rescale01))
+rescale01 <- function(x) {
+  rng <- range(x, na.rm = TRUE)
+  (x - rng[1]) / (rng[2] - rng[1])
+}
 ```
+
+Pulling out intermediate calculations into named variables is a good practice because it makes it more clear what the code is doing.
 
 Another advantage of functions is that if our requirements change, we only need to make the change in one place.
 For example, we might discover that some of our variables include infinite values, and `rescale01()` fails:
@@ -176,43 +153,96 @@ rescale01(x)
 This is an important part of the "do not repeat yourself" (or DRY) principle.
 The more repetition you have in your code, the more places you need to remember to update when things change (and they always do!), and the more likely you are to create bugs over time.
 
+### Mutate functions
+
+When thinking about your own functions it's useful to think about functions that return vectors of the same length as their input.
+These are the sorts of functions that you'll use in `mutate()` and `filter()`.
+
+For example, maybe instead of rescaling to 0-1 you want to rescale to mean 0 sd 1:
+
 ```{r}
 rescale_z <- function(x) {
   (x - mean(x, na.rm = TRUE)) / sd(x, na.rm = TRUE)
 }
+```
 
+Sometimes your functions are highly specialised for one data analysis.
+For example, you might have a bunch of variables that record missing values as 997, 998, or 999:
+
+```{r}
 fix_na <- function(x) {
-  if_else(x %in% c(99, 999, 9999), NA, x)
+  if_else(x %in% c(997, 998, 999), NA, x)
 }
+```
 
-squish <- function(x, min, max) {
+Other cases, you might be wrapping up a simple a `case_when()` to give it a standard name:
+
+```{r}
+clamp <- function(x, min, max) {
   case_when(
     x < min ~ min,
     x > max ~ max,
     .default = x
   )
 }
+```
 
+Or maybe wrapping up some standardised string manipulation:
+
+```{r}
 first_upper <- function(x) {
   str_sub(x, 1, 1) <- str_to_upper(str_sub(x, 1, 1))
   x
+}
+
+# https://twitter.com/neilgcurrie/status/1571607727255834625
+mape <- function(actual, predicted) {
+  sum(abs((actual - predicted) / actual)) / length(actual)
+}
+```
+
+Another useful string manipulation function comes from NV Labor Analysis:
+
+```{r}
+# https://twitter.com/NVlabormarket/status/1571939851922198530
+
+clean_number <- function(x) {
+  is_pct <- str_detect(x, "%")
+  num <- num |> 
+    str_remove_all("%") |> 
+    str_remove_all(x, ",") |> 
+    str_remove_all(x, fixed("$")) |> 
+    as.numeric(num)
+  if_else(is_pct, num / 100, num)
 }
 ```
 
 ### Summary functions
 
+In other cases you want a function that returns a single value for use in `summary()`.
+Sometimes this can just be a matter of setting a default argument:
+
+```{r}
+commas <- function(x) {
+  str_flatten(x, collapse = ", ")
+}
+```
+
+Or some very simple computation, for example to compute the coefficient of variation, which standardises the standard deviation by dividing it by the mean:
+
 ```{r}
 cv <- function(x, na.rm = FALSE) {
   sd(x, na.rm = na.rm) / mean(x, na.rm = na.rm)
 }
+```
 
-# Compute confidence interval around the mean using normal approximation
-mean_ci <- function(x, conf = 0.95) {
-  se <- sd(x) / sqrt(length(x))
-  alpha <- 1 - conf
-  mean(x) + se * qnorm(c(alpha / 2, 1 - alpha / 2))
-}
+Or maybe you just want to give a common pattern a name that's easier to remember:
 
+```{r}
+# https://twitter.com/gbganalyst/status/1571619641390252033
+n_missing <- function(x) {
+  sum(is.na(x))
+} 
 ```
 
 ### Exercises
@@ -221,7 +251,7 @@ mean_ci <- function(x, conf = 0.95) {
     What would happen if `x` contained a single missing value, and `na.rm` was `FALSE`?
 
 2.  In the second variant of `rescale01()`, infinite values are left unchanged.
-    Rewrite `rescale01()` so that `-Inf` is mapped to 0, and `Inf` is mapped to 1.
+    Can you rewrite `rescale01()` so that `-Inf` is mapped to 0, and `Inf` is mapped to 1?
 
 3.  Practice turning the following code snippets into functions.
     Think about what each function does.
@@ -236,7 +266,6 @@ mean_ci <- function(x, conf = 0.95) {
 
     x / sum(x, na.rm = TRUE)
 
-    sd(x, na.rm = TRUE) / mean(x, na.rm = TRUE)
     ```
 
 4.  Write your own functions to compute the variance and skewness of a numeric vector.
@@ -261,7 +290,15 @@ mean_ci <- function(x, conf = 0.95) {
     There's a lot of duplication in this song.
     Extend the initial piping example to recreate the complete song, and use functions to reduce the duplication.
 
-## Tidyeval
+## Data frame functions
+
+Tidy evaluation is hard to notice because it's the air that you breathe in this book.
+Writing funtions with it is hard, because you have to explicitly think about things that you haven't had to before.
+Things that the tidyverse has been designed to help you avoid thinking about so that you can focus on your analysis.
+
+### Introduction to tidy evaluation
+
+The second common form of function takes a data frame as the first argument, some extra arguments that say what to do with it, and returns a data frame.
 
 ```{r}
 mutate_y <- function(data) {
@@ -269,29 +306,113 @@ mutate_y <- function(data) {
 }
 ```
 
-## Select functions
+These sorts of functions often wrap up other tidyverse functions, and so inevitably encounter the challenge of what's called tidy evaluation.
+Let's illustrate the problem with a function so simple that you'd never both writing it yourself:
 
-We'll start with select-style verbs.
-The most important example is `dplyr:select()` but it also includes `relocate()`, `rename()`, `pull()`, as well as `pivot_longer()` and `pivot_wider()`.
-Technically, it's an argument, not a function, but in most cases the arguments to a function are select-style or mutate-style, not both.
-You can recognize by looking in the docs for its technical name "tidyselect", so called because it's powered by the [tidyselect](https://tidyselect.r-lib.org/) package.
+```{r}
+my_select <- function(df, var) {
+  df |> 
+    select(var)
+}
+```
 
-When you have the data-variable in an env-variable that is a function argument, you **embrace** the argument by surrounding it in doubled braces.
+What's going to happen if I run the following code?
 
-`across()` is a particularly important `select()` function.
-We'll come back to it in @sec-across.
+```{r}
+df <- tibble(var = 1, rav = 2)
+df |> my_select(rav)
+```
 
-## Mutate functions
+The problem is one of ambiguity.
+Inside the function, should `var` refer directly to the literal variable called `var` inside the data frame you've passed in, or should it refer to the code you've supplied in the `var` argument.
+dplyr prefers directs of indirect so we get an undesirably response.
+To resolve this problem, we need a tool: `{{ }}`, called embracing:
 
-Above section helps you reduce repeated code inside a dplyr verbs.
-This section teaches you how to reduce duplication outside of dplyr verbs.
+```{r}
+my_select <- function(df, var) {
+  df |> 
+    select({{ var }})
+}
+df |> my_select(rav)
+```
 
-As well as `mutate()` this includes `arrange()`, `count()`, `filter()`, `group_by()`, `distinct()`, and `summarise()`.
-You can recgonise if an argument is mutate-style by looking for its technical name "data-masking" in the document.
+This tells dplyr you want to select not `var` directly, but use the contents of `var` that the user has provided.
+One way to remember what's happening is to think of `{{ }}` like looking down a tunnel --- it's going to look inside of `var`.
 
-Tidy evaluation is hard to notice because it's the air that you breathe in this book.
-Writing funtions with it is hard, because you have to explicitly think about things that you haven't had to before.
-Things that the tidyverse has been designed to help you avoid thinking about so that you can focus on your analysis.
+There's much more to learn about tidy evaluation , but this should be enough to get you started writing functions.
+
+### Which arguments need embracing?
+
+Not ever argument needs to be embraced --- only those arguments that are evaluated in the context of the data.
+These fail into two main groups:
+
+-   Arguments that select variables, like `select()`, `relocate()`, and `rename()`.
+    The technical name for these arguments is "tidy-select" arguments, and if you look at the documentation you'll see these arguments thus labelled.
+
+-   Arguments that compute with variables: `arrange()`, `filter()`, and `summarise()`.
+    The technical name for these argument is "data-masking"
+
+It's usually easier to tell which is which, but there are some that are harder because you usually supply just a single variable name.
+
+-   All the arguments to `aes()` is are computing arguments because you can write `aes(x  * 2, y / 10)` etc
+-   The arguments to `group_by()`, `count()`, and `distinct()` are computing arguments because they can all create new variables.
+-   The `names_from` arguments to `pivot_wider()` is a selecting function because you can take the names from multiple variables with `names_from = c(x, y, z)`.
+
+### Selection arguments
+
+In @sec-across you'll learn more about `across()` which is a really powerful selecting function that you can use inside of computing arguments.
+
+### Computing arguments
+
+```{r}
+my_summarise2 <- function(data, expr) {
+  data %>% summarise(
+    mean = mean({{ expr }}),
+    sum = sum({{ expr }}),
+    n = n()
+  )
+}
+```
+
+A common use case is to modify `count()`, for example to compute percents:
+
+```{r}
+# https://twitter.com/Diabb6/status/1571635146658402309
+count_pct <- function(df, var) {
+  df |>
+    count({{ var }}, sort = TRUE) |>
+    mutate(pct = n / sum(n))
+}
+
+mtcars |> count_pct(cyl)
+```
+
+Or to pivot the output:
+
+```{r}
+#| eval: false
+
+# Inspired by https://twitter.com/pollicipes/status/1571606508944719876
+count_wide <- function(data, rows, cols) {
+  data |> 
+    count(pick(c({{rows}}, {{cols}}))) |> 
+    pivot_wider(names_from = {{cols}}, values_from = n)
+}
+mtcars |> count_wide(vs, cyl)
+mtcars |> count_wide(c(vs, am), cyl)
+```
+
+This requires use `pick()` to use tidy-select inside a data-masking (`count()`) function.
+
+```{r}
+# https://twitter.com/JustinTPriest/status/1571614088329048064
+# https://twitter.com/FBpsy/status/1571909992139362304
+# https://twitter.com/ekholm_e/status/1571900197894078465
+
+enrich_join <- function(x, y, ..., by = NULL) { 
+ left_join(x, y %>% select(...), by = by)
+}
+```
 
 ## Style
 
