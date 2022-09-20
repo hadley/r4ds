@@ -30,7 +30,10 @@ The chapter concludes with some also gives you some suggestions for how to style
 
 ### Prerequisites
 
+We'll wrap up a variety of functions from around the tidyverse.
+
 ```{r}
+#| message: false
 library(tidyverse)
 ```
 
@@ -292,106 +295,162 @@ n_missing <- function(x) {
 
 ## Data frame functions
 
-Tidy evaluation is hard to notice because it's the air that you breathe in this book.
-Writing funtions with it is hard, because you have to explicitly think about things that you haven't had to before.
-Things that the tidyverse has been designed to help you avoid thinking about so that you can focus on your analysis.
-
-### Introduction to tidy evaluation
-
 The second common form of function takes a data frame as the first argument, some extra arguments that say what to do with it, and returns a data frame.
+There are lots of functions of this nature, but we'll focus on wrapping tidyverse functions, principally those from dplyr and tidyr.
+
+### Tidy evaluation
+
+Let's illustrate the problem with a very simple function: `pull_unique()`.
+The goal of this function is to `pull()` the unique (distinct) values of a variable:
 
 ```{r}
-mutate_y <- function(data) {
-  mutate(data, y = a + x)
-}
-```
-
-These sorts of functions often wrap up other tidyverse functions, and so inevitably encounter the challenge of what's called tidy evaluation.
-Let's illustrate the problem with a function so simple that you'd never both writing it yourself:
-
-```{r}
-my_select <- function(df, var) {
+pull_unique <- function(df, var) {
   df |> 
-    select(var)
+    distinct(var) |> 
+    pull(var)
 }
 ```
 
-What's going to happen if I run the following code?
+If we try and use it, we get an error:
 
 ```{r}
-df <- tibble(var = 1, rav = 2)
-df |> my_select(rav)
+#| error: true
+diamonds |> pull_unique(clarity)
 ```
 
-The problem is one of ambiguity.
-Inside the function, should `var` refer directly to the literal variable called `var` inside the data frame you've passed in, or should it refer to the code you've supplied in the `var` argument.
-dplyr prefers directs of indirect so we get an undesirably response.
-To resolve this problem, we need a tool: `{{ }}`, called embracing:
+To make the problem a bit more clear we can use a made up data frame:
 
 ```{r}
-my_select <- function(df, var) {
+df <- tibble(var = "var", x = "x", y = "y")
+df |> pull_unique(x)
+df |> pull_unique(y)
+```
+
+The problem is that regardless of the inputs, our function is always doing literally `df |> distinct(var) |> pull(var)`, instead of `df |> distinct(x) |> pull(x)` or `df |> distinct(y) |> pull(y)`.
+This is a problem of indirection, and it arises because dplyr allows you to refer to the names of variables inside your data frame without any special treatment, so called **tidy evaluation**.
+
+Tidy evaluation is great 95% of the time because it makes our data analyses very concise as we never have to say which data frame a variable comes from; it's obvious from the context.
+The downside of tidy evaluation comes when we want to wrap up repeated tidyverse code into a function: we need some way tell `distinct()` and `pull()` not to treat `var` as the name of a variable, but instead look inside `var` for the variable we actually want to use.
+
+The solution to this problem is **embracing**.
+By wrapping a variable in `{{ }}` (embracing it) dplyr knows that we want to use the value stored inside that variable.
+One way to remember what's happening is to think of `{{ }}` like looking down a tunnel --- it's going to make the function look inside of `var` rather than looking for a variable called `var`.
+
+To make `pull_unique()` work we just need to replace `var` with `{{ var }}`:
+
+```{r}
+pull_unique <- function(df, var) {
   df |> 
-    select({{ var }})
+    distinct({{ var }}) |> 
+    pull({{ var }})
 }
-df |> my_select(rav)
+diamonds |> pull_unique(clarity)
 ```
 
-This tells dplyr you want to select not `var` directly, but use the contents of `var` that the user has provided.
-One way to remember what's happening is to think of `{{ }}` like looking down a tunnel --- it's going to look inside of `var`.
+### When to embrace?
 
-There's much more to learn about tidy evaluation , but this should be enough to get you started writing functions.
+So the art of wrapping tidyverse functions basically figuring out which arguments need to be embraced.
+Fortunately this is pretty easy because you can look it up from the documentation 😄.
+There are two terms to look for in the docs:
 
-### Which arguments need embracing?
+-   **Data-masking**: this is used in functions like `arrange()`, `filter()`, and `summarise()` which do computation with variables.
+-   **Tidy-selections**: this is used for for functions like `select()`, `relocate()`, and `rename()` that work with groups of variables.
 
-Not ever argument needs to be embraced --- only those arguments that are evaluated in the context of the data.
-These fail into two main groups:
+TODO: something about ...
 
--   Arguments that select variables, like `select()`, `relocate()`, and `rename()`.
-    The technical name for these arguments is "tidy-select" arguments, and if you look at the documentation you'll see these arguments thus labelled.
+Your intuition for many common functions should be pretty good --- think about whether it's ok to compute `x + 1` or select multiple variables with `a:x`.
+There are are some that are harder to tell because you usually use them with a single variable, so it's hard to tell whether they're data-masking or tidy-select:
 
--   Arguments that compute with variables: `arrange()`, `filter()`, and `summarise()`.
-    The technical name for these argument is "data-masking"
-
-It's usually easier to tell which is which, but there are some that are harder because you usually supply just a single variable name.
-
--   All the arguments to `aes()` is are computing arguments because you can write `aes(x  * 2, y / 10)` etc
 -   The arguments to `group_by()`, `count()`, and `distinct()` are computing arguments because they can all create new variables.
 -   The `names_from` arguments to `pivot_wider()` is a selecting function because you can take the names from multiple variables with `names_from = c(x, y, z)`.
+-   It's not a data frame function, but ggplot2's `aes()` uses data-masking because `aes(x  * 2, y / 10)` etc.
 
-### Selection arguments
+In the next two sections we'll explore the sorts of handy functions you might write for data-masking and tidy-select arguments
 
-In @sec-across you'll learn more about `across()` which is a really powerful selecting function that you can use inside of computing arguments.
+### Data-masking examples
 
-### Computing arguments
+If you commonly perform the same set of summaries when doing initial data exploration, you might consider wrapping them up in a helper function:
 
 ```{r}
-my_summarise2 <- function(data, expr) {
+summary6 <- function(data, var) {
   data %>% summarise(
-    mean = mean({{ expr }}),
-    sum = sum({{ expr }}),
-    n = n()
+    min = min({{ var }}, na.rm = TRUE),
+    mean = mean({{ var }}, na.rm = TRUE),
+    median = median({{ var }}, na.rm = TRUE),
+    max = max({{ var }}, na.rm = TRUE),
+    n = n(),
+    n_miss = sum(is.na({{ var }}))
   )
 }
+diamonds |> summary6(carat)
 ```
 
-A common use case is to modify `count()`, for example to compute percents:
+The nice thing about this function is because it wraps summary you can used it on grouped data:
+
+```{r}
+diamonds |> 
+  group_by(cut) |> 
+  summary6(carat)
+```
+
+Because the arguments to summarize are data-masking that also means that the `var` argument to `summary6()` is data-masking.
+That means you can also summarize computed variables:
+
+```{r}
+diamonds |> 
+  group_by(cut) |> 
+  summary6(log10(carat))
+```
+
+To summarize multiple you'll need wait until @sec-across, where you'll learn about `across()` which lets you repeat the same computations with multiple variables.
+
+Another common helper function is to write a version of `count()` that also computes proportions:
 
 ```{r}
 # https://twitter.com/Diabb6/status/1571635146658402309
-count_pct <- function(df, var) {
+count_prop <- function(df, var, sort = FALSE) {
   df |>
-    count({{ var }}, sort = TRUE) |>
-    mutate(pct = n / sum(n))
+    count({{ var }}, sort = sort) |>
+    mutate(prop = n / sum(n))
 }
 
-mtcars |> count_pct(cyl)
+diamonds |> count_prop(clarity)
 ```
 
-Or to pivot the output:
+Note that this function has three arguments: `df`, `var`, and `sort`, and only `var` needs to be embraced because it's passed to `count()` which uses data-masking for all variables in `…`.
+
+Or maybe you want to find the unique values for a variable for a subset of the data:
 
 ```{r}
-#| eval: false
+unique_where <- function(df, condition, var) {
+  df |> 
+    filter({{ condition }}) |> 
+    distinct({{ var }}) |> 
+    arrange({{ var }}) |> 
+    pull()
+}
+nycflights13::flights |> unique_where(month == 12, dest)
+```
 
+### Tidy-select arguments
+
+```{r}
+#| include: false
+pick <- function(cols) {
+  across({{ cols }})
+}
+```
+
+```{r}
+# https://twitter.com/drob/status/1571879373053259776
+enrich_join <- function(x, y, y_vars = everything(), by = NULL) { 
+  left_join(x, y |> select({{ y_vars }}), by = by)
+}
+```
+
+Another useful helper is to make a "wide" count, where you make a 2d table of counts.
+
+```{r}
 # Inspired by https://twitter.com/pollicipes/status/1571606508944719876
 count_wide <- function(data, rows, cols) {
   data |> 
@@ -404,15 +463,9 @@ mtcars |> count_wide(c(vs, am), cyl)
 
 This requires use `pick()` to use tidy-select inside a data-masking (`count()`) function.
 
-```{r}
-# https://twitter.com/JustinTPriest/status/1571614088329048064
-# https://twitter.com/FBpsy/status/1571909992139362304
-# https://twitter.com/ekholm_e/status/1571900197894078465
+### Learning more
 
-enrich_join <- function(x, y, ..., by = NULL) { 
- left_join(x, y %>% select(...), by = by)
-}
-```
+Once you have the basics under your belt, you can learn more about the full range of tidy evaluation possibilities by reading `vignette("programming", package = "dplyr")`.
 
 ## Style
 
