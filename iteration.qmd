@@ -703,26 +703,23 @@ paths[failed]
 
 Then call the import function again for each failure and figure out what went wrong.
 
-## Saving multiple objects
+## Saving multiple outputs
 
-So far we've focused on map, which is designed for functions that return something.
-But some functions don't return things, they instead do things (i.e. their return value isn't important).
-This sort of function includes:
+In the last section, you learned about `map()`, which is useful for reading multiple files into a single object.
+In this section, we'll now explore the opposite: how can you take one or more R objects and save them to one or more files?
+We'll explore this challenge using three examples:
 
--   Saving data to a database.
--   Saving data to disk, like `readr::read_csv()`.
--   Saving plots to disk with `ggsave()`.
-
-In this section, you'll learn about `map()`'s friend `walk()`, which is design to work with this sort of function.
-Along the way you'll see how to use it to load multiple csv files into a database and turn multiple plots into files.
+-   Saving multiple data frames into one database.
+-   Saving multiple data frames into multiple csv files.
+-   Saving multiple plots to multiple `.png` files.
 
 ### Writing to a database {#sec-save-database}
 
-Sometimes when working with many files at once, it's not possible to load all your data into memory at once.
-If you can't `map(files, read_csv)` how can you work with your work?
-Well, one approach is to put it all into a database and then use dbplyr to access just the subsets that you need.
+Sometimes when working with many files at once, it's not possible to fit all your data into memory at once.
+If you can't `map(files, read_csv)` how can you work with your data?
+One approach is to put it all into a database and then use dbplyr to access just the subsets that you need.
 
-If you're Sometimes the database package will provide a handy function that will take a vector of paths and load them all into the datbase.
+If you're lucky, the database package will provide a handy function that will take a vector of paths and load them all into the database.
 This is the case with duckdb's `duckdb_read_csv()`:
 
 ```{r}
@@ -731,31 +728,35 @@ con <- DBI::dbConnect(duckdb::duckdb())
 duckdb::duckdb_read_csv(con, "gapminder", paths)
 ```
 
-But we don't have csv files, we have excel spreadsheets.
+But here we don't have csv files, we have excel spreadsheets.
 So we're going to have to do it "by hand".
-And you can use this same pattern for databases that don't have
+And you can use this same pattern for databases that don't have a handy function for loading many csv files.
 
-Unlike in @sec-load-data, we we're not using to `dbWriteTable()`, because we're going to create the table once, and then append to it multiple times.
-So instead we'll use `dbCreateTable()` and `dbAppend()` table.
-We first create an empty table with the fields we'll use:
+We need to start by creating a table that will fill in with data.
+The easiest way to do this is by creating template for the existing data.
+So we begin by loading a single row from one file and adding the year to it:
+
+```{r}
+template <- readxl::read_excel(paths[[1]], n_max = 1)
+template$year <- 1952
+template
+```
+
+Now we can connect to the database, and `DBI::dbCreateTable()` to turn our template into database table:
 
 ```{r}
 con <- DBI::dbConnect(duckdb::duckdb())
-
-template <- readxl::read_excel(paths[[1]])
-template$year <- 1952
-
 DBI::dbCreateTable(con, "gapminder", template)
 ```
 
-Unlike `dbWriteTable()`, `dbCreateTable()` doesn't load in any data.
-It's job is to create the write table fields with the right types:
+`dbCreateTable()` doesn't use the data in `template`, just variable names and types.
+So if we inspect the `gapminder` table now you'll see that it's empty but it has the variables we need:
 
 ```{r}
 con |> tbl("gapminder")
 ```
 
-Now we need a function that takes a single path and loads it into an existing table in the database with `dbAppendTable()`:
+Next, we need a function that takes a single file path and reads it into R, and adds it to the `gapminder` table, the job of `DBI::dbAppendTable()`:
 
 ```{r}
 append_file <- function(path) {
@@ -766,25 +767,27 @@ append_file <- function(path) {
 }
 ```
 
-Now you need to call `append_csv()` once for each value of `path`.
-That's certainly possible with map:
+Now we need to call `append_csv()` once for `path`.
+That's certainly possible with `map()`:
 
 ```{r}
 #| eval: false
 paths |> map(append_file)
 ```
 
-But we don't actually care about the output, so instead we can use `walk()`.
-This does exactly the same thing as `map()` but throws the output away.
+But we don't actually care about the output, so instead of `map()` it's slightly nicer to use `walk()`.
+`walk()` does exactly the same thing as `map()` but throws the output away:
 
 ```{r}
 paths |> walk(append_file)
 ```
 
-Now if we look at the data we can see we have all the data in one place:
+Now if we can see we have all the data in our table:
 
 ```{r}
-con |> tbl("gapminder")
+con |> 
+  tbl("gapminder") |> 
+  count(year)
 ```
 
 ```{r, include = FALSE}
@@ -793,7 +796,7 @@ DBI::dbDisconnect(con, shutdown = TRUE)
 
 ### Writing csv files
 
-The same basic principle applies if we want to save out multiple csv files, one for each group.
+The same basic principle applies if we want to write multiple csv files, one for each group.
 Let's imagine that we want to take the `ggplot2::diamonds` data and save our one csv file for each `clarity`.
 First we need to make those individual datasets.
 One way to do that is with dplyr's `group_split()`:
@@ -823,11 +826,11 @@ write_csv(by_clarity[[3]], "diamonds-SI1.csv")
 write_csv(by_clarity[[8]], "diamonds-IF.csv")
 ```
 
-This is a little different compared our previous uses of `map()` because instead of changing one argument we're now changing two.
-This means that we'll need to use `map2()` instead of `map()`.
+This is a little different to our previous uses of `map()` because there are two arguments changing, not just one.
+That means that we'll need to use `map2()` instead of `map()`.
 
-We'll also need to generate the names for those files somehow.
-The most general way to do so is to use `dplyr::group_indices()`:
+But before we can use `map2()` we need to figure out the names for those files.
+The most general way to do so is to use `dplyr::group_key()` to get the unique values of the grouping variables, then use `mutate()` and `str_glue()` to make a path:
 
 ```{r}
 keys <- diamonds |> 
@@ -841,35 +844,43 @@ paths <- keys |>
 paths
 ```
 
-This feels a bit fiddly here because we're only working with a single group, but you can imagine this is very powerful if you want to group by multiple variables.
+This feels a bit fiddly here because we're only working with a single group, but you can imagine this is very powerful when you're grouping by multiple variables.
 
 Now that we have all the pieces in place, we can eliminate the need to copy and paste by running `walk2()`:
 
 ```{r}
-#| eval: false
 walk2(by_clarity, paths, write_csv)
+```
+
+This is shorthand for:
+
+```{r}
+#| eval: false
+write_csv(by_clarity[[1]], paths[[1]])
+write_csv(by_clarity[[2]], paths[[2]])
+write_csv(by_clarity[[3]], paths[[3]])
+...
+write_csv(by_clarity[[8]], paths[[8]])
+```
+
+```{r}
+#| include: false
+unlink(paths)
 ```
 
 ### Saving plots
 
-We can take the same basic approach if you want to create many plots.
-We're jumping the gun here a bit because you won't learn how to save a single plot until @sec-ggsave, but hopefully
+We can take the same basic approach to create many plots.
+We're jumping the gun here a bit because you won't learn how to save a single plot until @sec-ggsave, but hopefully you'll get the basic idea.
 
-Let's first split up the data:
-
-```{r}
-by_cyl <- mtcars |> group_by(cyl)
-```
-
-Then create the plots using `map()` to call `ggplot()` repeatedly with different datasets.
-That gives us a list of plots[^iteration-5]:
+Let's assume you've already split up the data using `group_split()`.
+Now you can use `map()` to create a list of many plots[^iteration-5]:
 
 [^iteration-5]: You can print `plots` to get a crude animation --- you'll get one plot for each element of `plots`.
 
 ```{r}
-plots <- by_cyl |>
-  group_split() |> 
-  map(\(df) ggplot(df, aes(mpg, wt)) + geom_point())
+plots <- by_clarity |>
+  map(\(df) ggplot(df, aes(carat)) + geom_histogram(binwidth = 0.01))
 ```
 
 (If this was a more complicated plot you'd use a named function so there's more room for all the details.)
@@ -877,9 +888,8 @@ plots <- by_cyl |>
 Then you create the file names:
 
 ```{r}
-paths <- by_cyl |> 
-  group_keys() |> 
-  mutate(path = str_glue("cyl-{cyl}.png")) |> 
+paths <- keys |> 
+  mutate(path = str_glue("clarity-{clarity}.png")) |> 
   pull()
 paths
 ```
@@ -887,19 +897,24 @@ paths
 Then use `walk2()` with `ggsave()` to save each plot:
 
 ```{r}
-walk2(plots, paths, \(plot, name) ggsave(name, plot, path = tempdir()))
+walk2(paths, plots, \(path, plot) ggsave(path, plot, width = 6, height = 6))
 ```
 
 This is short hand for:
 
 ```{r}
 #| eval: false
-ggsave(plots[[1]], paths[[1]], path = tempdir())
-ggsave(plots[[2]], paths[[2]], path = tempdir())
-ggsave(plots[[3]], paths[[3]], path = tempdir())
+ggsave(paths[[1]], plots[[1]], width = 6, height = 6)
+ggsave(paths[[2]], plots[[2]], width = 6, height = 6)
+ggsave(paths[[3]], plots[[3]], width = 6, height = 6)
+...
+ggsave(paths[[8]], plots[[8]], width = 6, height = 6)
 ```
 
-It's barely necessary here, but you can imagine how useful this would be if you had to create hundreds of plot.
+```{r}
+#| include: false
+unlink(paths)
+```
 
 ### Exercises
 
@@ -907,25 +922,22 @@ It's barely necessary here, but you can imagine how useful this would be if you 
 
 ## For loops
 
-Another way to attack this sort of problem is with a `for` loop.
-We don't teach for loops here to stay focused.
-They're definitely important.
-You can learn more about them and how they're connected to the map functions in purr in <https://adv-r.hadley.nz/control-flow.html#loops> and <https://adv-r.hadley.nz/functionals.html>.
-
-Once you master these functions, you'll find it takes much less time to solve iteration problems.
-But you should never feel bad about using a `for` loop instead of a map function.
-The map functions are a step up a tower of abstraction, and it can take a long time to get your head around how they work.
-The important thing is that you solve the problem that you're working on, not write the most concise and elegant code (although that's definitely something you want to strive towards!).
+Before we finish up this chapter, we have a duty to mention another important technique for iteration in R, the `for` loop.
+`for` loops are powerful and general tool that you definitely need to learn as you become a more experienced R programmer.
+But we skip them here because, as you've seen, you can solve a whole bunch of useful problems just by learning `across()`, `map()`, and `walk2()`.
+If you'd like to learn more about for loops, <https://adv-r.hadley.nz/control-flow.html#loops> is one place to start.
 
 Some people will tell you to avoid `for` loops because they are slow.
 They're wrong!
-(Well at least they're rather out of date, as `for` loops haven't been slow for many years.) The chief benefits of using functions like `map()` is not speed, but clarity: they make your code easier to write and to read.
-
-If you actually need to worry about performance, you'll know, it'll be obvious.
-till then, don't worry about it.
+(Well at least they're rather out of date, as `for` loops haven't been slow for many years.) The chief benefit of using functions like `map()` is not speed, but clarity: once you've mastered the basic idea, they make your code easier to write and to read.
 
 ## Summary
 
-These are the basics of iteration, focusing on the places where it comes up in an analysis.
-But in general, iteration is a super power: one you solved one problem, you can apply iteration techniques to solve every similar problem.
-You can learn more in <https://purrr.tidyverse.org> and the [Functionals chapter](https://adv-r.hadley.nz/functionals.html) of *Advanced R*.
+In this chapter you learn iteration tools to solve three problems that come up frequently when doing data science: manipulating multiple columns, reading multiple files, and saving multiple outputs.
+But in general, iteration is a super power: if you know the right iteration technique, you can easily go from fixing one problems to fixing any number of problems.
+Once you've mastered the techniques in this chapter, we highly recommend learning more by reading <https://purrr.tidyverse.org> and the [Functionals chapter](https://adv-r.hadley.nz/functionals.html) of *Advanced R*.
+
+This chapter concludes the programming section of the book.
+You've now learned the basics of programming in R.
+You know now the data types that underpin all of the objects you work with, and have two powerful techniques (functions and iteration) for reducing the duplication in your code.
+We hope you've got a taste for how programming can help your analyses, and you've made a solid start on your journey to become not just a data scientist who uses R, but a data science who can program in R.
