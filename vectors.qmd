@@ -10,6 +10,7 @@ source("_common.R")
 
 So far we've talked about individual data types individual like numbers, strings, factors, tibbles and more.
 Now it's time to learn more about how they fit together into a holistic structure.
+Relatively little immediate benefit but a necessary foundation for building your programming knowledge.
 
 In this chapter we'll explore the **vector** data type, the type that underlies pretty much all objects that we use to store data in R.
 
@@ -25,21 +26,17 @@ We will, however, use a handful of functions from the **purrr** package to avoid
 library(tidyverse)
 ```
 
-## Vector basics
+## Vectors
 
 There are two fundamental types of vectors:
 
 1.  **Atomic** vectors, of which there are six types: **logical**, **integer**, **double**, **character**, **complex**, and **raw**.
     Integer and double vectors are collectively known as **numeric** vectors.
+    Raw and complex are rarely used during data analysis, so we won't discuss them here.
 
 2.  **Lists**, which are sometimes called recursive vectors because lists can contain other lists.
 
 The chief difference between atomic vectors and lists is that atomic vectors are **homogeneous** (every element is the same type), while lists can be **heterogeneous** (every element can be a different type).
-
-There's one other related object: `NULL`.
-`NULL` is often used to represent the absence of a vector (as opposed to `NA` which is used to represent the absence of a value in a vector).
-`NULL` typically behaves like a vector of length 0.
-
 @fig-datatypes summarizes the interrelationships.
 
 ```{r}
@@ -59,9 +56,11 @@ There's one other related object: `NULL`.
 knitr::include_graphics("diagrams/data-structures.png", dpi = 270)
 ```
 
+### Properties
+
 Every vector has two key properties:
 
-1.  Its **type**, which is one of logical, integer, double, character or list.
+1.  Its **type**, which is one of logical, integer, double, character, list etc.
     You can determine this with `typeof()`.
 
     ```{r}
@@ -85,169 +84,22 @@ Every vector has two key properties:
 
 Vectors can also contain arbitrary additional metadata in the form of attributes.
 These attributes are used to create **S3 vectors** which build on additional behavior.
-You've seen three S3 vectors in this book:
+You've seen three S3 vectors in this book: factors, dates, and date-times.
+We'll come back those in @sec-s3-vectors.
 
--   Factors (`factor`) are built on top of integer vectors.
--   Dates (`date`) are built on top of double vectors.
--   Date-times (`POSIXct`) are built on top of double vectors.
+### Atomic vectors
 
-You can use S3 to build on top of lists to make things that are fundamentally not vectors, like data frames or linear models.
+While technically speaking there are six types of atomic vector, in principle we only worry about three: logical vectors, numeric vectors, and character vectors.
 
-### Exercises
+-   Logical vectors were the subject of @sec-logicals. They're the simplest type of atomic vector because they can take only three possible values: `FALSE`, `TRUE`, and `NA`.
+-   Numeric vectors were the subject of @sec-numbers. Numeric vectors can either be integers or doubles. We lump them together in this book because there are few important differences when doing data analysis. The one important difference was discussed in @sec-fp-comparison: doubles are fundamentally approximations because they floating point numbers that can not always be precisely represented with a fixed amount of memory.
+-   Character vectors were the subject of @sec-strings. They're the most complex type of atomic vector, because each element of a character vector is a string, and a string can contain any amount of data.
 
-1.  Carefully read the documentation of `is.vector()`. What does it actually test for? Why does `is.atomic()` not agree with the definition of atomic vectors above?
-
-## Atomic vectors
-
-The four most important types of atomic vector are logical, integer, double, and character.
-Raw and complex are rarely used during a data analysis, so we won't discuss them here.
-The difference between integer and double is rarely important for data science, so we lump them together into numeric.
-
-### Logical
-
-Logical vectors are the simplest type of atomic vector because they can take only three possible values: `FALSE`, `TRUE`, and `NA`.
-Logical vectors are usually constructed with comparison operators, as described in @sec-logicals.
-
-### Numeric
-
-Integer and double vectors are known collectively as numeric vectors and were the topic of @sec-numbers.
-In R, numbers are doubles by default.
-To make an integer, place an `L` after the number:
-
-```{r}
-typeof(1)
-typeof(1L)
-```
-
-The distinction between integers and doubles is not usually important in R, but there are two important differences that you should be aware of:
-
-1.  Doubles are approximations, as we discussed in @sec-fp-comparison.
-    Doubles represent floating point numbers that can not always be precisely represented with a fixed amount of memory.
-    For example, the square of the square root of two is not two:
-
-    ```{r}
-    x <- sqrt(2) ^ 2
-    x
-    x - 2
-    ```
-
-2.  Integers have one special value: `NA`, while doubles have four: `NA`, `NaN`, `Inf` and `-Inf`.
-    All three special values `NaN`, `Inf` and `-Inf` can arise during division:
-
-    ```{r}
-    c(-1, 0, 1) / 0
-    ```
-
-    Avoid using `==` to check for these other special values.
-    Instead use the helper functions `is.finite()`, `is.infinite()`, and `is.nan()`.
-
-### Character
-
-Character vectors are the most complex type of atomic vector, because each element of a character vector is a string, and a string can contain an arbitrary amount of data.
-You already learned many practical tools for working with character vectors in @sec-strings.
-Here we wanted to mention one important feature of the underlying string implementation: R uses a global string pool.
-This means that each unique string is only stored in memory once, and every use of the string points to that representation.
-This reduces the amount of memory needed by duplicated strings.
-You can see this behavior in practice with `lobstr::obj_size()`:
-
-```{r}
-x <- "This is a reasonably long string."
-lobstr::obj_size(x)
-
-y <- rep(x, 1000)
-lobstr::obj_size(y)
-```
-
-`y` doesn't take up 1,000x as much memory as `x`, because each element of `y` is just a pointer to that same string.
-A pointer is 8 bytes, so 1000 pointers to a 152 B string is 8 \* 1000 + 152 = 8,144 B.
-
-### Missing values {#sec-missing-values-vectors}
-
-Note that each type of atomic vector has its own missing value:
-
-```{r}
-NA            # logical
-NA_integer_   # integer
-NA_real_      # double
-NA_character_ # character
-```
-
-This is usually unimportant because `NA` will almost always be automatically converted to the correct type.
-
-### Coercion
-
-There are two ways to convert, or coerce, one type of vector to another:
-
-1.  Explicit coercion happens when you call a function like `as.logical()`, `as.integer()`, `as.double()`, or `as.character()`.
-    Whenever you find yourself using explicit coercion, you should always check whether you can make the fix upstream, so that the vector never had the wrong type in the first place.
-    For example, you may need to tweak your readr `col_types` specification.
-
-2.  Implicit coercion happens when you use a vector in a specific context that expects a certain type of vector.
-    For example, when you use a logical vector with a numeric summary function, or when you use a double vector where an integer vector is expected.
-
-Because explicit coercion is used relatively rarely, and is largely easy to understand, we'll focus on implicit coercion here.
-
-You've already seen the most important type of implicit coercion: using a logical vector in a numeric context.
-In this case `TRUE` is converted to `1` and `FALSE` converted to `0`.
-That means the sum of a logical vector is the number of trues, and the mean of a logical vector is the proportion of trues:
-
-```{r}
-x <- sample(20, 100, replace = TRUE)
-y <- x > 10
-sum(y)  # how many are greater than 10?
-mean(y) # what proportion are greater than 10?
-```
-
-It's also important to understand what happens when you try and create a vector containing multiple types with `c()`: the most complex type always wins.
-
-```{r}
-typeof(c(TRUE, 1L))
-typeof(c(1L, 1.5))
-typeof(c(1.5, "a"))
-```
-
-An atomic vector can not have a mix of different types because the type is a property of the complete vector, not the individual elements.
-If you need to mix multiple types in the same vector, you should use a list.
-
-### Exercises
-
-1.  Describe the difference between `is.finite(x)` and `!is.infinite(x)`.
-
-2.  Read the source code for `dplyr::near()` (Hint: to see the source code, drop the `()`).
-    How does it work?
-
-3.  A logical vector can take 3 possible values.
-    How many possible values can an integer vector take?
-    How many possible values can a double take?
-    Use Google to do some research.
-
-4.  Brainstorm at least four functions that allow you to convert a double to an integer.
-    How do they differ?
-    Be precise.
-
-5.  What functions from the readr package allow you to turn a string into logical, integer, and double vector?
-
-6.  Compare and contrast `setNames()` with `purrr::set_names()`.
-
-## Lists {#sec-lists}
+### Lists {#sec-lists}
 
 Lists are a step up in complexity from atomic vectors, because lists can contain other lists.
 This makes them suitable for representing hierarchical or tree-like structures, as you saw in @sec-rectangling.
-You create a list with `list()`:
-
-```{r}
-x <- list(1, 2, 3)
-x
-```
-
-A very useful tool for working with lists is `str()` because it focuses on the **str**ucture, not the contents.
-
-```{r}
-str(x)
-
-x_named <- list(a = 1, b = 2, c = 3)
-str(x_named)
-```
+You create a list with `list()`.
 
 Unlike atomic vectors, `list()` can contain a mix of objects:
 
@@ -263,7 +115,134 @@ z <- list(list(1, 2), list(3, 4))
 str(z)
 ```
 
-To explain more complicated list manipulation functions, it's helpful to have a visual representation of lists.
+### Missing values and `NULL`
+
+Note that each type of atomic vector has its own missing value:
+
+```{r}
+NA            # logical
+NA_integer_   # integer
+NA_real_      # double
+NA_character_ # character
+```
+
+This is usually unimportant because `NA` will almost always be automatically converted to the correct type.
+
+There's one other related object: `NULL`.
+`NULL` is often used to represent the absence of a vector (as opposed to `NA` which is used to represent the absence of a value in a vector).
+`NULL` typically behaves like a vector of length 0.
+`NULL` is sort of the equivalent of a missing value inside a list.
+
+### Names
+
+All types of vectors can be named.
+You can name them during creation with `c()` or `list()`:
+
+```{r}
+x <- c(x = 1, y = 2, z = 4)
+x
+```
+
+It's important to notice this display, because it can be surprising at first.
+`str()` is always a great tool to check the object is structured as you expect.
+
+```{r}
+str(x)
+```
+
+Or after the fact with `purrr::set_names()`:
+
+```{r}
+x <- list(1, 2, 3)
+x |> 
+  set_names(c("a", "b", "c")) |> 
+  str()
+```
+
+You can also pass `set_names()` a function.
+This is particularly useful if you have a character vector.
+And we'll see an important use for it in @sec-data-in-the-path.
+
+```{r}
+x <- c("a", "b", "c")
+x |> set_names(str_to_upper)
+```
+
+Named vectors are most useful for subsetting, described next.
+
+### Coercion
+
+There are two ways to convert, or coerce, one type of vector to another:
+
+1.  Explicit coercion happens when you call a function like `as.logical()`, `as.integer()`, `as.double()`, or `as.character()`.
+    Whenever you find yourself using explicit coercion, you should always check whether you can make the fix upstream, so that the vector never had the wrong type in the first place.
+    For example, you may need to tweak your readr `col_types` specification.
+
+2.  Implicit coercion happens when you use a vector in a specific context that expects a certain type of vector.
+    For example, when you use a logical vector with a numeric summary function, or when you use a double vector where an integer vector is expected.
+
+Because explicit coercion is used relatively rarely, and is largely easy to understand, we'll focus on implicit coercion here.
+Just beware using them on lists; if you need to get a list into a simple vector, put it inside a data frame and use the tools from @sec-rectangling.
+
+```{r}
+as.character(list(1, 2, 3))
+as.character(list(1, list(2, list(3))))
+```
+
+You've already seen the most important type of implicit coercion: using a logical vector in a numeric context.
+In this case `TRUE` is converted to `1` and `FALSE` converted to `0`.
+That means the sum of a logical vector is the number of trues, and the mean of a logical vector is the proportion of trues:
+
+```{r}
+x <- sample(20, 100, replace = TRUE)
+y <- x > 10
+sum(y)  # how many are greater than 10?
+mean(y) # what proportion are greater than 10?
+```
+
+It's also important to understand what happens when you try and create a vector containing multiple types with `c()`: logical \< integer \< double \< character \< list.
+Generally rather too flexible.
+
+```{r}
+typeof(c(TRUE, 1L))
+typeof(c(1L, 1.5))
+typeof(c(1.5, "a"))
+```
+
+### Exercises
+
+1.  Carefully read the documentation of `is.vector()`.
+    What does it actually test for?
+    Why does `is.atomic()` not agree with the definition of atomic vectors above?
+
+2.  Describe the difference between `is.finite(x)` and `!is.infinite(x)`.
+
+3.  A logical vector can take 3 possible values.
+    How many possible values can an integer vector take?
+    How many possible values can a double take?
+    Use Google to do some research.
+
+4.  Brainstorm at least four functions that allow you to convert a double to an integer.
+    How do they differ?
+    Be precise.
+
+5.  What functions from the readr package allow you to turn a string into logical, integer, and double vector?
+
+6.  Compare and contrast `setNames()` with `purrr::set_names()`.
+
+7.  Draw the following lists as nested sets:
+
+    a.  `list(a, b, list(c, d), list(e, f))`
+    b.  `list(list(list(list(list(list(a))))))`
+
+## Subsetting {#sec-vector-subsetting}
+
+There are three subsetting tools in base R: `[`, `[[`, and `$`.
+`[` selects a vector; `[[` selects a single value, and `$` selects a single number based on named.
+We'll see how they apply to atomic vectors and lists.
+And then how they combine to provide an alternative to `filter()` and `select()` for working with data frames.
+
+To explain more complicated list manipulation functions, it's helpful to have a visual representation of lists and vectors.
 For example, take these three lists:
 
 ```{r}
@@ -290,36 +269,7 @@ There are three principles:
 
 3.  The orientation of the children (i.e. rows or columns) isn't important, so we'll pick a row or column orientation to either save space or illustrate an important property in the example.
 
-### Names
-
-All types of vectors can be named.
-But names they seem particularly useful for lists.
-You can name them during creation with `list()`:
-
-```{r}
-list(x = 1, y = 2, z = 4)
-```
-
-Or after the fact with `purrr::set_names()`:
-
-```{r}
-set_names(list(1, 2, 3), c("a", "b", "c"))
-```
-
-Named vectors are most useful for subsetting, described next.
-
-### Exercises
-
-1.  Draw the following lists as nested sets:
-
-    a.  `list(a, b, list(c, d), list(e, f))`
-    b.  `list(list(list(list(list(list(a))))))`
-
-## Subsetting {#sec-vector-subsetting}
-
-There are three subsetting tools in base R: `[`, `[[`, and `$`.
-We'll see how they apply to atomic vectors and lists.
-And then how they combine to provide an alternative to `filter()` and `select()` for working with data frames.
+To learn more about the applications of subsetting, reading the "Subsetting" chapter of *Advanced R*: <http://adv-r.had.co.nz/Subsetting.html#applications>.
 
 ### Atomic vectors
 
@@ -336,7 +286,8 @@ There are four types of things that you can subset a vector with:
     x[c(3, 2, 5)]
     ```
 
-    By repeating a position, you can actually make a longer output than input:
+    By repeating a position, you can actually make a longer output than input.
+    (This makes subsetting a bit of a misnomer).
 
     ```{r}
     x[c(1, 1, 5, 5, 5, 2)]
@@ -387,10 +338,7 @@ There are four types of things that you can subset a vector with:
     Like with positive integers, you can also use a character vector to duplicate individual entries.
 
 4.  The simplest type of subsetting is nothing, `x[]`, which returns the complete `x`.
-    This is not useful for subsetting vectors, but it is useful when subsetting matrices (and other high dimensional structures) because it lets you select all the rows or all the columns, by leaving that index blank.
-    For example, if `x` is 2d, `x[1, ]` selects the first row and all the columns, and `x[, -1]` selects all rows and all columns except the first.
-
-To learn more about the applications of subsetting, reading the "Subsetting" chapter of *Advanced R*: <http://adv-r.had.co.nz/Subsetting.html#applications>.
+    This is not useful for subsetting vectors, but as well see shortly it is useful when subsetting 2d structures like tibbles.
 
 There is an important variation of `[` called `[[`.
 `[[` only ever extracts a single element, and always drops names.
@@ -445,7 +393,8 @@ knitr::include_graphics("diagrams/lists-subsetting.png")
 ```
 
 The difference between `[` and `[[` is very important, but it's easy to get confused.
-To help you remember, let me show you an unusual pepper shaker in @fig-pepper-1.If this pepper shaker is your list `pepper`, then, `pepper[1]` is a pepper shaker containing a single pepper packet, as in @fig-pepper-2. `pepper[2]` would look the same, but would contain the second packet.
+To help you remember, let me show you an unusual pepper shaker in @fig-pepper-1.If this pepper shaker is your list `pepper`, then, `pepper[1]` is a pepper shaker containing a single pepper packet, as in @fig-pepper-2.
+`pepper[2]` would look the same, but would contain the second packet.
 `pepper[1:2]` would be a pepper shaker containing two pepper packets.
 `pepper[[1]]` would extract the pepper packet itself, as in @fig-pepper-3.
 
@@ -507,7 +456,7 @@ knitr::include_graphics("images/pepper-2.jpg")
 7.  What happens if you subset a tibble as if you're subsetting a list?
     What are the key differences between a list and a tibble?
 
-## Attributes and S3 vectors
+## Attributes and S3 vectors {#sec-s3-vectors}
 
 Any vector can contain arbitrary additional metadata through its **attributes**.
 You can think of attributes as named list of vectors that can be attached to any object.
@@ -528,6 +477,10 @@ There are three very important attributes that are used to implement fundamental
 3.  **Class** is used to implement the S3 object oriented system.
 
 You've seen names above, and we won't cover dimensions because we don't use matrices in this book.
+
+-   Factors (`factor`) are built on top of integer vectors.
+-   Dates (`date`) are built on top of double vectors.
+-   Date-times (`POSIXct`) are built on top of double vectors.
 
 ### Class
 
@@ -655,5 +608,3 @@ The class of tibble includes "data.frame" which means tibbles inherit the regula
 
 2.  Try and make a tibble that has columns with different lengths.
     What happens?
-
-3.  Based on the definition above, is it ok to have a list as a column of a tibble?
