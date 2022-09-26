@@ -23,10 +23,11 @@ Writing a function has three big advantages over using copy-and-paste:
 
 Writing good functions is a lifetime journey.
 Even after using R for many years we still learn new techniques and better ways of approaching old problems.
-The goal of this chapter is to get you started on your journey with functions with two useful types of functions:
+The goal of this chapter is to get you started on your journey with functions with three useful types of functions:
 
 -   Vector functions take one or more vectors as input and return a vector as output.
 -   Data frame functions take a data frame as input and return a data frame as output.
+-   Plot functions that take a data frame as input and return a plot as output.
 
 The chapter concludes with some advice on function style.
 
@@ -343,7 +344,7 @@ These functions work in the same way as dplyr verbs: they takes a data frame as 
 
 ### Indirection and tidy evaluation
 
-When you start writing functions that use dplyr verbs you rapidly hit the problem of inderation.
+When you start writing functions that use dplyr verbs you rapidly hit the problem of indirecation.
 Let's illustrate the problem with a very simple function: `pull_unique()`.
 The goal of this function is to `pull()` the unique (distinct) values of a variable:
 
@@ -412,8 +413,6 @@ There are are some cases that are harder to guess because you usually use them w
 -   The arguments to `group_by()`, `count()`, and `distinct()` are computing arguments because they can all create new variables.
 
 -   The `names_from` arguments to `pivot_wider()` is a selecting function because you can take the names from multiple variables with `names_from = c(x, y, z)`.
-
--   It's not a data frame function, but ggplot2's `aes()` uses data-masking because `aes(x  * 2, y / 10)` etc.
 
 In the next two sections we'll explore the sorts of handy functions you might write for data-masking and tidy-select arguments
 
@@ -562,6 +561,147 @@ mtcars |> count_wide(vs, cyl)
 mtcars |> count_wide(c(vs, am), cyl)
 ```
 
+### Learning more
+
+Once you have the basics under your belt, you can learn more about the full range of tidy evaluation possibilities by reading `vignette("programming", package = "dplyr")`.
+
+## Plot functions
+
+You can also use the techniques described above with ggplot2, because `aes()` is a data-masking function.
+For example, imagine that you're making a lot of histograms:
+
+```{r}
+#| fig-show: hide
+diamonds |> 
+  ggplot(aes(carat)) +
+  geom_histogram(binwidth = 0.1)
+
+diamonds |> 
+  ggplot(aes(carat)) +
+  geom_histogram(binwidth = 0.05)
+```
+
+Wouldn't it be nice if you could wrap this up into a histogram function?
+This is easy as once you know that `aes()` is a data-masking function so that you need to embrace:
+
+```{r}
+histogram <- function(df, var, binwidth = NULL) {
+  df |> 
+    ggplot(aes({{ var }})) + 
+    geom_histogram(binwidth = binwidth)
+}
+
+diamonds |> histogram(carat, 0.1)
+```
+
+Note that `histogram()` returns a ggplot2 plot, so that you can still add on additional components if you want.
+Just remember to switch from `|>` to `+`:
+
+```{r}
+diamonds |> 
+  histogram(carat, 0.1) +
+  labs(x = "Size (in carats)", y = "Number of diamonds")
+```
+
+### Other examples
+
+```{r}
+# https://twitter.com/tyler_js_smith/status/1574377116988104704
+
+lin_check <- function(df, x, y) {
+  df |>
+    ggplot(aes({{ x }}, {{ y }})) +
+    geom_point() +
+    geom_smooth(method = "loess", color = "red", se = FALSE) +
+    geom_smooth(method = "lm", color = "black", se = FALSE) 
+}
+```
+
+```{r}
+# https://twitter.com/sharoz/status/1574376332821204999
+
+# Facetting is fiddly - have to use special vars syntax.
+foo <- function(x) {
+  ggplot(mtcars) +
+    aes(x = mpg, y = disp) +
+    geom_point() +
+    facet_wrap(vars({{ x }}))
+}
+```
+
+```{r}
+sorted_bars <- function(df, var) {
+  df |> 
+    mutate({{ var }} := fct_rev(fct_infreq({{ var }}))) |> 
+    ggplot(aes(y = {{ var }})) + 
+    geom_bar()
+}
+diamonds |> sorted_bars(cut)
+```
+
+Of course you might combine both dplyr and ggplot2:
+
+```{r}
+bars <- function(df, condition, var) {
+  df |> 
+    filter({{ condition }}) |> 
+    ggplot(aes({{ var }})) + 
+    geom_bar() + 
+    scale_x_discrete(guide = guide_axis(angle = 45))
+}
+
+diamonds |> bars(cut == "Good", clarity)
+```
+
+I've written these functions so that you can supply any data frame, but there are also advantages to hardcoding a data frame, if you're using it repeatedly:
+
+```{r}
+density <- function(fill, ...) {
+  palmerpenguins::penguins |> 
+    ggplot(aes(bill_length_mm, fill = {{ fill }})) +
+    geom_density(alpha = 0.5) +
+    facet_wrap(vars(...))
+}
+
+density()
+density(species)
+density(island, sex)
+```
+
+### Labelling
+
+It'd be nice to label this plot automatically.
+To do so, we're going to have to go under the covers of tidy evaluation and use a function from a package we have talked about before: rlang.
+rlang is the package that implements tidy evaluation, and is used by all the other packages in the tidyverse.
+rlang provides a helpful function called `englue()` to solve just this problem.
+It uses a syntax inspired by glue but combined with embracing:
+
+```{r}
+histogram <- function(df, var, binwidth = NULL) {
+  label <- rlang::englue("A histogram of {{var}} with binwidth {binwidth}")
+  
+  df |> 
+    ggplot(aes({{ var }})) + 
+    geom_histogram(binwidth = binwidth) + 
+    labs(title = label)
+}
+
+diamonds |> histogram(carat, 0.1)
+```
+
+(Note that if you omit the `binwidth` the function fails with a weird error. That appears to be a bug in `englue()`: https://github.com/r-lib/rlang/issues/1492.
+Hopefully it'll be fixed soon!)
+
+You can use the same approach any other place that you might supply a string in a ggplot2 plot.
+
+### Advice
+
+It's hard to create general purpose plotting functions because you need to consider many different situations, and we haven't given you the programming skills to handle them all.
+Fortunately, in most cases it's relatively simple to extract repeated plotting code into a function.
+So, for now, strive to keep your functions simple, focussing on concrete repetition, not solve imaginary future problems.
+
+You can also learn other techniques in <https://ggplot2-book.org/programming.html>.
+
 ## Style
 
 It's important to remember that functions are not just for the computer, but are also for humans.
@@ -640,4 +780,13 @@ Learn more at <https://style.tidyverse.org/functions.html>
 
 ## Summary
 
-Once you have the basics under your belt, you can learn more about the full range of tidy evaluation possibilities by reading `vignette("programming", package = "dplyr")`.
+In this chapter you learned how to write functions for three useful scenarios: creating a vector, creating a data frames, or creating a plot.
+
+Writing functions to create data frames and plots using the tidyverse required you to learn a little about tidy evaluation.
+Tidy evaluation is really important, because its what allows you to write `diamonds |> filter(x == y)` and `filter()` knows to use `x` and `y` from the diamonds dataset.
+The downside of tidy evaluation is that you need to learn a new technique for programming: embracing.
+Embracing, e.g. `{{ x }}`, tells the tidy-evaluation using function to look inside the argument `x`, rather than using the literal variable `x`.
+You can figure out when you need to use embracing by looking in the documentation for the terms for the two major styles of tidyselect: "data masking" and "tidy select".
+
+In the next chapter, we'll dive into some of the details of R's vector data structures that we've omitted so far.
+These are immediately useful by themselves, but are a necessary foundation for the following chapter on iteration that provides some amazingly powerful tools.
