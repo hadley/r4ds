@@ -31,13 +31,28 @@ The goal of this chapter is to get you started on your journey with functions wi
 
 The chapter concludes with some advice on function style.
 
+Many of the examples in this chapter were inspired by real data analysis code supplied by folks on twitter.
+I've often simplified the code from the original so you might want to look at the original tweets which I list in the comments.
+If you want just to see a huge variety of funcitons, check out the motivating tweets: https://twitter.com/hadleywickham/status/1574373127349575680, https://twitter.com/hadleywickham/status/1571603361350164486 A big thanks to everyone who contributed!
+I won't fully explain all of the functions that I use here, so you might need to do some reading of the documentation.
+
 ### Prerequisites
 
 We'll wrap up a variety of functions from around the tidyverse.
+We'll also use nycflights13 as a source of relatively familiar data to apply our functions to.
 
 ```{r}
 #| message: false
 library(tidyverse)
+library(nycflights13)
+```
+
+This chapter also relies on a function that hasn't yet been implemented for dplyr but will be by the time the book is out:
+
+```{r}
+pick <- function(cols) {
+  across({{ cols }})
+}
 ```
 
 ## Vector functions
@@ -97,7 +112,8 @@ There's only one thing that varies which implies I'm going to need a function wi
 
 To turn this into an actual function you need three things:
 
-1.  A **name.** Here we might use `rescale01` because this function rescales a vector to lie between 0 and 1.
+1.  A **name**.
+    Here we might use `rescale01` because this function rescales a vector to lie between 0 and 1.
 
 2.  The **arguments**.
     The arguments are things that vary across calls.
@@ -176,6 +192,7 @@ These changes illustrate an important benefit of functions: because we've moved 
 
 Let's look at a few more vector functions before you get some practice writing your own.
 We'll start by looking at a few useful functions that work well in functions like `mutate()` and `filter()` because they return an output the same length as the input.
+The goal of these sections is to expose you to a bunch of different functions to get your creative juices flowing, and to give you plenty of examples to generalize the structure and utility of functions from.
 
 For example, maybe instead of rescaling to min 0, max 1, you want to rescale to mean zero, standard deviation one:
 
@@ -233,9 +250,10 @@ first_upper <- function(x) {
 first_upper("hello")
 ```
 
-Or maybe, like [NV Labor Analysis](https://twitter.com/NVlabormarket/status/1571939851922198530), you want to strip percent signs, commas, and dollar signs from a string before converting it into a number:
+Or maybe you want to strip percent signs, commas, and dollar signs from a string before converting it into a number:
 
 ```{r}
+# https://twitter.com/NVlabormarket/status/1571939851922198530
 clean_number <- function(x) {
   is_pct <- str_detect(x, "%")
   num <- x |> 
@@ -247,6 +265,27 @@ clean_number <- function(x) {
 }
 clean_number("$12,300")
 clean_number("45%")
+```
+
+There's no reason that your function can't take multiple vector inputs.
+For example, you might want to compute the distance between two locations on the globe using the haversine formula:
+
+```{r}
+# https://twitter.com/RosanaFerrero/status/1574722120428539906/photo/1
+haversine <- function(long1, lat1, long2, lat2, round = 3) {
+  # convert to radians
+  long1 <- long1 * pi / 180
+  lat1  <- lat1  * pi / 180
+  long2 <- long2 * pi / 180
+  lat2  <- lat2  * pi / 180
+  
+  R <- 6371 # Earth mean radius in km
+  a <- sin((lat2 - lat1) / 2)^2 + 
+    cos(lat1) * cos(lat2) * sin((long2 - long1) / 2)^2
+  d <- R * 2 * asin(sqrt(a))
+  
+  round(d, round)
+}
 ```
 
 ### Summary functions
@@ -261,7 +300,7 @@ commas <- function(x) {
 commas(c("cat", "dog", "pigeon"))
 ```
 
-Or some very simple computation, for example to compute the coefficient of variation, which standardizes the standard deviation by dividing it by the mean:
+Or performing some very simple computation, like computing the coefficient of variation, which standardizes the standard deviation by dividing it by the mean:
 
 ```{r}
 cv <- function(x, na.rm = FALSE) {
@@ -326,7 +365,7 @@ mape <- function(actual, predicted) {
     \mathrm{Skew}(x) = \frac{\frac{1}{n-2}\left(\sum_{i=1}^n(x_i - \bar x)^3\right)}{\mathrm{Var}(x)^{3/2}} \text{.}
     $$
 
-5.  Write `both_na()`, a function that takes two vectors of the same length and returns the number of positions that have an `NA` in both vectors.
+5.  Write `both_na()`, a summary function that takes two vectors of the same length and returns the number of positions that have an `NA` in both vectors.
 
 6.  Read the documentation to figure out what the following functions do.
     Why are they useful even though they are so short?
@@ -340,11 +379,11 @@ mape <- function(actual, predicted) {
 
 Vector functions are useful for pulling out code that's repeated within dplyr verbs.
 In this section, you'll learn how to write "data frame" functions which pull out code that's repeated across multiple pipelines.
-These functions work in the same way as dplyr verbs: they takes a data frame as the first argument, some extra arguments that say what to do with it, and usually return a data frame.
+These functions work in the same way as dplyr verbs: they take a data frame as the first argument, some extra arguments that say what to do with it, and usually return a data frame.
 
 ### Indirection and tidy evaluation
 
-When you start writing functions that use dplyr verbs you rapidly hit the problem of indirecation.
+When you start writing functions that use dplyr verbs you rapidly hit the problem of indirection.
 Let's illustrate the problem with a very simple function: `pull_unique()`.
 The goal of this function is to `pull()` the unique (distinct) values of a variable:
 
@@ -374,15 +413,16 @@ df |> pull_unique(y)
 Regardless of how we call `pull_unique()` it always does `df |> distinct(var) |> pull(var)`, instead of `df |> distinct(x) |> pull(x)` or `df |> distinct(y) |> pull(y)`.
 This is a problem of indirection, and it arises because dplyr allows you to refer to the names of variables inside your data frame without any special treatment, so called **tidy evaluation**.
 
-Tidy evaluation is great 95% of the time because it makes our data analyses very concise as you never have to say which data frame a variable comes from; it's obvious from the context.
+Tidy evaluation is great 95% of the time because it makes your data analyses very concise as you never have to say which data frame a variable comes from; it's obvious from the context.
 The downside of tidy evaluation comes when we want to wrap up repeated tidyverse code into a function.
 Here we need some way tell `distinct()` and `pull()` not to treat `var` as the name of a variable, but instead look inside `var` for the variable we actually want to use.
 
 Tidy evaluation includes a solution to this problem called **embracing**.
-By wrapping a variable in `{{ }}` (embracing it) we tell dplyr that we want to use the value stored inside variable, not the variable itself.
-One way to remember what's happening is to think of `{{ }}` as looking down a tunnel --- it's going to make the function look inside of `var` rather than looking for a variable called `var`.
+Embracing a variable means to wrap it in braces so (e.g.) `var` becomes `{{ var }}`.
+Embracing a variable tells dplyr to use the value stored inside the argument, not the argument as the a literal variable name.
+One way to remember what's happening is to think of `{{ }}` as looking down a tunnel --- `{{ var }}` will make a function look inside of `var` rather than looking for a variable called `var`.
 
-So to make `pull_unique()` work we just need to replace `var` with `{{ var }}`:
+So to make `pull_unique()` work we need to replace `var` with `{{ var }}`:
 
 ```{r}
 pull_unique <- function(df, var) {
@@ -395,7 +435,7 @@ diamonds |> pull_unique(clarity)
 
 ### When to embrace?
 
-The art of wrapping tidyverse functions basically figuring out which arguments need to be embraced.
+So the art of writing data frame functions is basically just figuring out which arguments need to be embraced.
 Fortunately this is easy because you can look it up from the documentation 😄.
 There are two terms to look for in the docs:
 
@@ -407,16 +447,14 @@ When you start looking closely at the documentation, you'll notice that many dpl
 This is a special shorthand syntax that matches any that aren't otherwise explicitly matched.
 For example, `arrange()` uses data-masking for `…` and `select()` uses tidy-select for `…`.
 
-Your intuition for many common functions should be pretty good --- think about whether it's ok to compute `x + 1` or select multiple variables with `a:x`.
-There are are some cases that are harder to guess because you usually use them with a single variable, which uses the same syntax for both data-masking or tidy-select:
-
--   The arguments to `group_by()`, `count()`, and `distinct()` are computing arguments because they can all create new variables.
-
--   The `names_from` arguments to `pivot_wider()` is a selecting function because you can take the names from multiple variables with `names_from = c(x, y, z)`.
+Your intuition for many common functions should be pretty good --- think about whether you can compute (e.g. `x + 1`) or select (e.g. `a:x`).
+There are a few cases where it's harder to tell because you usually use them with single variable, which uses the same syntax for both data-masking or tidy-select.
+For example, the arguments to `group_by()`, `count()`, and `distinct()` are computing arguments because they can all create new variables.
+If you're ever confused, just look at the docs.
 
 In the next two sections we'll explore the sorts of handy functions you might write for data-masking and tidy-select arguments
 
-### Data-masking arguments
+### Summary basics
 
 If you commonly perform the same set of summaries when doing initial data exploration, you might consider wrapping them up in a helper function:
 
@@ -437,7 +475,7 @@ diamonds |> summary6(carat)
 
 (Whenever you wrap `summarise()` in a helper, I think it's good practice to set `.groups = "drop"` to both avoid the message and leave the data in an ungrouped state.)
 
-The nice thing about this function is because it wraps summary you can used it on grouped data:
+The nice thing about this function is because it wraps `summarise()` you can used it on grouped data:
 
 ```{r}
 diamonds |> 
@@ -454,9 +492,11 @@ diamonds |>
   summary6(log10(carat))
 ```
 
-To summarize multiple you'll need wait until @sec-across, where you'll learn how to use `across()` to repeat the same computation with multiple variables.
+To summarize multiple variables you'll need wait until @sec-across, where you'll learn how to use `across()`.
 
-Another common helper function is a version of `count()` that also computes proportions:
+### Count variations
+
+Another popular helper function is a version of `count()` that also computes proportions:
 
 ```{r}
 # https://twitter.com/Diabb6/status/1571635146658402309
@@ -468,54 +508,11 @@ count_prop <- function(df, var, sort = FALSE) {
 diamonds |> count_prop(clarity)
 ```
 
-Note that this function has three arguments: `df`, `var`, and `sort`, and only `var` needs to be embraced.
+This function has three arguments: `df`, `var`, and `sort`, and only `var` needs to be embraced.
 `var` is passed to `count()` which uses data-masking for all variables in `…`.
 
-Or maybe you want to find the unique values of a variable for a subset of the data:
-
-```{r}
-unique_where <- function(df, condition, var) {
-  df |> 
-    filter({{ condition }}) |> 
-    distinct({{ var }}) |> 
-    arrange({{ var }}) |> 
-    pull()
-}
-nycflights13::flights |> 
-  unique_where(month == 12, dest)
-```
-
-Here we embrace `condition` because it's passed to `filter()` and `var` because its passed to `distinct()` and `arrange()`.
-We could also pass it to `pull()` but it doesn't actually matter here because there's only one variable to select.
-
-### Tidy-select arguments
-
-```{r}
-#| include: false
-pick <- function(cols) {
-  across({{ cols }})
-}
-```
-
-When it's common to
-
-```{r}
-# https://twitter.com/drob/status/1571879373053259776
-left_join_select <- function(x, y, y_vars = everything(), by = NULL) { 
-  y <- y |> select({{ y_vars }})
-  left_join(x, y, by = by)
-}
-```
-
-```{r}
-left_join_id <- function(x, y, y_vars = everything()) {
-  y <- y |> select(id, {{ y_vars }})
-  left_join(x, y, by = "id")
-}
-```
-
 Sometimes you want to select variables inside a function that uses data-masking.
-For example, imagine you want to write `count_missing()` that counts the number of missing observations in row.
+For example, imagine you want to write `count_missing()` that counts the number of missing observations in rows.
 You might try writing something like:
 
 ```{r}
@@ -525,12 +522,12 @@ count_missing <- function(df, group_vars, x_var) {
     group_by({{ group_vars }}) |> 
     summarise(n_miss = sum(is.na({{ x_var }})))
 }
-nycflights13::flights |> 
+flights |> 
   count_missing(c(year, month, day), dep_time)
 ```
 
 This doesn't work because `group_by()` uses data-masking not tidy-select.
-We can work around that problem by using `pick()` which allows you to use use tidy-select insidea data-masking functions:
+We can work around that problem by using `pick()` which allows you to use use tidy-select inside data-masking functions:
 
 ```{r}
 count_missing <- function(df, group_vars, x_var) {
@@ -538,15 +535,15 @@ count_missing <- function(df, group_vars, x_var) {
     group_by(pick({{ group_vars }})) |> 
     summarise(n_miss = sum(is.na({{ x_var }})))
 }
-nycflights13::flights |> 
+flights |> 
   count_missing(c(year, month, day), dep_time)
 ```
 
-Another useful helper is to make a "wide" count, where you make a 2d table of counts.
-Here we count using all the variables in the rows and columns, and then use `pivot_wider()` to rearrange:
+Another useful helper that uses `pick()` is to make a 2d table of counts.
+Here we count using all the variables in the `rows` and `columns`, then use `pivot_wider()` to rearrange:
 
 ```{r}
-# Inspired by https://twitter.com/pollicipes/status/1571606508944719876
+# https://twitter.com/pollicipes/status/1571606508944719876
 count_wide <- function(data, rows, cols) {
   data |> 
     count(pick(c({{ rows }}, {{ cols }}))) |> 
@@ -557,17 +554,58 @@ count_wide <- function(data, rows, cols) {
       values_fill = 0
     )
 }
-mtcars |> count_wide(vs, cyl)
-mtcars |> count_wide(c(vs, am), cyl)
+diamonds |> count_wide(clarity, cut)
+diamonds |> count_wide(c(clarity, color), cut)
+```
+
+We didn't discuss `pivot_wider()` above, but you can read the docs to discover that `names_from` uses the tidy-select style of tidy evaluation.
+
+### Selecting rows and columns
+
+Or maybe you want to find the sorted unique values of a variable for a subset of the data.
+Rather than supplying a variable and a value to do the filtering, I'll allow the user to supply an condition:
+
+```{r}
+unique_where <- function(df, condition, var) {
+  df |> 
+    filter({{ condition }}) |> 
+    distinct({{ var }}) |> 
+    arrange({{ var }}) |> 
+    pull({{ var }})
+}
+
+# Find all the destinations in December
+flights |> unique_where(month == 12, dest)
+# Which months did plane N14228 fly in?
+flights |> unique_where(tailnum == "N14228", month)
+```
+
+Here we embrace `condition` because it's passed to `filter()` and `var` because its passed to `distinct()`, `arrange()`, and `pull()`.
+
+I've made all these examples take a data frame as the first argument, but if you're working repeatedly with the same data frame, it can make sense to hard code it.
+For example, this function always works with the flights dataset, make it easy to grab the subset that you want to work with.
+It always includes `time_hour`, `carrier`, and `flight` since these are the primary key that allows you to identify a row.
+
+```{r}
+flights_sub <- function(rows, cols) {
+  flights |> 
+    filter({{ rows }}) |> 
+    select(time_hour, carrier, flight, {{ cols }})
+}
+
+flights_sub(dest == "IAH", contains("time"))
 ```
 
 ### Learning more
 
-Once you have the basics under your belt, you can learn more about the full range of tidy evaluation possibilities by reading `vignette("programming", package = "dplyr")`.
+This section has introduced you to some of the power and flexibility of tidy evaluation with dplyr (and a dash of tidyr).
+We've only used the smallest part of tidy evaluation, embracing, and it already gives you considerable power to reduce duplication in your data analyses.
+You can learn more advanced techniques in `vignette("programming", package = "dplyr")`.
 
 ## Plot functions
 
-You can also use the techniques described above with ggplot2, because `aes()` is a data-masking function.
+Instead of returning a data frame, you might want to return a plot.
+Fortunately you can use the same techniques with ggplot2, because `aes()` is a data-masking function.
 For example, imagine that you're making a lot of histograms:
 
 ```{r}
@@ -603,21 +641,48 @@ diamonds |>
   labs(x = "Size (in carats)", y = "Number of diamonds")
 ```
 
-### Other examples
+### More variables
+
+It's straightforward to add more variables to the mix.
+For example, maybe you want an easy way to eye ball whether or not a data set is linear by overlaying a smooth line and a straight line:
 
 ```{r}
 # https://twitter.com/tyler_js_smith/status/1574377116988104704
 
-lin_check <- function(df, x, y) {
+linearity_check <- function(df, x, y) {
   df |>
     ggplot(aes({{ x }}, {{ y }})) +
     geom_point() +
     geom_smooth(method = "loess", color = "red", se = FALSE) +
-    geom_smooth(method = "lm", color = "black", se = FALSE) 
+    geom_smooth(method = "lm", color = "blue", se = FALSE) 
 }
+
+starwars |> 
+  filter(mass < 1000) |> 
+  linearity_check(mass, height)
 ```
 
-Of course you might combine both dplyr and ggplot2:
+Or you want to wrap up an alternative for a scatterplot that uses colour to display a third variable, for very large datasets where overplotting is a problem:
+
+```{r}
+# https://twitter.com/ppaxisa/status/1574398423175921665
+hex_plot <- function(df, x, y, z, bins = 20, fun = "mean") {
+  df |> 
+    ggplot(aes({{ x }}, {{ y }}, z = {{ z }})) + 
+    stat_summary_hex(
+      aes(colour = after_scale(fill)),
+      bins = bins, 
+      fun = fun,
+    )
+}
+diamonds |> hex_plot(carat, price, depth)
+```
+
+### Combining with dplyr
+
+Some of the most useful helpers combine a dash of dplyr with ggplot2.
+For example, if you might want to do a bar chart where you automatically sort the bars in frequency order using `fct_infreq()`.
+And I'm drawing the vertical bars, so you need to reverse the usual order to get the highest values at the top:
 
 ```{r}
 sorted_bars <- function(df, var) {
@@ -629,14 +694,47 @@ sorted_bars <- function(df, var) {
 diamonds |> sorted_bars(cut)
 ```
 
+You can also get creative and display data summaries in other way:
+
+```{r}
+# https://gist.github.com/GShotwell/b19ef520b6d56f61a830fabb3454965b
+
+fancy_ts <- function(df, val, group) {
+  labs <- df |> 
+    group_by({{group}}) |> 
+    summarize(breaks = max({{val}}))
+  
+  df |> 
+    ggplot(aes(date, {{val}}, group = {{group}}, color = {{group}})) +
+    geom_path() +
+    scale_y_continuous(
+      breaks = labs$breaks, 
+      labels = scales::label_comma(),
+      minor_breaks = NULL,
+      guide = guide_axis(position = "right")
+    ) 
+}
+
+df <- tibble(
+  dist1 = sort(rnorm(50, 5, 2)), 
+  dist2 = sort(rnorm(50, 8, 3)),
+  dist4 = sort(rnorm(50, 15, 1)),
+  date = seq.Date(as.Date("2022-01-01"), as.Date("2022-04-10"), by = "2 days")
+)
+df <- pivot_longer(df, cols = -date, names_to = "dist_name", values_to = "value")
+
+fancy_ts(df, value, dist_name)
+
+```
+
 Next we'll discuss two more complicated cases: facetting and automatic labelling.
 
 ### Facetting
 
-Unfortunately facetting is a special challenge, mostly because it was implemented well before we understood what tidy evaluation was and how it should work.
-And unlike `aes()`, it wasn't straightforward to backport to tidy evalution, so you have to use a different syntax to usual.
-Instead of writing `~ x`, you write `vars(x)` and instead of `~ x + y` you write `vars(x, y)`.
-The only advantage of this syntax is that `vars()` is data masking so you can embrace within it.
+Unfortunately programming with facetting is a special challenge, because facetting was implemented before we understood what tidy evaluation was and how it should work.
+Unlike `aes()`, it wasn't straightforward to backport to tidy evalution, so you have to learn a new syntax.
+When programming with facets, instead of writing `~ x`, you need to write `vars(x)` and instead of `~ x + y` you need to write `vars(x, y)`.
+The only advantage of this syntax is that `vars()` uses tidy evaluation so you can embrace within it:
 
 ```{r}
 # https://twitter.com/sharoz/status/1574376332821204999
@@ -653,6 +751,7 @@ foo <- function(x) {
 I've written these functions so that you can supply any data frame, but there are also advantages to hardcoding a data frame, if you're using it repeatedly:
 
 ```{r}
+# https://twitter.com/yutannihilat_en/status/1574387230025875457
 density <- function(fill, ...) {
   palmerpenguins::penguins |> 
     ggplot(aes(bill_length_mm, fill = {{ fill }})) +
@@ -688,6 +787,21 @@ rlang provides a helpful function called `englue()` to solve just this problem.
 It uses a syntax inspired by glue but combined with embracing:
 
 ```{r}
+# https://twitter.com/ppaxisa/status/1574398423175921665
+hex_plot <- function(df, x, y, z, bins = 20, fun = "mean") {
+  df |> 
+    ggplot(aes({{ x }}, {{ y }}, z = {{ z }})) + 
+    stat_summary_hex(
+      aes(colour = after_scale(fill)),
+      bins = bins, 
+      fun = fun,
+    ) + 
+    labs(colour = rlang::englue("{{z}}"))
+}
+diamonds |> hex_plot(carat, price, depth)
+```
+
+```{r}
 histogram <- function(df, var, binwidth = NULL) {
   label <- rlang::englue("A histogram of {{var}} with binwidth {binwidth}")
   
@@ -705,7 +819,7 @@ Hopefully it'll be fixed soon!)
 
 You can use the same approach any other place that you might supply a string in a ggplot2 plot.
 
-### Advice
+### Learning more
 
 It's hard to create general purpose plotting functions because you need to consider many different situations, and we haven't given you the programming skills to handle them all.
 Fortunately, in most cases it's relatively simple to extract repeated plotting code into a function.
