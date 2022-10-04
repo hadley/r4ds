@@ -10,13 +10,16 @@ knitr::opts_chunk$set(
   fig.show = "hold"
 )
 
-options(dplyr.print_min = 6, dplyr.print_max = 6)
+options(
+  dplyr.print_min = 6,
+  dplyr.print_max = 6,
+  stringr.view_n = 10
+)
 
 # Activate crayon output
 options(
   #crayon.enabled = TRUE,
   pillar.bold = TRUE,
-  stringr.html = FALSE
 )
 
 ggplot2::theme_set(ggplot2::theme_gray(12))
