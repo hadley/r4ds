@@ -13,13 +13,10 @@ knitr::opts_chunk$set(
 options(
   dplyr.print_min = 6,
   dplyr.print_max = 6,
-  stringr.view_n = 10
-)
-
-# Activate crayon output
-options(
-  #crayon.enabled = TRUE,
-  pillar.bold = TRUE,
+  stringr.view_n = 10,
+  # Activate crayon output - temporarily disabled for quarto
+  # crayon.enabled = TRUE,
+  pillar.bold = TRUE
 )
 
 ggplot2::theme_set(ggplot2::theme_gray(12))
@@ -33,8 +30,15 @@ status <- function(type) {
     stop("Invalid `type`", call. = FALSE)
   )
 
+  class <- switch(type,
+    polishing = "note",
+    restructuring = "important",
+    drafting = "important",
+    complete = "note"
+  )
+
   cat(paste0(
-    "::: status\n",
+    "::: callout-", class, "\n",
     "You are reading the work-in-progress second edition of R for Data Science. ",
     "This chapter ", status, ". ",
     "You can find the complete first edition at <https://r4ds.had.co.nz>.\n",
