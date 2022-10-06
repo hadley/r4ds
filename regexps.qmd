@@ -318,14 +318,11 @@ In general, look at punctuation characters with suspicion; if your regular expre
 ### Anchors
 
 By default, regular expressions will match any part of a string.
-If you want to match at the start of end you need to **anchor** the regular expression using `^` or `$`.
-
--   `^` to match the start of the string.
--   `$` to match the end of the string.
+If you want to match at the start of end you need to **anchor** the regular expression using `^` to match the start of the string or `$` to match the end of the string:
 
 ```{r}
-str_view(fruit, "^a") # match "a" at start
-str_view(fruit, "a$") # match "a" at end
+str_view(fruit, "^a")
+str_view(fruit, "a$")
 ```
 
 To remember which is which, try this mnemonic which we learned from [Evan Misshula](https://twitter.com/emisshula/status/323863393167613953): if you begin with power (`^`), you end up with money (`$`).
@@ -339,8 +336,7 @@ str_view(fruit, "^apple$")
 ```
 
 You can also match the boundary between words (i.e. the start or end of a word) with `\b`.
-This is not that useful in R code, but it can be handy when searching in RStudio.
-It's useful to find the name of a function that's a component of other functions.
+This can be particularly when using RStudio's find and replace tool.
 For example, if to find all uses of `sum()`, you can search for `\bsum\b` to avoid matching `summarise`, `summary`, `rowsum` and so on:
 
 ```{r}
@@ -349,7 +345,7 @@ str_view(x, "sum")
 str_view(x, "\\bsum\\b")
 ```
 
-When used alone anchors will produce a zero-width match:
+When used alone, anchors will produce a zero-width match:
 
 ```{r}
 str_view("abc", c("$", "^", "\\b"))
@@ -364,12 +360,14 @@ str_replace_all("abc", c("$", "^", "\\b"), "--")
 ### Character classes
 
 A **character class**, or character **set**, allows you to match any character in a set.
-The basic syntax lists each character you want to match inside of `[]`, so `[abc]` will match a, b, or c.
-Inside of `[]` only `-`, `^`, and `\` have special meanings:
+You can construct your own sets with `[]`, where `[abc]` matches a, b, or c.
+There are three characters that have special meaning inside of `[]:`
 
 -   `-` defines a range, e.g. `[a-z]`: matches any lower case letter and `[0-9]` matches any number.
 -   `^` takes the inverse of the set, e.g. `[^abc]`: matches anything except a, b, or c.
 -   `\` escapes special characters, so `[\^\-\]]`: matches `^`, `-`, or `]`.
+
+Here are few examples:
 
 ```{r}
 str_view("abcd ABCD 12345 -!@#%.", "[abc]+")
@@ -382,11 +380,11 @@ str_view("a-b-c", "[a-c]")
 str_view("a-b-c", "[a\\-c]")
 ```
 
-### Shorthand character classes
-
-There are a few character classes that are used so commonly that they get their own shortcut.
+Some character classes are used so commonly that they get their own shortcut.
 You've already seen `.`, which matches any character apart from a newline.
-There are three other particularly useful pairs:
+There are three other particularly useful pairs[^regexps-4]:
+
+[^regexps-4]: Remember, to create a regular expression containing `\d` or `\s`, you'll need to escape the `\` for the string, so you'll type `"\\d"` or `"\\s"`.
 
 -   `\d`: matches any digit;\
     `\D`: matches anything that isn't a digit.
@@ -395,9 +393,7 @@ There are three other particularly useful pairs:
 -   `\w`: matches any "word" character, i.e. letters and numbers;\
     `\W`: matches any "non-word" character.
 
-Remember, to create a regular expression containing `\d` or `\s`, you'll need to escape the `\` for the string, so you'll type `"\\d"` or `"\\s"`.
-
-The following code demonstrates the different shortcuts with a selection of letters, numbers, and punctuation characters.
+The following code demonstrates the six shortcuts with a selection of letters, numbers, and punctuation characters.
 
 ```{r}
 str_view("abcd 12345 !@#%.", "\\d+")
@@ -412,21 +408,27 @@ str_view("abcd 12345 !@#%.", "\\S+")
 
 The **quantifiers** control how many times a pattern matches.
 In @sec-reg-basics you learned about `?` (0 or 1 matches), `+` (1 or more matches), and `*` (0 or more matches).
-For example, `colou?r` will match American or British spelling, `\d+` will match one or more digits, and `\s?` will optionally match a single whitespace.
+For example, `colou?r` will match American or British spelling, `\d+` will match one or more digits, and `\s?` will optionally match a single item of whitespace.
 You can also specify the number of matches precisely:
 
--   `{n}`: exactly n matches.
--   `{n,}`: n or more matches.
--   `{n,m}`: between n and m matches.
+-   `{n}` matches exactly n times.
+-   `{n,}` matches at least n times.
+-   `{n,m}` matches between n and m times.
 
-The following code shows how this works for a few simple examples using `\b` to make the match start at the beginning of a word.
+The following code shows how this works for a few simple examples:
 
 ```{r}
-x <- " x xx xxx xxxx"
-str_view(x, "\\bx{2}")
-str_view(x, "\\bx{2,}")
-str_view(x, "\\bx{1,3}")
-str_view(x, "\\bx{2,3}")
+x <- "-- -x- -xx- -xxx- -xxxx- -xxxxx-"
+str_view(x, "-x?-")      # [0, 1]
+str_view(x, "-x+-")      # [1, Inf)
+str_view(x, "-x*-")      # [0, Inf)
+str_view(x, "-x{2}-")    # [2. 2]
+str_view(x, "-x{2,}-")   # [2, Inf)
+str_view(x, "-x{2,3}-")  # [2, 3]
+```
+
+```{r}
+str_view(fruit, "")
 ```
 
 ### Operator precedence and parentheses
@@ -435,21 +437,19 @@ What does `ab+` match?
 Does it match "a" followed by one or more "b"s, or does it match "ab" repeated any number of times?
 What does `^a|b$` match?
 Does it match the complete string a or the complete string b, or does it match a string starting with a or a string starting with "b"?
-The answer to these questions is determined by operator precedence, similar to the PEMDAS or BEDMAS rules you might have learned in school for what `a + b * c`.
 
-You already know that `a + b * c` is equivalent to `a + (b * c)` not `(a + b) * c` because `*` has higher precedence and `+` has lower precedence: you compute `*` before `+`.
-In regular expressions, quantifiers have high precedence and alternation has low precedence.
-That means `ab+` is equivalent to `a(b+)`, and `^a|b$` is equivalent to `(^a)|(b$)`.
+The answer to these questions is determined by operator precedence, similar to the PEMDAS or BEDMAS rules you might have learned in school to understand how to compute `a + b * c`.
+You know that `a + b * c` is equivalent to `a + (b * c)` not `(a + b) * c` because `*` has higher precedence and `+` has lower precedence: you compute `*` before `+`.
+In regular expressions, quantifiers have higher precedence and alternation has lower precedence which means that `ab+` is equivalent to `a(b+)`, and `^a|b$` is equivalent to `(^a)|(b$)`.
+
 Just like with algebra, you can use parentheses to override the usual order.
 Unlike algebra you're unlikely to remember the precedence rules for regexes, so feel free to use parentheses liberally.
 
-Technically the escape, character classes, and parentheses are all operators that also have precedence.
-But these tend to be less likely to cause confusion because they mostly behave how you expect: it's unlikely that you'd think that `\(s|d)` would mean `(\s)|(\d)`.
-
 ### Grouping and capturing
 
-Parentheses are an important tool for controlling the order in which pattern operations are applied but they also have an important additional effect: they create **capturing groups** that allow you to use to sub-components of the match.
-You can refer back to previously matched text inside parentheses by using **back reference**: `\1` refers to the match contained in the first parenthesis, `\2` in the second parenthesis, and so on.
+Parentheses are important for controlling the order in which pattern operations are applied but they also have an important additional effect: they create **capturing groups** that allow you to use to sub-components of the match.
+
+The first way to use a capturing group is to refer back to it within a match by using a **back reference**: `\1` refers to the match contained in the first parenthesis, `\2` in the second parenthesis, and so on.
 For example, the following pattern finds all fruits that have a repeated pair of letters:
 
 ```{r}
@@ -459,19 +459,22 @@ str_view(fruit, "(..)\\1")
 And this one finds all words that start and end with the same pair of letters:
 
 ```{r}
-str_view(words, "^(..).*\\1$")
+str_view(words, "(..).*\\1$")
 ```
 
-You can also use backreferences in `str_replace()`:
+You can also use backreferences in `str_replace()`.
+For example, this code switches the order of the second and third words in `sentences`:
 
 ```{r}
 sentences |> 
   str_replace("(\\w+) (\\w+) (\\w+)", "\\1 \\3 \\2") |> 
-  head(5)
+  str_view()
 ```
 
 If you want extract the matches for each group you can use `str_match()`.
-But it returns a matrix, so isn't as easy to work with:
+But `str_match()` returns a matrix, so it's not particularly easy to work with[^regexps-5]:
+
+[^regexps-5]: Mostly because we never discuss matrices in this book!
 
 ```{r}
 sentences |> 
@@ -488,8 +491,8 @@ sentences |>
   set_names("match", "word1", "word2")
 ```
 
-But then you've basically recreated your own simple version of `separate_regex_wider()`.
-Indeed, behind the scenes `separate_regexp_wider()` converts your vector of patterns to a single regexp that uses grouping to capture only the named components.
+But then you've basically recreated your own version of `separate_regex_wider()`.
+And,i indeed, behind the scenes `separate_regexp_wider()` converts your vector of patterns to a single regexp that uses grouping to capture only the named components.
 
 Occasionally, you'll want to use parentheses without creating matching groups.
 You can create a non-capturing group with `(?:)`.
@@ -502,24 +505,27 @@ str_match(x, "(gr(?:e|a)y)")
 
 ### Exercises
 
-2.  How would you match the literal string `"'\`? How about `"$^$"`?
+1.  How would you match the literal string `"'\`? How about `"$^$"`?
 
-3.  Explain why each of these patterns don't match a `\`: `"\"`, `"\\"`, `"\\\"`.
+2.  Explain why each of these patterns don't match a `\`: `"\"`, `"\\"`, `"\\\"`.
 
-4.  Given the corpus of common words in `stringr::words`, create regular expressions that find all words that:
+3.  Given the corpus of common words in `stringr::words`, create regular expressions that find all words that:
 
     a.  Start with "y".
     b.  Don't start with "y".
     c.  End with "x".
     d.  Are exactly three letters long. (Don't cheat by using `str_length()`!)
     e.  Have seven letters or more.
+    f.  Contain a vowel-consonant pair
+    g.  Contain at least two vowel-consonant pairs in a row
+    h.  Only consist of repeated vowel-consonant pairs.
 
-5.  Create 11 regular expressions that match the British or American spellings for each of the following words: grey/gray, modelling/modeling, summarize/summarise, aluminium/aluminum, defence/defense, analog/analogue, center/centre, sceptic/skeptic, aeroplane/airplane, arse/ass, doughnut/donut.
+4.  Create 11 regular expressions that match the British or American spellings for each of the following words: grey/gray, modelling/modeling, summarize/summarise, aluminium/aluminum, defence/defense, analog/analogue, center/centre, sceptic/skeptic, aeroplane/airplane, arse/ass, doughnut/donut.
     Try and make the shortest possible regex!
 
-6.  Create a regular expression that will match telephone numbers as commonly written in your country.
+5.  Create a regular expression that will match telephone numbers as commonly written in your country.
 
-7.  Describe in words what these regular expressions match: (read carefully to see if each entry is a regular expression or a string that defines a regular expression.)
+6.  Describe in words what these regular expressions match: (read carefully to see if each entry is a regular expression or a string that defines a regular expression.)
 
     a.  `^.*$`
     b.  `"\\{.+\\}"`
@@ -529,24 +535,17 @@ str_match(x, "(gr(?:e|a)y)")
     f.  `(.)\1\1`
     g.  `"(..)\\1"`
 
-8.  Solve the beginner regexp crosswords at <https://regexcrossword.com/challenges/beginner>.
+7.  Solve the beginner regexp crosswords at <https://regexcrossword.com/challenges/beginner>.
 
 ## Pattern control
 
-### Regex Flags {#sec-flags}
+It's possible to exercise control over the details of the match by supplying a richer object to the `pattern` argument.
+There are three particularly useful options: `regex()`, `fixed()`, and `coll()`, as described in the following sections.
 
-The are a number of settings, often called **flags** in other programming languages, that you can use to control some of the details of the regex.
-In stringr, you can use these by wrapping the pattern in a call to `regex()`:
+### Regex flags {#sec-flags}
 
-```{r}
-#| eval: false
-
-# The regular call:
-str_view(fruit, "nana")
-# is shorthand for
-str_view(fruit, regex("nana"))
-```
-
+There are a number of settings that can use to control the details of the regexp, which are often called **flags** in other programming languages.
+In stringr, you can use these by wrapping the pattern in a call to `regex()`.
 The most useful flag is probably `ignore_case = TRUE` because it allows characters to match either their uppercase or lowercase forms:
 
 ```{r}
@@ -555,16 +554,16 @@ str_view(bananas, "banana")
 str_view(bananas, regex("banana", ignore_case = TRUE))
 ```
 
-If you're doing a lot of work with multiline strings (i.e. strings that contain `\n`), `multiline` and `dotall` can also be useful.
-`dotall = TRUE` allows `.` to match everything, including `\n`:
+If you're doing a lot of work with multiline strings (i.e. strings that contain `\n`), `dotall`and `multiline` also be useful.
+`dotall = TRUE` lets `.` match everything, including `\n`:
 
 ```{r}
 x <- "Line 1\nLine 2\nLine 3"
-str_view(x, ".L")
-str_view(x, regex(".L", dotall = TRUE))
+str_view(x, ".Line")
+str_view(x, regex(".Line", dotall = TRUE))
 ```
 
-And `multiline = TRUE` allows `^` and `$` to match the start and end of each line rather than the start and end of the complete string:
+And `multiline = TRUE` makes `^` and `$` match the start and end of each line rather than the start and end of the complete string:
 
 ```{r}
 x <- "Line 1\nLine 2\nLine 3"
@@ -572,20 +571,23 @@ str_view(x, "^Line")
 str_view(x, regex("^Line", multiline = TRUE))
 ```
 
-Finally, if you're writing a complicated regular expression and you're worried you might not understand it in the future, `comments = TRUE` can be extremely useful.
-It allows you to use comments and whitespace to make complex regular expressions more understandable.
-Spaces and new lines are ignored, as is everything after `#`.
-(Note that we use a raw string here to minimize the number of escapes needed.)
+Finally, if you're writing a complicated regular expression and you're worried you might not understand it in the future, you might find `comments = TRUE` to be useful.
+It ignores spaces and new lines, as well is everything after `#`, allowing you to use comments and whitespace to make complex regular expressions more understandable[^regexps-6].
+
+[^regexps-6]: `comments = TRUE` is particularly effective in combination with a raw string, as we use here.
 
 ```{r}
-phone <- regex(r"(
-  \(?     # optional opening parens
-  (\d{3}) # area code
-  [)\ -]? # optional closing parens, space, or dash
-  (\d{3}) # another three numbers
-  [\ -]?  # optional space or dash
-  (\d{3}) # three more numbers
-  )", comments = TRUE)
+phone <- regex(
+  r"(
+    \(?     # optional opening parens
+    (\d{3}) # area code
+    [)\ -]? # optional closing parens, space, or dash
+    (\d{3}) # another three numbers
+    [\ -]?  # optional space or dash
+    (\d{3}) # three more numbers
+  )", 
+  comments = TRUE
+)
 
 str_match("514-791-8141", phone)
 ```
@@ -593,7 +595,7 @@ str_match("514-791-8141", phone)
 If you're using comments and want to match a space, newline, or `#`, you'll need to escape it:
 
 ```{r}
-str_view("x x #", regex("x #", comments = TRUE))
+str_view("x x #", regex(r"(x #)", comments = TRUE))
 str_view("x x #", regex(r"(x\ \#)", comments = TRUE))
 ```
 
@@ -605,33 +607,25 @@ You can opt-out of the regular expression rules by using `fixed()`:
 str_view(c("", "a", "."), fixed("."))
 ```
 
-You can opt out by setting `ignore_case = TRUE`.
+`fixed()` also gives you the ability to ignore case:
 
 ```{r}
-str_view("x  X  xy", "X")
-str_view("x  X  xy", fixed("X", ignore_case = TRUE))
+str_view("x X", "X")
+str_view("x X", fixed("X", ignore_case = TRUE))
 ```
 
-If you're working with non-English text, it's slightly safer to use `coll()` rather than
+If you're working with non-English text, you should generally use `coll()` instead, as it implements the full rules for capitalization as used by the `locale` you specify.
+See @#sec-other-languages for more details.
 
 ```{r}
 str_view("i İ ı I", fixed("İ", ignore_case = TRUE))
 str_view("i İ ı I", coll("İ", ignore_case = TRUE, locale = "tr"))
 ```
 
-### Boundaries
-
 ## Practice
 
-To put these ideas in practice we'll solve a few semi-authentic problems using the `words` and `sentences` datasets built into stringr.
-`words` is a list of common English words and `sentences` is a set of simple sentences originally used for testing voice transmission.
-
-```{r}
-str_view(head(words))
-str_view(head(sentences))
-```
-
-The following three sections help you practice the components of a pattern by discussing three general techniques: checking you work by creating simple positive and negative controls, combining regular expressions with Boolean algebra, and creating complex patterns using string manipulation.
+To put these ideas in practice we'll solve a few semi-authentic problems to show you how you might iteratively solve a more complex problem.
+We'll discuss three general techniques: checking you work by creating simple positive and negative controls, combining regular expressions with Boolean algebra, and creating complex patterns using string manipulation.
 
 ### Check your work
 
@@ -676,7 +670,7 @@ str_detect(neg, pattern)
 
 It's typically much easier to come up with positive examples than negative examples, because it takes some time until you're good enough with regular expressions to predict where your weaknesses are.
 Nevertheless they're still useful; even if you don't get them correct right away, you can slowly accumulate them as you work on your problem.
-If you later get more into programming and learn about unit tests, you can then turn these examples into automated tests that ensure you never make the same mistake twice.)
+If you later get more into programming and learn about unit tests, you can then turn these examples into automated tests that ensure you never make the same mistake twice.
 
 ### Boolean operations {#sec-boolean-operations}
 
@@ -742,7 +736,7 @@ The basic idea is simple: we just combine alternation with word boundaries.
 str_view(sentences, "\\b(red|green|blue)\\b")
 ```
 
-But it would be tedious to construct this pattern by hand.
+But as the number of colours grows, it would quickly get tedious to construct this pattern by hand.
 Wouldn't it be nice if we could store the colours in a vector?
 
 ```{r}
@@ -760,15 +754,15 @@ We could make this pattern more comprehensive if we had a good list of colors.
 One place we could start from is the list of built-in colours that R can use for plots:
 
 ```{r}
-str_view(colors())[1:27]
+str_view(colors())
 ```
 
-But first lets element the numbered variants:
+But lets first element the numbered variants:
 
 ```{r}
 cols <- colors()
 cols <- cols[!str_detect(cols, "\\d")]
-cols[1:27]
+str_view(cols)
 ```
 
 Then we can turn this into one giant pattern:
@@ -778,14 +772,20 @@ pattern <- str_c("\\b(", str_flatten(cols, "|"), ")\\b")
 str_view(sentences, pattern)
 ```
 
-In this example `cols` only contains numbers and letters so you don't need to worry about metacharacters.
-But in general, when creating patterns from existing strings it's good practice to run through `str_escape()` which will automatically add `\` in front of otherwise special characters.
+In this example `cols` only contains numbers and letters so you don't need to worry about special characters.
+But generally, when creating patterns from existing strings it's wise to run them through `str_escape()` which will automatically escape any special characters.
 
 ### Exercises
 
 1.  Construct patterns to find evidence for and against the rule "i before e except after c"?
-2.  `colors()` contains a number of modifiers like "lightgray" and "darkblue". How could you automatically identify these modifiers? (Think about how you might detect and removed what colors are being modified).
-3.  Create a regular expression that finds any base R dataset. You can get a list of these datasets via a special use of the `data()` function: `data(package = "datasets")$results[, "Item"]`. Note that a number of old datasets are individual vectors; these contain the name of the grouping "data frame" in parentheses, so you'll need to also strip these off.
+
+2.  `colors()` contains a number of modifiers like "lightgray" and "darkblue".
+    How could you automatically identify these modifiers?
+    (Think about how you might detect and removed what colors are being modified).
+
+3.  Create a regular expression that finds any base R dataset.
+    You can get a list of these datasets via a special use of the `data()` function: `data(package = "datasets")$results[, "Item"]`.
+    Note that a number of old datasets are individual vectors; these contain the name of the grouping "data frame" in parentheses, so you'll need to also strip these off.
 
 ## Elsewhere
 
@@ -813,24 +813,25 @@ Fortunately, the basics of regular expressions are so well established that you'
 You only need to be aware of the difference when you start to rely on advanced features like complex Unicode character ranges or special features that use the `(?…)` syntax.
 You can learn more about these advanced features in `vignette("regular-expressions", package = "stringr")`.
 
--   `apropos()` searches all objects available from the global environment.
-    This is useful if you can't quite remember the name of the function.
+`apropos()` searches all objects available from the global environment.
+This is useful if you can't quite remember the name of the function.
 
-    ```{r}
-    apropos("replace")
-    ```
+```{r}
+apropos("replace")
+```
 
--   `dir()` lists all the files in a directory.
-    The `pattern` argument takes a regular expression and only returns file names that match the pattern.
-    For example, you can find all the R Markdown files in the current directory with:
+`dir()` lists all the files in a directory.
+The `pattern` argument takes a regular expression and only returns file names that match the pattern.
+For example, you can find all the R Markdown files in the current directory with:
 
-    ```{r}
-    head(dir(pattern = "\\.Rmd$"))
-    ```
+```{r}
+head(dir(pattern = "\\.Rmd$"))
+```
 
-    (If you're more comfortable with "globs" like `*.Rmd`, you can convert them to regular expressions with `glob2rx()`).
+(If you're more comfortable with "globs" like `*.Rmd`, you can convert them to regular expressions with `glob2rx()`).
 
 ## Summary
 
 Another useful reference is [https://www.regular-expressions.info/](https://www.regular-expressions.info/tutorial.html).
 It's not R specific, but it covers the most advanced features and explains how regular expressions work under the hood.
+
