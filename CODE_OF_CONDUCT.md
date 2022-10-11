@@ -3,7 +3,7 @@
 ## Our Pledge
 
 We as members, contributors, and leaders pledge to make participation in our
-community a harassment-free experience for everyone, regardless of age, body
+community a harassment-free experience for everyone, regardless of age, body-
 size, visible or invisible disability, ethnicity, sex characteristics, gender
 identity and expression, level of experience, education, socio-economic status,
 nationality, personal appearance, race, religion, or sexual identity and
@@ -28,8 +28,8 @@ community
 Examples of unacceptable behavior include:
 
 * The use of sexualized language or imagery, and sexual attention or
-advances of any kind
-* Trolling, insulting or derogatory comments, and personal or political attacks
+advances of any kind.
+* Trolling, insulting or passing derogatory comments, and personal or political attacks
 * Public or private harassment
 * Publishing others' private information, such as a physical or email
 address, without their explicit permission
@@ -50,7 +50,7 @@ decisions when appropriate.
 
 ## Scope
 
-This Code of Conduct applies within all community spaces, and also applies
+This Code of Conduct applies within all community spaces, and also applies to
 when an individual is officially representing the community in public spaces.
 Examples of representing our community include using an official e-mail
 address, posting via an official social media account, or acting as an appointed
