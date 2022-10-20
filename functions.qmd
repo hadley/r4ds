@@ -4,7 +4,7 @@
 #| results: "asis"
 #| echo: false
 source("_common.R")
-status("drafting")
+status("polishing")
 ```
 
 ## Introduction
@@ -597,8 +597,6 @@ diamonds |> count_wide(c(clarity, color), cut)
 
 While our examples have mostly focused on dplyr, the tidy evaluation also underpins tidyr, and if you look at the `pivot_wider()` docs you can see that `names_from` uses tidy-selection.
 
-### Learning more
-
 ### Exercises
 
 ## Plot functions
@@ -752,36 +750,32 @@ The only advantage of this syntax is that `vars()` uses tidy evaluation so you c
 ```{r}
 # https://twitter.com/sharoz/status/1574376332821204999
 
-# Facetting is fiddly - have to use special vars syntax.
 foo <- function(x) {
-  ggplot(mtcars) +
-    aes(x = mpg, y = disp) +
+  ggplot(mtcars, aes(mpg, disp)) +
     geom_point() +
     facet_wrap(vars({{ x }}))
 }
 foo(cyl)
 ```
 
-As with data frame functions, it can also be useful to make your plotting functions tightly coupled to a specific dataset, or even a specific variable.
-The following function makes it particularly easy to interactively explore the conditional distribution `bill_length_mm` from palmerpenguins dataset.
+As with data frame functions, it can be useful to make your plotting functions tightly coupled to a specific dataset, or even a specific variable.
+For example, the following function makes it particularly easy to interactively explore the conditional distribution `bill_length_mm` from palmerpenguins dataset.
 
 ```{r}
 # https://twitter.com/yutannihilat_en/status/1574387230025875457
-density <- function(fill, facets) {
-  palmerpenguins::penguins |> 
-    ggplot(aes(bill_length_mm, fill = {{ fill }})) +
-    geom_density(alpha = 0.5) +
+density <- function(colour, facets, binwidth = 0.1) {
+  diamonds |> 
+    ggplot(aes(carat, after_stat(density), colour = {{ colour }})) +
+    geom_freqpoly(binwidth = binwidth) +
     facet_wrap(vars({{ facets }}))
 }
 
 density()
-density(species)
-density(island, sex)
+density(cut)
+density(cut, clarity)
 ```
 
-Also note that we hardcoded the `x` variable but allowed the fill to vary.
-
-### Labelling
+### Labeling
 
 Remember the histogram function we showed you earlier?
 
@@ -793,13 +787,13 @@ histogram <- function(df, var, binwidth = NULL) {
 }
 ```
 
-Wouldn't it be nice if we could label the output with the variable and the binwidth that was used?
-To do so, we're going to have to go under the covers of tidy evaluation and use a function from a new package: rlang.
-rlang is a low-level package that's used by just about every other package in the tidyverse because it implements tidy evaluation (and provided many other useful tools).
+Wouldn't it be nice if we could label the output with the variable and the bin width that was used?
+To do so, we're going to have to go under the covers of tidy evaluation and use a function from package we haven't talked about before: rlang.
+rlang is a low-level package that's used by just about every other package in the tidyverse because it implements tidy evaluation (as well as many other useful tools).
 
-To solve the labelling problem we can use `rlang::englue()`.
+To solve the labeling problem we can use `rlang::englue()`.
 This works similarly to `str_glue()`, so any value wrapped in `{ }` will be inserted into the string.
-But unlike `str_glue()`, it also understands `{{ }}`, which automatically insert the appropriate variable name.
+But it also understands `{{ }}`, which automatically insert the appropriate variable name:
 
 ```{r}
 histogram <- function(df, var, binwidth) {
@@ -814,27 +808,19 @@ histogram <- function(df, var, binwidth) {
 diamonds |> histogram(carat, 0.1)
 ```
 
-(Note that if you omit the `binwidth` the function fails with a weird error. That appears to be a bug in `englue()`: https://github.com/r-lib/rlang/issues/1492.
-Hopefully it'll be fixed soon!)
-
 You can use the same approach any other place that you might supply a string in a ggplot2 plot.
 
 ### Exercises
 
 ## Style
 
-It's important to remember that functions are not just for the computer, but are also for humans.
-R doesn't care what your function is called, or what comments it contains, but these are important for human readers.
-This section discusses some things that you should bear in mind when writing functions that humans can understand.
-
-The name of a function is important.
+R doesn't care what your function or arguments are called but the names make a big difference for humans.
 Ideally, the name of your function will be short, but clearly evoke what the function does.
 That's hard!
 But it's better to be clear than short, as RStudio's autocomplete makes it easy to type long names.
 
 Generally, function names should be verbs, and arguments should be nouns.
 There are some exceptions: nouns are ok if the function computes a very well known noun (i.e. `mean()` is better than `compute_mean()`), or accessing some property of an object (i.e. `coef()` is better than `get_coefficients()`).
-A good sign that a noun might be a better choice is if you're using a very broad verb like "get", "compute", "calculate", or "determine".
 Use your best judgement and don't be afraid to rename a function if you figure out a better name later.
 
 ```{r}
@@ -851,8 +837,9 @@ impute_missing()
 collapse_years()
 ```
 
-In terms of white space, continue to follow the rules from @sec-workflow-style.
-Additionally, `function` should always be followed by squiggly brackets (`{}`), and the contents should be indented by an additional two spaces.
+R also doesn't care about how you use white space in your functions but future readers will.
+Continue to follow the rules from @sec-workflow-style.
+Additionally, `function()` should always be followed by squiggly brackets (`{}`), and the contents should be indented by an additional two spaces.
 This makes it easier to see the hierarchy in your code by skimming the left-hand margin.
 
 ```{r}
@@ -874,10 +861,8 @@ pull_unique <- function(df, var) {
 pull_unique <- function(df, var) df |> distinct({{ var }}) |> pull({{ var }})
 ```
 
-As you can see from the example we recommend putting extra spaces inside of `{{ }}`.
-This makes it super obvious that something unusual is happening.
-
-Learn more at <https://style.tidyverse.org/functions.html>
+As you can see we recommend putting extra spaces inside of `{{ }}`.
+This makes it very obvious that something unusual is happening.
 
 ### Exercises
 
@@ -902,14 +887,12 @@ Learn more at <https://style.tidyverse.org/functions.html>
 In this chapter you learned how to write functions for three useful scenarios: creating a vector, creating a data frames, or creating a plot.
 Along the way your saw many examples, which hopefully started to get your creative juices flowing, and gave you some ideas for where functions might help your analysis code.
 
-You also learned a little about tidy evaluation so you could wrap functions from dplyr, tidyr, and ggplot2.
-Tidy evaluation is a key component of the tidyverse because it allows you to write `diamonds |> filter(x == y)` and `filter()` knows to use `x` and `y` from the diamonds dataset.
-The downside of tidy evaluation is that you need to learn a new technique for programming: embracing, `{{ x }}`.
-Embracing already gives you considerable power to reduce duplication in your data analyses, but there are many more advanced techniques available, which you can learn more about it `vignette("programming", package = "dplyr")` and `vignette("programming", package = "tidyr")`.
+We have only shown you the bare minimum to get started with functions and there's much more to learn.
+A few places to learn more are:
 
-Here we've focused on very simple plotting functions, the sort of functions that you might naturally extract from repeated code in your analyses.
-As you get better at programming and learn more about ggplot2, you'll be able create richer functions with greater flexibility.
-The next place you might stop on your journey is the [Programming with ggplot2](https://ggplot2-book.org/programming.html){.uri} chapter of the ggplot2 book, where you'll learn other ways to reduce duplication in your plotting code.
+-   To learn more about programming with tidy evaluation, see useful recipes in `vignette("programming", package = "dplyr")` and `vignette("programming", package = "tidyr")` and learn more about the theory in <https://rlang.r-lib.org/reference/topic-data-mask.html>.
+-   To learn more about reducing duplication in your ggplot2 code, read the [Programming with ggplot2](https://ggplot2-book.org/programming.html){.uri} chapter of the ggplot2 book.
+-   To learn more about good function style, read <https://style.tidyverse.org/functions.html>.
 
 In the next chapter, we'll dive into some of the details of R's vector data structures that we've omitted so far.
-These are immediately useful by themselves, but are a necessary foundation for the following chapter on iteration that provides some amazingly powerful tools.
+These are not immediately useful by themselves, but are a necessary foundation for the following chapter on iteration which gives you further tools for reducing code duplication.
