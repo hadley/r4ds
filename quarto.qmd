@@ -1,0 +1,646 @@
+# Quarto {#sec-rmarkdown}
+
+```{r}
+#| results: "asis"
+#| echo: false
+
+source("_common.R")
+status("polishing")
+```
+
+## Introduction
+
+Quarto provides a unified authoring framework for data science, combining your code, its results, and your prose.
+Quarto documents are fully reproducible and support dozens of output formats, like PDFs, Word files, presentations, and more.
+
+Quarto files are designed to be used in three ways:
+
+1.  For communicating to decision makers, who want to focus on the conclusions, not the code behind the analysis.
+
+2.  For collaborating with other data scientists (including future you!), who are interested in both your conclusions, and how you reached them (i.e. the code).
+
+3.  As an environment in which to *do* data science, as a modern day lab notebook where you can capture not only what you did, but also what you were thinking.
+
+Quarto is a command line interface tool, not an R package.
+This means that help is, by-and-large, not available through `?`.
+Instead, as you work through this chapter, and use Quarto in the future, you should refer to the Quarto documentation page at [https://quarto.org](https://quarto.org/){.uri} for help.
+
+If you're an R Markdown user, you might be thinking "Quarto sounds a lot like R Markdown".
+You're not wrong!
+Quarto unifies the functionality of many packages from the R Markdown ecosystem (rmarkdown, bookdown, distill, xaringan, etc.) into a single consistent system as well as extends it with native support for multiple programming languages like Python and Julia in addition to R.
+In a way, Quarto reflects everything that was learned from expanding and supporting the R Markdown ecosystem over a decade.
+
+### Prerequisites
+
+You need the Quarto command line interface (Quarto CLI), but you don't need to explicitly install it or load it, as RStudio automatically does both when needed.
+
+```{r}
+#| label: setup
+#| include: false
+
+chunk <- "```"
+inline <- function(x = "") paste0("`` `r ", x, "` ``")
+library(tidyverse)
+```
+
+## Quarto basics
+
+This is a Quarto file -- a plain text file that has the extension `.qmd`:
+
+```{r echo = FALSE, comment = ""}
+cat(htmltools::includeText("quarto/diamond-sizes.qmd"))
+```
+
+It contains three important types of content:
+
+1.  An (optional) **YAML header** surrounded by `---`s.
+2.  **Chunks** of R code surrounded by ```` ``` ````.
+3.  Text mixed with simple text formatting like `# heading` and `_italics_`.
+
+When you open a `.qmd`, you get a notebook interface where code and output are interleaved.
+You can run each code chunk by clicking the Run icon (it looks like a play button at the top of the chunk), or by pressing Cmd/Ctrl + Shift + Enter.
+RStudio executes the code and displays the results inline with the code:
+
+```{r}
+#| echo: false
+#| out-width: "90%"
+#| fig-alt: |
+#|   RStudio window with a Quarto document titled "diamond-sizes.qmd" 
+#|   on the left and a blank Viewer window on the right. The Quarto 
+#|   document has a code chunk that creates a frequency plot of diamonds 
+#|   that weigh less then 2.5 carats. The plot shows that the frequency 
+#|   decreases as the weight increases.
+
+knitr::include_graphics("quarto/diamond-sizes-notebook.png")
+```
+
+If you don't like seeing your plots and output in your document and would rather make use of RStudio's console and plot panes, you can click on the gear icon next to "Render" and switch to "Chunk Output in Console".
+
+```{r}
+#| echo: false
+#| out-width: "90%"
+#| fig-alt: |
+#|   RStudio window with a Quarto document titled "diamond-sizes.qmd" 
+#|   on the left and the Plot pane on the bottom right. The Quarto 
+#|   document has a code chunk that creates a frequency plot of diamonds 
+#|   that weigh less then 2.5 carats. The plot is displayed in the Plot 
+#|   pane and shows that the frequency decreases as the weight increases. 
+#|   The RStudio option to show Chunk Output in Console is also 
+#|   highlighted.
+
+knitr::include_graphics("quarto/diamond-sizes-console-output.png")
+```
+
+To produce a complete report containing all text, code, and results, click "Render" or press Cmd/Ctrl + Shift + K.
+You can also do this programmatically with `quarto::quarto_render("diamond-sizes.qmd")`.
+This will display the report in the viewer pane and create an HTML file.
+
+```{r}
+#| echo: false
+#| out-width: "90%"
+#| fig-alt: |
+#|   RStudio window with a Quarto document titled "diamond-sizes.qmd" 
+#|   on the left and the Plot pane on the bottom right. The rendered 
+#|   document does not show any of the code, but the code is visible 
+#|   in the source document.
+
+knitr::include_graphics("quarto/diamond-sizes-report.png")
+```
+
+When you render the document, Quarto sends the `.qmd` file to **knitr**, [https://yihui.name/knitr](https://yihui.name/knitr/){.uri}, which executes all of the code chunks and creates a new markdown (`.md`) document which includes the code and its output.
+The markdown file generated by knitr is then processed by **pandoc**, [https://pandoc.org](https://pandoc.org/){.uri}, which is responsible for creating the finished file.
+The advantage of this two step workflow is that you can create a very wide range of output formats, as you'll learn about in @sec-quarto-formats.
+
+```{r}
+#| echo: false
+#| out-width: "75%"
+#| fig-alt: |
+#|   Workflow diagram starting with a qmd file, then knitr, then md, 
+#|   then pandoc, then PDF, MS Word, or HTML.
+
+knitr::include_graphics("images/quarto-flow.png")
+```
+
+To get started with your own `.qmd` file, select *File \> New File \> Quarto Document...* in the menu bar.
+RStudio will launch a wizard that you can use to pre-populate your file with useful content that reminds you how the key features of Quarto work.
+
+The following sections dive into the three components of a Quarto document in more details: the markdown text, the code chunks, and the YAML header.
+
+### Exercises
+
+1.  Create a new Quarto document using *File \> New File \> Quarto Document*.
+    Read the instructions.
+    Practice running the chunks individually.
+    Then render the document by clicking the appropriate button and then by using the appropriate keyboard short cut.
+    Verify that you can modify the code, re-run it, and see modified output.
+
+2.  Create one new Quarto document for each of the three built-in formats: HTML, PDF and Word.
+    Render each of the three documents.
+    How do the outputs differ?
+    How do the inputs differ?
+    (You may need to install LaTeX in order to build the PDF output --- RStudio will prompt you if this is necessary.)
+
+## Visual Editor
+
+RStudio provides a [WYSIWYM](https://en.wikipedia.org/wiki/WYSIWYM) editor, the Visual Editor, for Quarto documents.
+This tool provides an interface for authoring Quarto documents using Pandoc markdown (a slightly extended version of Markdown that Quarto understands), including tables, citations, cross-references, footnotes, divs/spans, definition lists, attributes, raw HTML/TeX, and more as well as support for executing code cells and viewing their output inline.
+
+If you're new to computational documents like `.qmd` files but have experience using tools like Google Docs or MS Word, the easiest way to get started with Quarto in RStudio is the visual editor.
+
+In the visual editor you can either use the buttons on the menu bar to insert images, tables, cross-references, etc. or you can use the catch-all <kbd>⌘ /</kbd> shortcut to insert just about anything.
+If you are at the beginning of a line (as shown below), you can also enter just <kbd>/</kbd> to invoke the shortcut.
+
+```{r}
+#| echo: false
+#| out-width: "75%"
+#| fig-alt: |
+#|   A Quarto document displaying various features of the 
+#|   visual editor such as text formatting (italic, bold, 
+#|   underline, small caps, code, superscript, and subscript),
+#|   first through third level headings, bulleted and numbered
+#|   lists, links, linked phrases, and images (along with a 
+#|   pop-up window for customizing image size, adding a 
+#|   caption and alt text, etc.), tables with a header row, 
+#|   and the insert anything tool with options to insert an 
+#|   R code chunk, a Python code chunk, a div, a bullet list, 
+#|   a numbered list, or a first level heading (the top few 
+#|   choices in the tool).
+
+knitr::include_graphics("quarto/quarto-visual-editor.png")
+```
+
+Inserting images and customizing how they are displayed is also facilitated with the visual editor.
+You can either paste an image from your clipboard directly into the visual editor (and RStudio will place a copy of that image in the project directory and link to it) or you can use the visual editor's Insert \> Figure / Image menu to browse to the image you want to insert or paste it's URL.
+In addition, using the same menu you can resize the image as well as add a caption, alternative text, and a link.
+
+The visual editor has many more features that we haven't enumerated here that you might find useful as you gain experience authoring with it.
+
+Most importantly, while the visual editor displays your content with formatting, under the hood, it saves your content in plain Markdown and you can switch back and forth between the visual and source editors to view and edit your content using either tool.
+
+## Source editor
+
+Prose in `.qmd` files is written in Markdown, a lightweight set of conventions for formatting plain text files.
+Markdown is designed to be easy to read and easy to write.
+It is also very easy to learn.
+The guide below shows how to use Pandoc's Markdown, a slightly extended version of Markdown that Quarto understands.
+
+```{r}
+#| echo: false
+#| comment: ""
+
+cat(readr::read_file("quarto/markdown.qmd"))
+```
+
+The best way to learn these is simply to try them out.
+It will take a few days, but soon they will become second nature, and you won't need to think about them.
+If you forget, you can get to a handy reference sheet with *Help \> Markdown Quick Reference*.
+
+### Exercises
+
+1.  Practice what you've learned by creating a brief CV.
+    The title should be your name, and you should include headings for (at least) education or employment.
+    Each of the sections should include a bulleted list of jobs/degrees.
+    Highlight the year in bold.
+
+2.  Using the visual editor, figure out how to:
+
+    a.  Add a footnote.
+    b.  Add a horizontal rule.
+    c.  Add a block quote.
+
+3.  Now, using the source editor and the Markdown quick reference, figure out how to:
+
+    a.  Add a footnote.
+    b.  Add a horizontal rule.
+    c.  Add a block quote.
+
+4.  Copy and paste the contents of `diamond-sizes.qmd` from <https://github.com/hadley/r4ds/tree/main/quarto> in to a local R Quarto document.
+    Check that you can run it, then add text after the frequency polygon that describes its most striking features.
+
+## Code chunks
+
+To run code inside a Quarto document, you need to insert a chunk.
+There are three ways to do so:
+
+1.  The keyboard shortcut Cmd + Option + I / Ctrl + Alt + I.
+
+2.  The "Insert" button icon in the editor toolbar.
+
+3.  By manually typing the chunk delimiters ```` ```{r} ```` and ```` ``` ````.
+
+We'd recommend you learn the keyboard shortcut.
+It will save you a lot of time in the long run!
+
+You can continue to run the code using the keyboard shortcut that by now (we hope!) you know and love: Cmd/Ctrl + Enter.
+However, chunks get a new keyboard shortcut: Cmd/Ctrl + Shift + Enter, which runs all the code in the chunk.
+Think of a chunk like a function.
+A chunk should be relatively self-contained, and focused around a single task.
+
+The following sections describe the chunk header which consists of ```` ```{r} ````, followed by an optional chunk label and various other chunk options, each on their own line, marked by `#|`.
+
+### Chunk label
+
+Chunks can be given an optional label, e.g.
+
+```{r}
+#| echo: fenced
+#| label: simple-addition
+
+1 + 1
+```
+
+This has three advantages:
+
+1.  You can more easily navigate to specific chunks using the drop-down code navigator in the bottom-left of the script editor:
+
+    ```{r}
+    #| echo: false
+    #| out-width: "30%"
+    #| fig-alt: |
+    #|   Snippet of RStudio IDE showing only the drop-down code navigator 
+    #|   which shows three chunks. Chunk 1 is setup. Chunk 2 is cars and 
+    #|   it is in a section called Quarto. Chunk 3 is pressure and it is in 
+    #|   a section called Including plots.
+
+    knitr::include_graphics("screenshots/quarto-chunk-nav.png")
+    ```
+
+2.  Graphics produced by the chunks will have useful names that make them easier to use elsewhere.
+    More on that in @sec-graphics-communication.
+
+3.  You can set up networks of cached chunks to avoid re-performing expensive computations on every run.
+    More on that below.
+
+Your chunk labels should be short but evocative and should not contain spaces.
+We recommend using dashes (`-`) to separate words and avoiding other special characters in chunk labels.
+
+You are generally free to label your chunk however you like, but there is one chunk name that imbues special behavior: `setup`.
+When you're in a notebook mode, the chunk named setup will be run automatically once, before any other code is run.
+
+### Chunk options
+
+Chunk output can be customized with **options**, fields supplied to chunk header.
+Knitr provides almost 60 options that you can use to customize your code chunks.
+Here we'll cover the most important chunk options that you'll use frequently.
+You can see the full list at [https://yihui.name/knitr/options](https://yihui.name/knitr/options/){.uri}.
+
+The most important set of options controls if your code block is executed and what results are inserted in the finished report:
+
+-   `eval: false` prevents code from being evaluated.
+    (And obviously if the code is not run, no results will be generated).
+    This is useful for displaying example code, or for disabling a large block of code without commenting each line.
+
+-   `include: false` runs the code, but doesn't show the code or results in the final document.
+    Use this for setup code that you don't want cluttering your report.
+
+-   `echo: false` prevents code, but not the results from appearing in the finished file.
+    Use this when writing reports aimed at people who don't want to see the underlying R code.
+
+-   `message: false` or `warning: false` prevents messages or warnings from appearing in the finished file.
+
+-   `results: hide` hides printed output; `fig-show: hide` hides plots.
+
+-   `error: true` causes the render to continue even if code returns an error.
+    This is rarely something you'll want to include in the final version of your report, but can be very useful if you need to debug exactly what is going on inside your `.qmd`.
+    It's also useful if you're teaching R and want to deliberately include an error.
+    The default, `error: false` causes knitting to fail if there is a single error in the document.
+
+Each of these chunk options get added to the header of the chunk, following `#|`, e.g., in the following chunk the result is not printed since `eval` is set to false.
+
+```{r}
+#| echo: fenced
+#| label: simple-multiplication
+#| eval: false
+
+2 * 2
+```
+
+The following table summarizes which types of output each option suppresses:
+
+| Option           | Run code | Show code | Output | Plots | Messages | Warnings |
+|------------------|:--------:|:---------:|:------:|:-----:|:--------:|:--------:|
+| `eval: false`    |    \-    |           |   \-   |  \-   |    \-    |    \-    |
+| `include: false` |          |    \-     |   \-   |  \-   |    \-    |    \-    |
+| `echo: false`    |          |    \-     |        |       |          |          |
+| `results: hide`  |          |           |   \-   |       |          |          |
+| `fig-show: hide` |          |           |        |  \-   |          |          |
+| `message: false` |          |           |        |       |    \-    |          |
+| `warning: false` |          |           |        |       |          |    \-    |
+
+### Table
+
+By default, Quarto prints data frames and matrices as you'd see them in the console:
+
+```{r}
+mtcars[1:5, ]
+```
+
+If you prefer that data be displayed with additional formatting you can use the `knitr::kable()` function.
+The code below generates @tbl-kable.
+
+```{r}
+#| label: tbl-kable
+#| tbl-cap: A knitr kable.
+
+knitr::kable(mtcars[1:5, ], )
+```
+
+Read the documentation for `?knitr::kable` to see the other ways in which you can customize the table.
+For even deeper customization, consider the **gt**, **huxtable**, **reactable**, **kableExtra**, **xtable**, **stargazer**, **pander**, **tables**, and **ascii** packages.
+Each provides a set of tools for returning formatted tables from R code.
+
+There is also a rich set of options for controlling how figures are embedded.
+You'll learn about these in @sec-graphics-communication.
+
+### Caching
+
+Normally, each render of a document starts from a completely clean slate.
+This is great for reproducibility, because it ensures that you've captured every important computation in code.
+However, it can be painful if you have some computations that take a long time.
+The solution is `cache: true`.
+
+You can enable the Knitr cache at the document level for caching the results of all computations in a document using standard YAML options:
+
+``` yaml
+---
+title: "My Document"
+execute: 
+  cache: true
+---
+```
+
+You can also enable caching at the chunk level for caching the results of computation in a specific chunk:
+
+```{r}
+#| echo: fenced
+#| cache: true
+
+# code for lengthy computation...
+```
+
+When set, this will save the output of the chunk to a specially named file on disk.
+On subsequent runs, knitr will check to see if the code has changed, and if it hasn't, it will reuse the cached results.
+
+The caching system must be used with care, because by default it is based on the code only, not its dependencies.
+For example, here the `processed_data` chunk depends on the `raw_data` chunk:
+
+    `r chunk`{r}
+    #| label: raw_data
+
+    rawdata <- readr::read_csv("a_very_large_file.csv")
+    `r chunk`
+
+    `r chunk`{r}
+    #| label: processed_data
+    #| cache: true
+
+    processed_data <- rawdata |> 
+      filter(!is.na(import_var)) |> 
+      mutate(new_variable = complicated_transformation(x, y, z))
+    `r chunk`
+
+Caching the `processed_data` chunk means that it will get re-run if the dplyr pipeline is changed, but it won't get rerun if the `read_csv()` call changes.
+You can avoid that problem with the `dependson` chunk option:
+
+    `r chunk`{r}
+    #| label: processed_data
+    #| cache: true
+    #| dependson: "raw_data"
+
+    processed_data <- rawdata |> 
+      filter(!is.na(import_var)) |> 
+      mutate(new_variable = complicated_transformation(x, y, z))
+    `r chunk`
+
+`dependson` should contain a character vector of *every* chunk that the cached chunk depends on.
+Knitr will update the results for the cached chunk whenever it detects that one of its dependencies have changed.
+
+Note that the chunks won't update if `a_very_large_file.csv` changes, because knitr caching only tracks changes within the `.qmd` file.
+If you want to also track changes to that file you can use the `cache.extra` option.
+This is an arbitrary R expression that will invalidate the cache whenever it changes.
+A good function to use is `file.info()`: it returns a bunch of information about the file including when it was last modified.
+Then you can write:
+
+    `r chunk`{r}
+    #| label: raw_data
+    #| cache.extra: file.info("a_very_large_file.csv")
+
+    rawdata <- readr::read_csv("a_very_large_file.csv")
+    `r chunk`
+
+As your caching strategies get progressively more complicated, it's a good idea to regularly clear out all your caches with `knitr::clean_cache()`.
+
+We've followed the advice of [David Robinson](https://twitter.com/drob/status/738786604731490304) to name these chunks: each chunk is named after the primary object that it creates.
+This makes it easier to understand the `dependson` specification.
+
+### Global options
+
+As you work more with knitr, you will discover that some of the default chunk options don't fit your needs and you want to change them.
+
+You can do this by adding the preferred options in the document YAML, under `execute`.
+For example, if you are preparing a report for an audience who does not need to see your code but only your results and narrative, you might set `echo: false` at the document level.
+That will hide the code by default, so only showing the chunks you deliberately choose to show (with `echo: true`).
+You might consider setting `message: false` and `warning: false`, but that would make it harder to debug problems because you wouldn't see any messages in the final document.
+
+``` yaml
+title: "My report"
+execute:
+  echo: false
+```
+
+Since Quarto is designed to be multi-lingual (works with R as well as other languages like Python, Julia, etc.), all of the knitr options are not available at the document execution level since some of them only work with knitr and not other engines Quarto uses for running code in other languages (e.g., Jupyter).
+You can, however, still set these as global options for your document under the `knitr` field, under `opts_chunk`.
+For example, when writing books and tutorials we set:
+
+``` yaml
+title: "Tutorial"
+knitr:
+  opts_chunk:
+    comment: "#>"
+    collapse: true
+```
+
+This uses our preferred comment formatting and ensures that the code and output are kept closely entwined.
+
+### Inline code
+
+There is one other way to embed R code into a Quarto document: directly into the text, with: `r inline()`.
+This can be very useful if you mention properties of your data in the text.
+For example, the example document used at the start of the chapter had:
+
+> We have data about `r inline('nrow(diamonds)')` diamonds.
+> Only `r inline('nrow(diamonds) - nrow(smaller)')` are larger than 2.5 carats.
+> The distribution of the remainder is shown below:
+
+When the report is knit, the results of these computations are inserted into the text:
+
+> We have data about 53940 diamonds.
+> Only 126 are larger than 2.5 carats.
+> The distribution of the remainder is shown below:
+
+When inserting numbers into text, `format()` is your friend.
+It allows you to set the number of `digits` so you don't print to a ridiculous degree of accuracy, and a `big.mark` to make numbers easier to read.
+You might combine these into a helper function:
+
+```{r}
+comma <- function(x) format(x, digits = 2, big.mark = ",")
+comma(3452345)
+comma(.12358124331)
+```
+
+### Exercises
+
+1.  Add a section that explores how diamond sizes vary by cut, colour, and clarity.
+    Assume you're writing a report for someone who doesn't know R, and instead of setting `echo: false` on each chunk, set a global option.
+
+2.  Download `diamond-sizes.qmd` from <https://github.com/hadley/r4ds/tree/main/quarto>.
+    Add a section that describes the largest 20 diamonds, including a table that displays their most important attributes.
+
+3.  Modify `diamonds-sizes.qmd` to use `comma()` to produce nicely formatted output.
+    Also include the percentage of diamonds that are larger than 2.5 carats.
+
+4.  Set up a network of chunks where `d` depends on `c` and `b`, and both `b` and `c` depend on `a`.
+    Have each chunk print `lubridate::now()`, set `cache: true`, then verify your understanding of caching.
+
+## Troubleshooting
+
+Troubleshooting Quarto documents can be challenging because you are no longer in an interactive R environment, and you will need to learn some new tricks.
+The first thing you should always try is to recreate the problem in an interactive session.
+Restart R, then "Run all chunks" (either from Code menu, under Run region), or with the keyboard shortcut Ctrl + Alt + R.
+If you're lucky, that will recreate the problem, and you can figure out what's going on interactively.
+
+If that doesn't help, there must be something different between your interactive environment and the Quarto environment.
+You're going to need to systematically explore the options.
+The most common difference is the working directory: the working directory of a Quarto is the directory in which it lives.
+Check the working directory is what you expect by including `getwd()` in a chunk.
+
+Next, brainstorm all the things that might cause the bug.
+You'll need to systematically check that they're the same in your R session and your Quarto session.
+The easiest way to do that is to set `error: true` on the chunk causing the problem, then use `print()` and `str()` to check that settings are as you expect.
+
+## YAML header
+
+You can control many other "whole document" settings by tweaking the parameters of the YAML header.
+You might wonder what YAML stands for: it's "yet another markup language", which is designed for representing hierarchical data in a way that's easy for humans to read and write.
+Quarto uses it to control many details of the output.
+Here we'll discuss three: self-contained documents, document parameters, and bibliographies.
+
+### Self-contained
+
+HTML documents typically have a number of external dependencies (e.g. images, CSS style sheets, JavaScript, etc.) and, by default, Quarto places these dependencies in a `_files` folder in the same directory as your `.qmd` file.
+If you publish the HTML file on a hosting platform (e.g., QuartoPub, <https://quartopub.com/>), the dependencies in this directory are published with your document and hence are available in the published report.
+However, if you want to email the report to a colleague, you might prefer to have a single, self-contained, HTML document that embeds all of its dependencies.
+You can do this by specifying the `embed-resources` option:
+
+By default these dependencies are placed in a `_files` directory alongside your document.
+For example, if you render `report.qmd` to HTML:
+
+``` yaml
+format:
+  html:
+    embed-resources: true
+```
+
+The resulting file will be self-contained, such that it will need no external files and no internet access to be displayed properly by a browser.
+
+### Parameters
+
+Quarto documents can include one or more parameters whose values can be set when you render the report.
+Parameters are useful when you want to re-render the same report with distinct values for various key inputs.
+For example, you might be producing sales reports per branch, exam results by student, or demographic summaries by country.
+To declare one or more parameters, use the `params` field.
+
+This example uses a `my_class` parameter to determine which class of cars to display:
+
+```{r}
+#| echo: false
+#| out-width: "100%"
+#| comment: ""
+
+cat(readr::read_file("quarto/fuel-economy.qmd"))
+```
+
+As you can see, parameters are available within the code chunks as a read-only list named `params`.
+
+You can write atomic vectors directly into the YAML header.
+You can also run arbitrary R expressions by prefacing the parameter value with `!r`.
+This is a good way to specify date/time parameters.
+
+``` yaml
+params:
+  start: !r lubridate::ymd("2015-01-01")
+  snapshot: !r lubridate::ymd_hms("2015-01-01 12:30:00")
+```
+
+### Bibliographies and Citations
+
+Quarto can automatically generate citations and a bibliography in a number of styles.
+The most straightforward way of adding citations and bibliographies to a Quarto document is using the visual editor in RStudio.
+
+To add a citation using the visual editor, go to Insert \> Citation.
+Citations can be inserted from a variety of sources:
+
+1.  [DOI](https://quarto.org/docs/visual-editor/technical.html#citations-from-dois) (Document Object Identifier) references.
+
+2.  [Zotero](https://quarto.org/docs/visual-editor/technical.html#citations-from-zotero) personal or group libraries.
+
+3.  Searches of [Crossref](https://www.crossref.org/), [DataCite](https://datacite.org/), or [PubMed](https://pubmed.ncbi.nlm.nih.gov/).
+
+4.  Your document bibliography (a `.bib` file in the directory of your document)
+
+Under the hood, the visual mode uses the standard Pandoc markdown representation for citations (e.g. `[@citation]`).
+
+If you add a citation using one of the first three methods, the visual editor will automatically create a `bibliography.bib` file for you and add the reference to it.
+It will also add a `bibliography` field to the document YAML.
+As you add more references, this file will get populated with their citations.
+You can also directly edit this file using many common bibliography formats including BibLaTeX, BibTeX, EndNote, Medline.
+
+To create a citation within your .qmd file in the source editor, use a key composed of '\@' + the citation identifier from the bibliography file.
+Then place the citation in square brackets.
+Here are some examples:
+
+``` markdown
+Separate multiple citations with a `;`: Blah blah [@smith04; @doe99].
+
+You can add arbitrary comments inside the square brackets: 
+Blah blah [see @doe99, pp. 33-35; also @smith04, ch. 1].
+
+Remove the square brackets to create an in-text citation: @smith04 
+says blah, or @smith04 [p. 33] says blah.
+
+Add a `-` before the citation to suppress the author's name: 
+Smith says blah [-@smith04].
+```
+
+When Quarto renders your file, it will build and append a bibliography to the end of your document.
+The bibliography will contain each of the cited references from your bibliography file, but it will not contain a section heading.
+As a result it is common practice to end your file with a section header for the bibliography, such as `# References` or `# Bibliography`.
+
+You can change the style of your citations and bibliography by referencing a CSL (citation style language) file in the `csl` field:
+
+``` yaml
+bibliography: rmarkdown.bib
+csl: apa.csl
+```
+
+As with the bibliography field, your csl file should contain a path to the file.
+Here we assume that the csl file is in the same directory as the .qmd file.
+A good place to find CSL style files for common bibliography styles is <https://github.com/citation-style-language/styles>.
+
+## Learning more
+
+Quarto is still relatively young, and is still growing rapidly.
+The best place to stay on top of innovations is the official Quarto website: [https://quarto.org](https://quarto.org/){.uri}.
+
+There are two important topics that we haven't covered here: collaboration, and the details of accurately communicating your ideas to other humans.
+Collaboration is a vital part of modern data science, and you can make your life much easier by using version control tools, like Git and GitHub.
+We recommend "Happy Git with R", a user friendly introduction to Git and GitHub from R users, by Jenny Bryan.
+The book is freely available online: <https://happygitwithr.com>
+
+We have not touched on what you should actually write in order to clearly communicate the results of your analysis.
+To improve your writing, we highly recommend reading either [*Style: Lessons in Clarity and Grace*](https://www.amazon.com/Style-Lessons-Clarity-Grace-12th/dp/0134080416) by Joseph M. Williams & Joseph Bizup, or [*The Sense of Structure: Writing from the Reader's Perspective*](https://www.amazon.com/Sense-Structure-Writing-Readers-Perspective/dp/0205296327) by George Gopen.
+Both books will help you understand the structure of sentences and paragraphs, and give you the tools to make your writing more clear.
+(These books are rather expensive if purchased new, but they're used by many English classes so there are plenty of cheap second-hand copies).
+George Gopen also has a number of short articles on writing at <https://www.georgegopen.com/the-litigation-articles.html>.
+They are aimed at lawyers, but almost everything applies to data scientists too.
+
