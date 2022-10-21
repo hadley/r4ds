@@ -13,12 +13,8 @@ So far, you've used a bunch of strings without learning much about the details.
 Now it's time to dive into them, learning what makes strings tick, and mastering some of the powerful string manipulation tool you have at your disposal.
 
 We'll begin with the details of creating strings and character vectors.
-You'll then dive into creating strings from data.
-Next, we'll discuss the basics of regular expressions, a powerful tool for describing patterns in strings, then use those tools to extract data from strings.
-The chapter finishes up with functions that work with individual letters, including a brief discussion of where your expectations from English might steer you wrong when working with other languages, and a few useful non-stringr functions.
-
-This chapter is paired with two other chapters.
-Regular expression are a big topic, so we'll come back to them again in @sec-regular-expressions. We'll also come back to strings again in @sec-programming-with-strings where we'll look at them from a programming perspective rather than a data analysis perspective.
+You'll then dive into creating strings from data, then the opposite; extracting strings from data.
+The chapter finishes up with functions that work with individual letters and a brief discussion of where your expectations from English might steer you wrong when working with other languages.
 
 ### Prerequisites
 
@@ -32,8 +28,6 @@ We'll also use the babynames data since it provides some fun strings to manipula
 library(tidyverse)
 library(babynames)
 ```
-
-Similar functionality is available in base R (through functions like `grepl()`, `gsub()`, and `regmatches()`) but we think you'll find stringr easier to use because it's been carefully designed to be as consistent as possible.
 
 You can easily tell when you're using a stringr function because all stringr functions start with `str_`.
 This is particularly useful if you use RStudio, because typing `str_` will trigger autocomplete, allowing you jog your memory of which functions are available.
@@ -138,15 +132,18 @@ One of the challenges of working with text is that there's a variety of ways tha
 
     3.  `\\\\\\`
 
-2.  Create the string in your R session and print it. What happens to the special "\\u00a0"? How does `str_view()` display it? Can you do a little googling to figure out what this special character is?
+2.  Create the string in your R session and print it.
+    What happens to the special "\\u00a0"?
+    How does `str_view()` display it?
+    Can you do a little googling to figure out what this special character is?
 
     ```{r}
     x <- "This\u00a0is\u00a0tricky"
     ```
 
-## Creating strings from data
+## Creating many strings from data
 
-Now that you've learned the basics of creating strings by "hand", we'll go into the details of creating strings from other strings.
+Now that you've learned the basics of creating a string or two by "hand", we'll go into the details of creating strings from other strings.
 This will help you solve the common problem where you have some text that you wrote that you want to combine with strings from a data frame.
 For example, to create a greeting you might combine "Hello" with a `name` variable.
 We'll show you how to do this with `str_c()` and `str_glue()` and how you might use them with `mutate()`.
@@ -182,7 +179,7 @@ df |> mutate(
 )
 ```
 
-### `str_glue()`
+### `str_glue()` {#sec-glue}
 
 If you are mixing many fixed and variable strings with `str_c()`, you'll notice that you have to type `""` repeatedly, and this can make it hard to see the overall goal of the code.
 An alternative approach is provided by the [glue package](https://glue.tidyverse.org) via `str_glue()`[^strings-4] .
@@ -257,311 +254,114 @@ df |>
 
     c.  `str_c("\\section{", title, "}")`
 
-## Working with patterns
+## Extracting data from strings
 
-As well as creating strings from data, you probably also want to extract data from longer strings.
-Unfortunately before we can tackle that, we need to take a brief digression to talk about **regular expressions**.
-Regular expressions are a very concise language that describes patterns in strings.
-For example, `"^The"` is shorthand for any string that starts with "The", and `a.+e` is a shorthand for "a" followed by one or more other characters, followed by an "e".
+Working from <https://github.com/tidyverse/tidyr/pull/1304>.
 
-We'll start by using `str_detect()` which answers a simple question: "does this pattern occur anywhere in my vector?".
-We'll then ask progressively more complex questions by learning more about regular expressions and the stringr functions that use them.
+It's very common for multiple variables to be crammed together into a single string.
+In this section you'll learn how to use four tidyr to extract them:
 
-### Detect matches
+-   `df |> separate_by_longer(col, sep)`
+-   `df |> separate_at_longer(col, width)`
+-   `df |> separate_by_wider(col, sep, names)`
+-   `df |> separate_at_wider(col, widths)`
 
-The term "regular expression" is a bit of a mouthful, so most people abbreviate to "regex"[^strings-7] or "regexp".
-To learn about regexes, we'll start with the simplest function that uses them: `str_detect()`. It takes a character vector and a pattern, and returns a logical vector that says if the pattern was found at each element of the vector.
-The following code shows the simplest type of pattern, an exact match.
+If you look closely you can see there's a common pattern here: `separate` followed by `by` or `at`, followed by longer or `wider`.
+`by` splits up a string with a separator like `", "` or `" "`.
+`at` splits at given locations, like 5, 10, and 17.
+`longer` makes input data frame longer, making new rows; `wider` makes the input data frame wider, add new columns.
 
-[^strings-7]: With a hard g, sounding like "reg-x".
-
-```{r}
-x <- c("apple", "banana", "pear")
-str_detect(x, "e")   # does the word contain an e?
-str_detect(x, "b")   # does the word contain a b?
-str_detect(x, "ear") # does the word contain "ear"?
-```
-
-`str_detect()` returns a logical vector the same length as the first argument, so it pairs well with `filter()`.
-For example, this code finds all the most popular names containing a lower-case "x":
+There's one more member of this family, `separate_regex_wider()`, that we'll come back in @sec-regular-expressions.
+It's the most flexible of the `at` forms but you need to know a bit about regular expression in order to use it.
 
 ```{r}
-babynames |> 
-  filter(str_detect(name, "x")) |> 
-  count(name, wt = n, sort = TRUE)
+#| include: false
+has_dev_tidyr <- packageVersion("tidyr") >= "1.2.1.9001"
 ```
 
-We can also use `str_detect()` with `summarize()` by remembering that when you use a logical vector in a numeric context, `FALSE` becomes 0 and `TRUE` becomes 1.
-That means `sum(str_detect(x, pattern))` tells you the number of observations that match and `mean(str_detect(x, pattern))` tells you the proportion of observations that match.
-For example, the following snippet computes and visualizes the proportion of baby names that contain "x", broken down by year.
+The next two sections will give you the basic idea behind these separate functions, and then we'll work through a few case studies that require mutliple uses.
+
+### Splitting into rows
+
+`separate_by_longer()` and `separate_at_longer()` are most useful when the number of components varies from row to row.
+`separate_by_longer()` arises most commonly:
 
 ```{r}
-#| label: fig-x-names
-#| fig-cap: >
-#|   A time series showing the proportion of baby names that contain a
-#|   lower case "x".
-#| fig-alt: >
-#|   A timeseries showing the proportion of baby names that contain the letter x. 
-#|   The proportion declines gradually from 8 per 1000 in 1880 to 4 per 1000 in 
-#|   1980, then increases rapidly to 16 per 1000 in 2019.
+#| eval: !expr has_dev_tidyr
 
-babynames |> 
-  group_by(year) |> 
-  summarise(prop_x = mean(str_detect(name, "x"))) |> 
-  ggplot(aes(year, prop_x)) + 
-  geom_line()
+df1 <- tibble(x = c("a,b,c", "d,e", "f"))
+df1 |> 
+  separate_by_longer(x, sep = ",")
 ```
 
-(Note that this gives us the proportion of names that contain an x; if you wanted the proportion of babies with a name containing an x, you'd need to perform a weighted mean).
+(If the separators have some variation you can use a regular expression instead, if you know about it.)
 
-### Introduction to regular expressions
-
-The simplest patterns, like those above, are exact: they match any strings that contain the exact sequence of characters in the pattern.
-And when we say exact we really mean exact: "x" will only match lowercase "x" not uppercase "X".
+It's rarer to see `separate_at_longer()` in the wild, but some older datasets can adopt a very compact format where each character is used to record a value:
 
 ```{r}
-str_detect(c("x", "X"), "x")
+#| eval: !expr has_dev_tidyr
+
+df2 <- tibble(x = c("1211", "131", "21"))
+df2 |> 
+  separate_at_longer(x, width = 1)
 ```
 
-In general, any letter or number will match exactly, but punctuation characters like `.`, `+`, `*`, `[`, `]`, `?`, often have special meanings[^strings-8].
-For example, `.`
-will match any character[^strings-9], so `"a."` will match any string that contains an "a" followed by another character
-:
+### Splitting into columns
 
-[^strings-8]: You'll learn how to escape this special behaviour in @sec-regexp-escaping.
-
-[^strings-9]: Well, any character apart from `\n`.
+`separate_by_wider()` and `separate_at_wider()` are most useful when there are a fixed number of components in each string, and you want to spread them into columns.
+They are more complicated that their `by` equivalents because you need to name the columns.
 
 ```{r}
-str_detect(c("a", "ab", "ae", "bd", "ea", "eab"), "a.")
+#| eval: !expr has_dev_tidyr
+
+df3 <- tibble(x = c("a,1,2022", "b,2,2011", "e,5,2015"))
+df3 |> 
+  separate_by_wider(x, sep = ",", names = c("letter", "number", "year"))
 ```
 
-To get a better sense of what's happening, lets switch to `str_view_all()`.
-This shows which characters are matched by colouring the match blue and surrounding it with `<>`:
+If a specific value is not useful you can use `NA` to omit it from the results:
 
 ```{r}
-str_view_all(c("a", "ab", "ae", "bd", "ea", "eab"), "a.")
+#| eval: !expr has_dev_tidyr
+
+df3 <- tibble(x = c("a,1,2022", "b,2,2011", "e,5,2015"))
+df3 |> 
+  separate_by_wider(x, sep = ",", names = c("letter", NA, "year"))
 ```
 
-Regular expressions are a powerful and flexible language which we'll come back to in @sec-regular-expressions. Here we'll just introduce only the most important components: quantifiers and character classes.
-
-**Quantifiers** control how many times an element that can be applied to other pattern: `?` makes a pattern optional (i.e. it matches 0 or 1 times), `+` lets a pattern repeat (i.e. it matches at least once), and `*` lets a pattern be optional or repeat (i.e. it matches any number of times, including 0).
+Alternatively, you can provide `names_sep` and `separate_by_wider()` will use that separator to name automatically:
 
 ```{r}
-# ab? matches an "a", optionally followed by a "b".
-str_view_all(c("a", "ab", "abb"), "ab?")
+#| eval: !expr has_dev_tidyr
 
-# ab+ matches an "a", followed by at least one "b".
-str_view_all(c("a", "ab", "abb"), "ab+")
-
-# ab* matches an "a", followed by any number of "b"s.
-str_view_all(c("a", "ab", "abb"), "ab*")
+df3 |> 
+  separate_by_wider(x, sep = ",", names_sep = "_")
 ```
 
-**Character classes** are defined by `[]` and let you match a set set of characters, e.g. `[abcd]` matches "a", "b", "c", or "d".
-You can also invert the match by starting with `^`: `[^abcd]` matches anything **except** "a", "b", "c", or "d".
-We can use this idea to find the vowels in a few particularly special names:
+`separate_at_wider()` works a little differently, because you typically want to specify the width of each column.
+So you give it a named integer vector, where the name gives the name of the new column and the value is the number of characters it occupies.
+You can omit values from the output by not naming them:
 
 ```{r}
-names <- c("Hadley", "Mine", "Garrett")
-str_view_all(names, "[aeiou]")
+#| eval: !expr has_dev_tidyr
+
+df4 <- tibble(x = c("202215TX", "202122LA", "202325CA")) 
+df4 |> 
+  separate_at_wider(x, c(year = 4, age = 2, state = 2))
 ```
 
-You can combine character classes and quantifiers.
-Notice the difference between the following two patterns that look for consonants.
-The same characters are matched, but the number of matches is different.
-
-```{r}
-str_view_all(names, "[^aeiou]")
-str_view_all(names, "[^aeiou]+")
-```
-
-Regular expressions are very compact and use a lot of punctuation characters, so they can seem overwhelming at first, and you'll think a cat has walked across your keyboard.
-So don't worry if they're hard to understand at first; you'll get better with practice.
-Lets start that practice with some other useful stringr functions.
-
-### Count matches
-
-A variation on `str_detect()` is `str_count()`: rather than a simple yes or no, it tells you how many matches there are in a string:
-
-```{r}
-x <- c("apple", "banana", "pear")
-str_count(x, "p")
-```
-
-Note that regular expression matches never overlap so `str_count()` only starts looking for a new match after the end of the last match.
-For example, in `"abababa"`, how many times will the pattern `"aba"` match?
-Regular expressions say two, not three:
-
-```{r}
-str_count("abababa", "aba")
-str_view_all("abababa", "aba")
-```
-
-It's natural to use `str_count()` with `mutate()`.
-The following example uses `str_count()` with character classes to count the number of vowels and consonants in each name.
-
-```{r}
-babynames |> 
-  count(name) |> 
-  mutate(
-    vowels = str_count(name, "[aeiou]"),
-    consonants = str_count(name, "[^aeiou]")
-  )
-```
-
-If you look closely, you'll notice that there's something off with our calculations: "Aaban" contains three "a"s, but our summary reports only two vowels.
-That's because we've forgotten to tell you that regular expressions are case sensitive.
-There are three ways we could fix this:
-
--   Add the upper case vowels to the character class: `str_count(name, "[aeiouAEIOU]")`.
--   Tell the regular expression to ignore case: `str_count(regex(name, ignore.case = TRUE), "[aeiou]")`. We'll talk about more a little later.
--   Use `str_to_lower()` to convert the names to lower case: `str_count(str_to_lower(name), "[aeiou]")`. We'll come back to this function in @sec-other-languages.
-
-This is pretty typical when working with strings --- there are often multiple ways to reach your goal, either making your pattern more complicated or by doing some preprocessing on your string.
-If you get stuck trying one approach, it can often be useful to switch gears and tackle the problem from a different perspective.
-
-### Replace matches
-
-`str_replace_all()` allows you to replace a match with the text of your choosing.
-This can be particularly useful if you need to standardize a vector.
-Unlike the regexp functions we've encountered so far, `str_replace_all()` takes three arguments: a character vector, a pattern, and a replacement.
-
-The simplest use is to replace a pattern with a fixed string:
-
-```{r}
-x <- c("apple", "pear", "banana")
-str_replace_all(x, "[aeiou]", "-")
-```
-
-`str_remove_all()` is a short cut for `str_replace_all(x, pattern, "")` --- it removes matching patterns from a string.
-
-Use in `mutate()`
-
-Using pipe inside mutate.
-Recommendation to make a function, and think about testing it --- don't need formal tests, but useful to build up a set of positive and negative test cases as you.
-
-### Advanced replacements
-
-You can also perform multiple replacements by supplying a named vector.
-The name gives a regular expression to match, and the value gives the replacement.
-
-```{r}
-x <- c("1 house", "1 person has 2 cars", "3 people")
-str_replace_all(x, c("1" = "one", "2" = "two", "3" = "three"))
-```
-
-Alternatively, you can provide a replacement function: it's called with a vector of matches, and should return what to replacement them with.
-We'll come back to this powerful tool in [Chapter -@sec-programming-with-strings].
-
-```{r}
-x <- c("1 house", "1 person has 2 cars", "3 people")
-str_replace_all(x, "[aeiou]+", str_to_upper)
-```
-
-### Pattern control
-
-Now that you've learn about regular expressions, you might be worried about them working when you don't want them to.
-You can opt-out of the regular expression rules by using `fixed()`:
-
-```{r}
-str_view(c("", "a", "."), fixed("."))
-```
-
-Both fixed strings and regular expressions are case sensitive by default.
-You can opt out by setting `ignore_case = TRUE`.
-
-```{r}
-str_view_all("x  X  xy", "X")
-str_view_all("x  X  xy", fixed("X", ignore_case = TRUE))
-str_view_all("x  X  xy", regex(".Y", ignore_case = TRUE))
-```
-
-### Exercises
-
-1.  What name has the most vowels?
-    What name has the highest proportion of vowels?
-    (Hint: what is the denominator?)
-
-2.  For each of the following challenges, try solving it by using both a single regular expression, and a combination of multiple `str_detect()` calls.
-
-    a.  Find all words that start or end with `x`.
-    b.  Find all words that start with a vowel and end with a consonant.
-    c.  Are there any words that contain at least one of each different vowel?
-
-3.  Replace all forward slashes in a string with backslashes.
-
-4.  Implement a simple version of `str_to_lower()` using `str_replace_all()`.
-
-5.  Switch the first and last letters in `words`.
-    Which of those strings are still `words`?
-
-## Extract data from strings
-
-Common for multiple variables worth of data to be stored in a single string.
-In this section you'll learn how to use various functions tidyr to extract them.
-
-Waiting on: <https://github.com/tidyverse/tidyups/pull/15>
-
-## Locale dependent operations {#sec-other-languages}
-
-So far all of our examples have been using English.
-The details of the many ways other languages are different to English are too diverse to detail here, but we wanted to give a quick outline of the functions who's behavior differs based on your **locale**, the set of settings that vary from country to country.
-
-Locale is specified with lower-case language abbreviation, optionally followed by a `_` and a upper-case region identifier.
-For example, "en" is English, "en_GB" is British English, and "en_US" is American English.
-If you don't already know the code for your language, [Wikipedia](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes) has a good list, and you can see which are supported with `stringi::stri_locale_list()`.
-
-Base R string functions automatically use your locale current locale.
-This means that string manipulation code works the way you expect when you're working with text in your native language, but it might work differently when you share it with someone who lives in another country.
-To avoid this problem, stringr defaults to the "en" locale, and requires you to specify the `locale` argument to override it.
-This also makes it easy to tell if a function might have different behavior in different locales.
-
-Fortunately there are three sets of functions where the locale matters:
-
--   **Changing case**: while only relatively few languages have upper and lower case (Latin, Greek, and Cyrillic, plus a handful of lessor known languages).
-    The rules are not te same in every language that uses these alphabets.
-    For example, Turkish has two i's: with and without a dot, and it has a different rule for capitalising them:
-
-    ```{r}
-    str_to_upper(c("i", "ı"))
-    str_to_upper(c("i", "ı"), locale = "tr")
-    ```
-
--   **Comparing strings**: `str_equal()` lets you compare if two strings are equal, optionally ignoring case:
-
-    ```{r}
-    str_equal("i", "I", ignore_case = TRUE)
-    str_equal("i", "I", ignore_case = TRUE, locale = "tr")
-    ```
-
--   **Sorting strings**: `str_sort()` and `str_order()` sort vectors alphabetically, but the alphabet is not the same in every language[^strings-10]!
-    Here's an example: in Czech, "ch" is a compound letter that appears after `h` in the alphabet.
-
-    ```{r}
-    str_sort(c("a", "c", "ch", "h", "z"))
-    str_sort(c("a", "c", "ch", "h", "z"), locale = "cs")
-    ```
-
-    Danish has a similar problem.
-    Normally, characters with diacritics (e.g. à, á, â) sort after the plain character (e.g. a).
-    But in Danish ø and å are their own letters that come at the end of the alphabet:
-
-    ```{r}
-    str_sort(c("a", "å", "o", "ø", "z"))
-    str_sort(c("a", "å", "o", "ø", "z"), locale = "da")
-    ```
-
-    This also comes up when sorting strings with `dplyr::arrange()` which is why it also has a `locale` argument.
-
-[^strings-10]: Sorting in languages that don't have an alphabet (like Chinese) is more complicated still.
+### Case studies
 
 ## Letters
 
-Functions that work with the components of strings called **code points**.
-Depending on the language involved, this might be a letter (like in most European languages), a syllable (like Japanese), or a logogram (like in Chinese).
-It might be something more exotic like an accent, or a special symbol used to join two emoji together.
-But to keep things simple, we'll call these letters.
+This section discusses string function that work with individual characters.
+In English, characters are easy to understand because they're correspond to the 26 letters of the alphabet (plus a handful of punctuation characters).
+Things get complicated quickly when you move beyond English.
+Even languages that use the same alphabet, but add additional accents (like å, é, ï, ô, ū) are non-trivial because these extra letters might be represented as an individual character or by composing an unaccented letter with a diacritic mark.
+Things get more complicated still as you move further away.
+To give just a few examples in Japanese each "letter" is a syllable, in Chinese each "letter" is a complex logogram, and in Arabic, letters look radically different depending on where in the word they fail.
+
+In this section, we'll you're using English (or a nearby language); if you're working with another language, these examples either may not applty or need radically different approaches.
 
 ### Length
 
@@ -571,9 +371,9 @@ But to keep things simple, we'll call these letters.
 str_length(c("a", "R for data science", NA))
 ```
 
-You could use this with `count()` to find the distribution of lengths of US babynames, and then with `filter()` to look at the longest names[^strings-11]:
+You could use this with `count()` to find the distribution of lengths of US babynames, and then with `filter()` to look at the longest names[^strings-7]:
 
-[^strings-11]: Looking at these entries, we'd guess that the babynames data removes spaces or hyphens from names and truncates after 15 letters.
+[^strings-7]: Looking at these entries, we'd guess that the babynames data removes spaces or hyphens from names and truncates after 15 letters.
 
 ```{r}
 babynames |>
@@ -621,14 +421,14 @@ babynames |>
 Sometimes the reason you care about the length of a string is because you're trying to fit it into a label on a plot or in a table.
 stringr provides two useful tools for cases where your string is too long:
 
--   `str_trunc(x, 20)` ensures that no string is longer than 20 characters, replacing any thing too long with `…`.
+-   `str_trunc(x, 30)` ensures that no string is longer than 20 characters, replacing any thing too long with `…`.
 
--   `str_wrap(x, 20)` wraps a string introducing new lines so that each line is at most 20 characters (it doesn't hyphenate, however, so any word longer than 20 characters will make a longer time)
+-   `str_wrap(x, 30)` wraps a string introducing new lines so that each line is at most 30 characters (it doesn't hyphenate, however, so any word longer than 30 characters will make a longer line)
 
 ```{r}
 x <- "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat."
 
-str_trunc(x, 30)
+str_view(str_trunc(x, 30))
 str_view(str_wrap(x, 30))
 ```
 
@@ -639,26 +439,60 @@ TODO: add example with a plot.
 1.  Use `str_length()` and `str_sub()` to extract the middle letter from each baby name. What will you do if the string has an even number of characters?
 2.  Are there any major trends in the length of babynames over time? What about the popularity of first and last letters?
 
-## Other functions
+## Locale dependent {#sec-other-languages}
 
-The are a bunch of other places you can use regular expressions outside of stringr.
+So far all of our examples have been using English.
+The details of the many ways other languages are different to English are too diverse to detail here, but we wanted to give a quick outline of the functions who's behavior differs based on your **locale**, the set of settings that vary from country to country.
 
--   `matches()`: as you can tell from it's lack of `str_` prefix, this isn't a stringr fuction.
-    It's a "tidyselect" function, a fucntion that you can use anywhere in the tidyverse when selecting variables (e.g. `dplyr::select()`, `rename_with()`, `across()`, ...).
+Locale is specified with lower-case language abbreviation, optionally followed by a `_` and a upper-case region identifier.
+For example, "en" is English, "en_GB" is British English, and "en_US" is American English.
+If you don't already know the code for your language, [Wikipedia](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes) has a good list, and you can see which are supported with `stringi::stri_locale_list()`.
 
--   `apropos()` searches all objects available from the global environment.
-    This is useful if you can't quite remember the name of the function.
+Base R string functions automatically use your locale current locale.
+This means that string manipulation code works the way you expect when you're working with text in your native language, but it might work differently when you share it with someone who lives in another country.
+To avoid this problem, stringr defaults to the "en" locale, and requires you to specify the `locale` argument to override it.
+This also makes it easy to tell if a function might have different behavior in different locales.
+
+Fortunately there are three sets of functions where the locale matters:
+
+-   **Changing case**: while only relatively few languages have upper and lower case (Latin, Greek, and Cyrillic, plus a handful of lessor known languages).
+    The rules are not the same in every language that uses these alphabets.
+    For example, Turkish has two i's: with and without a dot, and it has a different rule for capitalizing them:
 
     ```{r}
-    apropos("replace")
+    str_to_upper(c("i", "ı"))
+    str_to_upper(c("i", "ı"), locale = "tr")
     ```
 
--   `dir()` lists all the files in a directory.
-    The `pattern` argument takes a regular expression and only returns file names that match the pattern.
-    For example, you can find all the R Markdown files in the current directory with:
+-   **Comparing strings**: `str_equal()` lets you compare if two strings are equal, optionally ignoring case:
 
     ```{r}
-    head(dir(pattern = "\\.Rmd$"))
+    str_equal("i", "I", ignore_case = TRUE)
+    str_equal("i", "I", ignore_case = TRUE, locale = "tr")
     ```
 
-    (If you're more comfortable with "globs" like `*.Rmd`, you can convert them to regular expressions with `glob2rx()`).
+-   **Sorting strings**: `str_sort()` and `str_order()` sort vectors alphabetically, but the alphabet is not the same in every language[^strings-8]!
+    Here's an example: in Czech, "ch" is a compound letter that appears after `h` in the alphabet.
+
+    ```{r}
+    str_sort(c("a", "c", "ch", "h", "z"))
+    str_sort(c("a", "c", "ch", "h", "z"), locale = "cs")
+    ```
+
+    Danish has a similar problem.
+    Normally, characters with diacritics (e.g. à, á, â) sort after the plain character (e.g. a).
+    But in Danish ø and å are their own letters that come at the end of the alphabet:
+
+    ```{r}
+    str_sort(c("a", "å", "o", "ø", "z"))
+    str_sort(c("a", "å", "o", "ø", "z"), locale = "da")
+    ```
+
+    This also comes up when sorting strings with `dplyr::arrange()` which is why it also has a `locale` argument.
+
+[^strings-8]: Sorting in languages that don't have an alphabet (like Chinese) is more complicated still.
+
+## Summary
+
+In this chapter you've learned a wide of tools for working with strings, but you haven't learned one of the most important and powerful tools: regular expressions.
+Regular expressions are very concise, but very expressive, language for describing patterns within strings, and are the topic of the next chapter.

@@ -15,7 +15,7 @@ It's relatively rare to find logical vectors in your raw data, but you'll create
 
 We'll begin by discussing the most common way of creating logical vectors: with numeric comparisons.
 Then you'll learn about how you can use Boolean algebra to combine different logical vectors, as well as some useful summaries.
-We'll finish off with some tools for making conditional changes, and a useful function for turning logical vectors into groups.
+We'll finish off with `if_else()` and `case_when()`, two useful functions for making conditional changes powered by logical vectors.
 
 ### Prerequisites
 
@@ -84,7 +84,7 @@ flights |>
   filter(daytime & approx_ontime)
 ```
 
-### Floating point comparison
+### Floating point comparison {#sec-fp-comparison}
 
 Beware of using `==` with numbers.
 For example, it looks like this vector contains the numbers 1 and 2:
@@ -187,6 +187,8 @@ flights |>
   arrange(desc(is.na(dep_time)), dep_time)
 ```
 
+We'll come back to cover missing values in more depth in @sec-missing-values.
+
 ### Exercises
 
 1.  How does `dplyr::near()` work? Type `near` to see the source code.
@@ -200,7 +202,7 @@ In R, `&` is "and", `|` is "or", and `!` is "not", and `xor()` is exclusive or[^
 
 [^logicals-2]: That is, `xor(x, y)` is true if x is true, or y is true, but not both.
     This is how we usually use "or" In English.
-    Both is not usually an acceptable answer to the question "would you like ice cream or cake?".
+    "Both" is not usually an acceptable answer to the question "would you like ice cream or cake?".
 
 ```{r}
 #| label: fig-bool-ops
@@ -223,7 +225,7 @@ knitr::include_graphics("diagrams/transform.png", dpi = 270)
 As well as `&` and `|`, R also has `&&` and `||`.
 Don't use them in dplyr functions!
 These are called short-circuiting operators and only ever return a single `TRUE` or `FALSE`.
-They're important for programming and you'll learn more about them in @sec-conditional-execution.
+They're important for programming, not data science
 
 ### Missing values {#sec-na-boolean}
 
@@ -344,7 +346,7 @@ flights |>
 In most cases, however, `any()` and `all()` are a little too crude, and it would be nice to be able to get a little more detail about how many values are `TRUE` or `FALSE`.
 That leads us to the numeric summaries.
 
-### Numeric summaries
+### Numeric summaries of logical vectors
 
 When you use a logical vector in a numeric context, `TRUE` becomes 1 and `FALSE` becomes 0.
 This makes `sum()` and `mean()` very useful with logical vectors because `sum(x)` will give the number of `TRUE`s and `mean(x)` the proportion of `TRUE`s.
@@ -382,7 +384,7 @@ flights |>
 ### Logical subsetting
 
 There's one final use for logical vectors in summaries: you can use a logical vector to filter a single variable to a subset of interest.
-This makes use of the base `[` (pronounced subset) operator, which you'll learn more about this in @sec-vector-subsetting.
+This makes use of the base `[` (pronounced subset) operator, which you'll learn more about in @sec-vector-subsetting.
 
 Imagine we wanted to look at the average delay just for flights that were actually delayed.
 One way to do so would be to first filter the flights:
@@ -402,7 +404,7 @@ This works, but what if we wanted to also compute the average delay for flights 
 We'd need to perform a separate filter step, and then figure out how to combine the two data frames together[^logicals-3].
 Instead you could use `[` to perform an inline filtering: `arr_delay[arr_delay > 0]` will yield only the positive arrival delays.
 
-[^logicals-3]: We'll cover this in [Chapter -@sec-relational-data]
+[^logicals-3]: We'll cover this in @sec-joins\]
 
 This leads to:
 
@@ -432,8 +434,7 @@ There are two important tools for this: `if_else()` and `case_when()`.
 ### `if_else()`
 
 If you want to use one value when a condition is true and another value when it's `FALSE`, you can use `dplyr::if_else()`[^logicals-4].
-You'll always use the first three argument of `if_else()`.
-The first argument, `condition`, is a logical vector, the second, `true`, gives the output when the condition is true, and the third, `false`, gives the output if the condition is false.
+You'll always use the first three argument of `if_else()`. The first argument, `condition`, is a logical vector, the second, `true`, gives the output when the condition is true, and the third, `false`, gives the output if the condition is false.
 
 [^logicals-4]: dplyr's `if_else()` is very similar to base R's `ifelse()`.
     There are two main advantages of `if_else()`over `ifelse()`: you can choose what should happen to missing values, and `if_else()` is much more likely to give you a meaningful error if you variables have incompatible types.
@@ -544,53 +545,13 @@ flights |>
   )
 ```
 
-## Making groups {#sec-groups-from-logical}
+## Summary
 
-Before we move on to the next chapter, we want to show you one last trick that's useful for grouping data.
-Sometimes you want to start a new group every time some event occurs.
-For example, when you're looking at website data, it's common to want to break up events into sessions, where a session is defined as a gap of more than x minutes since the last activity.
+The definition of a logical vector is simple because each value must be either `TRUE`, `FALSE`, or `NA`.
+But logical vectors provide a huge amount of power.
+In this chapter, you learned how to create logical vectors with `>`, `<`, `<=`, `=>`, `==`, `!=`, and `is.na()`, how to combine them with `!`, `&`, and `|`, and how to summarize them with `any()`, `all()`, `sum()`, and `mean()`.
+You also learned the powerful `if_else()` and `case_when()` that allow you to return values depending on the value of a logical vector.
 
-Here's some made up data that illustrates the problem.
-So far computed the time lag between the events, and figured out if there's a gap that's big enough to qualify:
-
-```{r}
-events <- tibble(
-  time = c(0, 1, 2, 3, 5, 10, 12, 15, 17, 19, 20, 27, 28, 30)
-)
-events <- events |> 
-  mutate(
-    diff = time - lag(time, default = first(time)),
-    gap = diff >= 5
-  )
-events
-```
-
-But how do we go from that logical vector to something that we can `group_by()`?
-`consecutive_id()` comes to the rescue:
-
-```{r}
-events |> mutate(
-  group = consecutive_id(gap)
-)
-```
-
-`consecutive_id()` starts a new group every time one of its arguments changes.
-That makes it useful both here, with logical vectors, and in many other place.
-For example, inspired by [this stackoverflow question](https://stackoverflow.com/questions/27482712), imagine you have a data frame with a bunch of repeated values:
-
-```{r}
-df <- tibble(
-  x = c("a", "a", "a", "b", "c", "c", "d", "e", "a", "a", "b", "b"),
-  y = c(1, 2, 3, 2, 4, 1, 3, 9, 4, 8, 10, 199)
-)
-df
-```
-
-You want to keep the first row from each repeated `x`.
-That's easier to express with a combination of `consecutive_id()` and `slice_head()`:
-
-```{r}
-df |> 
-  group_by(id = consecutive_id(x)) |> 
-  slice_head(n = 1)
-```
+We'll see logical vectors again and in the following chapters.
+For example in @sec-strings you'll learn about `str_detect(x, pattern)` which returns a logical vector that's `TRUE` for the elements of `x` that match the `pattern`, and in @sec-dates-and-times you'll create logical vectors from the comparison of dates and times.
+But for now, we're going to move onto the next most important type of vector: numeric vectors.

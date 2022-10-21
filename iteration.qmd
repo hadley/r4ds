@@ -4,32 +4,33 @@
 #| results: "asis"
 #| echo: false
 source("_common.R")
+status("drafting")
 ```
 
 ## Introduction
 
-In @sec-functions, we talked about how important it is to reduce duplication in your code by creating functions instead of copying-and-pasting.
-Reducing code duplication has three main benefits:
+In this chapter, you'll tools for iteration, repeatedly performing the same action on different objects.
+You've already learned a number of special purpose tools for iteration:
 
-1.  It's easier to see the intent of your code, because your eyes are drawn to what's different, not what stays the same.
+-   To draw one plot for each group you can use ggplot2's facetting.
+-   To compute a summary statistic for each subgroup you can use `group_by()` and `summarise()`.
+-   To extract each element in a named list you can use `unnest_wider()` or `unnest_longer()`.
 
-2.  It's easier to respond to changes in requirements.
-    As your needs change, you only need to make changes in one place, rather than remembering to change every place that you copied-and-pasted the code.
-
-3.  You're likely to have fewer bugs because each line of code is used in more places.
-
-One tool for reducing duplication is functions, which reduce duplication by identifying repeated patterns of code and extract them out into independent pieces that can be easily reused and updated.
-Another tool for reducing duplication is **iteration**, which helps you when you need to do the same thing to multiple inputs: repeating the same operation on different columns, or on different datasets.
-
-In this chapter you'll learn about two important iteration paradigms: **imperative** and **functional**.
-On the imperative side you have tools like `for` loops and `while` loops, which are a great place to start because they make iteration very explicit, so it's obvious what's happening.
-However, `for` loops are quite verbose because they require bookkeeping code that is duplicated for every `for` loop.
-Functional programming (FP) offers tools to extract out this duplicated code, so each common `for` loop pattern gets its own function.
-Once you master the vocabulary of FP, you can solve many common iteration problems with less code, more ease, and fewer errors.
+Now it's time to learn some more general tools.
+Tools for iteration can quickly become very abstract, but in this chapter we'll keep things concrete to make as easy as possible to learn the basics.
+We're going to focus on three related tools for three related tasks: modifying multiple columns, reading multiple files, and saving multiple objects.
+We'll conclude with a brief discussion of `for`-loops, an important iteration technique that we deliberately don't cover here, and provide a few pointers for learning more.
 
 ### Prerequisites
 
-Once you've mastered the `for` loops provided by base R, you'll learn some of the powerful programming tools provided by purrr, one of the tidyverse core packages.
+::: callout-important
+This chapter relies on features only found in purrr 1.0.0, which is still in development.
+If you want to live life on the edge you can get the dev version with `devtools::install_github("tidyverse/purrr")`.
+:::
+
+In this chapter, we'll focus on tools provided by dplyr and purrr, both core members of the tidyverse.
+You've seen dplyr before, but purrr is new.
+We're going to use just a couple of purrr functions from in this chapter, but it's a great package to skill as you improve your programming skills.
 
 ```{r}
 #| label: setup
@@ -38,975 +39,923 @@ Once you've mastered the `for` loops provided by base R, you'll learn some of th
 library(tidyverse)
 ```
 
+This chapter also relies on a function that hasn't yet been implemented for dplyr but will be by the time the book is out:
+
+```{r}
+pick <- function(cols) {
+  across({{ cols }})
+}
+```
+
+## Modifying multiple columns {#sec-across}
+
+Imagine you have this simple tibble:
+
+```{r}
+df <- tibble(
+  a = rnorm(10),
+  b = rnorm(10),
+  c = rnorm(10),
+  d = rnorm(10)
+)
+```
+
+And you want to compute the median of every column.
+You could do it with copy-and-paste:
+
+```{r}
+df |> summarise(
+  a = median(a),
+  b = median(b),
+  c = median(c),
+  d = median(d),
+  n = n()
+)
+```
+
+But that breaks our rule of thumb to never copy and paste more than twice, and you can imagine that this will get very tedious if you have tens or even hundreds of variables.
+Instead you can use `across()`:
+
+```{r}
+df |> summarise(
+  across(a:d, median),
+  n = n()
+)
+```
+
+`across()` has three particularly important arguments, which we'll discuss in detail in the following sections.
+You'll use the first two every time you use `across()`:
+
+-   The first argument, `.cols`, specifies which columns you want to iterate over. It uses tidy-select syntax, just like `select()`.
+-   The second argument, `.fns`, specifies what to do with each column.
+
+The `.names` argument gives you control over the output names, and is particularly useful when you use `across()` with `mutate()`.
+We'll also discuss two important variations, `if_any()` and `if_all()`, which work with `filter()`.
+
+### Selecting columns with `.cols`
+
+The first argument to `across()` selects the columns to transform.
+This argument uses the same specifications as `select()`, @sec-select, so you can use functions like `starts_with()` and `ends_with()` to select variables based on their name.
+Grouping columns are automatically ignored because they're carried along for the ride by the dplyr verb.
+
+There are two additional selection techniques that are particularly useful for `across()`: `everything()` and `where()`.
+`everything()` is straightforward: it selects every (non-grouping) column:
+
+```{r}
+df <- tibble(
+  grp = sample(2, 10, replace = TRUE),
+  a = rnorm(10),
+  b = rnorm(10),
+  c = rnorm(10),
+  d = rnorm(10)
+)
+
+df |> 
+  group_by(grp) |> 
+  summarise(across(everything(), median))
+```
+
+`where()` allows you to select columns based on their type:
+
+-   `where(is.numeric)` selects all numeric columns.
+-   `where(is.character)` selects all string columns.
+-   `where(is.Date)` selects all date columns.
+-   `where(is.POSIXct)` selects all date-time columns.
+-   `where(is.logical)` selects all logical columns.
+
+```{r}
+df <- tibble(
+  x1 = 1:3,
+  x2 = runif(3),
+  y1 = sample(letters, 3),
+  y2 = c("banana", "apple", "egg")
+)
+
+df |> 
+  summarise(across(where(is.numeric), mean))
+
+df |> 
+  summarise(across(where(is.character), str_flatten))
+```
+
+Just like other selectors, you can combine these with Boolean algebra.
+For example, `!where(is.numeric)` selects all non-numeric columns and `starts_with("a") & where(is.logical)` selects all logical columns whose name starts with "a".
+
+### Defining the action with `.fns`
+
+The second argument to `across()` defines how each column will be transformed.
+In simple cases, this will just be the name of existing function, but you might want to supply additional arguments or perform multiple transformations, as described below.
+
+Lets motivate this problem with an simple example: what happens if we have some missing values in our data?
+`median()` will preserve those missing values giving us a suboptimal output:
+
+```{r}
+rnorm_na <- function(n, n_na, mean = 0, sd = 1) {
+  sample(c(rnorm(n - n_na, mean = mean, sd = 1), rep(NA, n_na)))
+}
+
+df <- tibble(
+  a = rnorm_na(5, 1),
+  b = rnorm_na(5, 1),
+  c = rnorm_na(5, 2),
+  d = rnorm(5)
+)
+df |> 
+  summarise(
+    across(a:d, median),
+    n = n()
+  )
+```
+
+It'd be nice to be able to pass along `na.rm = TRUE` to `median()` to remove these missing values.
+To do so, instead of calling `median()` directly, we need to create a new function that calls `median()` with the correct arguments:
+
+```{r}
+df |> 
+  summarise(
+    across(a:d, function(x) median(x, na.rm = TRUE)),
+    n = n()
+  )
+```
+
+This is a little verbose, so R comes with a handy shortcut: for this sort of throw away function[^iteration-1], you can replace `function` with `\`:
+
+[^iteration-1]: These are often called anonymous functions because you don't give them a name with `<-.`
+
+```{r}
+#| results: false
+df |> 
+  summarise(
+    across(a:d, \(x) median(x, na.rm = TRUE)),
+    n = n()
+  )
+```
+
+In either case, `across()` effectively expands to the following code:
+
+```{r}
+#| eval: false
+
+df |> summarise(
+  a = median(a, na.rm = TRUE),
+  b = median(b, na.rm = TRUE),
+  c = median(c, na.rm = TRUE),
+  d = median(d, na.rm = TRUE),
+  n = n()
+)
+```
+
+When we remove the missing values from the `median()`, it would be nice to know just how many values we were removing.
+We find that out by supplying two functions to `across()`: one to compute the median and the other to count the missing values.
+You can supply multiple functions with a named list:
+
+```{r}
+df |> 
+  summarise(
+    across(a:d, list(
+      median = \(x) median(x, na.rm = TRUE),
+      n_miss = \(x) sum(is.na(x))
+    )),
+    n = n()
+  )
+```
+
+If you look carefully, you might intuit that the columns are named using using a glue specification (@sec-glue) like `{.col}_{.fn}` where `.col` is the name of the original column and `.fn` is the name of the function.
+That's not a coincidence!
+As you'll learn in the next section, you can use `.names` argument to supply your own glue spec.
+
+### Missing values {#sec-across-missing-values}
+
+```{r}
+#| eval: false
+
+df |> 
+  mutate(across(where(is.numeric), coalesce, 0))
+
+df |> 
+  mutate(across(where(is.numeric), na_if, -99))
+```
+
+### Column names
+
+The result of `across()` is named according to the specification provided in the `.names` variable.
+We could specify our own if we wanted the name of the function to come first[^iteration-2]:
+
+[^iteration-2]: You can't currently change the order of the columns, but you could reorder them after the fact using `relocate()` or similar.
+
+```{r}
+df |> 
+  summarise(
+    across(
+      a:d, 
+      list(
+        median = \(x) median(x, na.rm = TRUE),
+        n_miss = \(x) sum(is.na(x))
+      ), 
+      .names = "{.fn}_{.col}"
+    ),
+    n = n(),
+  )
+```
+
+The `.names` argument is particularly important when you use `across()` with `mutate()`.
+By default the output of `across()` is given the same names as the inputs.
+This means that `across()` inside of `mutate()` will replace existing columns:
+
+```{r}
+df |> 
+  mutate(
+    across(a:d, \(x) coalesce(x, 0))
+  )
+```
+
+If you'd like to instead create new columns, you can use the `.names` argument give the output new names:
+
+```{r}
+df |> 
+  mutate(
+    across(a:d, \(x) x * 2, .names = "{.col}_double")
+  )
+```
+
+### Filtering
+
+`across()` is a great match for `summarise()` and `mutate()` but it's not such a great fit for `filter()` because you usually string together calls to multiple functions either with `|` or `&`.
+So dplyr provides two variants of `across()` called `if_any()` and `if_all()`:
+
+```{r}
+df |> filter(is.na(a) | is.na(b) | is.na(c) | is.na(d))
+# same as:
+df |> filter(if_any(a:d, is.na))
+
+df |> filter(is.na(a) & is.na(b) & is.na(c) & is.na(d))
+# same as:
+df |> filter(if_all(a:d, is.na))
+```
+
+### `across()` in functions
+
+`across()` is particularly useful to program with because it allows you to operate with multiple variables.
+For example, [Jacob Scott](https://twitter.com/_wurli/status/1571836746899283969) uses this little helper to expand all date variables into year, month, and day variables:
+
+```{r}
+expand_dates <- function(df) {
+  df |> 
+    mutate(
+      across(
+        where(lubridate::is.Date), 
+        list(year = year, month = month, day = mday)
+      )
+    )
+}
+```
+
+It also makes it easy to supply multiple variables in a single argument because the first argument uses tidy-select.
+You just need to remember to embrace that argument.
+For example, this function will compute the means of numeric variables by default.
+But by supplying the second argument you can choose to summarize just selected variables:
+
+```{r}
+summarise_means <- function(df, summary_vars = where(is.numeric)) {
+  df |> 
+    summarise(
+      across({{ summary_vars }}, \(x) mean(x, na.rm = TRUE)),
+      n = n()
+    )
+}
+diamonds |> 
+  group_by(clarity) |> 
+  summarise_means()
+
+diamonds |> 
+  group_by(clarity) |> 
+  summarise_means(c(carat, x:z))
+```
+
+### Vs `pivot_longer()`
+
+Before we go on, it's worth pointing out an interesting connection between `across()` and `pivot_longer()`.
+In many cases, you perform the same calculations by first pivoting the data and then performing the operations by group rather than by column.
+For example, we could rewrite our multiple summary `across()` as:
+
+```{r}
+df |> 
+  pivot_longer(a:d) |> 
+  group_by(name) |> 
+  summarise(
+    median = median(value, na.rm = TRUE),
+    n_miss = sum(is.na(value))
+  )
+```
+
+This is a useful technique to know about because sometimes you'll hit a problem that's not currently possible to solve with `across()`: when you have groups of variables that you want to compute with simultaneously.
+For example, imagine that our data frame contains both values and weights and we want to compute a weighted mean:
+
+```{r}
+df3 <- tibble(
+  a_val = rnorm(10),
+  a_w = runif(10),
+  b_val = rnorm(10),
+  b_w = runif(10),
+  c_val = rnorm(10),
+  c_w = runif(10),
+  d_val = rnorm(10),
+  d_w = runif(10)
+)
+```
+
+There's currently no way to do this with `across()`[^iteration-3], but it's relatively straightforward with `pivot_longer()`:
+
+[^iteration-3]: Maybe there will be one day, but currently we don't see how.
+
+```{r}
+df3_long <- df3 |> 
+  pivot_longer(
+    everything(), 
+    names_to = c("group", ".value"), 
+    names_sep = "_"
+  )
+df3_long
+
+df3_long |> 
+  group_by(group) |> 
+  summarise(mean = weighted.mean(val, w))
+```
+
+If needed, you could `pivot_wider()` this back to the original form.
+
+### Exercises
+
+1.  Compute the number of unique values in each column of `palmerpenguins::penguins`.
+
+2.  Compute the mean of every column in `mtcars`.
+
+3.  Group `diamonds` by `cut`, `clarity`, and `color` then count the number of observations and the mean of each numeric variable.
+
+4.  What happens if you use a list of functions, but don't name them?
+    How is the output named?
+
+5.  It is possible to use `across()` inside `filter()` where it's equivalent to `if_all()`.
+    Can you explain why?
+
+6.  Adjust `expand_dates()` to automatically remove the date columns after they've been expanded.
+    Do you need to embrace any arguments?
+
+7.  Explain what each step of the pipeline in this function does.
+    What special feature of `where()` are we taking advantage of?
+
+    ```{r}
+    #| results: false
+
+    show_missing <- function(df, group_vars, summary_vars = everything()) {
+      df |> 
+        group_by(pick({{ group_vars }})) |> 
+        summarise(
+          across({{ summary_vars }}, \(x) sum(is.na(x))),
+          .groups = "drop"
+        ) |>
+        select(where(\(x) any(x > 0)))
+    }
+    nycflights13::flights |> show_missing(c(year, month, day))
+    ```
+
+## Reading multiple files
+
+In the previous section, you learn how to use `dplyr::across()` to repeat a transformation on multiple columns.
+In this section, you'll learn how to use `purrr::map()` to read every file in a directly.
+Let's start with a little motivation: imagine you have a directory full of excel spreadsheets[^iteration-4] you want to read.
+You could do it with copy and paste:
+
+[^iteration-4]: If you instead had a directory of csv files with the same format, you can use the technique from @sec-readr-directory.
+
+```{r}
+#| eval: false
+data2019 <- readr::read_excel("data/y2019.xls")
+data2020 <- readr::read_excel("data/y2020.xls")
+data2021 <- readr::read_excel("data/y2021.xls")
+data2022 <- readr::read_excel("data/y2022.xls")
+```
+
+And then use `dplyr::bind_rows()` to combine them all together:
+
+```{r}
+#| eval: false
+data <- bind_rows(data2019, data2020, data2021, data2022)
+```
+
+You can imagine that this would get tedious quickly, especially if you had 400 files, not four.
+So in the following sections, you'll learn how to automate this sort of task.
+There are basic steps: use `dir()` list all the files, then use `purrr::map()` to read each of them into a list, then use `purrr::list_rbind()` to combine them into a single data frame.
+We'll then discuss how you can handle situations of increasing heterogeneity, where you can't do exactly the same thing to every file.
+
+### Listing files in a directory
+
+`dir()` lists the files in a directory.
+You'll almost always use three arguments:
+
+-   `path`, the first argument is the directory to look in.
+
+-   `pattern` is a regular expression that the file names must match.
+    The most common pattern is something like `\\.xlsx$` or `\\.csv$` to match an extension, but you can use whatever you need to extract the data files from anything else living in that directory.
+
+-   `full.names` determines whether or not the directory name should be included in the output.
+    You almost always want this to be `TRUE`.
+
+To make our motivating example concrete, this book contains a folder with 12 excel spreadsheets containining data from the gapminder package.
+Each file contains one years for data for 142 countries.
+We can list them all with the appropriate call to `dir()`:
+
+```{r}
+paths <- dir("data/gapminder", pattern = "\\.xlsx$", full.names = TRUE)
+paths
+```
+
+### `purrr::map()` and `list_rbind()`
+
+Now that we have these 12 paths, we could call `read_excel()` 12 times to get 12 data frames.
+In general, we won't know how files there are to read, so instead of saving each data frame to its own variable, we'll put them all into a list, something like this:
+
+```{r}
+#| eval: false
+list(
+  readxl::read_excel("data/gapminder/1952.xls"),
+  readxl::read_excel("data/gapminder/1957.xls"),
+  readxl::read_excel("data/gapminder/1962.xls"),
+  ...,
+  readxl::read_excel("data/gapminder/2007.xls")
+)
+```
+
+Now that's just as tedious to type as before, but we can use a shortcut: `purrr::map()`.
+`map()` is similar to `across()`, but instead of doing something to each column in a data frame, it does something to each element of a vector.
+`map(x, f)` is shorthand for:
+
+```{r}
+#| eval: false
+list(
+  f(x[[1]]),
+  f(x[[2]]),
+  ...,
+  f(x[[n]])
+)
+```
+
+So we can use `map()` get a list of 12 data frames:
+
+```{r}
+files <- map(paths, readxl::read_excel)
+length(files)
+
+files[[1]]
+```
+
+(This is another data structure that doesn't display particularly compactly with `str()` so you might want to load into RStudio and inspect it with `View()`).
+
+Now we can use `purrr::list_rbind()` to combine that list of data frames into a single data frame:
+
+```{r}
+list_rbind(files)
+```
+
+Or we could do both steps at once in pipeline:
+
+```{r}
+#| results: false
+paths |> 
+  map(readxl::read_excel) |> 
+  list_rbind()
+```
+
+What if we want to pass in extra arguments to `read_excel()`?
+We use the same technique that we used with `across()`.
+For example, it's often useful to peak at the first few row of the data with `n_max = 1`:
+
+```{r}
+paths |> 
+  map(\(path) readxl::read_excel(path, n_max = 1)) |> 
+  list_rbind()
+```
+
+This makes it clear that something is missing: there's no `year` column because that value is recorded in the path, not the individual files.
+We'll tackle that problem next.
+
+### Data in the path {#sec-data-in-the-path}
+
+Sometimes the name of the file is itself data.
+In this example, the file name contains the year, which is not otherwise recorded in the individual files.
+To get that column into the final data frame, we need to do two things.
+
+Firstly, we name the vector of paths.
+The easiest way to do this is with the `set_names()` function, which can take a function.
+Here we use `basename()` to extract just the file name from the full path:
+
+```{r}
+paths <- paths |> set_names(basename) 
+paths
+```
+
+Those paths are automatically carried along by all the map functions, so the list of data frames will have those same names:
+
+```{r}
+#| eval: false
+paths |> 
+  map(readxl::read_excel) |> 
+  names()
+```
+
+Then we use the `names_to` argument `list_rbind()` to tell it to save the names to a new column called `year`, then use `readr::parse_number()` to turn it into a number.
+
+```{r}
+paths |> 
+  set_names(basename) |> 
+  map(readxl::read_excel) |> 
+  list_rbind(names_to = "year") |> 
+  mutate(year = parse_number(year))
+```
+
+In more complicated other cases, there might be another variable stored in the directory name, or maybe the file name contains multiple bits of data.
+In that case, use `set_names()` (without any arguments) to record the full path, and then use `tidyr::separate_by()` and friends to turn them into useful columns.
+
+```{r}
+paths |> 
+  set_names() |> 
+  map(readxl::read_excel) |> 
+  list_rbind(names_to = "year") |> 
+  separate(
+    year, 
+    into = c(NA, "directory", "file", "ext"), 
+    sep = "[/.]"
+  )
+```
+
+### Save your work
+
+Now that you've done all this hard work to get to a nice tidy data frame, it's a great time to save your work:
+
+```{r}
+gapminder <- paths |> 
+  set_names(basename) |> 
+  map(readxl::read_excel) |> 
+  list_rbind(names_to = "year") |> 
+  mutate(year = parse_number(year))
+
+write_csv(gapminder, "gapminder.csv")
+```
+
+```{r}
+#| include: false
+unlink("gapminder.csv")
+```
+
+If you're working in a project, we'd suggest calling the file that does this sort of data prep work something like `0-cleanup.R.` The `0` in the file name suggests that this should be run before anything else.
+
+If your input data files change of over time, you might consider learning a tool like [targets](https://docs.ropensci.org/targets/) to set up your data cleaning code to automatically re-run when ever one of the input files is modified.
+
+### Many simple iterations
+
+Here we've just loaded the data directly from disk, and were lucky enough to get a tidy dataset.
+In most cases, you'll need to do some additional tidying, and you have basic basic options: you can do one round of iteration with a complex function, or do a multiple rounds of iteration with multiple simple functions.
+In our experience most folks reach first for one complex iteration, but you're often better by doing multiple simple iterations.
+
+For example, imagine that you want to read in a bunch of files, filter out missing values, pivot, and then combine.
+One way to approach the problem is write a function that takes a file and does all those steps and call `map()` once:
+
+```{r}
+#| eval: false
+process_file <- function(path) {
+  df <- read_csv(path)
+  
+  df |> 
+    filter(!is.na(id)) |> 
+    mutate(id = tolower(id)) |> 
+    pivot_longer(jan:dec, names_to = "month")
+}
+
+paths |> 
+  map(process_file) |> 
+  list_rbind()
+```
+
+Another approach is to read all the files and combine them together first.
+Then you only need to
+
+```{r}
+#| eval: false
+paths |> 
+  map(read_csv) |> 
+  list_rbind() |> 
+  filter(!is.na(id)) |> 
+  mutate(id = tolower(id)) |> 
+  pivot_longer(jan:dec, names_to = "month")
+```
+
+We recommend the second approach because it stops you getting fixated on getting the first file right because moving on to the rest.
+By considering all of the data when doing tidying and cleaning, you're more likely to think holistically and end up with a higher quality result.
+
+### Heterogeneous data
+
+Unfortunately it's sometime not possible to go from `map()` straight to `list_rbind()` because the data frames are so heterogeneous that `list_rbind()` either fails or yields a data frame that's not very useful.
+In that case, it's still useful to start by loading all of the files:
+
+```{r}
+#| eval: false
+files <- paths |> 
+  map(readxl::read_excel) 
+```
+
+Then a very useful strategy is to convert the structure of the data frames to data so that you can explore using your data science skills.
+One way to do so is with this handy `df_types` function that returns a tibble with one row for each column:
+
+```{r}
+df_types <- function(df) {
+  tibble(
+    col_name = names(df), 
+    col_type = map_chr(df, vctrs::vec_ptype_full),
+    n_miss = map_int(df, \(x) sum(is.na(x)))
+  )
+}
+
+df_types(starwars)
+df_types(nycflights13::flights)
+```
+
+You can then apply this function all of the files, and maybe do some pivoting to make it easy to see where there are differences.
+
+```{r}
+files |> 
+  map(df_types) |> 
+  list_rbind(names_to = "file_name") |> 
+  select(-n_miss) |> 
+  pivot_wider(names_from = col_name, values_from = col_type)
+```
+
+If the files have heterogeneous formats you might need to do more processing before you can successfully merge them.
+Unfortunately we're now going to leave you to figure that out on your own, but you might want to read about `map_if()` and `map_at()`.
+`map_if()` allows you to selectively modify elements of a list based on their values; `map_at()` allows you to selectively modify elements based on their names.
+
+### Handling failures
+
+Sometimes the structure of your data might be sufficiently wild that you can't even read all the files with a single command.
+And then you'll encounter one of the downsides of map: is that it succeeds or fails as a whole.
+`map()` will either successfully read all of the files in a directory or fail with an error.
+This is annoying: why does one failure prevent you from accessing all the other successes?
+
+Luckily, purrr comes with a helper to tackle this problem: `possibly()`.
+When you wrap a function in possible, a failure with instead return a `NULL`.
+`list_rbind()` automatically ignores `NULL`s, so the following code will always succeed:
+
+```{r}
+files <- paths |> 
+  map(possibly(\(path) readxl::read_excel(path), NULL))
+
+data <- files |> list_rbind()
+```
+
+Now comes the hard part of figuring out why they failed and what do to about it.
+Start by getting the paths that failed:
+
+```{r}
+failed <- map_vec(files, is.null)
+paths[failed]
+```
+
+Then call the import function again for each failure and figure out what went wrong.
+
+## Saving multiple outputs
+
+In the last section, you learned about `map()`, which is useful for reading multiple files into a single object.
+In this section, we'll now explore the opposite: how can you take one or more R objects and save them to one or more files?
+We'll explore this challenge using three examples:
+
+-   Saving multiple data frames into one database.
+-   Saving multiple data frames into multiple csv files.
+-   Saving multiple plots to multiple `.png` files.
+
+### Writing to a database {#sec-save-database}
+
+Sometimes when working with many files at once, it's not possible to fit all your data into memory at once.
+If you can't `map(files, read_csv)` how can you work with your data?
+One approach is to put it all into a database and then use dbplyr to access just the subsets that you need.
+
+If you're lucky, the database package will provide a handy function that will take a vector of paths and load them all into the database.
+This is the case with duckdb's `duckdb_read_csv()`:
+
+```{r}
+#| eval: false
+con <- DBI::dbConnect(duckdb::duckdb())
+duckdb::duckdb_read_csv(con, "gapminder", paths)
+```
+
+But here we don't have csv files, we have excel spreadsheets.
+So we're going to have to do it "by hand".
+And you can use this same pattern for databases that don't have a handy function for loading many csv files.
+
+We need to start by creating a table that will fill in with data.
+The easiest way to do this is by creating template for the existing data.
+So we begin by loading a single row from one file and adding the year to it:
+
+```{r}
+template <- readxl::read_excel(paths[[1]], n_max = 1)
+template$year <- 1952
+template
+```
+
+Now we can connect to the database, and `DBI::dbCreateTable()` to turn our template into database table:
+
+```{r}
+con <- DBI::dbConnect(duckdb::duckdb())
+DBI::dbCreateTable(con, "gapminder", template)
+```
+
+`dbCreateTable()` doesn't use the data in `template`, just variable names and types.
+So if we inspect the `gapminder` table now you'll see that it's empty but it has the variables we need:
+
+```{r}
+con |> tbl("gapminder")
+```
+
+Next, we need a function that takes a single file path and reads it into R, and adds it to the `gapminder` table, the job of `DBI::dbAppendTable()`:
+
+```{r}
+append_file <- function(path) {
+  df <- readxl::read_excel(path)
+  df$year <- parse_number(basename(path))
+  
+  DBI::dbAppendTable(con, "gapminder", df)
+}
+```
+
+Now we need to call `append_csv()` once for `path`.
+That's certainly possible with `map()`:
+
+```{r}
+#| eval: false
+paths |> map(append_file)
+```
+
+But we don't actually care about the output, so instead of `map()` it's slightly nicer to use `walk()`.
+`walk()` does exactly the same thing as `map()` but throws the output away:
+
+```{r}
+paths |> walk(append_file)
+```
+
+Now if we can see we have all the data in our table:
+
+```{r}
+con |> 
+  tbl("gapminder") |> 
+  count(year)
+```
+
+```{r, include = FALSE}
+DBI::dbDisconnect(con, shutdown = TRUE)
+```
+
+### Writing csv files
+
+The same basic principle applies if we want to write multiple csv files, one for each group.
+Let's imagine that we want to take the `ggplot2::diamonds` data and save our one csv file for each `clarity`.
+First we need to make those individual datasets.
+One way to do that is with dplyr's `group_split()`:
+
+```{r}
+by_clarity <- diamonds |> 
+  group_by(clarity) |> 
+  group_split()
+```
+
+This produces a list of length 8, containing one tibble for each unique value of `clarity`:
+
+```{r}
+length(by_clarity)
+
+by_clarity[[1]]
+```
+
+If we were going to save these data frames by hand, we might write something like:
+
+```{r}
+#| eval: false
+write_csv(by_clarity[[1]], "diamonds-I1.csv")
+write_csv(by_clarity[[2]], "diamonds-SI2.csv")
+write_csv(by_clarity[[3]], "diamonds-SI1.csv")
+...
+write_csv(by_clarity[[8]], "diamonds-IF.csv")
+```
+
+This is a little different to our previous uses of `map()` because there are two arguments changing, not just one.
+That means that we'll need to use `map2()` instead of `map()`.
+
+But before we can use `map2()` we need to figure out the names for those files.
+The most general way to do so is to use `dplyr::group_key()` to get the unique values of the grouping variables, then use `mutate()` and `str_glue()` to make a path:
+
+```{r}
+keys <- diamonds |> 
+  group_by(clarity) |> 
+  group_keys()
+keys
+
+paths <- keys |> 
+  mutate(path = str_glue("diamonds-{clarity}.csv")) |> 
+  pull()
+paths
+```
+
+This feels a bit fiddly here because we're only working with a single group, but you can imagine this is very powerful when you're grouping by multiple variables.
+
+Now that we have all the pieces in place, we can eliminate the need to copy and paste by running `walk2()`:
+
+```{r}
+walk2(by_clarity, paths, write_csv)
+```
+
+This is shorthand for:
+
+```{r}
+#| eval: false
+write_csv(by_clarity[[1]], paths[[1]])
+write_csv(by_clarity[[2]], paths[[2]])
+write_csv(by_clarity[[3]], paths[[3]])
+...
+write_csv(by_clarity[[8]], paths[[8]])
+```
+
+```{r}
+#| include: false
+unlink(paths)
+```
+
+### Saving plots
+
+We can take the same basic approach to create many plots.
+We're jumping the gun here a bit because you won't learn how to save a single plot until @sec-ggsave, but hopefully you'll get the basic idea.
+
+Let's assume you've already split up the data using `group_split()`.
+Now you can use `map()` to create a list of many plots[^iteration-5]:
+
+[^iteration-5]: You can print `plots` to get a crude animation --- you'll get one plot for each element of `plots`.
+
+```{r}
+plots <- by_clarity |>
+  map(\(df) ggplot(df, aes(carat)) + geom_histogram(binwidth = 0.01))
+```
+
+(If this was a more complicated plot you'd use a named function so there's more room for all the details.)
+
+Then you create the file names:
+
+```{r}
+paths <- keys |> 
+  mutate(path = str_glue("clarity-{clarity}.png")) |> 
+  pull()
+paths
+```
+
+Then use `walk2()` with `ggsave()` to save each plot:
+
+```{r}
+walk2(paths, plots, \(path, plot) ggsave(path, plot, width = 6, height = 6))
+```
+
+This is short hand for:
+
+```{r}
+#| eval: false
+ggsave(paths[[1]], plots[[1]], width = 6, height = 6)
+ggsave(paths[[2]], plots[[2]], width = 6, height = 6)
+ggsave(paths[[3]], plots[[3]], width = 6, height = 6)
+...
+ggsave(paths[[8]], plots[[8]], width = 6, height = 6)
+```
+
+```{r}
+#| include: false
+unlink(paths)
+```
+
+### Exercises
+
+1.  Imagine you have a table of student data containing (amongst other variables) `school_name` and `student_id`. Sketch out what code you'd write if you want to save all the information for each student in file called `{student_id}.csv` in the `{school}` directory.
+
 ## For loops
 
-Imagine we have this simple tibble:
-
-```{r}
-df <- tibble(
-  a = rnorm(10),
-  b = rnorm(10),
-  c = rnorm(10),
-  d = rnorm(10)
-)
-```
-
-We want to compute the median of each column.
-You *could* do with copy-and-paste:
-
-```{r}
-median(df$a)
-median(df$b)
-median(df$c)
-median(df$d)
-```
-
-But that breaks our rule of thumb: never copy and paste more than twice.
-Instead, we could use a `for` loop:
-
-```{r}
-output <- vector("double", ncol(df))  # 1. output
-for (i in seq_along(df)) {            # 2. sequence
-  output[[i]] <- median(df[[i]])      # 3. body
-}
-output
-```
-
-Every `for` loop has three components:
-
-1.  The **output**: `output <- vector("double", length(x))`.
-    Before you start the loop, you must always allocate sufficient space for the output.
-    This is very important for efficiency: if you grow the `for` loop at each iteration using `c()` (for example), your `for` loop will be very slow.
-
-    A general way of creating an empty vector of given length is the `vector()` function.
-    It has two arguments: the type of the vector ("logical", "integer", "double", "character", etc.) and the length of the vector.
-
-2.  The **sequence**: `i in seq_along(df)`.
-    This determines what to loop over: each run of the `for` loop will assign `i` to a different value from `seq_along(df)`.
-    It's useful to think of `i` as a pronoun, like "it".
-
-    You might not have seen `seq_along()` before.
-    It's a safe version of the familiar `1:length(l)`, with an important difference: if you have a zero-length vector, `seq_along()` does the right thing:
-
-    ```{r}
-    y <- vector("double", 0)
-    seq_along(y)
-    1:length(y)
-    ```
-
-    You probably won't create a zero-length vector deliberately, but it's easy to create them accidentally.
-    If you use `1:length(x)` instead of `seq_along(x)`, you're likely to get a confusing error message.
-
-3.  The **body**: `output[[i]] <- median(df[[i]])`.
-    This is the code that does the work.
-    It's run repeatedly, each time with a different value for `i`.
-    The first iteration will run `output[[1]] <- median(df[[1]])`, the second will run `output[[2]] <- median(df[[2]])`, and so on.
-
-That's all there is to the `for` loop!
-Now is a good time to practice creating some basic (and not so basic) `for` loops using the exercises below.
-Then we'll move on to some variations of the `for` loop that help you solve other problems that will crop up in practice.
-
-### Exercises
-
-1.  Write `for` loops to:
-
-    a.  Compute the mean of every column in `mtcars`.
-    b.  Determine the type of each column in `nycflights13::flights`.
-    c.  Compute the number of unique values in each column of `palmerpenguins::penguins`.
-    d.  Generate 10 random normals from distributions with means of -10, 0, 10, and 100.
-
-    Think about the output, sequence, and body **before** you start writing the loop.
-
-2.  Eliminate the `for` loop in each of the following examples by taking advantage of an existing function that works with vectors:
-
-    ```{r}
-    #| eval: false
-
-    out <- ""
-    for (x in letters) {
-      out <- stringr::str_c(out, x)
-    }
-
-    x <- sample(100)
-    sd <- 0
-    for (i in seq_along(x)) {
-      sd <- sd + (x[i] - mean(x)) ^ 2
-    }
-    sd <- sqrt(sd / (length(x) - 1))
-
-    x <- runif(100)
-    out <- vector("numeric", length(x))
-    out[1] <- x[1]
-    for (i in 2:length(x)) {
-      out[i] <- out[i - 1] + x[i]
-    }
-    ```
-
-3.  Combine your function writing and `for` loop skills:
-
-    a.  Write a `for` loop that `prints()` the lyrics to the children's song "Alice the camel".
-    b.  Convert the nursery rhyme "ten in the bed" to a function. Generalise it to any number of people in any sleeping structure.
-    c.  Convert the song "99 bottles of beer on the wall" to a function. Generalise to any number of any vessel containing any liquid on any surface.
-
-4.  It's common to see `for` loops that don't preallocate the output and instead increase the length of a vector at each step:
-
-    ```{r}
-    #| eval: false
-
-    output <- vector("integer", 0)
-    for (i in seq_along(x)) {
-      output <- c(output, lengths(x[[i]]))
-    }
-    output
-    ```
-
-    How does this affect performance?
-    Design and execute an experiment.
-
-## For loop variations
-
-Once you have the basic `for` loop under your belt, there are some variations that you should be aware of.
-These variations are important regardless of how you do iteration, so don't forget about them once you've mastered the FP techniques you'll learn about in the next section.
-
-There are four variations on the basic theme of the `for` loop:
-
-1.  Modifying an existing object, instead of creating a new object.
-2.  Looping over names or values, instead of indices.
-3.  Handling outputs of unknown length.
-4.  Handling sequences of unknown length.
-
-### Modifying an existing object
-
-Sometimes you want to use a `for` loop to modify an existing object.
-For example, remember our challenge from @sec-functions on functions.
-We wanted to rescale every column in a data frame:
-
-```{r}
-df <- tibble(
-  a = rnorm(10),
-  b = rnorm(10),
-  c = rnorm(10),
-  d = rnorm(10)
-)
-rescale01 <- function(x) {
-  rng <- range(x, na.rm = TRUE)
-  (x - rng[1]) / (rng[2] - rng[1])
-}
-
-df$a <- rescale01(df$a)
-df$b <- rescale01(df$b)
-df$c <- rescale01(df$c)
-df$d <- rescale01(df$d)
-```
-
-To solve this with a `for` loop we again think about the three components:
-
-1.  **Output**: we already have the output --- it's the same as the input!
-
-2.  **Sequence**: we can think about a data frame as a list of columns, so we can iterate over each column with `seq_along(df)`.
-
-3.  **Body**: apply `rescale01()`.
-
-This gives us:
-
-```{r}
-for (i in seq_along(df)) {
-  df[[i]] <- rescale01(df[[i]])
-}
-```
-
-Typically you'll be modifying a list or data frame with this sort of loop, so remember to use `[[`, not `[`.
-You might have spotted that we used `[[` in all my `for` loops: we think it's better to use `[[` even for atomic vectors because it makes it clear that you want to work with a single element.
-
-### Looping patterns
-
-There are three basic ways to loop over a vector.
-So far we've shown you the most general: looping over the numeric indices with `for (i in seq_along(xs))`, and extracting the value with `x[[i]]`.
-There are two other forms:
-
-1.  Loop over the elements: `for (x in xs)`.
-    This is most useful if you only care about side-effects, like plotting or saving a file, because it's difficult to save the output efficiently.
-
-2.  Loop over the names: `for (nm in names(xs))`.
-    This gives you a name, which you can use to access the value with `x[[nm]]`.
-    This is useful if you want to use the name in a plot title or a file name.
-    If you're creating named output, make sure to name the results vector like so:
-
-    ```{r}
-    #| eval: false
-
-    results <- vector("list", length(x))
-    names(results) <- names(x)
-    ```
-
-Iteration over the numeric indices is the most general form, because given the position you can extract both the name and the value:
-
-```{r}
-#| eval: false
-
-for (i in seq_along(x)) {
-  name <- names(x)[[i]]
-  value <- x[[i]]
-}
-```
-
-### Unknown output length
-
-Sometimes you might not know how long the output will be.
-For example, imagine you want to simulate some random vectors of random lengths.
-You might be tempted to solve this problem by progressively growing the vector:
-
-```{r}
-means <- c(0, 1, 2)
-
-output <- double()
-for (i in seq_along(means)) {
-  n <- sample(100, 1)
-  output <- c(output, rnorm(n, means[[i]]))
-}
-str(output)
-```
-
-But this is not very efficient because in each iteration, R has to copy all the data from the previous iterations.
-In technical terms you get "quadratic" ($O(n^2)$) behavior which means that a loop with three times as many elements would take nine ($3^2$) times as long to run.
-
-A better solution to save the results in a list, and then combine into a single vector after the loop is done:
-
-```{r}
-out <- vector("list", length(means))
-for (i in seq_along(means)) {
-  n <- sample(100, 1)
-  out[[i]] <- rnorm(n, means[[i]])
-}
-str(out)
-str(unlist(out))
-```
-
-Here we've used `unlist()` to flatten a list of vectors into a single vector.
-
-This pattern occurs in other places too:
-
-1.  You might be generating a long string.
-    Instead of `paste()`ing together each iteration with the previous, save the output in a character vector and then combine that vector into a single string with `str_flatten()`.
-
-2.  You might be generating a big data frame.
-    Instead of sequentially `rbind()`ing in each iteration, save the output in a list, then use `dplyr::bind_rows(output)` to combine the output into a single data frame.
-
-Watch out for this pattern.
-Whenever you see it, switch to a more complex result object, and then combine in one step at the end.
-
-### Unknown sequence length
-
-Sometimes you don't even know how long the input sequence should run for.
-This is common when doing simulations.
-For example, you might want to loop until you get three heads in a row.
-You can't do that sort of iteration with the `for` loop.
-Instead, you can use a `while` loop.
-A `while` loop is simpler than a `for` loop because it only has two components, a condition and a body:
-
-```{r}
-#| eval: false
-
-while (condition) {
-  # body
-}
-```
-
-A `while` loop is also more general than a `for` loop, because you can rewrite any `for` loop as a `while` loop, but you can't rewrite every `while` loop as a `for` loop:
-
-```{r}
-#| eval: false
-
-for (i in seq_along(x)) {
-  # body
-}
-
-# Equivalent to
-i <- 1
-while (i <= length(x)) {
-  # body
-  i <- i + 1 
-}
-```
-
-Here's how we could use a `while` loop to find how many tries it takes to get three heads in a row:
-
-```{r}
-flip <- function() sample(c("T", "H"), 1)
-
-flips <- 0
-nheads <- 0
-
-while (nheads < 3) {
-  if (flip() == "H") {
-    nheads <- nheads + 1
-  } else {
-    nheads <- 0
-  }
-  flips <- flips + 1
-}
-flips
-```
-
-I mention `while` loops only briefly, because we hardly ever use them.
-They're most often used for simulation, which is outside the scope of this book.
-However, it is good to know they exist so that you're prepared for problems where the number of iterations is not known in advance.
-
-### Exercises
-
-1.  Imagine you have a directory full of CSV files that you want to read in.
-    You have their paths in a vector, `files <- dir("data/", pattern = "\\.csv$", full.names = TRUE)`, and now want to read each one with `read_csv()`.
-    Write the `for` loop that will load them into a single data frame.
-
-2.  What happens if you use `for (nm in names(x))` and `x` has no names?
-    What if only some of the elements are named?
-    What if the names are not unique?
-
-3.  Write a function that prints the mean of each numeric column in a data frame, along with its name.
-    For example, `show_mean(mpg)` would print:
-
-    ```{r}
-    #| eval: false
-
-    show_mean(mpg)
-    #> displ:   3.47
-    #> year:    2004
-    #> cyl:     5.89
-    #> cty:    16.86
-    ```
-
-    (Extra challenge: what function did we use to make sure that the numbers lined up nicely, even though the variable names had different lengths?)
-
-4.  What does this code do?
-    How does it work?
-
-    ```{r}
-    #| eval: false
-
-    trans <- list( 
-      disp = function(x) x * 0.0163871,
-      am = function(x) {
-        factor(x, labels = c("auto", "manual"))
-      }
-    )
-    for (var in names(trans)) {
-      mtcars[[var]] <- trans[[var]](mtcars[[var]])
-    }
-    ```
-
-## For loops vs. functionals
-
-`For` loops are not as important in R as they are in other languages because R is a functional programming language.
-This means that it's possible to wrap up `for` loops in a function, and call that function instead of using the `for` loop directly.
-
-To see why this is important, consider (again) this simple data frame:
-
-```{r}
-df <- tibble(
-  a = rnorm(10),
-  b = rnorm(10),
-  c = rnorm(10),
-  d = rnorm(10)
-)
-```
-
-Imagine you want to compute the mean of every column.
-You could do that with a `for` loop:
-
-```{r}
-output <- vector("double", length(df))
-for (i in seq_along(df)) {
-  output[[i]] <- mean(df[[i]])
-}
-output
-```
-
-You realise that you're going to want to compute the means of every column pretty frequently, so you extract it out into a function:
-
-```{r}
-col_mean <- function(df) {
-  output <- vector("double", length(df))
-  for (i in seq_along(df)) {
-    output[i] <- mean(df[[i]])
-  }
-  output
-}
-```
-
-But then you think it'd also be helpful to be able to compute the median, and the standard deviation, so you copy and paste your `col_mean()` function and replace the `mean()` with `median()` and `sd()`:
-
-```{r}
-col_median <- function(df) {
-  output <- vector("double", length(df))
-  for (i in seq_along(df)) {
-    output[i] <- median(df[[i]])
-  }
-  output
-}
-col_sd <- function(df) {
-  output <- vector("double", length(df))
-  for (i in seq_along(df)) {
-    output[i] <- sd(df[[i]])
-  }
-  output
-}
-```
-
-Uh oh!
-You've copied-and-pasted this code twice, so it's time to think about how to generalize it.
-Notice that most of this code is `for` loop boilerplate and it's hard to see the one thing (`mean()`, `median()`, `sd()`) that is different between the functions.
-
-What would you do if you saw a set of functions like this:
-
-```{r}
-f1 <- function(x) abs(x - mean(x)) ^ 1
-f2 <- function(x) abs(x - mean(x)) ^ 2
-f3 <- function(x) abs(x - mean(x)) ^ 3
-```
-
-Hopefully, you'd notice that there's a lot of duplication, and extract it out into an additional argument:
-
-```{r}
-f <- function(x, i) abs(x - mean(x)) ^ i
-```
-
-You've reduced the chance of bugs (because you now have 1/3 of the original code), and made it easy to generalize to new situations.
-
-We can do exactly the same thing with `col_mean()`, `col_median()` and `col_sd()` by adding an argument that supplies the function to apply to each column:
-
-```{r}
-col_summary <- function(df, fun) {
-  out <- vector("double", length(df))
-  for (i in seq_along(df)) {
-    out[i] <- fun(df[[i]])
-  }
-  out
-}
-col_summary(df, median)
-col_summary(df, mean)
-```
-
-The idea of passing a function to another function is an extremely powerful idea, and it's one of the behaviors that makes R a functional programming language.
-It might take you a while to wrap your head around the idea, but it's worth the investment.
-In the rest of the chapter, you'll learn about and use the **purrr** package, which provides functions that eliminate the need for many common `for` loops.
-The apply family of functions in base R (`apply()`, `lapply()`, `tapply()`, etc) solve a similar problem, but purrr is more consistent and thus is easier to learn.
-
-The goal of using purrr functions instead of `for` loops is to allow you to break common list manipulation challenges into independent pieces:
-
-1.  How can you solve the problem for a single element of the list?
-    Once you've solved that problem, purrr takes care of generalising your solution to every element in the list.
-
-2.  If you're solving a complex problem, how can you break it down into bite-sized pieces that allow you to advance one small step towards a solution?
-    With purrr, you get lots of small pieces that you can compose together with the pipe.
-
-This structure makes it easier to solve new problems.
-It also makes it easier to understand your solutions to old problems when you re-read your old code.
-
-### Exercises
-
-1.  Read the documentation for `apply()`.
-    In the 2d case, what two `for` loops does it generalise?
-
-2.  Adapt `col_summary()` so that it only applies to numeric columns You might want to start with an `is_numeric()` function that returns a logical vector that has a `TRUE` corresponding to each numeric column.
-
-## The map functions
-
-The pattern of looping over a vector, doing something to each element and saving the results is so common that the purrr package provides a family of functions to do it for you.
-There is one function for each type of output:
-
--   `map()` makes a list.
--   `map_lgl()` makes a logical vector.
--   `map_int()` makes an integer vector.
--   `map_dbl()` makes a double vector.
--   `map_chr()` makes a character vector.
-
-Each function takes a vector as input, applies a function to each piece, and then returns a new vector that's the same length (and has the same names) as the input.
-The type of the vector is determined by the suffix to the map function.
-
-Once you master these functions, you'll find it takes much less time to solve iteration problems.
-But you should never feel bad about using a `for` loop instead of a map function.
-The map functions are a step up a tower of abstraction, and it can take a long time to get your head around how they work.
-The important thing is that you solve the problem that you're working on, not write the most concise and elegant code (although that's definitely something you want to strive towards!).
+Before we finish up this chapter, we have a duty to mention another important technique for iteration in R, the `for` loop.
+`for` loops are powerful and general tool that you definitely need to learn as you become a more experienced R programmer.
+But we skip them here because, as you've seen, you can solve a whole bunch of useful problems just by learning `across()`, `map()`, and `walk2()`.
+If you'd like to learn more about for loops, <https://adv-r.hadley.nz/control-flow.html#loops> is one place to start.
 
 Some people will tell you to avoid `for` loops because they are slow.
 They're wrong!
-(Well at least they're rather out of date, as `for` loops haven't been slow for many years.) The chief benefits of using functions like `map()` is not speed, but clarity: they make your code easier to write and to read.
+(Well at least they're rather out of date, as `for` loops haven't been slow for many years.) The chief benefit of using functions like `map()` is not speed, but clarity: once you've mastered the basic idea, they make your code easier to write and to read.
 
-We can use these functions to perform the same computations as the last `for` loop.
-Those summary functions returned doubles, so we need to use `map_dbl()`:
+## Summary
 
-```{r}
-map_dbl(df, mean)
-map_dbl(df, median)
-map_dbl(df, sd)
-```
+In this chapter you learn iteration tools to solve three problems that come up frequently when doing data science: manipulating multiple columns, reading multiple files, and saving multiple outputs.
+But in general, iteration is a super power: if you know the right iteration technique, you can easily go from fixing one problems to fixing any number of problems.
+Once you've mastered the techniques in this chapter, we highly recommend learning more by reading <https://purrr.tidyverse.org> and the [Functionals chapter](https://adv-r.hadley.nz/functionals.html) of *Advanced R*.
 
-Compared to using a `for` loop, focus is on the operation being performed (i.e. `mean()`, `median()`, `sd()`), not the bookkeeping required to loop over every element and store the output.
-This is even more apparent if we use the pipe:
-
-```{r}
-df |> map_dbl(mean)
-df |> map_dbl(median)
-df |> map_dbl(sd)
-```
-
-There are a few differences between `map_*()` and `col_summary()`:
-
--   All purrr functions are implemented in C.
-    This makes them a little faster at the expense of readability.
-
--   The second argument, `.f`, the function to apply, can be a formula, a character vector, or an integer vector.
-    You'll learn about those handy shortcuts in the next section.
-
--   `map_*()` uses ... (\[dot dot dot\]) to pass along additional arguments to `.f` each time it's called:
-
-    ```{r}
-    map_dbl(df, mean, trim = 0.5)
-    ```
-
--   The map functions also preserve names:
-
-    ```{r}
-    z <- list(x = 1:3, y = 4:5)
-    map_int(z, length)
-    ```
-
-### Shortcuts
-
-There are a few shortcuts that you can use with `.f` in order to save a little typing.
-Imagine you want to fit a linear model to each group in a dataset.
-The following toy example splits up the `mtcars` dataset into three pieces (one for each value of cylinder) and fits the same linear model to each piece:
-
-```{r}
-models <- mtcars |> 
-  split(mtcars$cyl) |> 
-  map(\(df) lm(mpg ~ wt, data = df))
-```
-
-Here we've used `.x` as a pronoun: it refers to the current list element (in the same way that `i` referred to the current index in the `for` loop).
-`.x` in a one-sided formula corresponds to an argument in an anonymous function.
-
-When you're looking at many models, you might want to extract a summary statistic like the $R^2$.
-To do that we need to first run `summary()` and then extract the component called `r.squared`.
-We could do that using the shorthand for anonymous functions:
-
-```{r}
-models |> 
-  map(summary) |> 
-  map_dbl(\(x) x$r.squared)
-```
-
-But extracting named components is a common operation, so purrr provides an even shorter shortcut: you can use a string.
-
-```{r}
-models |> 
-  map(summary) |> 
-  map_dbl("r.squared")
-```
-
-### Base R
-
-If you're familiar with the apply family of functions in base R, you might have noticed some similarities with the purrr functions:
-
--   `lapply()` is basically identical to `map()`, except that `map()` is consistent with all the other functions in purrr, and you can use the shortcuts for `.f`.
-
--   Base `sapply()` is a wrapper around `lapply()` that automatically simplifies the output.
-    This is useful for interactive work but is problematic in a function because you never know what sort of output you'll get:
-
-    ```{r}
-    x1 <- list(
-      c(0.27, 0.37, 0.57, 0.91, 0.20),
-      c(0.90, 0.94, 0.66, 0.63, 0.06), 
-      c(0.21, 0.18, 0.69, 0.38, 0.77)
-    )
-    x2 <- list(
-      c(0.50, 0.72, 0.99, 0.38, 0.78), 
-      c(0.93, 0.21, 0.65, 0.13, 0.27), 
-      c(0.39, 0.01, 0.38, 0.87, 0.34)
-    )
-
-    threshold <- function(x, cutoff = 0.8) x[x > cutoff]
-    x1 |> sapply(threshold) |> str()
-    x2 |> sapply(threshold) |> str()
-    ```
-
--   `vapply()` is a safe alternative to `sapply()` because you supply an additional argument that defines the type.
-    The only problem with `vapply()` is that it's a lot of typing: `vapply(df, is.numeric, logical(1))` is equivalent to `map_lgl(df, is.numeric)`.
-    One advantage of `vapply()` over purrr's map functions is that it can also produce matrices --- the map functions only ever produce vectors.
-
-We focus on purrr functions here because they have more consistent names and arguments, helpful shortcuts, and in the future will provide easy parallelism and progress bars.
-
-### Exercises
-
-1.  Write code that uses one of the map functions to:
-
-    a.  Compute the mean of every column in `mtcars`.
-    b.  Determine the type of each column in `nycflights13::flights`.
-    c.  Compute the number of unique values in each column of `palmerpenguins::penguins`.
-    d.  Generate 10 random normals from distributions with means of -10, 0, 10, and 100.
-
-2.  How can you create a single vector that for each column in a data frame indicates whether or not it's a factor?
-
-3.  What happens when you use the map functions on vectors that aren't lists?
-    What does `map(1:5, runif)` do?
-    Why?
-
-4.  What does `map(-2:2, rnorm, n = 5)` do?
-    Why?
-    What does `map_dbl(-2:2, rnorm, n = 5)` do?
-    Why?
-
-5.  Rewrite `map(x, function(df) lm(mpg ~ wt, data = df))` to eliminate the anonymous function.
-
-## Dealing with failure
-
-When you use the map functions to repeat many operations, the chances are much higher that one of those operations will fail.
-When this happens, you'll get an error message, and no output.
-This is annoying: why does one failure prevent you from accessing all the other successes?
-How do you ensure that one bad apple doesn't ruin the whole barrel?
-
-In this section you'll learn how to deal with this situation with a new function: `safely()`.
-`safely()` is an adverb: it takes a function (a verb) and returns a modified version.
-In this case, the modified function will never throw an error.
-Instead, it always returns a list with two elements:
-
-1.  `result` is the original result.
-    If there was an error, this will be `NULL`.
-
-2.  `error` is an error object.
-    If the operation was successful, this will be `NULL`.
-
-(You might be familiar with the `try()` function in base R.
-It's similar, but because it sometimes returns the original result and it sometimes returns an error object it's more difficult to work with.)
-
-Let's illustrate this with a simple example: `log()`:
-
-```{r}
-safe_log <- safely(log)
-str(safe_log(10))
-str(safe_log("a"))
-```
-
-When the function succeeds, the `result` element contains the result and the `error` element is `NULL`.
-When the function fails, the `result` element is `NULL` and the `error` element contains an error object.
-
-`safely()` is designed to work with `map()`:
-
-```{r}
-x <- list(1, 10, "a")
-y <- x |> map(safely(log))
-str(y)
-```
-
-This would be easier to work with if we had two lists: one of all the errors and one of all the output.
-That's easy to get with `purrr::transpose()`:
-
-```{r}
-y <- y |> transpose()
-str(y)
-```
-
-It's up to you how to deal with the errors, but typically you'll either look at the values of `x` where `y` is an error, or work with the values of `y` that are ok:
-
-```{r}
-is_ok <- y$error |> map_lgl(is_null)
-x[!is_ok]
-y$result[is_ok] |> flatten_dbl()
-```
-
-Purrr provides two other useful adverbs:
-
--   Like `safely()`, `possibly()` always succeeds.
-    It's simpler than `safely()`, because you give it a default value to return when there is an error.
-
-    ```{r}
-    x <- list(1, 10, "a")
-    x |> map_dbl(possibly(log, NA_real_))
-    ```
-
--   `quietly()` performs a similar role to `safely()`, but instead of capturing errors, it captures printed output, messages, and warnings:
-
-    ```{r}
-    x <- list(1, -1)
-    x |> map(quietly(log)) |> str()
-    ```
-
-## Mapping over multiple arguments
-
-So far we've mapped along a single input.
-But often you have multiple related inputs that you need to iterate along in parallel.
-That's the job of the `map2()` and `pmap()` functions.
-For example, imagine you want to simulate some random normals with different means.
-You know how to do that with `map()`:
-
-```{r}
-mu <- list(5, 10, -3)
-mu |> 
-  map(rnorm, n = 5) |> 
-  str()
-```
-
-What if you also want to vary the standard deviation?
-One way to do that would be to iterate over the indices and index into vectors of means and sds:
-
-```{r}
-sigma <- list(1, 5, 10)
-seq_along(mu) |> 
-  map(\(i) rnorm(5, mu[[i]], sigma[[i]])) |> 
-  str()
-```
-
-But that obfuscates the intent of the code.
-Instead we could use `map2()` which iterates over two vectors in parallel:
-
-```{r}
-map2(mu, sigma, rnorm, n = 5) |> str()
-```
-
-`map2()` generates this series of function calls:
-
-```{r}
-#| echo: false
-
-knitr::include_graphics("diagrams/lists-map2.png")
-```
-
-Note that the arguments that vary for each call come *before* the function; arguments that are the same for every call come *after*.
-
-Like `map()`, `map2()` is just a wrapper around a `for` loop:
-
-```{r}
-map2 <- function(x, y, f, ...) {
-  out <- vector("list", length(x))
-  for (i in seq_along(x)) {
-    out[[i]] <- f(x[[i]], y[[i]], ...)
-  }
-  out
-}
-```
-
-You could also imagine `map3()`, `map4()`, `map5()`, `map6()` etc, but that would get tedious quickly.
-Instead, purrr provides `pmap()` which takes a list of arguments.
-You might use that if you wanted to vary the mean, standard deviation, and number of samples:
-
-```{r}
-n <- list(1, 3, 5)
-args1 <- list(n, mu, sigma)
-args1 |>
-  pmap(rnorm) |> 
-  str()
-```
-
-That looks like:
-
-```{r}
-#| echo: false
-
-knitr::include_graphics("diagrams/lists-pmap-unnamed.png")
-```
-
-If you don't name the list's elements, `pmap()` will use positional matching when calling the function.
-That's a little fragile, and makes the code harder to read, so it's better to name the arguments:
-
-```{r}
-#| eval: false
-
-args2 <- list(mean = mu, sd = sigma, n = n)
-args2 |> 
-  pmap(rnorm) |> 
-  str()
-```
-
-That generates longer, but safer, calls:
-
-```{r}
-#| echo: false
-
-knitr::include_graphics("diagrams/lists-pmap-named.png")
-```
-
-Since the arguments are all the same length, it makes sense to store them in a data frame:
-
-```{r}
-params <- tribble(
-  ~mean, ~sd, ~n,
-    5,     1,  1,
-   10,     5,  3,
-   -3,    10,  5
-)
-params |> 
-  pmap(rnorm)
-```
-
-As soon as your code gets complicated, we think a data frame is a good approach because it ensures that each column has a name and is the same length as all the other columns.
-
-## Walk {#sec-walk}
-
-Walk is an alternative to map that you use when you want to call a function for its side effects, rather than for its return value.
-You typically do this because you want to render output to the screen or save files to disk --- the important thing is the action, not the return value.
-Here's a very simple example:
-
-```{r}
-x <- list(1, "a", 3)
-
-x |> 
-  walk(print)
-```
-
-`walk()` is generally not that useful compared to `walk2()` or `pwalk()`.
-For example, if you had a list of plots and a vector of file names, you could use `walk2()` to save each file to the corresponding location on disk:
-
-```{r}
-#| eval: false
-library(tidyverse)
-
-plots <- mtcars |> 
-  split(mtcars$cyl) |> 
-  map(\(df) ggplot(df, aes(mpg, wt)) + geom_point())
-paths <- str_c(names(plots), ".pdf")
-
-walk2(paths, plots, ggsave, path = tempdir())
-```
-
-`walk()`, `walk2()` and `pwalk()` all invisibly return `.`, the first argument.
-This makes them suitable for use in the middle of pipelines.
-
-## Other patterns of for loops
-
-purrr provides a number of other functions that abstract over other types of `for` loops.
-You'll use them less frequently than the map functions, but they're useful to know about.
-The goal here is to briefly illustrate each function, so hopefully it will come to mind if you see a similar problem in the future.
-Then you can go look up the documentation for more details.
-
-### Predicate functions
-
-A number of functions work with **predicate** functions that return either a single `TRUE` or `FALSE`.
-
-`keep()` and `discard()` keep elements of the input where the predicate is `TRUE` or `FALSE` respectively:
-
-```{r}
-gss_cat |> 
-  keep(is.factor) |> 
-  str()
-
-gss_cat |> 
-  discard(is.factor) |> 
-  str()
-```
-
-`some()` and `every()` determine if the predicate is true for any or for all of the elements.
-
-```{r}
-x <- list(1:5, letters, list(10))
-
-x |> 
-  some(is_character)
-
-x |> 
-  every(is_vector)
-```
-
-`detect()` finds the first element where the predicate is true; `detect_index()` returns its position.
-
-```{r}
-x <- sample(10)
-x
-
-x |> 
-  detect(\(x) x > 5)
-
-x |> 
-  detect_index(\(x) x > 5)
-```
-
-`head_while()` and `tail_while()` take elements from the start or end of a vector while a predicate is true:
-
-```{r}
-x |> 
-  head_while(\(x) x > 5)
-
-x |> 
-  tail_while(\(x) x > 5)
-```
-
-### Reduce and accumulate
-
-Sometimes you have a complex list that you want to reduce to a simple list by repeatedly applying a function that reduces a pair to a singleton.
-This is useful if you want to apply a two-table dplyr verb to multiple tables.
-For example, you might have a list of data frames, and you want to reduce to a single data frame by joining the elements together:
-
-```{r}
-dfs <- list(
-  age = tibble(name = "John", age = 30),
-  sex = tibble(name = c("John", "Mary"), sex = c("M", "F")),
-  trt = tibble(name = "Mary", treatment = "A")
-)
-
-dfs |> reduce(full_join)
-```
-
-Or maybe you have a list of vectors, and want to find the intersection:
-
-```{r}
-vs <- list(
-  c(1, 3, 5, 6, 10),
-  c(1, 2, 3, 7, 8, 10),
-  c(1, 2, 3, 4, 8, 9, 10)
-)
-
-vs |> reduce(intersect)
-```
-
-`reduce()` takes a "binary" function (i.e. a function with two primary inputs), and applies it repeatedly to a list until there is only a single element left.
-
-`accumulate()` is similar but it keeps all the interim results.
-You could use it to implement a cumulative sum:
-
-```{r}
-x <- sample(10)
-x
-x |> accumulate(`+`)
-```
-
-### Exercises
-
-1.  Implement your own version of `every()` using a `for` loop.
-    Compare it with `purrr::every()`.
-    What does purrr's version do that your version doesn't?
-
-2.  Create an enhanced `col_summary()` that applies a summary function to every numeric column in a data frame.
-
-3.  A possible base R equivalent of `col_summary()` is:
-
-    ```{r}
-    col_sum3 <- function(df, f) {
-      is_num <- sapply(df, is.numeric)
-      df_num <- df[, is_num]
-
-      sapply(df_num, f)
-    }
-    ```
-
-    But it has a number of bugs as illustrated with the following inputs:
-
-    ```{r}
-    #| eval: false
-
-    df <- tibble(
-      x = 1:3, 
-      y = 3:1,
-      z = c("a", "b", "c")
-    )
-    # OK
-    col_sum3(df, mean)
-    # Has problems: don't always return numeric vector
-    col_sum3(df[1:2], mean)
-    col_sum3(df[1], mean)
-    col_sum3(df[0], mean)
-    ```
-
-    What causes the bugs?
-
-## Case study
-
-<!--# Case study on web scraping from multiple pages -->
+This chapter concludes the programming section of the book.
+You've now learned the basics of programming in R.
+You know now the data types that underpin all of the objects you work with, and have two powerful techniques (functions and iteration) for reducing the duplication in your code.
+We hope you've got a taste for how programming can help your analyses, and you've made a solid start on your journey to become not just a data scientist who uses R, but a data science who can program in R.

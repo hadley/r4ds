@@ -4,6 +4,7 @@
 #| results: "asis"
 #| echo: false
 source("_common.R")
+status("polishing")
 ```
 
 ## Introduction
@@ -18,34 +19,48 @@ Writing a function has three big advantages over using copy-and-paste:
 
 3.  You eliminate the chance of making incidental mistakes when you copy and paste (i.e. updating a variable name in one place, but not in another).
 
-Writing good functions is a lifetime journey.
-Even after using R for many years we still learn new techniques and better ways of approaching old problems.
-The goal of this chapter is not to teach you every esoteric detail of functions but to get you started with some pragmatic advice that you can apply immediately.
+A good rule of thumb is to consider writing a function whenever you've copied and pasted a block of code more than twice (i.e. you now have three copies of the same code).
+In this chapter, you'll learn about three useful types of functions:
 
-As well as practical advice for writing functions, this chapter also gives you some suggestions for how to style your code.
-Good code style is like correct punctuation.
-Youcanmanagewithoutit, but it sure makes things easier to read!
-As with styles of punctuation, there are many possible variations.
-Here we present the style we use in our code, but the most important thing is to be consistent.
+-   Vector functions take one or more vectors as input and return a vector as output.
+-   Data frame functions take a data frame as input and return a data frame as output.
+-   Plot functions that take a data frame as input and return a plot as output.
+
+Each of these sections include many examples to help you generalize the patterns that you see.
+These examples wouldn't be possible without the help of folks of twitter, and we encourage follow the links in the comment to see original inspirations.
+You might also want to read the original motivating tweets for [general functions](https://twitter.com/hadleywickham/status/1571603361350164486) and [plotting functions](https://twitter.com/hadleywickham/status/1574373127349575680) to see even more functions.
 
 ### Prerequisites
 
+We'll wrap up a variety of functions from around the tidyverse.
+We'll also use nycflights13 as a source of familiar data to use our functions with.
+
 ```{r}
+#| message: false
 library(tidyverse)
+library(nycflights13)
 ```
 
-## When should you write a function?
+This chapter also relies on a function that hasn't yet been implemented for dplyr but will be by the time the book is out:
 
-You should consider writing a function whenever you've copied and pasted a block of code more than twice (i.e. you now have three copies of the same code).
+```{r}
+pick <- function(cols) {
+  across({{ cols }})
+}
+```
+
+## Vector functions
+
+We'll begin with vector functions: functions that take one or more vectors and return a vector result.
 For example, take a look at this code.
 What does it do?
 
 ```{r}
-df <- tibble::tibble(
-  a = rnorm(10),
-  b = rnorm(10),
-  c = rnorm(10),
-  d = rnorm(10)
+df <- tibble(
+  a = rnorm(5),
+  b = rnorm(5),
+  c = rnorm(5),
+  d = rnorm(5),
 )
 
 df |> mutate(
@@ -56,107 +71,103 @@ df |> mutate(
   c = (c - min(c, na.rm = TRUE)) / 
     (max(c, na.rm = TRUE) - min(c, na.rm = TRUE)),
   d = (d - min(d, na.rm = TRUE)) / 
-    (max(d, na.rm = TRUE) - min(d, na.rm = TRUE))  
+    (max(d, na.rm = TRUE) - min(d, na.rm = TRUE)),
 )
 ```
 
 You might be able to puzzle out that this rescales each column to have a range from 0 to 1.
 But did you spot the mistake?
-Hadley made an error when copying-and-pasting the code for `b`: he forgot to change an `a` to a `b`.
-Extracting repeated code out into a function is a good idea because it prevents you from making this type of mistake.
+When Hadley wrote this code he made an error when copying-and-pasting and forgot to change an `a` to a `b`.
+Preventing this type of mistake of is one very good reason to learn how to write functions.
 
-To write a function you need to first analyse the code.
-How many inputs does it have?
+### Writing a function
+
+To write a function you need to first analyse your repeated code to figure what parts are constant and what parts vary.
+If we take the code above and pull it outside of `mutate()` it's a little easier to see the pattern because each repetition is now one line:
 
 ```{r}
 #| eval: false
 
-(df$a - min(df$a, na.rm = TRUE)) /
-  (max(df$a, na.rm = TRUE) - min(df$a, na.rm = TRUE))
+(a - min(a, na.rm = TRUE)) / (max(a, na.rm = TRUE) - min(a, na.rm = TRUE))
+(b - min(b, na.rm = TRUE)) / (max(b, na.rm = TRUE) - min(b, na.rm = TRUE))
+(c - min(c, na.rm = TRUE)) / (max(c, na.rm = TRUE) - min(c, na.rm = TRUE))
+(d - min(d, na.rm = TRUE)) / (max(d, na.rm = TRUE) - min(d, na.rm = TRUE))  
 ```
 
-This code only has one input: `df$a`.
-(If you're surprised that `TRUE` is not an input, you can explore why in the exercise below.) To make the inputs more clear, it's a good idea to rewrite the code using temporary variables with general names.
-Here this code only requires a single numeric vector, so we'll call it `x`:
+To make this a bit clearer we can replace the bit that varies with `█`:
 
 ```{r}
-x <- df$a
-(x - min(x, na.rm = TRUE)) / (max(x, na.rm = TRUE) - min(x, na.rm = TRUE))
+#| eval: false
+(█ - min(█, na.rm = TRUE)) / (max(█, na.rm = TRUE) - min(█, na.rm = TRUE))
 ```
 
-There is some duplication in this code.
-We're computing the range of the data three times, so it makes sense to do it in one step:
+To turn this into a function you need three things:
+
+1.  A **name**.
+    Here we'll use `rescale01` because this function rescales a vector to lie between 0 and 1.
+
+2.  The **arguments**.
+    The arguments are things that vary across calls and our analysis above tells us that have just one.
+    We'll call it `x` because this is the conventional name for a numeric vector.
+
+3.  The **body**.
+    The body is the code that repeated across all the calls.
+
+Then you create a function by following the template:
 
 ```{r}
-rng <- range(x, na.rm = TRUE)
-(x - rng[1]) / (rng[2] - rng[1])
+name <- function(arguments) {
+  body
+}
 ```
 
-Pulling out intermediate calculations into named variables is a good practice because it makes it more clear what the code is doing.
-Now that we've simplified the code, and checked that it still works, we can turn it into a function:
+For this case that leads to:
 
 ```{r}
 rescale01 <- function(x) {
-  rng <- range(x, na.rm = TRUE)
-  (x - rng[1]) / (rng[2] - rng[1])
+  (x - min(x, na.rm = TRUE)) / (max(x, na.rm = TRUE) - min(x, na.rm = TRUE))
 }
-rescale01(c(0, 5, 10))
 ```
 
-There are three key steps to creating a new function:
-
-1.  You need to pick a **name** for the function.
-    Here we used `rescale01` because this function rescales a vector to lie between 0 and 1.
-
-2.  You list the inputs, or **arguments**, to the function inside `function`.
-    Here we have just one argument.
-    If we had more the call would look like `function(x, y, z)`.
-
-3.  You place the code you have developed in the **body** of the function, a `{` block that immediately follows `function(...)`.
-
-Note the overall process: we only made the function after we'd figured out how to make it work with a simple input.
-It's easier to start with working code and turn it into a function; it's harder to create a function and then try to make it work.
-
-At this point it's a good idea to check your function with a few different inputs:
+At this point you might test with a few simple inputs to make sure you've captured the logic correctly:
 
 ```{r}
 rescale01(c(-10, 0, 10))
 rescale01(c(1, 2, 3, NA, 5))
 ```
 
-As you write more and more functions you'll eventually want to convert these informal, interactive tests into formal, automated tests.
-That process is called unit testing.
-Unfortunately, it's beyond the scope of this book, but you can learn about it in <https://r-pkgs.org/testing-basics.html>.
-
-We can simplify the original example now that we have a function:
+Then you can rewrite the call to `mutate()` as:
 
 ```{r}
 df |> mutate(
   a = rescale01(a),
   b = rescale01(b),
   c = rescale01(c),
-  d = rescale01(d)  
+  d = rescale01(d),
 )
 ```
 
-Compared to the original, this code is easier to understand and we've eliminated one class of copy-and-paste errors.
-There is still quite a bit of duplication since we're doing the same thing to multiple columns.
-We could reduce that duplication with `across()` which you'll learn more about in @sec-iteration:
+(In @sec-iteration, you'll learn how to use `across()` to reduce the duplication even further so all you need is `df |> mutate(across(a:d, rescale01))`).
+
+### Improving our function
+
+You might notice `rescale01()` function does some unnecessary work --- instead of computing `min()` twice and `max()` once we could instead compute both the minimum and maximum in one step with `range()`:
 
 ```{r}
-df |> 
-  mutate(across(a:d, rescale01))
+rescale01 <- function(x) {
+  rng <- range(x, na.rm = TRUE)
+  (x - rng[1]) / (rng[2] - rng[1])
+}
 ```
 
-Another advantage of functions is that if our requirements change, we only need to make the change in one place.
-For example, we might discover that some of our variables include infinite values, and `rescale01()` fails:
+Or you might try this function on a vector that includes an infinite value:
 
 ```{r}
 x <- c(1:10, Inf)
 rescale01(x)
 ```
 
-Because we've extracted the code into a function, we only need to make the fix in one place:
+That result is not particularly useful so we could ask `range()` to ignore infinite values:
 
 ```{r}
 rescale01 <- function(x) {
@@ -166,32 +177,189 @@ rescale01 <- function(x) {
 rescale01(x)
 ```
 
-This is an important part of the "do not repeat yourself" (or DRY) principle.
-The more repetition you have in your code, the more places you need to remember to update when things change (and they always do!), and the more likely you are to create bugs over time.
+These changes illustrate an important benefit of functions: because we've moved the repeated code into a function, we only need to make the change in one place.
+
+### Mutate functions
+
+Now you've got the basic idea of functions, lets take a look a whole bunch of examples.
+We'll start by looking at "mutate" functions, functions that work well like `mutate()` and `filter()` because they return an output the same length as the input.
+
+Lets start with a simple variation of `rescale01()`.
+Maybe you want compute the Z-score, rescaling a vector to have to a mean of zero and a standard deviation of one:
+
+```{r}
+z_score <- function(x) {
+  (x - mean(x, na.rm = TRUE)) / sd(x, na.rm = TRUE)
+}
+```
+
+Or maybe you want to wrap up a straightforward `case_when()` in order to give it a useful name.
+For example, this `clamp()` function ensures all values of a vector lie in between a minimum or a maximum:
+
+```{r}
+clamp <- function(x, min, max) {
+  case_when(
+    x < min ~ min,
+    x > max ~ max,
+    .default = x
+  )
+}
+clamp(1:10, min = 3, max = 7)
+```
+
+Or maybe you'd rather mark those values as `NA`s:
+
+```{r}
+na_outside <- function(x, min, max) {
+  case_when(
+    x < min ~ NA,
+    x > max ~ NA,
+    .default = x
+  )
+}
+na_outside(1:10, min = 3, max = 7)
+```
+
+Of course functions don't just need to work with numeric variables.
+You might want to extract out some repeated string manipulation.
+Maybe you need to make the first character upper case:
+
+```{r}
+first_upper <- function(x) {
+  str_sub(x, 1, 1) <- str_to_upper(str_sub(x, 1, 1))
+  x
+}
+first_upper("hello")
+```
+
+Or maybe you want to strip percent signs, commas, and dollar signs from a string before converting it into a number:
+
+```{r}
+# https://twitter.com/NVlabormarket/status/1571939851922198530
+clean_number <- function(x) {
+  is_pct <- str_detect(x, "%")
+  num <- x |> 
+    str_remove_all("%") |> 
+    str_remove_all(",") |> 
+    str_remove_all(fixed("$")) |> 
+    as.numeric(x)
+  if_else(is_pct, num / 100, num)
+}
+clean_number("$12,300")
+clean_number("45%")
+```
+
+Sometimes your functions will be highly specialized for one data analysis.
+For example, if you have a bunch of variables that record missing values as 997, 998, or 999, you might want to write a function to replace them with `NA`:
+
+```{r}
+fix_na <- function(x) {
+  if_else(x %in% c(997, 998, 999), NA, x)
+}
+```
+
+We've focused on examples that take a single vector because we think they're the most common.
+But there's no reason that your function can't take multiple vector inputs.
+For example, you might want to compute the distance between two locations on the globe using the haversine formula.
+This requires four vectors:
+
+```{r}
+# https://twitter.com/RosanaFerrero/status/1574722120428539906/photo/1
+haversine <- function(long1, lat1, long2, lat2, round = 3) {
+  # convert to radians
+  long1 <- long1 * pi / 180
+  lat1  <- lat1  * pi / 180
+  long2 <- long2 * pi / 180
+  lat2  <- lat2  * pi / 180
+  
+  R <- 6371 # Earth mean radius in km
+  a <- sin((lat2 - lat1) / 2)^2 + 
+    cos(lat1) * cos(lat2) * sin((long2 - long1) / 2)^2
+  d <- R * 2 * asin(sqrt(a))
+  
+  round(d, round)
+}
+```
+
+### Summary functions
+
+Another important family of vector functions is summary functions, functions that return a single value for use in `summarize()`.
+Sometimes this can just be a matter of setting a default argument or two:
+
+```{r}
+commas <- function(x) {
+  str_flatten(x, collapse = ", ", last = " and ")
+}
+commas(c("cat", "dog", "pigeon"))
+```
+
+Or you might wrap up a simple computation, like for the coefficient of variation, which divides standard deviation by the mean:
+
+```{r}
+cv <- function(x, na.rm = FALSE) {
+  sd(x, na.rm = na.rm) / mean(x, na.rm = na.rm)
+}
+cv(runif(100, min = 0, max = 50))
+cv(runif(100, min = 0, max = 500))
+```
+
+Or maybe you just want to make a common pattern easier to remember by giving it a memorable name:
+
+```{r}
+# https://twitter.com/gbganalyst/status/1571619641390252033
+n_missing <- function(x) {
+  sum(is.na(x))
+} 
+```
+
+You can also write functions with multiple vector inputs.
+For example, maybe you want to compute the mean absolute prediction error to help you compare model predictions with actual values:
+
+```{r}
+# https://twitter.com/neilgcurrie/status/1571607727255834625
+mape <- function(actual, predicted) {
+  sum(abs((actual - predicted) / actual)) / length(actual)
+}
+```
+
+::: callout-note
+## RStudio
+
+Once you start writing functions, there are two RStudio shortcuts that are super useful:
+
+-   To find the definition of a function that you've written, place the cursor on the name of the function and press `F2`.
+
+-   To quickly jump to a function, press `Ctrl + .` to open the fuzzy file and function finder and type the first few letters of your function name.
+    You can also navigate to files, Quarto sections, and more, making it a very handy navigation tool.
+:::
 
 ### Exercises
 
-1.  Why is `TRUE` not a parameter to `rescale01()`?
-    What would happen if `x` contained a single missing value, and `na.rm` was `FALSE`?
-
-2.  In the second variant of `rescale01()`, infinite values are left unchanged.
-    Rewrite `rescale01()` so that `-Inf` is mapped to 0, and `Inf` is mapped to 1.
-
-3.  Practice turning the following code snippets into functions.
+1.  Practice turning the following code snippets into functions.
     Think about what each function does.
     What would you call it?
     How many arguments does it need?
-    Can you rewrite it to be more expressive or less duplicative?
 
     ```{r}
     #| eval: false
 
     mean(is.na(x))
+    mean(is.na(y))
+    mean(is.na(z))
 
     x / sum(x, na.rm = TRUE)
+    y / sum(y, na.rm = TRUE)
+    z / sum(z, na.rm = TRUE)
 
-    sd(x, na.rm = TRUE) / mean(x, na.rm = TRUE)
+    round(x / sum(x, na.rm = TRUE) * 100, 1)
+    round(y / sum(y, na.rm = TRUE) * 100, 1)
+    round(z / sum(z, na.rm = TRUE) * 100, 1)
     ```
+
+2.  In the second variant of `rescale01()`, infinite values are left unchanged.
+    Can you rewrite `rescale01()` so that `-Inf` is mapped to 0, and `Inf` is mapped to 1?
+
+3.  Given a vector of birthdates, write a function to compute the age in years.
 
 4.  Write your own functions to compute the variance and skewness of a numeric vector.
     Variance is defined as $$
@@ -201,9 +369,9 @@ The more repetition you have in your code, the more places you need to remember 
     \mathrm{Skew}(x) = \frac{\frac{1}{n-2}\left(\sum_{i=1}^n(x_i - \bar x)^3\right)}{\mathrm{Var}(x)^{3/2}} \text{.}
     $$
 
-5.  Write `both_na()`, a function that takes two vectors of the same length and returns the number of positions that have an `NA` in both vectors.
+5.  Write `both_na()`, a summary function that takes two vectors of the same length and returns the number of positions that have an `NA` in both vectors.
 
-6.  What do the following functions do?
+6.  Read the documentation to figure out what the following functions do.
     Why are they useful even though they are so short?
 
     ```{r}
@@ -211,24 +379,502 @@ The more repetition you have in your code, the more places you need to remember 
     is_readable <- function(x) file.access(x, 4) == 0
     ```
 
-7.  Read the [complete lyrics](https://en.wikipedia.org/wiki/Little_Bunny_Foo_Foo) to "Little Bunny Foo Foo".
-    There's a lot of duplication in this song.
-    Extend the initial piping example to recreate the complete song, and use functions to reduce the duplication.
+## Data frame functions
 
-## Functions are for humans and computers
+Vector functions are useful for pulling out code that's repeated within a dplyr verb.
+But you'll often also repeat the verbs themselves, particularly within a large pipeline.
+When you notice yourself copying and pasting multiple verbs multiple times, you might think about writing a data frame function.
+Data frame functions work like dplyr verbs: they take a data frame as the first argument, some extra arguments that say what to do with it, and return a data frame or vector.
 
-It's important to remember that functions are not just for the computer, but are also for humans.
-R doesn't care what your function is called, or what comments it contains, but these are important for human readers.
-This section discusses some things that you should bear in mind when writing functions that humans can understand.
+To let you write a function that uses dplyr verbs, we'll first introduce you to the challenge of indirection and how you can overcome it with embracing, `{{ }}`.
+With this theory under your belt, we'll then show you a bunch of examples to illustrate what you might do with it.
 
-The name of a function is important.
+### Indirection and tidy evaluation
+
+When you start writing functions that use dplyr verbs you rapidly hit the problem of indirection.
+Let's illustrate the problem with a very simple function: `pull_unique()`.
+The goal of this function is to `pull()` the unique (distinct) values of a variable:
+
+```{r}
+pull_unique <- function(df, var) {
+  df |> 
+    distinct(var) |> 
+    pull(var)
+}
+```
+
+If we try and use it, we get an error:
+
+```{r}
+#| error: true
+diamonds |> pull_unique(clarity)
+```
+
+To make the problem a bit more clear we can use a made up data frame:
+
+```{r}
+df <- tibble(var = "var", x = "x", y = "y")
+df |> pull_unique(x)
+df |> pull_unique(y)
+```
+
+Regardless of how we call `pull_unique()` it always does `df |> distinct(var) |> pull(var)`, instead of `df |> distinct(x) |> pull(x)` or `df |> distinct(y) |> pull(y)`.
+This is a problem of indirection, and it arises because dplyr uses **tidy evaluation** to allow you to refer to the names of variables inside your data frame without any special treatment.
+
+Tidy evaluation is great 95% of the time because it makes your data analyses very concise as you never have to say which data frame a variable comes from; it's obvious from the context.
+The downside of tidy evaluation comes when we want to wrap up repeated tidyverse code into a function.
+Here we need some way to tell `distinct()` and `pull()` not to treat `var` as the name of a variable, but instead look inside `var` for the variable we actually want to use.
+
+Tidy evaluation includes a solution to this problem called **embracing**.
+Embracing a variable means to wrap it in braces so (e.g.) `var` becomes `{{ var }}`.
+Embracing a variable tells dplyr to use the value stored inside the argument, not the argument as the literal variable name.
+One way to remember what's happening is to think of `{{ }}` as looking down a tunnel --- `{{ var }}` will make a dplyr function look inside of `var` rather than looking for a variable called `var`.
+
+So to make `pull_unique()` work we need to replace `var` with `{{ var }}`:
+
+```{r}
+pull_unique <- function(df, var) {
+  df |> 
+    distinct({{ var }}) |> 
+    pull({{ var }})
+}
+diamonds |> pull_unique(clarity)
+```
+
+Success!
+
+### When to embrace?
+
+So the key challenge in writing data frame functions is figuring out which arguments need to be embraced.
+Fortunately this is easy because you can look it up from the documentation 😄.
+There are two terms to look for in the docs which corresponding to the two most common sub-types of tidy evaluation:
+
+-   **Data-masking**: this is used in functions like `arrange()`, `filter()`, and `summarise()` that compute with variables.
+
+-   **Tidy-selection**: this is used for for functions like `select()`, `relocate()`, and `rename()` that select variables.
+
+Your intuition about which arguments use tidy evaluation should be good for many common functions --- just think about whether you can compute (e.g. `x + 1`) or select (e.g. `a:x`).
+
+In the following sections we'll explore the sorts of handy functions you might write once you understand embracing.
+
+### Common use cases
+
+If you commonly perform the same set of summaries when doing initial data exploration, you might consider wrapping them up in a helper function:
+
+```{r}
+summary6 <- function(data, var) {
+  data |> summarise(
+    min = min({{ var }}, na.rm = TRUE),
+    mean = mean({{ var }}, na.rm = TRUE),
+    median = median({{ var }}, na.rm = TRUE),
+    max = max({{ var }}, na.rm = TRUE),
+    n = n(),
+    n_miss = sum(is.na({{ var }})),
+    .groups = "drop"
+  )
+}
+diamonds |> summary6(carat)
+```
+
+(Whenever you wrap `summarise()` in a helper, we think it's good practice to set `.groups = "drop"` to both avoid the message and leave the data in an ungrouped state.)
+
+The nice thing about this function is because it wraps `summarise()` you can used it on grouped data:
+
+```{r}
+diamonds |> 
+  group_by(cut) |> 
+  summary6(carat)
+```
+
+Because the arguments to summarize are data-masking that also means that the `var` argument to `summary6()` is data-masking.
+That means you can also summarize computed variables:
+
+```{r}
+diamonds |> 
+  group_by(cut) |> 
+  summary6(log10(carat))
+```
+
+To summarize multiple variables you'll need to wait until @sec-across, where you'll learn how to use `across()`.
+
+Another popular `summarise()` helper function is a version of `count()` that also computes proportions:
+
+```{r}
+# https://twitter.com/Diabb6/status/1571635146658402309
+count_prop <- function(df, var, sort = FALSE) {
+  df |>
+    count({{ var }}, sort = sort) |>
+    mutate(prop = n / sum(n))
+}
+diamonds |> count_prop(clarity)
+```
+
+This function has three arguments: `df`, `var`, and `sort`, and only `var` needs to be embraced because it's passed to `count()` which uses data-masking for all variables in `…`.
+
+Or maybe you want to find the sorted unique values of a variable for a subset of the data.
+Rather than supplying a variable and a value to do the filtering, we'll allow the user to supply a condition:
+
+```{r}
+unique_where <- function(df, condition, var) {
+  df |> 
+    filter({{ condition }}) |> 
+    distinct({{ var }}) |> 
+    arrange({{ var }}) |> 
+    pull({{ var }})
+}
+
+# Find all the destinations in December
+flights |> unique_where(month == 12, dest)
+# Which months did plane N14228 fly in?
+flights |> unique_where(tailnum == "N14228", month)
+```
+
+Here we embrace `condition` because it's passed to `filter()` and `var` because its passed to `distinct()`, `arrange()`, and `pull()`.
+
+We've made all these examples take a data frame as the first argument, but if you're working repeatedly with the same data, it can make sense to hardcode it.
+For example, the following function always works with the flights dataset and always selects `time_hour`, `carrier`, and `flight` since they are form the compound primary key that allows you to identify a row.
+
+```{r}
+flights_sub <- function(rows, cols) {
+  flights |> 
+    filter({{ rows }}) |> 
+    select(time_hour, carrier, flight, {{ cols }})
+}
+
+flights_sub(dest == "IAH", contains("time"))
+```
+
+### Data-masking vs tidy-selection
+
+Sometimes you want to select variables inside a function that uses data-masking.
+For example, imagine you want to write a `count_missing()` that counts the number of missing observations in rows.
+You might try writing something like:
+
+```{r}
+#| error: true
+count_missing <- function(df, group_vars, x_var) {
+  df |> 
+    group_by({{ group_vars }}) |> 
+    summarise(n_miss = sum(is.na({{ x_var }})))
+}
+flights |> 
+  count_missing(c(year, month, day), dep_time)
+```
+
+This doesn't work because `group_by()` uses data-masking, not tidy-selection.
+We can work around that problem by using the handy `pick()` which allows you to use use tidy-selection inside data-masking functions:
+
+```{r}
+count_missing <- function(df, group_vars, x_var) {
+  df |> 
+    group_by(pick({{ group_vars }})) |> 
+    summarise(n_miss = sum(is.na({{ x_var }})))
+}
+flights |> 
+  count_missing(c(year, month, day), dep_time)
+```
+
+Another convenient use of `pick()` is to make a 2d table of counts.
+Here we count using all the variables in the `rows` and `columns`, then use `pivot_wider()` to rearrange the counts into a grid:
+
+```{r}
+# https://twitter.com/pollicipes/status/1571606508944719876
+count_wide <- function(data, rows, cols) {
+  data |> 
+    count(pick(c({{ rows }}, {{ cols }}))) |> 
+    pivot_wider(
+      names_from = {{ cols }}, 
+      values_from = n,
+      names_sort = TRUE,
+      values_fill = 0
+    )
+}
+diamonds |> count_wide(clarity, cut)
+diamonds |> count_wide(c(clarity, color), cut)
+```
+
+While our examples have mostly focused on dplyr, tidy evaluation also underpins tidyr, and if you look at the `pivot_wider()` docs you can see that `names_from` uses tidy-selection.
+
+### Exercises
+
+1.  Using the datasets from nyclights13, write functions that:
+
+    1.  Find all flights that were cancelled (i.e. `is.na(arr_time)`) or delayed by more than an hour.
+
+        ```{r}
+        #| eval: false
+        flights |> filter_severe()
+        ```
+
+    2.  Counts the number of cancelled flights and the number of flights delayed by more than an hour.
+
+        ```{r}
+        #| eval: false
+        flights |> group_by(dest) |> summarise_severe()
+        ```
+
+    3.  Finds all flights that were cancelled or delayed by more than a user supplied number of hours:
+
+        ```{r}
+        #| eval: false
+        flights |> filter_severe(hours = 2)
+        ```
+
+    4.  Summarizes the weather to compute the minum, mean, and maximum, of a user supplied variable:
+
+        ```{r}
+        #| eval: false
+        weather |> summarise_weather(temp)
+        ```
+
+    5.  Converts the user supplied variable that uses clock time (e.g. `dep_time`, `arr_time`, etc) into a decimal time (i.e. hours + minutes / 60).
+
+        ```{r}
+        #| eval: false
+        weather |> standardise_time(sched_dep_time)
+        ```
+
+2.  For each of the following functions list all arguments that use tidy evaluation and describe whether they use data-masking or tidy-select: `distinct()`, `count()`, `group_by()`, `rename_with()`, `slice_min()`, `slice_sample()`.
+
+3.  Generalize the following function so that you can supply any number of variables to count.
+
+    ```{r}
+    count_prop <- function(df, var, sort = FALSE) {
+      df |>
+        count({{ var }}, sort = sort) |>
+        mutate(prop = n / sum(n))
+    }
+    ```
+
+## Plot functions
+
+Instead of returning a data frame, you might want to return a plot.
+Fortunately you can use the same techniques with ggplot2, because `aes()` is a data-masking function.
+For example, imagine that you're making a lot of histograms:
+
+```{r}
+#| fig-show: hide
+diamonds |> 
+  ggplot(aes(carat)) +
+  geom_histogram(binwidth = 0.1)
+
+diamonds |> 
+  ggplot(aes(carat)) +
+  geom_histogram(binwidth = 0.05)
+```
+
+Wouldn't it be nice if you could wrap this up into a histogram function?
+This is easy as once you know that `aes()` is a data-masking function so that you need to embrace:
+
+```{r}
+histogram <- function(df, var, binwidth = NULL) {
+  df |> 
+    ggplot(aes({{ var }})) + 
+    geom_histogram(binwidth = binwidth)
+}
+
+diamonds |> histogram(carat, 0.1)
+```
+
+Note that `histogram()` returns a ggplot2 plot, so that you can still add on additional components if you want.
+Just remember to switch from `|>` to `+`:
+
+```{r}
+diamonds |> 
+  histogram(carat, 0.1) +
+  labs(x = "Size (in carats)", y = "Number of diamonds")
+```
+
+### More variables
+
+It's straightforward to add more variables to the mix.
+For example, maybe you want an easy way to eyeball whether or not a data set is linear by overlaying a smooth line and a straight line:
+
+```{r}
+# https://twitter.com/tyler_js_smith/status/1574377116988104704
+
+linearity_check <- function(df, x, y) {
+  df |>
+    ggplot(aes({{ x }}, {{ y }})) +
+    geom_point() +
+    geom_smooth(method = "loess", color = "red", se = FALSE) +
+    geom_smooth(method = "lm", color = "blue", se = FALSE) 
+}
+
+starwars |> 
+  filter(mass < 1000) |> 
+  linearity_check(mass, height)
+```
+
+Or maybe you want an alternative to colored scatterplots for very large datasets where overplotting is a problem:
+
+```{r}
+# https://twitter.com/ppaxisa/status/1574398423175921665
+hex_plot <- function(df, x, y, z, bins = 20, fun = "mean") {
+  df |> 
+    ggplot(aes({{ x }}, {{ y }}, z = {{ z }})) + 
+    stat_summary_hex(
+      aes(colour = after_scale(fill)), # make border same colour as fill
+      bins = bins, 
+      fun = fun,
+    )
+}
+diamonds |> hex_plot(carat, price, depth)
+```
+
+### Combining with dplyr
+
+Some of the most useful helpers combine a dash of dplyr with ggplot2.
+For example, if you might want to do a vertical bar chart where you automatically sort the bars in frequency order using `fct_infreq()`.
+Since the bar chart is vertical, we also need to reverse the usual order to get the highest values at the top:
+
+```{r}
+sorted_bars <- function(df, var) {
+  df |> 
+    mutate({{ var }} := fct_rev(fct_infreq({{ var }}))) |> 
+    ggplot(aes(y = {{ var }})) + 
+    geom_bar()
+}
+diamonds |> sorted_bars(cut)
+```
+
+Or you could maybe you want to make it easy to draw a bar plot just for a subset of the data:
+
+```{r}
+conditional_bars <- function(df, condition, var) {
+  df |> 
+    filter({{ condition }}) |> 
+    ggplot(aes({{ var }})) + 
+    geom_bar()
+}
+
+diamonds |> conditional_bars(cut == "Good", clarity)
+```
+
+You can also get creative and display data summaries in other way.
+For example, this code uses the axis labels to display the highest value.
+As you learn more about ggplot2, the power of your functions will continue to increase.
+
+```{r}
+# https://gist.github.com/GShotwell/b19ef520b6d56f61a830fabb3454965b
+
+fancy_ts <- function(df, val, group) {
+  labs <- df |> 
+    group_by({{group}}) |> 
+    summarize(breaks = max({{val}}))
+  
+  df |> 
+    ggplot(aes(date, {{val}}, group = {{group}}, color = {{group}})) +
+    geom_path() +
+    scale_y_continuous(
+      breaks = labs$breaks, 
+      labels = scales::label_comma(),
+      minor_breaks = NULL,
+      guide = guide_axis(position = "right")
+    ) 
+}
+
+df <- tibble(
+  dist1 = sort(rnorm(50, 5, 2)), 
+  dist2 = sort(rnorm(50, 8, 3)),
+  dist4 = sort(rnorm(50, 15, 1)),
+  date = seq.Date(as.Date("2022-01-01"), as.Date("2022-04-10"), by = "2 days")
+)
+df <- pivot_longer(df, cols = -date, names_to = "dist_name", values_to = "value")
+
+fancy_ts(df, value, dist_name)
+```
+
+Next we'll discuss two more complicated cases: faceting and automatic labeling.
+
+### Faceting
+
+Unfortunately programming with faceting is a special challenge, because faceting was implemented before we understood what tidy evaluation was and how it should work.
+so you have to learn a new syntax.
+When programming with facets, instead of writing `~ x`, you need to write `vars(x)` and instead of `~ x + y` you need to write `vars(x, y)`.
+The only advantage of this syntax is that `vars()` uses tidy evaluation so you can embrace within it:
+
+```{r}
+# https://twitter.com/sharoz/status/1574376332821204999
+
+foo <- function(x) {
+  ggplot(mtcars, aes(mpg, disp)) +
+    geom_point() +
+    facet_wrap(vars({{ x }}))
+}
+foo(cyl)
+```
+
+As with data frame functions, it can be useful to make your plotting functions tightly coupled to a specific dataset, or even a specific variable.
+For example, the following function makes it particularly easy to interactively explore the conditional distribution `bill_length_mm` from palmerpenguins dataset.
+
+```{r}
+# https://twitter.com/yutannihilat_en/status/1574387230025875457
+density <- function(colour, facets, binwidth = 0.1) {
+  diamonds |> 
+    ggplot(aes(carat, after_stat(density), colour = {{ colour }})) +
+    geom_freqpoly(binwidth = binwidth) +
+    facet_wrap(vars({{ facets }}))
+}
+
+density()
+density(cut)
+density(cut, clarity)
+```
+
+### Labeling
+
+Remember the histogram function we showed you earlier?
+
+```{r}
+histogram <- function(df, var, binwidth = NULL) {
+  df |> 
+    ggplot(aes({{ var }})) + 
+    geom_histogram(binwidth = binwidth)
+}
+```
+
+Wouldn't it be nice if we could label the output with the variable and the bin width that was used?
+To do so, we're going to have to go under the covers of tidy evaluation and use a function from package we haven't talked about before: rlang.
+rlang is a low-level package that's used by just about every other package in the tidyverse because it implements tidy evaluation (as well as many other useful tools).
+
+To solve the labeling problem we can use `rlang::englue()`.
+This works similarly to `str_glue()`, so any value wrapped in `{ }` will be inserted into the string.
+But it also understands `{{ }}`, which automatically insert the appropriate variable name:
+
+```{r}
+histogram <- function(df, var, binwidth) {
+  label <- rlang::englue("A histogram of {{var}} with binwidth {binwidth}")
+  
+  df |> 
+    ggplot(aes({{ var }})) + 
+    geom_histogram(binwidth = binwidth) + 
+    labs(title = label)
+}
+
+diamonds |> histogram(carat, 0.1)
+```
+
+You can use the same approach any other place that you might supply a string in a ggplot2 plot.
+
+### Exercises
+
+1.  Build up a rich plotting function by incrementally implementing each of the steps below.
+    1.  Draw a scatterplot given dataset and `x` and `y` variables.
+
+    2.  Add a line of best fit (i.e. a linear model with no standard errors).
+
+    3.  Add a title.
+
+## Style
+
+R doesn't care what your function or arguments are called but the names make a big difference for humans.
 Ideally, the name of your function will be short, but clearly evoke what the function does.
 That's hard!
 But it's better to be clear than short, as RStudio's autocomplete makes it easy to type long names.
 
 Generally, function names should be verbs, and arguments should be nouns.
 There are some exceptions: nouns are ok if the function computes a very well known noun (i.e. `mean()` is better than `compute_mean()`), or accessing some property of an object (i.e. `coef()` is better than `get_coefficients()`).
-A good sign that a noun might be a better choice is if you're using a very broad verb like "get", "compute", "calculate", or "determine".
 Use your best judgement and don't be afraid to rename a function if you figure out a better name later.
 
 ```{r}
@@ -245,72 +891,40 @@ impute_missing()
 collapse_years()
 ```
 
-If your function name is composed of multiple words, we recommend using "snake_case", where each lowercase word is separated by an underscore.
-camelCase is a popular alternative.
-It doesn't really matter which one you pick, the important thing is to be consistent: pick one or the other and stick with it.
-R itself is not very consistent, but there's nothing you can do about that.
-Make sure you don't fall into the same trap by making your code as consistent as possible.
+R also doesn't care about how you use white space in your functions but future readers will.
+Continue to follow the rules from @sec-workflow-style.
+Additionally, `function()` should always be followed by squiggly brackets (`{}`), and the contents should be indented by an additional two spaces.
+This makes it easier to see the hierarchy in your code by skimming the left-hand margin.
 
 ```{r}
-#| eval: false
+# missing extra two spaces
+pull_unique <- function(df, var) {
+df |> 
+  distinct({{ var }}) |> 
+  pull({{ var }})
+}
 
-# Never do this!
-col_mins <- function(x, y) {}
-rowMaxes <- function(y, x) {}
+# Pipe indented incorrectly
+pull_unique <- function(df, var) {
+  df |> 
+  distinct({{ var }}) |> 
+  pull({{ var }})
+}
+
+# Missing {} and all one line
+pull_unique <- function(df, var) df |> distinct({{ var }}) |> pull({{ var }})
 ```
 
-If you have a family of functions that do similar things, make sure they have consistent names and arguments.
-Use a common prefix to indicate that they are connected.
-That's better than a common suffix because autocomplete allows you to type the prefix and see all the members of the family.
-
-```{r}
-#| eval: false
-
-# Good
-input_select()
-input_checkbox()
-input_text()
-
-# Not so good
-select_input()
-checkbox_input()
-text_input()
-```
-
-A good example of this design is the stringr package: if you don't remember exactly which function you need, you can type `str_` and jog your memory.
-
-Where possible, avoid overriding existing functions and variables.
-It's impossible to do in general because so many good names are already taken by other packages, but avoiding the most common names from base R will avoid confusion.
-
-```{r}
-#| eval: false
-
-# Don't do this!
-T <- FALSE
-c <- 10
-mean <- function(x) sum(x)
-```
-
-Use comments, lines starting with `#`, to explain the "why" of your code.
-You generally should avoid comments that explain the "what" or the "how".
-If you can't understand what the code does from reading it, you should think about how to rewrite it to be more clear.
-Do you need to add some intermediate variables with useful names?
-Do you need to break out a subcomponent of a large function so you can name it?
-However, your code can never capture the reasoning behind your decisions: why did you choose this approach instead of an alternative?
-What else did you try that didn't work?
-It's a great idea to capture that sort of thinking in a comment.
+As you can see we recommend putting extra spaces inside of `{{ }}`.
+This makes it very obvious that something unusual is happening.
 
 ### Exercises
 
-1.  Read the source code for each of the following three functions, puzzle out what they do, and then brainstorm better names.
+1.  Read the source code for each of the following two functions, puzzle out what they do, and then brainstorm better names.
 
     ```{r}
     f1 <- function(string, prefix) {
       substr(string, 1, nchar(prefix)) == prefix
-    }
-    f2 <- function(x) {
-      if (length(x) <= 1) return(NULL)
-      x[-length(x)]
     }
     f3 <- function(x, y) {
       rep(y, length.out = length(x))
@@ -319,639 +933,21 @@ It's a great idea to capture that sort of thinking in a comment.
 
 2.  Take a function that you've written recently and spend 5 minutes brainstorming a better name for it and its arguments.
 
-3.  Compare and contrast `rnorm()` and `MASS::mvrnorm()`.
-    How could you make them more consistent?
-
-4.  Make a case for why `norm_r()`, `norm_d()` etc would be better than `rnorm()`, `dnorm()`.
+3.  Make a case for why `norm_r()`, `norm_d()` etc would be better than `rnorm()`, `dnorm()`.
     Make a case for the opposite.
 
-## Conditional execution {#sec-conditional-execution}
+## Summary
 
-An `if` statement allows you to conditionally execute code.
-It looks like this:
+In this chapter you learned how to write functions for three useful scenarios: creating a vector, creating a data frames, or creating a plot.
+Along the way your saw many examples, which hopefully started to get your creative juices flowing, and gave you some ideas for where functions might help your analysis code.
 
-```{r}
-#| eval: false
+We have only shown you the bare minimum to get started with functions and there's much more to learn.
+A few places to learn more are:
 
-if (condition) {
-  # code executed when condition is TRUE
-} else {
-  # code executed when condition is FALSE
-}
-```
+-   To learn more about programming with tidy evaluation, see useful recipes in [programming with dplyr](https://dplyr.tidyverse.org/articles/programming.html) and [programming with tidyr](https://tidyr.tidyverse.org/articles/programming.html) and learn more about the theory in [What is data-masking and why do I need {{?](https://rlang.r-lib.org/reference/topic-data-mask.html).
+-   To learn more about reducing duplication in your ggplot2 code, read the [Programming with ggplot2](https://ggplot2-book.org/programming.html){.uri} chapter of the ggplot2 book.
+-   For more advice on function style, see the [tidyverse style guide](https://style.tidyverse.org/functions.html){.uri}.
 
-To get help on `if` you need to surround it in backticks: `` ?`if` ``.
-The help isn't particularly helpful if you're not already an experienced programmer, but at least you know how to get to it!
+In the next chapter, we'll dive into some of the details of R's vector data structures that we've omitted so far.
+These are not immediately useful by themselves, but are a necessary foundation for the following chapter on iteration which gives you further tools for reducing code duplication.
 
-Here's a simple function that uses an `if` statement.
-The goal of this function is to return a logical vector describing whether or not each element of a vector is named.
-
-```{r}
-has_name <- function(x) {
-  nms <- names(x)
-  if (is.null(nms)) {
-    rep(FALSE, length(x))
-  } else {
-    !is.na(nms) & nms != ""
-  }
-}
-```
-
-This function takes advantage of the standard return rule: a function returns the last value that it computed.
-Here that is either one of the two branches of the `if` statement.
-
-### Conditions
-
-The `condition` must evaluate to either `TRUE` or `FALSE`.
-If it's a vector, you'll get a warning message; if it's an `NA`, you'll get an error.
-Watch out for these messages in your own code:
-
-```{r}
-#| error: true
-
-if (c(TRUE, FALSE)) {}
-
-if (NA) {}
-```
-
-You can use `||` (or) and `&&` (and) to combine multiple logical expressions.
-These operators are "short-circuiting": as soon as `||` sees the first `TRUE` it returns `TRUE` without computing anything else.
-As soon as `&&` sees the first `FALSE` it returns `FALSE`.
-You should never use `|` or `&` in an `if` statement: these are vectorised operations that apply to multiple values (that's why you use them in `filter()`).
-If you do have a logical vector, you can use `any()` or `all()` to collapse it to a single value.
-
-Be careful when testing for equality.
-`==` is vectorised, which means that it's easy to get more than one output.
-Either check the length is already 1, collapse with `all()` or `any()`, or use the non-vectorised `identical()`.
-`identical()` is very strict: it always returns either a single `TRUE` or a single `FALSE`, and doesn't coerce types.
-This means that you need to be careful when comparing integers and doubles:
-
-```{r}
-identical(0L, 0)
-```
-
-You also need to be wary of floating point numbers:
-
-```{r}
-x <- sqrt(2) ^ 2
-x
-x == 2
-x - 2
-```
-
-Instead use `dplyr::near()` for comparisons, as described in \[comparisons\].
-
-And remember, `x == NA` doesn't do anything useful!
-
-### Multiple conditions
-
-You can chain multiple if statements together:
-
-```{r}
-#| eval: false
-
-if (this) {
-  # do that
-} else if (that) {
-  # do something else
-} else {
-  # 
-}
-```
-
-But if you end up with a very long series of chained `if` statements, you should consider rewriting.
-One useful technique is the `switch()` function.
-It allows you to evaluate selected code based on position or name.
-
-```{r}
-#| echo: false
-
-function(x, y, op) {
-  switch(op,
-    plus = x + y,
-    minus = x - y,
-    times = x * y,
-    divide = x / y,
-    stop("Unknown op!")
-  )
-}
-```
-
-Another useful function that can often eliminate long chains of `if` statements is `cut()`.
-It's used to discretise continuous variables.
-
-### Code style
-
-Both `if` and `function` should (almost) always be followed by squiggly brackets (`{}`), and the contents should be indented by two spaces.
-This makes it easier to see the hierarchy in your code by skimming the left-hand margin.
-
-An opening curly brace should never go on its own line and should always be followed by a new line.
-A closing curly brace should always go on its own line, unless it's followed by `else`.
-Always indent the code inside curly braces.
-
-```{r}
-#| eval: false
-
-# Good
-if (y < 0 && debug) {
-  message("Y is negative")
-}
-
-if (y == 0) {
-  log(x)
-} else {
-  y ^ x
-}
-
-# Bad
-if (y < 0 && debug)
-message("Y is negative")
-
-if (y == 0) {
-  log(x)
-} 
-else {
-  y ^ x
-}
-```
-
-It's ok to drop the curly braces if you have a very short `if` statement that can fit on one line:
-
-```{r}
-y <- 10
-x <- if (y < 20) "Too low" else "Too high"
-```
-
-We recommend this only for very brief `if` statements.
-Otherwise, the full form is easier to read:
-
-```{r}
-if (y < 20) {
-  x <- "Too low" 
-} else {
-  x <- "Too high"
-}
-```
-
-### Exercises
-
-1.  What's the difference between `if` and `ifelse()`?
-    Carefully read the help and construct three examples that illustrate the key differences.
-
-2.  Write a greeting function that says "good morning", "good afternoon", or "good evening", depending on the time of day.
-    (Hint: use a time argument that defaults to `lubridate::now()`.
-    That will make it easier to test your function.)
-
-3.  Implement a `fizzbuzz` function.
-    It takes a single number as input.
-    If the number is divisible by three, it returns "fizz".
-    If it's divisible by five it returns "buzz".
-    If it's divisible by three and five, it returns "fizzbuzz".
-    Otherwise, it returns the number itself.
-    Make sure you first write working code before you create the function.
-
-4.  How could you use `cut()` to simplify this set of nested if-else statements?
-
-    ```{r}
-    #| eval: false
-
-    if (temp <= 0) {
-      "freezing"
-    } else if (temp <= 10) {
-      "cold"
-    } else if (temp <= 20) {
-      "cool"
-    } else if (temp <= 30) {
-      "warm"
-    } else {
-      "hot"
-    }
-    ```
-
-    How would you change the call to `cut()` if we used `<` instead of `<=`?
-    What is the other chief advantage of `cut()` for this problem?
-    (Hint: what happens if you have many values in `temp`?)
-
-5.  What happens if you use `switch()` with numeric values?
-
-6.  What does this `switch()` call do?
-    What happens if `x` is "e"?
-
-    ```{r}
-    #| eval: false
-
-    switch(x, 
-      a = ,
-      b = "ab",
-      c = ,
-      d = "cd"
-    )
-    ```
-
-    Experiment, then carefully read the documentation.
-
-## Function arguments
-
-The arguments to a function typically fall into two broad sets: one set supplies the **data** to compute on, and the other supplies arguments that control the **details** of the computation.
-For example:
-
--   In `log()`, the data is `x`, and the detail is the `base` of the logarithm.
-
--   In `mean()`, the data is `x`, and the details are how much data to trim from the ends (`trim`) and how to handle missing values (`na.rm`).
-
--   In `t.test()`, the data are `x` and `y`, and the details of the test are `alternative`, `mu`, `paired`, `var.equal`, and `conf.level`.
-
--   In `str_c()` you can supply any number of strings to `...`, and the details of the concatenation are controlled by `sep` and `collapse`.
-
-Generally, data arguments should come first.
-Detail arguments should go on the end, and usually should have default values.
-You specify a default value in the same way you call a function with a named argument:
-
-```{r}
-# Compute confidence interval around the mean using normal approximation
-mean_ci <- function(x, conf = 0.95) {
-  se <- sd(x) / sqrt(length(x))
-  alpha <- 1 - conf
-  mean(x) + se * qnorm(c(alpha / 2, 1 - alpha / 2))
-}
-
-x <- runif(100)
-mean_ci(x)
-mean_ci(x, conf = 0.99)
-```
-
-The default value should almost always be the most common value.
-The few exceptions to this rule are to do with safety.
-For example, it makes sense for `na.rm` to default to `FALSE` because missing values are important.
-Even though `na.rm = TRUE` is what you usually put in your code, it's a bad idea to silently ignore missing values by default.
-
-When you call a function, you typically omit the names of the data arguments, because they are used so commonly.
-If you override the default value of a detail argument, you should use the full name:
-
-```{r}
-#| eval: false
-
-# Good
-mean(1:10, na.rm = TRUE)
-
-# Bad
-mean(x = 1:10, , FALSE)
-mean(, TRUE, x = c(1:10, NA))
-```
-
-You can refer to an argument by its unique prefix (e.g. `mean(x, n = TRUE)`), but this is generally best avoided given the possibilities for confusion.
-
-Notice that when you call a function, you should place a space around `=` in function calls, and always put a space after a comma, not before (just like in regular English).
-Using whitespace makes it easier to skim the function for the important components.
-
-```{r}
-#| eval: false
-
-# Good
-average <- mean(feet / 12 + inches, na.rm = TRUE)
-
-# Bad
-average<-mean(feet/12+inches,na.rm=TRUE)
-```
-
-### Choosing names
-
-The names of the arguments are also important.
-R doesn't care, but the readers of your code (including future-you!) will.
-Generally you should prefer longer, more descriptive names, but there are a handful of very common, very short names.
-It's worth memorising these:
-
--   `x`, `y`, `z`: vectors.
--   `w`: a vector of weights.
--   `df`: a data frame.
--   `i`, `j`: numeric indices (typically rows and columns).
--   `n`: length, or number of rows.
--   `p`: number of columns.
-
-Otherwise, consider matching names of arguments in existing R functions.
-For example, use `na.rm` to determine if missing values should be removed.
-
-### Checking values
-
-As you start to write more functions, you'll eventually get to the point where you don't remember exactly how your function works.
-At this point it's easy to call your function with invalid inputs.
-To avoid this problem, it's often useful to make constraints explicit.
-For example, imagine you've written some functions for computing weighted summary statistics:
-
-```{r}
-wt_mean <- function(x, w) {
-  sum(x * w) / sum(w)
-}
-wt_var <- function(x, w) {
-  mu <- wt_mean(x, w)
-  sum(w * (x - mu) ^ 2) / sum(w)
-}
-wt_sd <- function(x, w) {
-  sqrt(wt_var(x, w))
-}
-```
-
-What happens if `x` and `w` are not the same length?
-
-```{r}
-wt_mean(1:6, 1:3)
-```
-
-In this case, because of R's vector recycling rules, we don't get an error.
-
-It's good practice to check important preconditions, and throw an error (with `stop()`), if they are not true:
-
-```{r}
-wt_mean <- function(x, w) {
-  if (length(x) != length(w)) {
-    stop("`x` and `w` must be the same length")
-  }
-  sum(w * x) / sum(w)
-}
-```
-
-Be careful not to take this too far.
-There's a tradeoff between how much time you spend making your function robust, versus how long you spend writing it.
-For example, if you also added a `na.rm` argument, you don't need to check it carefully:
-
-```{r}
-wt_mean <- function(x, w, na.rm = FALSE) {
-  if (!is.logical(na.rm)) {
-    stop("`na.rm` must be logical")
-  }
-  if (length(na.rm) != 1) {
-    stop("`na.rm` must be length 1")
-  }
-  if (length(x) != length(w)) {
-    stop("`x` and `w` must be the same length")
-  }
-  
-  if (na.rm) {
-    miss <- is.na(x) | is.na(w)
-    x <- x[!miss]
-    w <- w[!miss]
-  }
-  sum(w * x) / sum(w)
-}
-```
-
-This is a lot of extra work for little additional gain.
-A useful compromise is the built-in `stopifnot()`: it checks that each argument is `TRUE`, and produces a generic error message if not.
-
-```{r}
-#| error: true
-
-wt_mean <- function(x, w, na.rm = FALSE) {
-  stopifnot(is.logical(na.rm), length(na.rm) == 1)
-  stopifnot(length(x) == length(w))
-  
-  if (na.rm) {
-    miss <- is.na(x) | is.na(w)
-    x <- x[!miss]
-    w <- w[!miss]
-  }
-  sum(w * x) / sum(w)
-}
-wt_mean(1:6, 6:1, na.rm = "foo")
-```
-
-Note that when using `stopifnot()` you assert what should be true rather than checking for what might be wrong.
-
-### Dot-dot-dot (`...`)
-
-Many functions in R take an arbitrary number of inputs:
-
-```{r}
-sum(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
-stringr::str_c("a", "b", "c", "d", "e", "f")
-```
-
-How do these functions work?
-They rely on a special argument: `...` (pronounced dot-dot-dot).
-This special argument captures any number of arguments that aren't otherwise matched.
-
-It's useful because you can then send those `...` on to another function.
-This is a useful catch-all if your function primarily wraps another function.
-For example, Hadley often create's these helper functions that wrap around `str_c()`:
-
-```{r}
-commas <- function(...) stringr::str_c(..., collapse = ", ")
-commas(letters[1:10])
-
-rule <- function(..., pad = "-") {
-  title <- paste0(...)
-  width <- getOption("width") - nchar(title) - 5
-  cat(title, " ", stringr::str_dup(pad, width), "\n", sep = "")
-}
-rule("Important output")
-```
-
-Here `...` lets you forward on any extra arguments to `str_c()`.
-It's a very convenient technique.
-But it does come at a price: any misspelled arguments will not raise an error.
-This makes it easy for typos to go unnoticed:
-
-```{r}
-x <- c(1, 2)
-sum(x, na.mr = TRUE)
-```
-
-If you just want to capture the values of the `...`, use `list(...)`.
-
-### Lazy evaluation
-
-Arguments in R are lazily evaluated: they're not computed until they're needed.
-That means if they're never used, they're never called.
-This is an important property of R as a programming language, but is generally not important when you're writing your own functions for data analysis.
-You can read more about lazy evaluation at <http://adv-r.had.co.nz/Functions.html#lazy-evaluation>.
-
-### Exercises
-
-1.  What does `commas(letters, collapse = "-")` do?
-    Why?
-
-2.  It'd be nice if you could supply multiple characters to the `pad` argument, e.g. `rule("Title", pad = "-+")`.
-    Why doesn't this currently work?
-    How could you fix it?
-
-3.  What does the `trim` argument to `mean()` do?
-    When might you use it?
-
-4.  The default value for the `method` argument to `cor()` is `c("pearson", "kendall", "spearman")`.
-    What does that mean?
-    What value is used by default?
-
-## Return values
-
-Figuring out what your function should return is usually straightforward: it's why you created the function in the first place!
-There are two things you should consider when returning a value:
-
-1.  Does returning early make your function easier to read?
-
-2.  Can you make your function pipeable?
-
-### Explicit return statements
-
-The value returned by the function is usually the last statement it evaluates, but you can choose to return early by using `return()`.
-We think it's best to save the use of `return()` to signal that you can return early with a simpler solution.
-A common reason to do this is because the inputs are empty:
-
-```{r}
-complicated_function <- function(x, y, z) {
-  if (length(x) == 0 || length(y) == 0) {
-    return(0)
-  }
-    
-  # Complicated code here
-}
-
-```
-
-Another reason is because you have a `if` statement with one complex block and one simple block.
-For example, you might write an if statement like this:
-
-```{r}
-#| eval: false
-
-f <- function() {
-  if (x) {
-    # Do 
-    # something
-    # that
-    # takes
-    # many
-    # lines
-    # to
-    # express
-  } else {
-    # return something short
-  }
-}
-```
-
-But if the first block is very long, by the time you get to the `else`, you've forgotten the `condition`.
-One way to rewrite it is to use an early return for the simple case:
-
-```{r}
-#| eval: false
-
-f <- function() {
-  if (!x) {
-    return(something_short)
-  }
-
-  # Do 
-  # something
-  # that
-  # takes
-  # many
-  # lines
-  # to
-  # express
-}
-```
-
-This tends to make the code easier to understand, because you don't need quite so much context to understand it.
-
-### Writing pipeable functions
-
-If you want to write your own pipeable functions, it's important to think about the return value.
-Knowing the return value's object type will mean that your pipeline will "just work".
-For example, with dplyr and tidyr the object type is the data frame.
-
-There are two basic types of pipeable functions: transformations and side-effects.
-With **transformations**, an object is passed to the function's first argument and a modified object is returned.
-With **side-effects**, the passed object is not transformed.
-Instead, the function performs an action on the object, like drawing a plot or saving a file.
-Side-effects functions should "invisibly" return the first argument, so that while they're not printed they can still be used in a pipeline.
-For example, this simple function prints the number of missing values in a data frame:
-
-```{r}
-show_missings <- function(df) {
-  n <- sum(is.na(df))
-  cat("Missing values: ", n, "\n", sep = "")
-  
-  invisible(df)
-}
-```
-
-If we call it interactively, the `invisible()` means that the input `df` doesn't get printed out:
-
-```{r}
-show_missings(mtcars)
-```
-
-But it's still there, it's just not printed by default:
-
-```{r}
-x <- show_missings(mtcars) 
-class(x)
-dim(x)
-```
-
-And we can still use it in a pipe:
-
-```{r}
-#| include: false
-
-library(dplyr)
-```
-
-```{r}
-mtcars |> 
-  show_missings() |> 
-  mutate(mpg = ifelse(mpg < 20, NA, mpg)) |> 
-  show_missings() 
-```
-
-## Environment
-
-The last component of a function is its environment.
-This is not something you need to understand deeply when you first start writing functions.
-However, it's important to know a little bit about environments because they are crucial to how functions work.
-The environment of a function controls how R finds the value associated with a name.
-For example, take this function:
-
-```{r}
-f <- function(x) {
-  x + y
-} 
-```
-
-In many programming languages, this would be an error, because `y` is not defined inside the function.
-In R, this is valid code because R uses rules called **lexical scoping** to find the value associated with a name.
-Since `y` is not defined inside the function, R will look in the **environment** where the function was defined:
-
-```{r}
-y <- 100
-f(10)
-
-y <- 1000
-f(10)
-```
-
-This behaviour seems like a recipe for bugs, and indeed you should avoid creating functions like this deliberately, but by and large it doesn't cause too many problems (especially if you regularly restart R to get to a clean slate).
-
-The advantage of this behaviour is that from a language standpoint it allows R to be very consistent.
-Every name is looked up using the same set of rules.
-For `f()` that includes the behaviour of two things that you might not expect: `{` and `+`.
-This allows you to do devious things like:
-
-```{r}
-`+` <- function(x, y) {
-  if (runif(1) < 0.1) {
-    sum(x, y)
-  } else {
-    sum(x, y) * 1.1
-  }
-}
-table(replicate(1000, 1 + 2))
-rm(`+`)
-```
-
-This is a common phenomenon in R.
-R places few limits on your power.
-You can do many things that you can't do in other programming languages.
-You can do many things that 99% of the time are extremely ill-advised (like overriding how addition works!).
-But this power and flexibility is what makes tools like ggplot2 and dplyr possible.
-Learning how to make best use of this flexibility is beyond the scope of this book, but you can read about it in [*Advanced R*](http://adv-r.had.co.nz).
