@@ -1,0 +1,375 @@
+# A field guide to base R
+
+```{r}
+#| results: "asis"
+#| echo: false
+source("_common.R")
+status("complete")
+```
+
+To finish off the programming section, we're going to give you a quick tour of the most important base R functions that we don't otherwise discuss in the book.
+This will help you read code that you'll encounter in the wild and start your on your journey to learn different ways to tackle the same problems.
+
+We'll focus on three big topics: subsetting with `[`, subsetting with `[[` and `$` and for loops.
+We don't teach these not because they're not useful, they are!
+But we strongly believe that it's easier to master one framework for tackling problems before moving on to the next.
+
+You absolutely should not feel the need to solve every problem using the tidyverse, and after you read this book we expect you'll learn other ways to tackle the same problems using base R, data.table, and more.
+You'll certainly encounter these other approaches when you start reading R code written by other people, particularly if you're using StackOverflow.
+It's 100% ok for your code to include a mix of paradigms, but when you have time, we highly recommend taking the time to rewrite with a consistent style --- this will help you understand what it does better, improve your R programming skills, and lead to code that's easier to maintain.
+
+Many R users who are otherwise not tidyverse users prefer ggplot2 for plotting due to helpful features like sensible defaults, automatic legends, modern look.
+
+Tibbles *are* data frames, but they tweak some older behaviors to make your life a little easier.
+R is an old language, and some things that were useful 10 or 20 years ago now get in your way.
+It's difficult to change base R without breaking existing code, so most innovation occurs in packages.
+Here we will describe the **tibble** package, which provides opinionated data frames that make working in the tidyverse a little easier.
+In most places, we use the term tibble and data frame interchangeably; when we want to draw particular attention to R's built-in data frame, we'll call them `data.frame`s.
+
+### Prerequisites
+
+```{r}
+#| label: setup
+#| message: false
+
+library(tidyverse)
+```
+
+## Selecting multiple elements with `[`
+
+`[` is the vector subsetting function, and is called like `x[i]`.
+It's is one of the most powerful features in R, but we use it very little in this book for two reasons:
+
+-   It's really useful for working with vectors, which we don't do that often (our vectors almost always live inside of data frames).
+-   We prefer named verbs like `arrange()`, `filter()`, `select()`, `rename()`, and `relocate()` because they're easier read in your head and they're a bit easier to remember.
+
+In this section, we'll introduce you to the power of `[`, first showing you how you can use it with vectors, then how the same principles extend in a straightforward way to data frames.
+We'll then help you cement that knowledge by showing how various dplyr verbs are special cases of `[`.
+
+### Subsetting vectors
+
+There are five main types of things that you can subset a vector with, i.e. that can be the i in `x[i]`:
+
+1.  **An vector of positive integers**.
+    Subsetting with positive integers keeps the elements at those positions:
+
+    ```{r}
+    x <- c("one", "two", "three", "four", "five")
+    x[c(3, 2, 5)]
+    ```
+
+    By repeating a position, you can actually make a longer output than input.
+    (This makes subsetting a bit of a misnomer).
+
+    ```{r}
+    x[c(1, 1, 5, 5, 5, 2)]
+    ```
+
+2.  **A vector of negative integers**.
+    Negative values drop the elements at the specified positions:
+
+    ```{r}
+    x[c(-1, -3, -5)]
+    ```
+
+3.  **A logical vector**.
+    Subsetting with a logical vector keeps all values corresponding to a `TRUE` value.
+    This is most often useful in conjunction with the comparison functions.
+
+    ```{r}
+    x <- c(10, 3, NA, 5, 8, 1, NA)
+
+    # All non-missing values of x
+    x[!is.na(x)]
+
+    # All even (or missing!) values of x
+    x[x %% 2 == 0]
+    ```
+
+4.  **A character vector**.
+    If you have a named vector, you can subset it with a character vector:
+
+    ```{r}
+    x <- c(abc = 1, def = 2, xyz = 5)
+    x[c("xyz", "def")]
+    ```
+
+    Like with positive integers, you can also use a character vector to duplicate individual entries.
+
+5.  **Nothing**.
+    The final type of subsetting is nothing, `x[]`, which returns the complete `x`.
+    This is not useful for subsetting vectors, but as well see shortly it is useful when subsetting 2d structures like tibbles.
+
+### Subsetting data frames
+
+There are quite a few different ways[^base-r-1] that you can use `[` with a data frame, but the most important looks like `df[rows, cols]`. For `rows` and `cols` you can use any of the four types of vectors described above.
+For example, `df[rows, ]` and `df[, cols]`.
+
+[^base-r-1]: Read <https://adv-r.hadley.nz/subsetting.html#subset-multiple> to see how you can also subset a data frame like it's a 1d object and how you can subset it with a matrix.
+
+Here are a few examples:
+
+The most important way to subset a data frame is as a combination of subsetting rows and columns: `df[rows, cols]` and use any of the forms above.
+The big difference is that when using `[`, you need to be explicit about where each column is coming from using the `dataframe$variable` syntax.
+
+Note that there's an important difference between tibbles and data frames.
+If `df` is a data frame, `df[, col]` will return a vector but if `df` is a tibble, it will return a tibble.
+
+```{r}
+df1 <- data.frame(x = 1:5)
+df1[, "x"]
+
+df2 <- tibble(x = 1:5)
+df2[, "x"]
+```
+
+### dplyr equivalents
+
+For example:
+
+-   `filter()` is equivalent to subsetting the rows with a logical vector.
+
+    ```{r}
+    #| results: false
+
+    # base R
+    diamonds[diamonds$carat > 1, ]
+
+    # dplyr
+    diamonds |> filter(carat > 1)
+    ```
+
+-   `arrange()` is equivalent to subsetting the rows with an integer vector, usually created with `order()`.
+
+    ```{r}
+    #| results: false
+
+    # base R
+    diamonds[order(diamonds$carat, diamonds$cut, diamonds$color), ]
+
+    # dplyr
+    diamonds |> arrange(carat, cut, color)
+    ```
+
+-   `select()` is similar to subsetting the columns with a character vector
+
+    ```{r}
+    #| results: false
+
+    diamonds[, c("x", "y", "z")]
+    diamonds |> select(x, y, z)
+    ```
+
+No dplyr function allows you to subset rows and columns simultaneously.
+This means that base R code can sometimes be much shorter than the equivalent dplyr code.
+
+## Selecting a single element `$` and `[[`
+
+Where `[` allows you to select many elements from a vector or data frame, `[[` and `$` are specialised for extracting a single element from a list of data frame.
+We don't use them much in this book because:
+
+-   When working with list-columns, we use `unnest_wider()` and `unnest_longer()`
+-   When working with lists of other things we use purrr functions.
+-   When extracting columns we use `pull()`.
+-   When creating columns we use `mutate()`.
+
+### Data frames
+
+`[[` and `$` can be used like `pull()` to extract columns out of a data frame.
+`[[` can access by position or by name, and `$` is specialized for access by position:
+
+```{r}
+tb <- tibble(
+  x = 1:4,
+  y = c(10, 4, 1, 21)
+)
+
+# by position
+tb[[1]]
+
+# by name
+tb[["x"]]
+tb$x
+```
+
+They can also be used like `mutate()` to create new columns:
+
+```{r}
+tb$z <- tb$x + tb$y
+tb
+```
+
+(There are a number other base approaches to reduce some of the duplication here, including with `transform()`, `with()`, and `within()`.
+Hadley collected a few examples at <https://gist.github.com/hadley/1986a273e384fb2d4d752c18ed71bedf>).
+
+### Lists
+
+`[[` and `$` are also really important for working with lists.
+And it's particularly important to contrast their behavior with `[`.
+Lets illustrate the differences a list named `a`:
+
+```{r}
+a <- list(a = 1:3, b = "a string", c = pi, d = list(-1, -5))
+```
+
+-   `[` extracts a sub-list.
+    The result will always be a list.
+
+    ```{r}
+    str(a[1:2])
+    str(a[4])
+    ```
+
+    Like with vectors, you can subset with a logical, integer, or character vector.
+
+-   `[[` extracts a single component from a list.
+    It removes a level of hierarchy from the list.
+
+    ```{r}
+    str(a[[1]])
+    str(a[[4]])
+    ```
+
+-   `$` is a shorthand for extracting named elements of a list.
+    It works similarly to `[[` except that you don't need to use quotes.
+
+    ```{r}
+    a$a
+    a[["a"]]
+    ```
+
+The distinction between `[` and `[[` is really important for lists, because `[[` drills down into the list while `[` returns a new, smaller list.
+Compare the code and output above with the visual representation in @fig-lists-subsetting.
+
+```{r}
+#| label: fig-lists-subsetting
+#| echo: false
+#| out-width: "75%"
+#| fig-cap: >
+#|   Subsetting a list, visually.
+
+knitr::include_graphics("diagrams/lists-subsetting.png")
+```
+
+The difference between `[` and `[[` is very important, but it's easy to get confused.
+To help you remember, let me show you an unusual pepper shaker in @fig-pepper-1.
+If this pepper shaker is your list `pepper`, then, `pepper[1]` is a pepper shaker containing a single pepper packet, as in @fig-pepper-2.
+`pepper[2]` would look the same, but would contain the second packet.
+`pepper[1:2]` would be a pepper shaker containing two pepper packets.
+`pepper[[1]]` would extract the pepper packet itself, as in @fig-pepper-3.
+
+```{r}
+#| label: fig-pepper-1
+#| echo: false
+#| out-width: "25%"
+#| fig-cap: >
+#|   A pepper shaker that Hadley once found in his hotel room.
+#| fig-alt: >
+#|   A photo of a glass pepper shaker. Instead of the pepper shaker
+#|   containing pepper, it contains many packets of pepper.
+
+knitr::include_graphics("images/pepper.jpg")
+```
+
+```{r}
+#| label: fig-pepper-2
+#| echo: false
+#| out-width: "25%"
+#| fig-cap: >
+#|   `pepper[1]`
+#| fig-alt: >
+#|   A photo of the glass pepper shaker containing just one packet of 
+#|   pepper.
+
+knitr::include_graphics("images/pepper-1.jpg")
+```
+
+```{r}
+#| label: fig-pepper-3
+#| echo: false
+#| out-width: "25%"
+#| fig-cap: >
+#|   `pepper[[1]]`
+#| fig-alt: A photo of single packet of pepper.
+
+knitr::include_graphics("images/pepper-2.jpg")
+```
+
+### Tibbles vs data frames
+
+There are a couple of important differences between tibbles and `data.frame`s when it comes to `$`.
+Data frames will match the prefix of any variable names (so called **partial matching**) and don't complain if a column doesn't exist:
+
+```{r}
+df <- data.frame(x1 = 1)
+df$x
+df$z
+```
+
+OTOH, are more strict: they only ever match variable names exactly and they will generate a warning if the column you are trying to access doesn't exist:
+
+```{r}
+tb <- tibble(x1 = 1)
+
+tb$x
+tb$z
+```
+
+For this reason we sometimes joke that tibbles are lazy and surly: they do less and complain more.
+
+### Exercises
+
+1.  Create functions that take a vector as input and return:
+
+    a.  The last value. Should you use `[` or `[[`?
+    b.  The elements at even numbered positions.
+    c.  Every element except the last value.
+    d.  Only even numbers (and no missing values).
+
+2.  Why is `x[-which(x > 0)]` not the same as `x[x <= 0]`?
+
+3.  What happens when you subset with a positive integer that's bigger than the length of the vector?
+    What happens when you subset with a name that doesn't exist?
+
+4.  What happens if you subset a tibble as if you're subsetting a list?
+    What are the key differences between a list and a tibble?
+
+## For loops
+
+For loops are the fundamental
+
+For loops are powerful and general tool that you definitely need to learn as you become a more experienced R programmer.
+But we skip them here because, as you've seen, you can solve a whole bunch of useful problems just by learning `across()`, `map()`, and `walk2()`.
+
+-   for loop basics
+-   vs `map()` and `map_vec()`
+-   vs `walk()`
+
+```{r}
+#| eval: false
+
+for (x in xs) {
+  do_something(x)
+}
+walk(xs, \(x) do_something(x))
+
+out <- c()
+for (x in xs) {
+  out <- c(out, transform(x))
+}
+map_dbl(xs, \(x) transform(x))
+
+df |> mutate(across(everything(), \(x) x + 1))
+
+for (nm in names(df)) {
+  df[[nm]] <- df[[nm]] + 1
+}
+
+df[] <- lapply(df, \(x) x + 1)
+```
+
+## Summary
+
+<https://adv-r.hadley.nz/subsetting.html>
+
+<https://adv-r.hadley.nz/control-flow.html#loops>
