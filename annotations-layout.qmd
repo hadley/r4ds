@@ -1,0 +1,366 @@
+# Annotations and layout {#sec-annotations-layout}
+
+```{r}
+#| results: "asis"
+#| echo: false
+source("_common.R")
+status("drafting")
+```
+
+## Introduction
+
+<!-- TO DO: Add intro -->
+
+### Prerequisites
+
+In this chapter, we'll focus once again on ggplot2.
+We'll also use a little dplyr for data manipulation, and a few ggplot2 extension packages, including **ggrepel** and **patchwork**.
+Rather than loading those extensions here, we'll refer to their functions explicitly, using the `::` notation.
+This will help make it clear which functions are built into ggplot2, and which come from other packages.
+Don't forget you'll need to install those packages with `install.packages()` if you don't already have them.
+
+```{r}
+#| label: setup
+
+library(tidyverse)
+```
+
+## Annotations
+
+In addition to labelling major components of your plot, it's often useful to label individual observations or groups of observations.
+The first tool you have at your disposal is `geom_text()`.
+`geom_text()` is similar to `geom_point()`, but it has an additional aesthetic: `label`.
+This makes it possible to add textual labels to your plots.
+
+There are two possible sources of labels.
+First, you might have a tibble that provides labels.
+The plot below isn't terribly useful, but it illustrates a useful approach: pull out the most efficient car in each class with dplyr, and then label it on the plot:
+
+```{r}
+best_in_class <- mpg |>
+  group_by(class) |>
+  filter(row_number(desc(hwy)) == 1)
+
+ggplot(mpg, aes(displ, hwy)) +
+  geom_point(aes(colour = class)) +
+  geom_text(aes(label = model), data = best_in_class)
+```
+
+This is hard to read because the labels overlap with each other, and with the points.
+We can make things a little better by switching to `geom_label()` which draws a rectangle behind the text.
+We also use the `nudge_y` parameter to move the labels slightly above the corresponding points:
+
+```{r}
+ggplot(mpg, aes(displ, hwy)) +
+  geom_point(aes(colour = class)) +
+  geom_label(aes(label = model), data = best_in_class, nudge_y = 2, alpha = 0.5)
+```
+
+That helps a bit, but if you look closely in the top-left hand corner, you'll notice that there are two labels practically on top of each other.
+This happens because the highway mileage and displacement for the best cars in the compact and subcompact categories are exactly the same.
+There's no way that we can fix these by applying the same transformation for every label.
+Instead, we can use the **ggrepel** package by Kamil Slowikowski.
+This useful package will automatically adjust labels so that they don't overlap:
+
+```{r}
+ggplot(mpg, aes(displ, hwy)) +
+  geom_point(aes(colour = class)) +
+  geom_point(size = 3, shape = 1, data = best_in_class) +
+  ggrepel::geom_label_repel(aes(label = model), data = best_in_class)
+```
+
+Note another handy technique used here: we added a second layer of large, hollow points to highlight the labelled points.
+
+You can sometimes use the same idea to replace the legend with labels placed directly on the plot.
+It's not wonderful for this plot, but it isn't too bad.
+(`theme(legend.position = "none"`) turns the legend off --- we'll talk about it more shortly.)
+
+```{r}
+class_avg <- mpg |>
+  group_by(class) |>
+  summarise(
+    displ = median(displ),
+    hwy = median(hwy)
+  )
+
+ggplot(mpg, aes(displ, hwy, colour = class)) +
+  ggrepel::geom_label_repel(aes(label = class),
+    data = class_avg,
+    size = 6,
+    label.size = 0,
+    segment.color = NA
+  ) +
+  geom_point() +
+  theme(legend.position = "none")
+```
+
+Alternatively, you might just want to add a single label to the plot, but you'll still need to create a data frame.
+Often, you want the label in the corner of the plot, so it's convenient to create a new data frame using `summarize()` to compute the maximum values of x and y.
+
+```{r}
+label_info <- mpg |>
+  summarise(
+    displ = max(displ),
+    hwy = max(hwy),
+    label = "Increasing engine size is \nrelated to decreasing fuel economy."
+  )
+
+ggplot(mpg, aes(displ, hwy)) +
+  geom_point() +
+  geom_text(data = label_info, aes(label = label), vjust = "top", hjust = "right")
+```
+
+If you want to place the text exactly on the borders of the plot, you can use `+Inf` and `-Inf`.
+Since we're no longer computing the positions from `mpg`, we can use `tibble()` to create the data frame:
+
+```{r}
+label_info <- tibble(
+  displ = Inf,
+  hwy = Inf,
+  label = "Increasing engine size is \nrelated to decreasing fuel economy."
+)
+
+ggplot(mpg, aes(displ, hwy)) +
+  geom_point() +
+  geom_text(data = label_info, aes(label = label), vjust = "top", hjust = "right")
+```
+
+In these examples, we manually broke the label up into lines using `"\n"`.
+Another approach is to use `stringr::str_wrap()` to automatically add line breaks, given the number of characters you want per line:
+
+```{r}
+"Increasing engine size is related to decreasing fuel economy." |>
+  str_wrap(width = 40) |>
+  writeLines()
+```
+
+Note the use of `hjust` and `vjust` to control the alignment of the label.
+@fig-just shows all nine possible combinations.
+
+```{r}
+#| label: fig-just
+#| echo: false
+#| fig-width: 4.5
+#| fig-asp: 0.5
+#| out-width: "60%"
+#| fig-cap: >
+#|   All nine combinations of `hjust` and `vjust`.
+
+vjust <- c(bottom = 0, center = 0.5, top = 1)
+hjust <- c(left = 0, center = 0.5, right = 1)
+
+df <- crossing(hj = names(hjust), vj = names(vjust)) |>
+  mutate(
+    y = vjust[vj],
+    x = hjust[hj],
+    label = paste0("hjust = '", hj, "'\n", "vjust = '", vj, "'")
+  )
+
+ggplot(df, aes(x, y)) +
+  geom_point(colour = "grey70", size = 5) +
+  geom_point(size = 0.5, colour = "red") +
+  geom_text(aes(label = label, hjust = hj, vjust = vj), size = 4) +
+  labs(x = NULL, y = NULL)
+```
+
+Remember, in addition to `geom_text()`, you have many other geoms in ggplot2 available to help annotate your plot.
+A few ideas:
+
+-   Use `geom_hline()` and `geom_vline()` to add reference lines.
+    We often make them thick (`size = 2`) and white (`colour = white`), and draw them underneath the primary data layer.
+    That makes them easy to see, without drawing attention away from the data.
+
+-   Use `geom_rect()` to draw a rectangle around points of interest.
+    The boundaries of the rectangle are defined by aesthetics `xmin`, `xmax`, `ymin`, `ymax`.
+
+-   Use `geom_segment()` with the `arrow` argument to draw attention to a point with an arrow.
+    Use aesthetics `x` and `y` to define the starting location, and `xend` and `yend` to define the end location.
+
+The only limit is your imagination (and your patience with positioning annotations to be aesthetically pleasing)!
+
+### Exercises
+
+1.  Use `geom_text()` with infinite positions to place text at the four corners of the plot.
+
+2.  Read the documentation for `annotate()`.
+    How can you use it to add a text label to a plot without having to create a tibble?
+
+3.  How do labels with `geom_text()` interact with faceting?
+    How can you add a label to a single facet?
+    How can you put a different label in each facet?
+    (Hint: Think about the underlying data.)
+
+4.  What arguments to `geom_label()` control the appearance of the background box?
+
+5.  What are the four arguments to `arrow()`?
+    How do they work?
+    Create a series of plots that demonstrate the most important options.
+
+## Zooming
+
+There are three ways to control the plot limits:
+
+1.  Adjusting what data are plotted
+2.  Setting the limits in each scale
+3.  Setting `xlim` and `ylim` in `coord_cartesian()`
+
+To zoom in on a region of the plot, it's generally best to use `coord_cartesian()`.
+Compare the following two plots:
+
+```{r}
+#| layout-ncol: 2
+#| fig-width: 4
+#| fig-height: 3
+#| message: false
+
+ggplot(mpg, mapping = aes(displ, hwy)) +
+  geom_point(aes(color = class)) +
+  geom_smooth() +
+  coord_cartesian(xlim = c(5, 7), ylim = c(10, 30))
+
+mpg |>
+  filter(displ >= 5, displ <= 7, hwy >= 10, hwy <= 30) |>
+  ggplot(aes(displ, hwy)) +
+  geom_point(aes(color = class)) +
+  geom_smooth()
+```
+
+You can also set the `limits` on individual scales.
+Reducing the limits is basically equivalent to subsetting the data.
+It is generally more useful if you want *expand* the limits, for example, to match scales across different plots.
+For example, if we extract two classes of cars and plot them separately, it's difficult to compare the plots because all three scales (the x-axis, the y-axis, and the colour aesthetic) have different ranges.
+
+```{r}
+#| layout-ncol: 2
+#| fig-width: 4
+#| fig-height: 3
+
+suv <- mpg |> filter(class == "suv")
+compact <- mpg |> filter(class == "compact")
+
+ggplot(suv, aes(displ, hwy, colour = drv)) +
+  geom_point()
+
+ggplot(compact, aes(displ, hwy, colour = drv)) +
+  geom_point()
+```
+
+One way to overcome this problem is to share scales across multiple plots, training the scales with the `limits` of the full data.
+
+```{r}
+#| layout-ncol: 2
+#| fig-width: 4
+#| fig-height: 3
+
+x_scale <- scale_x_continuous(limits = range(mpg$displ))
+y_scale <- scale_y_continuous(limits = range(mpg$hwy))
+col_scale <- scale_colour_discrete(limits = unique(mpg$drv))
+
+ggplot(suv, aes(displ, hwy, colour = drv)) +
+  geom_point() +
+  x_scale +
+  y_scale +
+  col_scale
+
+ggplot(compact, aes(displ, hwy, colour = drv)) +
+  geom_point() +
+  x_scale +
+  y_scale +
+  col_scale
+```
+
+In this particular case, you could have simply used faceting, but this technique is useful more generally, if for instance, you want to spread plots over multiple pages of a report.
+
+### Exercises
+
+<!-- TO DO: Add exercises -->
+
+## Themes
+
+Finally, you can customize the non-data elements of your plot with a theme:
+
+```{r}
+#| message: false
+
+ggplot(mpg, aes(displ, hwy)) +
+  geom_point(aes(color = class)) +
+  geom_smooth(se = FALSE) +
+  theme_bw()
+```
+
+ggplot2 includes eight themes by default, as shown in @fig-themes.
+Many more are included in add-on packages like **ggthemes** (<https://jrnold.github.io/ggthemes>), by Jeffrey Arnold.
+
+```{r}
+#| label: fig-themes
+#| echo: false
+#| fig-cap: The eight themes built-in to ggplot2.
+#| fig-alt: >
+#|   Eight barplots created with ggplot2, each 
+#|   with one of the eight built-in themes: 
+#|   theme_bw() - White background with grid lines,
+#|   theme_light() - Light axes and grid lines,
+#|   theme_classic() - Classic theme, axes but no grid
+#|   lines, theme_linedraw() - Only black lines, 
+#|   theme_dark() - Dark background for contrast, 
+#|   theme_minimal() - Minimal theme, no background,
+#|   theme_gray() - Gray background (default theme),
+#|   theme_void() - Empty theme, only geoms are visible.
+
+knitr::include_graphics("images/visualization-themes.png")
+```
+
+Many people wonder why the default theme has a gray background.
+This was a deliberate choice because it puts the data forward while still making the grid lines visible.
+The white grid lines are visible (which is important because they significantly aid position judgments), but they have little visual impact and we can easily tune them out.
+The grey background gives the plot a similar typographic colour to the text, ensuring that the graphics fit in with the flow of a document without jumping out with a bright white background.
+Finally, the grey background creates a continuous field of colour which ensures that the plot is perceived as a single visual entity.
+
+It's also possible to control individual components of each theme, like the size and colour of the font used for the y axis.
+Unfortunately, this level of detail is outside the scope of this book, so you'll need to read the [ggplot2 book](https://ggplot2-book.org/) for the full details.
+You can also create your own themes, if you are trying to match a particular corporate or journal style.
+
+### Exercises
+
+<!-- TO DO: Add exercises -->
+
+## Layout
+
+<!-- TO DO: Add patchwork things -->
+
+### Exercises
+
+<!-- TO DO: Add exercises -->
+
+## Saving your plots {#sec-ggsave}
+
+There are two main ways to get your plots out of R and into your final write-up: `ggsave()` and knitr.
+`ggsave()` will save the most recent plot to disk:
+
+```{r}
+#| fig-show: "hide"
+
+ggplot(mpg, aes(displ, hwy)) + geom_point()
+ggsave("my-plot.pdf")
+```
+
+```{r}
+#| include: false
+
+file.remove("my-plot.pdf")
+```
+
+If you don't specify the `width` and `height` they will be taken from the dimensions of the current plotting device.
+For reproducible code, you'll want to specify them.
+
+Generally, however, we recommend that you assemble your final reports using Quarto, so we focus on the important code chunk options that you should know about for graphics.
+You can learn more about `ggsave()` in the documentation.
+
+### Exercises
+
+<!-- TO DO: Add exercises -->
+
+## Summary
+
+<!-- TO DO: Add summary -->
+

@@ -1,0 +1,288 @@
+# Geoms and stats {#sec-geoms-stats}
+
+```{r}
+#| results: "asis"
+#| echo: false
+source("_common.R")
+status("drafting")
+```
+
+## Introduction
+
+<!--# TO DO: Add intro. -->
+
+### Prerequisites
+
+This chapter focuses on ggplot2, one of the core packages in the tidyverse.
+To access the datasets, help pages, and functions used in this chapter, load the tidyverse by running this code:
+
+```{r}
+#| label: setup
+
+library(tidyverse)
+```
+
+## ggplot2 calls
+
+As we move on from these introductory chapters, we'll transition to a more concise expression of ggplot2 code.
+So far we've been very explicit, which is helpful when you are learning:
+
+```{r}
+#| eval: false
+#| fig-alt: >
+#|   A frequency polygon plot of eruption times for the Old Faithful geyser. 
+#|   The distribution of eruption times is binomodal with one mode around 1.75 
+#|   and the other around 4.5.
+
+ggplot(data = faithful, mapping = aes(x = eruptions)) + 
+  geom_freqpoly(binwidth = 0.25)
+```
+
+Typically, the first one or two arguments to a function are so important that you should know them by heart.
+The first two arguments to `ggplot()` are `data` and `mapping`, and the first two arguments to `aes()` are `x` and `y`.
+In the remainder of the book, we won't supply those names.
+That saves typing, and, by reducing the amount of boilerplate, makes it easier to see what's different between plots.
+That's a really important programming concern that we'll come back to in @sec-functions.
+
+Rewriting the previous plot more concisely yields:
+
+```{r}
+#| eval: false
+#| fig-alt: >
+#|   A frequency polygon plot of eruption times for the Old Faithful geyser. 
+#|   The distribution of eruption times is binomodal with one mode around 1.75 
+#|   and the other around 4.5.
+
+ggplot(faithful, aes(eruptions)) + 
+  geom_freqpoly(binwidth = 0.25)
+```
+
+Sometimes we'll turn the end of a pipeline of data transformation into a plot.
+Watch for the transition from `|>` to `+`.
+We wish this transition wasn't necessary but unfortunately ggplot2 was created before the pipe was discovered.
+
+```{r}
+#| eval: false
+#| fig-alt: >
+#|   A tile plot of cut vs. clarity of diamonds. Each tile represents a 
+#|   cut/ckarity combination and tiles are colored according to the number of 
+#|   observations in each tile. There are more Ideal diamonds than other cuts, 
+#|   with the highest number being Ideal diamonds with VS2 clarity. Fair diamonds 
+#|   and diamonds with clarity I1 are the lowest in frequency.
+
+diamonds |> 
+  count(cut, clarity) |> 
+  ggplot(aes(clarity, cut, fill = n)) + 
+  geom_tile()
+```
+
+## Geometric objects
+
+How are these two plots similar?
+
+```{r}
+#| echo: false
+#| message: false
+#| layout-ncol: 2
+#| fig-width: 4
+#| fig-height: 2
+#| fig-alt: >
+#|   There are two plots. The plot on the left is a scatterplot of highway fuel 
+#|   efficiency versus engine size of cars and the plot on the right shows a 
+#|   smooth curve that follows the trajectory of the relationship between these 
+#|   variables. A confidence interval around the smooth curve is also displayed.
+
+ggplot(data = mpg) + 
+  geom_point(mapping = aes(x = displ, y = hwy))
+
+ggplot(data = mpg) + 
+  geom_smooth(mapping = aes(x = displ, y = hwy))
+```
+
+Both plots contain the same x variable, the same y variable, and both describe the same data.
+But the plots are not identical.
+Each plot uses a different visual object to represent the data.
+Remember from <!-- TO DO: Add reference --> that in ggplot2 syntax, visual objects that represent the data are called **geoms** and to define them, you use the geom functions that you add to `ggplot()`.
+
+<!-- TO DO: Add content -->
+
+ggplot2 provides more than 40 geoms, and extension packages provide even more (see <https://exts.ggplot2.tidyverse.org/gallery/> for a sampling).
+The best way to get a comprehensive overview is the ggplot2 cheatsheet, which you can find at <https://rstudio.com/resources/cheatsheets>.
+To learn more about any single geom, use the help (e.g. `?geom_smooth`).
+
+### Exercises
+
+<!-- TO DO: Add exercises -->
+
+## Statistical transformations
+
+Next, let's take a look at a bar chart.
+Bar charts seem simple, but they are interesting because they reveal something subtle about plots.
+Consider a basic bar chart, as drawn with `geom_bar()` or `geom_col()`.
+The following chart displays the total number of diamonds in the `diamonds` dataset, grouped by `cut`.
+The `diamonds` dataset is in the ggplot2 package and contains information on \~54,000 diamonds, including the `price`, `carat`, `color`, `clarity`, and `cut` of each diamond.
+The chart shows that more diamonds are available with high quality cuts than with low quality cuts.
+
+```{r}
+#| fig-alt: >
+#|   Bar chart of number of each cut of diamond. There are roughly 1500 
+#|   Fair, 5000 Good, 12000 Very Good, 14000 Premium, and 22000 Ideal cut 
+#|   diamonds.
+
+ggplot(data = diamonds) + 
+  geom_bar(mapping = aes(x = cut))
+```
+
+On the x-axis, the chart displays `cut`, a variable from `diamonds`.
+On the y-axis, it displays count, but count is not a variable in `diamonds`!
+Where does count come from?
+Many graphs, like scatterplots, plot the raw values of your dataset.
+Other graphs, like bar charts, calculate new values to plot:
+
+-   bar charts, histograms, and frequency polygons bin your data and then plot bin counts, the number of points that fall in each bin.
+
+-   smoothers fit a model to your data and then plot predictions from the model.
+
+-   boxplots compute a robust summary of the distribution and then display that summary as a specially formatted box.
+
+The algorithm used to calculate new values for a graph is called a **stat**, short for statistical transformation.
+@fig-vis-stat-bar shows how this process works with `geom_bar()`.
+
+```{r}
+#| label: fig-vis-stat-bar
+#| echo: false
+#| out-width: "100%"
+#| fig-cap: >
+#|   When create a bar chart we first start with the raw data, then
+#|   aggregate it to count the number of observations in each bar,
+#|   and finally map those computed variables to plot aesthetics.
+#| fig-alt: >
+#|   A figure demonstrating three steps of creating a bar chart. 
+#|   Step 1. geom_bar() begins with the diamonds data set. Step 2. geom_bar() 
+#|   transforms the data with the count stat, which returns a data set of 
+#|   cut values and counts. Step 3. geom_bar() uses the transformed data to 
+#|   build the plot. cut is mapped to the x-axis, count is mapped to the y-axis.
+
+knitr::include_graphics("images/visualization-stat-bar.png")
+```
+
+You can learn which stat a geom uses by inspecting the default value for the `stat` argument.
+For example, `?geom_bar` shows that the default value for `stat` is "count", which means that `geom_bar()` uses `stat_count()`.
+`stat_count()` is documented on the same page as `geom_bar()`.
+If you scroll down, the section called "Computed variables" explains that it computes two new variables: `count` and `prop`.
+
+You can generally use geoms and stats interchangeably.
+For example, you can recreate the previous plot using `stat_count()` instead of `geom_bar()`:
+
+```{r}
+#| fig-alt: >
+#|   Bar chart of number of each cut of diamond. There are roughly 1500 
+#|   Fair, 5000 Good, 12000 Very Good, 14000 Premium, and 22000 Ideal cut 
+#|   diamonds.
+
+ggplot(data = diamonds) + 
+  stat_count(mapping = aes(x = cut))
+```
+
+This works because every geom has a default stat; and every stat has a default geom.
+This means that you can typically use geoms without worrying about the underlying statistical transformation.
+However, there are three reasons why you might need to use a stat explicitly:
+
+1.  You might want to override the default stat.
+    In the code below, we change the stat of `geom_bar()` from count (the default) to identity.
+    This lets me map the height of the bars to the raw values of a $y$ variable.
+    Unfortunately when people talk about bar charts casually, they might be referring to this type of bar chart, where the height of the bar is already present in the data, or the previous bar chart where the height of the bar is generated by counting rows.
+
+    ```{r}
+    #| warning: false
+    #| fig-alt: >
+    #|   Bar chart of number of each cut of diamond. There are roughly 1500 
+    #|   Fair, 5000 Good, 12000 Very Good, 14000 Premium, and 22000 Ideal cut 
+    #|   diamonds.
+
+    demo <- tribble(
+      ~cut,         ~freq,
+      "Fair",       1610,
+      "Good",       4906,
+      "Very Good",  12082,
+      "Premium",    13791,
+      "Ideal",      21551
+    )
+
+    ggplot(data = demo) +
+      geom_bar(mapping = aes(x = cut, y = freq), stat = "identity")
+    ```
+
+    (Don't worry that you haven't seen `<-` or `tribble()` before.
+    You might be able to guess their meaning from the context, and you'll learn exactly what they do soon!)
+
+2.  You might want to override the default mapping from transformed variables to aesthetics.
+    For example, you might want to display a bar chart of proportions, rather than counts:
+
+    ```{r}
+    #| fig-alt: >
+    #|   Bar chart of proportion of each cut of diamond. Roughly, Fair 
+    #|   diamonds make up 0.03, Good 0.09, Very Good 0.22, Premium 26, and 
+    #|   Ideal 0.40.
+
+    ggplot(data = diamonds) + 
+      geom_bar(mapping = aes(x = cut, y = after_stat(prop), group = 1))
+    ```
+
+    To find the variables computed by the stat, look for the section titled "computed variables" in the help for `geom_bar()`.
+
+3.  You might want to draw greater attention to the statistical transformation in your code.
+    For example, you might use `stat_summary()`, which summarizes the y values for each unique x value, to draw attention to the summary that you're computing:
+
+    ```{r}
+    #| fig-alt: >
+    #|   A plot with depth on the y-axis and cut on the x-axis (with levels 
+    #|   fair, good, very good, premium, and ideal) of diamonds. For each level 
+    #|   of cut, vertical lines extend from minimum to maximum depth for diamonds 
+    #|   in that cut category, and the median depth is indicated on the line 
+    #|   with a point.
+
+    ggplot(data = diamonds) + 
+      stat_summary(
+        mapping = aes(x = cut, y = depth),
+        fun.min = min,
+        fun.max = max,
+        fun = median
+      )
+    ```
+
+ggplot2 provides more than 20 stats for you to use.
+Each stat is a function, so you can get help in the usual way, e.g. `?stat_bin`.
+To see a complete list of stats, try the [ggplot2 cheatsheet](https://rstudio.com/resources/cheatsheets).
+
+### Exercises
+
+1.  What is the default geom associated with `stat_summary()`?
+    How could you rewrite the previous plot to use that geom function instead of the stat function?
+
+2.  What does `geom_col()` do?
+    How is it different from `geom_bar()`?
+
+3.  Most geoms and stats come in pairs that are almost always used in concert.
+    Read through the documentation and make a list of all the pairs.
+    What do they have in common?
+
+4.  What variables does `stat_smooth()` compute?
+    What parameters control its behaviour?
+
+5.  In our proportion bar chart, we need to set `group = 1`.
+    Why?
+    In other words, what is the problem with these two graphs?
+
+    ```{r}
+    #| eval: false
+
+    ggplot(data = diamonds) + 
+      geom_bar(mapping = aes(x = cut, y = after_stat(prop)))
+    ggplot(data = diamonds) + 
+      geom_bar(mapping = aes(x = cut, fill = color, y = after_stat(prop)))
+    ```
+
+## Summary
+
+<!--# TO DO: Add summary. -->
