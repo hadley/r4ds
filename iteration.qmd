@@ -808,121 +808,115 @@ DBI::dbDisconnect(con, shutdown = TRUE)
 The same basic principle applies if we want to write multiple csv files, one for each group.
 Let's imagine that we want to take the `ggplot2::diamonds` data and save our one csv file for each `clarity`.
 First we need to make those individual datasets.
-One way to do that is with dplyr's `group_split()`:
+One way to do that is with dplyr's `group_nest()`:
 
 ```{r}
 by_clarity <- diamonds |> 
-  group_by(clarity) |> 
-  group_split()
+  group_nest(clarity)
+
+by_clarity
 ```
 
-This produces a list of length 8, containing one tibble for each unique value of `clarity`:
+This gives us a new tibble with eight rows and two columns.
+`clarity` is our grouping variable and `data` is a list-column containing one tibble for each unique value of `clarity`:
 
 ```{r}
-length(by_clarity)
-
-by_clarity[[1]]
+by_clarity$data[[1]]
 ```
 
 If we were going to save these data frames by hand, we might write something like:
 
 ```{r}
 #| eval: false
-write_csv(by_clarity[[1]], "diamonds-I1.csv")
-write_csv(by_clarity[[2]], "diamonds-SI2.csv")
-write_csv(by_clarity[[3]], "diamonds-SI1.csv")
+write_csv(by_clarity$data[[1]], "diamonds-I1.csv")
+write_csv(by_clarity$data[[2]], "diamonds-SI2.csv")
+write_csv(by_clarity$data[[3]], "diamonds-SI1.csv")
 ...
-write_csv(by_clarity[[8]], "diamonds-IF.csv")
+write_csv(by_clarity$data[[8]], "diamonds-IF.csv")
 ```
 
 This is a little different to our previous uses of `map()` because there are two arguments changing, not just one.
 That means that we'll need to use `map2()` instead of `map()`.
-
-But before we can use `map2()` we need to figure out the names for those files.
-The most general way to do so is to use `dplyr::group_key()` to get the unique values of the grouping variables, then use `mutate()` and `str_glue()` to make a path:
+But before we can use `map2()` we need to figure out the names for those files, using `mutate()` and `str_glue()`:
 
 ```{r}
-keys <- diamonds |> 
-  group_by(clarity) |> 
-  group_keys()
-keys
+by_clarity <- by_clarity |> 
+  mutate(path = str_glue("diamonds-{clarity}.csv"))
 
-paths <- keys |> 
-  mutate(path = str_glue("diamonds-{clarity}.csv")) |> 
-  pull()
-paths
+by_clarity
 ```
 
-This feels a bit fiddly here because we're only working with a single group, but you can imagine this is very powerful when you're grouping by multiple variables.
-
-Now that we have all the pieces in place, we can eliminate the need to copy and paste by running `walk2()`:
+Now that we have all the pieces in place, we can eliminate the need to copy and paste with `walk2()`:
 
 ```{r}
-walk2(by_clarity, paths, write_csv)
+walk2(by_clarity$data, by_clarity$path, write_csv)
 ```
 
 This is shorthand for:
 
 ```{r}
 #| eval: false
-write_csv(by_clarity[[1]], paths[[1]])
-write_csv(by_clarity[[2]], paths[[2]])
-write_csv(by_clarity[[3]], paths[[3]])
+write_csv(by_clarity$data[[1]], by_clarity$path[[1]])
+write_csv(by_clarity$data[[2]], by_clarity$path[[2]])
+write_csv(by_clarity$data[[3]], by_clarity$path[[3]])
 ...
-write_csv(by_clarity[[8]], paths[[8]])
+write_csv(by_clarity$by_clarity[[8]], by_clarity$path[[8]])
 ```
 
 ```{r}
 #| include: false
-unlink(paths)
+unlink(by_clarity$path)
 ```
 
 ### Saving plots
 
 We can take the same basic approach to create many plots.
-We're jumping the gun here a bit because you won't learn how to save a single plot until @sec-ggsave, but hopefully you'll get the basic idea.
+Let's first make a function that draws the plot we want:
 
-Let's assume you've already split up the data using `group_split()`.
-Now you can use `map()` to create a list of many plots[^iteration-5]:
+```{r}
+carat_histogram <- function(df) {
+  ggplot(df, aes(carat)) + geom_histogram(binwidth = 0.1)  
+}
+
+carat_histogram(by_clarity$data[[1]])
+```
+
+Now we can use `map()` to create a list of many plots[^iteration-5]:
 
 [^iteration-5]: You can print `plots` to get a crude animation --- you'll get one plot for each element of `plots`.
 
 ```{r}
-plots <- by_clarity |>
-  map(\(df) ggplot(df, aes(carat)) + geom_histogram(binwidth = 0.01))
-```
-
-(If this was a more complicated plot you'd use a named function so there's more room for all the details.)
-
-Then you create the file names:
-
-```{r}
-paths <- keys |> 
-  mutate(path = str_glue("clarity-{clarity}.png")) |> 
-  pull()
-paths
+by_clarity <- by_clarity |> 
+  mutate(
+    plot = map(data, carat_histogram),
+    path = str_glue("clarity-{clarity}.png")
+  )
 ```
 
 Then use `walk2()` with `ggsave()` to save each plot:
 
 ```{r}
-walk2(paths, plots, \(path, plot) ggsave(path, plot, width = 6, height = 6))
+walk2(
+  by_clarity$paths,
+  by_clarity$plots,
+  \(path, plot) ggsave(path, plot, width = 6, height = 6)
+)
 ```
 
 This is short hand for:
 
 ```{r}
 #| eval: false
-ggsave(paths[[1]], plots[[1]], width = 6, height = 6)
-ggsave(paths[[2]], plots[[2]], width = 6, height = 6)
-ggsave(paths[[3]], plots[[3]], width = 6, height = 6)
+ggsave(by_clarity$path[[1]], by_clarity$plot[[1]], width = 6, height = 6)
+ggsave(by_clarity$path[[2]], by_clarity$plot[[2]], width = 6, height = 6)
+ggsave(by_clarity$path[[3]], by_clarity$plot[[3]], width = 6, height = 6)
 ...
-ggsave(paths[[8]], plots[[8]], width = 6, height = 6)
+ggsave(by_clarity$path[[8]], by_clarity$plot[[8]], width = 6, height = 6)
 ```
 
 ```{r}
 #| include: false
-unlink(paths)
+unlink(by_clarity$paths)
 ```
 
 ### Exercises
