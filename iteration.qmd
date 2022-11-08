@@ -9,16 +9,17 @@ status("drafting")
 
 ## Introduction
 
-In this chapter, you'll tools for iteration, repeatedly performing the same action on different objects.
+In this chapter, you'll learn tools for iteration, repeatedly performing the same action on different objects.
 You've already learned a number of special purpose tools for iteration:
 
--   To draw one plot for each group you can use ggplot2's facetting.
--   To compute a summary statistic for each subgroup you can use `group_by()` and `summarise()`.
--   To extract each element in a named list you can use `unnest_wider()` or `unnest_longer()`.
+-   Manipulating each element of a vector with `+`, `-`, `*`, `/`, and friends.
+-   Drawing one plot with for each group with `facet_wrap()` and `facet_grid()`.
+-   Computing a summary statistic for each subgroup with `group_by()` and `summarise()`.
+-   Extracting each element in a named list with `unnest_wider()` and `unnest_longer()`.
 
 Now it's time to learn some more general tools.
-Tools for iteration can quickly become very abstract, but in this chapter we'll keep things concrete to make as easy as possible to learn the basics.
-We're going to focus on three related tools for three related tasks: modifying multiple columns, reading multiple files, and saving multiple objects.
+Tools for iteration can quickly become very abstract, but in this chapter we'll keep things concrete by focusing on three common tasks that you might use iteration for: modifying multiple columns, reading multiple files, and saving multiple objects.
+We'll finish off with a brief discussion of how you might might the same tools in other cases.
 
 ### Prerequisites
 
@@ -29,7 +30,7 @@ If you want to live life on the edge you can get the dev version with `devtools:
 
 In this chapter, we'll focus on tools provided by dplyr and purrr, both core members of the tidyverse.
 You've seen dplyr before, but purrr is new.
-We're going to use just a couple of purrr functions from in this chapter, but it's a great package to skill as you improve your programming skills.
+We're going to use just a couple of purrr functions from in this chapter, but it's a great package to explore as you improve your programming skills.
 
 ```{r}
 #| label: setup
@@ -40,7 +41,7 @@ library(tidyverse)
 
 ## Modifying multiple columns {#sec-across}
 
-Imagine you have this simple tibble:
+Imagine you have this simple tibble and you want to count the number of observations and compute the median of every column.
 
 ```{r}
 df <- tibble(
@@ -51,43 +52,37 @@ df <- tibble(
 )
 ```
 
-And you want to compute the median of every column.
 You could do it with copy-and-paste:
 
 ```{r}
 df |> summarise(
+  n = n(),
   a = median(a),
   b = median(b),
   c = median(c),
   d = median(d),
-  n = n()
 )
 ```
 
-But that breaks our rule of thumb to never copy and paste more than twice, and you can imagine that this will get very tedious if you have tens or even hundreds of variables.
+That breaks our rule of thumb to never copy and paste more than twice, and you can imagine that this will get very tedious if you have tens or even hundreds of variables.
 Instead you can use `across()`:
 
 ```{r}
 df |> summarise(
+  n = n(),
   across(a:d, median),
-  n = n()
 )
 ```
 
 `across()` has three particularly important arguments, which we'll discuss in detail in the following sections.
-You'll use the first two every time you use `across()`:
-
--   The first argument, `.cols`, specifies which columns you want to iterate over. It uses tidy-select syntax, just like `select()`.
--   The second argument, `.fns`, specifies what to do with each column.
-
-The `.names` argument gives you control over the output names, and is particularly useful when you use `across()` with `mutate()`.
+You'll use the first two every time you use `across()`: the first argument, `.cols`, specifies which columns you want to iterate over, and the second argument, `.fns`, specifies what to do with each column.
+You also the `.names` argument when you need additional control over the output names, which is particularly important when you use `across()` with `mutate()`.
 We'll also discuss two important variations, `if_any()` and `if_all()`, which work with `filter()`.
 
 ### Selecting columns with `.cols`
 
 The first argument to `across()` selects the columns to transform.
 This argument uses the same specifications as `select()`, @sec-select, so you can use functions like `starts_with()` and `ends_with()` to select variables based on their name.
-Grouping columns are automatically ignored because they're carried along for the ride by the dplyr verb.
 
 There are two additional selection techniques that are particularly useful for `across()`: `everything()` and `where()`.
 `everything()` is straightforward: it selects every (non-grouping) column:
@@ -105,6 +100,8 @@ df |>
   group_by(grp) |> 
   summarise(across(everything(), median))
 ```
+
+Note grouping columns (`grp` here) are not included in `across()` because they're automatically preserved by `summarise()`.
 
 `where()` allows you to select columns based on their type:
 
@@ -135,7 +132,7 @@ For example, `!where(is.numeric)` selects all non-numeric columns and `starts_wi
 ### Defining the action with `.fns`
 
 The second argument to `across()` defines how each column will be transformed.
-In simple cases, this will just be the name of existing function, but you might want to supply additional arguments or perform multiple transformations, as described below.
+In simple cases, this will be the name of existing function, but you might want to supply additional arguments or perform multiple transformations, as described below.
 
 Lets motivate this problem with an simple example: what happens if we have some missing values in our data?
 `median()` will preserve those missing values giving us a suboptimal output:
@@ -169,9 +166,9 @@ df |>
   )
 ```
 
-This is a little verbose, so R comes with a handy shortcut: for this sort of throw away function[^iteration-1], you can replace `function` with `\`:
+This is a little verbose, so R comes with a handy shortcut: for this sort of throw away, **anonymous**[^iteration-1], function you can replace `function` with `\`:
 
-[^iteration-1]: These are often called anonymous functions because you don't give them a name with `<-.`
+[^iteration-1]: Anonymous, because didn't give it a name with `<-.`
 
 ```{r}
 #| results: false
@@ -197,8 +194,8 @@ df |> summarise(
 ```
 
 When we remove the missing values from the `median()`, it would be nice to know just how many values we were removing.
-We find that out by supplying two functions to `across()`: one to compute the median and the other to count the missing values.
-You can supply multiple functions with a named list:
+We can find that out by supplying two functions to `across()`: one to compute the median and the other to count the missing values.
+You supply multiple functions by using a named list:
 
 ```{r}
 df |> 
@@ -214,18 +211,6 @@ df |>
 If you look carefully, you might intuit that the columns are named using using a glue specification (@sec-glue) like `{.col}_{.fn}` where `.col` is the name of the original column and `.fn` is the name of the function.
 That's not a coincidence!
 As you'll learn in the next section, you can use `.names` argument to supply your own glue spec.
-
-### Missing values {#sec-across-missing-values}
-
-```{r}
-#| eval: false
-
-df |> 
-  mutate(across(where(is.numeric), coalesce, 0))
-
-df |> 
-  mutate(across(where(is.numeric), na_if, -99))
-```
 
 ### Column names
 
@@ -251,7 +236,8 @@ df |>
 
 The `.names` argument is particularly important when you use `across()` with `mutate()`.
 By default the output of `across()` is given the same names as the inputs.
-This means that `across()` inside of `mutate()` will replace existing columns:
+This means that `across()` inside of `mutate()` will replace existing columns.
+For example, here we use `coalesce()` to replace `NA`s with `0`:
 
 ```{r}
 df |> 
@@ -554,7 +540,7 @@ paths |>
   names()
 ```
 
-Then we use the `names_to` argument `list_rbind()` to tell it to save the names to a new column called `year`, then use `readr::parse_number()` to turn it into a number.
+Then we use the `names_to` argument `list_rbind()` to tell it to save the names to a new column called `year`, then use `readr::parse_number()` to extract the number from the string.
 
 ```{r}
 paths |> 
