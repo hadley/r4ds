@@ -166,7 +166,7 @@ df |>
   )
 ```
 
-This is a little verbose, so R comes with a handy shortcut: for this sort of throw away, **anonymous**[^iteration-1], function you can replace `function` with `\`:
+This is a little verbose, so R comes with a handy shortcut: for this sort of throw away, or **anonymous**[^iteration-1], function you can replace `function` with `\`:
 
 [^iteration-1]: Anonymous, because didn't give it a name with `<-.`
 
@@ -272,7 +272,7 @@ df |> filter(if_all(a:d, is.na))
 
 ### `across()` in functions
 
-`across()` is particularly useful to program with because it allows you to operate with multiple variables.
+`across()` is particularly useful to program with because it allows you to operate on multiple variables.
 For example, [Jacob Scott](https://twitter.com/_wurli/status/1571836746899283969) uses this little helper to expand all date variables into year, month, and day variables:
 
 ```{r}
@@ -287,8 +287,7 @@ expand_dates <- function(df) {
 }
 ```
 
-It also makes it easy to supply multiple variables in a single argument because the first argument uses tidy-select.
-You just need to remember to embrace that argument.
+`across()` also makes it easy to supply multiple variables in a single argument because the first argument uses tidy-select; you just need to remember to embrace that argument.
 For example, this function will compute the means of numeric variables by default.
 But by supplying the second argument you can choose to summarize just selected variables:
 
@@ -399,7 +398,7 @@ If needed, you could `pivot_wider()` this back to the original form.
 ## Reading multiple files
 
 In the previous section, you learn how to use `dplyr::across()` to repeat a transformation on multiple columns.
-In this section, you'll learn how to use `purrr::map()` to read every file in a directly.
+In this section, you'll learn how to use `purrr::map()` to do something to every file in a directory.
 Let's start with a little motivation: imagine you have a directory full of excel spreadsheets[^iteration-4] you want to read.
 You could do it with copy and paste:
 
@@ -420,9 +419,9 @@ And then use `dplyr::bind_rows()` to combine them all together:
 data <- bind_rows(data2019, data2020, data2021, data2022)
 ```
 
-You can imagine that this would get tedious quickly, especially if you had 400 files, not four.
-So in the following sections, you'll learn how to automate this sort of task.
-There are basic steps: use `dir()` list all the files, then use `purrr::map()` to read each of them into a list, then use `purrr::list_rbind()` to combine them into a single data frame.
+You can imagine that this would get tedious quickly, especially if you had hundreds of files, not just four.
+The following sections show you how to automate this sort of task.
+There are three basic steps: use `dir()` list all the files in a directory, then use `purrr::map()` to read each of them into a list, then use `purrr::list_rbind()` to combine them into a single data frame.
 We'll then discuss how you can handle situations of increasing heterogeneity, where you can't do exactly the same thing to every file.
 
 ### Listing files in a directory
@@ -430,16 +429,16 @@ We'll then discuss how you can handle situations of increasing heterogeneity, wh
 `dir()` lists the files in a directory.
 You'll almost always use three arguments:
 
--   `path`, the first argument is the directory to look in.
+-   The first argument, `path`, is the directory to look in.
 
--   `pattern` is a regular expression that the file names must match.
-    The most common pattern is something like `\\.xlsx$` or `\\.csv$` to match an extension, but you can use whatever you need to extract the data files from anything else living in that directory.
+-   `pattern` is a regular expression used to filter the file names.
+    The most common pattern is something like `\\.xlsx$` or `\\.csv$` to find all files with a specified extension.
 
 -   `full.names` determines whether or not the directory name should be included in the output.
     You almost always want this to be `TRUE`.
 
-To make our motivating example concrete, this book contains a folder with 12 excel spreadsheets containining data from the gapminder package.
-Each file contains one years for data for 142 countries.
+To make our motivating example concrete, this book contains a folder with 12 excel spreadsheets containing data from the gapminder package.
+Each file contains one year's worth of data for 142 countries.
 We can list them all with the appropriate call to `dir()`:
 
 ```{r}
@@ -447,7 +446,7 @@ paths <- dir("data/gapminder", pattern = "\\.xlsx$", full.names = TRUE)
 paths
 ```
 
-### `purrr::map()` and `list_rbind()`
+### Lists
 
 Now that we have these 12 paths, we could call `read_excel()` 12 times to get 12 data frames.
 In general, we won't know how files there are to read, so instead of saving each data frame to its own variable, we'll put them all into a list, something like this:
@@ -462,6 +461,10 @@ list(
   readxl::read_excel("data/gapminder/2007.xls")
 )
 ```
+
+Something about `[[`
+
+### `purrr::map()` and `list_rbind()`
 
 Now that's just as tedious to type as before, but we can use a shortcut: `purrr::map()`.
 `map()` is similar to `across()`, but instead of doing something to each column in a data frame, it does something to each element of a vector.
@@ -522,7 +525,7 @@ Sometimes the name of the file is itself data.
 In this example, the file name contains the year, which is not otherwise recorded in the individual files.
 To get that column into the final data frame, we need to do two things.
 
-Firstly, we name the vector of paths.
+First, we name the vector of paths.
 The easiest way to do this is with the `set_names()` function, which can take a function.
 Here we use `basename()` to extract just the file name from the full path:
 
@@ -540,7 +543,7 @@ paths |>
   names()
 ```
 
-Then we use the `names_to` argument `list_rbind()` to tell it to save the names to a new column called `year`, then use `readr::parse_number()` to extract the number from the string.
+Then we use the `names_to` argument to `list_rbind()` to tell it to save the names into a new column called `year` then use `readr::parse_number()` to extract the number from the string.
 
 ```{r}
 paths |> 
@@ -550,19 +553,16 @@ paths |>
   mutate(year = parse_number(year))
 ```
 
-In more complicated other cases, there might be another variable stored in the directory name, or maybe the file name contains multiple bits of data.
-In that case, use `set_names()` (without any arguments) to record the full path, and then use `tidyr::separate_by()` and friends to turn them into useful columns.
+In more complicated cases, there might be other variables stored in the directory name, or maybe the file name contains multiple bits of data.
+In that case, use `set_names()` (without any arguments) to record the full path, and then use `tidyr::separate_wider_delim()` and friends to turn them into useful columns.
 
 ```{r}
 paths |> 
   set_names() |> 
   map(readxl::read_excel) |> 
   list_rbind(names_to = "year") |> 
-  separate(
-    year, 
-    into = c(NA, "directory", "file", "ext"), 
-    sep = "[/.]"
-  )
+  separate_wider_delim(year, delim = "/", names = c(NA, "dir", "file")) |> 
+  separate_wider_delim(file, delim = ".", names = c("file", "ext"))
 ```
 
 ### Save your work
@@ -579,6 +579,8 @@ gapminder <- paths |>
 write_csv(gapminder, "gapminder.csv")
 ```
 
+Now when you come back to this problem in the future, you can read in a single csv file.
+
 ```{r}
 #| include: false
 unlink("gapminder.csv")
@@ -591,11 +593,11 @@ If your input data files change of over time, you might consider learning a tool
 ### Many simple iterations
 
 Here we've just loaded the data directly from disk, and were lucky enough to get a tidy dataset.
-In most cases, you'll need to do some additional tidying, and you have basic basic options: you can do one round of iteration with a complex function, or do a multiple rounds of iteration with multiple simple functions.
+In most cases, you'll need to do some additional tidying, and you have two basic basic options: you can do one round of iteration with a complex function, or do a multiple rounds of iteration with simple functions.
 In our experience most folks reach first for one complex iteration, but you're often better by doing multiple simple iterations.
 
 For example, imagine that you want to read in a bunch of files, filter out missing values, pivot, and then combine.
-One way to approach the problem is write a function that takes a file and does all those steps and call `map()` once:
+One way to approach the problem is write a function that takes a file and does all those steps then call `map()` once:
 
 ```{r}
 #| eval: false
@@ -613,8 +615,24 @@ paths |>
   list_rbind()
 ```
 
-Another approach is to read all the files and combine them together first.
-Then you only need to
+Alternatively, you could perform each step of `process_file()` to every file:
+
+```{r}
+#| eval: false
+
+paths |> 
+  map(read_csv) |> 
+  map(\(df) df |> filter(!is.na(id))) |> 
+  map(\(df) df |> mutate(id = tolower(id))) |> 
+  map(\(df) df |> pivot_longer(jan:dec, names_to = "month")) |> 
+  list_rbind()
+```
+
+We recommend this approach because it stops you getting fixated on getting the first file right because moving on to the rest.
+By considering all of the data when doing tidying and cleaning, you're more likely to think holistically and end up with a higher quality result.
+
+In this particular example, there's another optimization you could make, by binding all the data frames together earlier.
+Then you can rely on regular dplyr behavior:
 
 ```{r}
 #| eval: false
@@ -625,9 +643,6 @@ paths |>
   mutate(id = tolower(id)) |> 
   pivot_longer(jan:dec, names_to = "month")
 ```
-
-We recommend the second approach because it stops you getting fixated on getting the first file right because moving on to the rest.
-By considering all of the data when doing tidying and cleaning, you're more likely to think holistically and end up with a higher quality result.
 
 ### Heterogeneous data
 
@@ -640,7 +655,7 @@ files <- paths |>
   map(readxl::read_excel) 
 ```
 
-Then a very useful strategy is to convert the structure of the data frames to data so that you can explore using your data science skills.
+Then a very useful strategy is to capture the structure of the data frames to data so that you can explore it using your data science skills.
 One way to do so is with this handy `df_types` function that returns a tibble with one row for each column:
 
 ```{r}
@@ -657,6 +672,7 @@ df_types(nycflights13::flights)
 ```
 
 You can then apply this function all of the files, and maybe do some pivoting to make it easy to see where there are differences.
+For example, this makes it easy to verify that the gapminder spreadsheets that we've been working with are all quite homogeneous:
 
 ```{r}
 files |> 
@@ -673,13 +689,13 @@ Unfortunately we're now going to leave you to figure that out on your own, but y
 ### Handling failures
 
 Sometimes the structure of your data might be sufficiently wild that you can't even read all the files with a single command.
-And then you'll encounter one of the downsides of map: is that it succeeds or fails as a whole.
-`map()` will either successfully read all of the files in a directory or fail with an error.
+And then you'll encounter one of the downsides of map: it succeeds or fails as a whole.
+`map()` will either successfully read all of the files in a directory or fail with an error, reading zero files.
 This is annoying: why does one failure prevent you from accessing all the other successes?
 
 Luckily, purrr comes with a helper to tackle this problem: `possibly()`.
-When you wrap a function in possible, a failure with instead return a `NULL`.
-`list_rbind()` automatically ignores `NULL`s, so the following code will always succeed:
+`possibly()` is what's known as a function operator: it takes a function and returns a function with modified behavior.
+In particular, `possibly()` changes a function from erroring to returning a value that you specify:
 
 ```{r}
 files <- paths |> 
@@ -688,7 +704,9 @@ files <- paths |>
 data <- files |> list_rbind()
 ```
 
-Now comes the hard part of figuring out why they failed and what do to about it.
+This works particularly well here because `list_rbind()`, like many tidyverse functions, automatically ignores `NULL`s.
+
+Now you have all the data that can be read easily, and it's time to tackle the hard part of figuring out why some files failed load and what do to about it.
 Start by getting the paths that failed:
 
 ```{r}
@@ -701,7 +719,7 @@ Then call the import function again for each failure and figure out what went wr
 ## Saving multiple outputs
 
 In the last section, you learned about `map()`, which is useful for reading multiple files into a single object.
-In this section, we'll now explore the opposite: how can you take one or more R objects and save them to one or more files?
+In this section, we'll now explore sort of the opposite problem: how can you take one or more R objects and save it to one or more files?
 We'll explore this challenge using three examples:
 
 -   Saving multiple data frames into one database.
@@ -710,9 +728,8 @@ We'll explore this challenge using three examples:
 
 ### Writing to a database {#sec-save-database}
 
-Sometimes when working with many files at once, it's not possible to fit all your data into memory at once.
-If you can't `map(files, read_csv)` how can you work with your data?
-One approach is to put it all into a database and then use dbplyr to access just the subsets that you need.
+Sometimes when working with many files at once, it's not possible to fit all your data into memory at once, and you can't do `map(files, read_csv)`.
+One approach to deal with this problem is to load your into a database so you can access just the bits you need with dbplyr.
 
 If you're lucky, the database package will provide a handy function that will take a vector of paths and load them all into the database.
 This is the case with duckdb's `duckdb_read_csv()`:
@@ -723,21 +740,21 @@ con <- DBI::dbConnect(duckdb::duckdb())
 duckdb::duckdb_read_csv(con, "gapminder", paths)
 ```
 
-But here we don't have csv files, we have excel spreadsheets.
+This would work great here, but we don't have csv files, we have excel spreadsheets.
 So we're going to have to do it "by hand".
-And you can use this same pattern for databases that don't have a handy function for loading many csv files.
+And learning to do it by hand, will also help you when you have a bunch of csvs and the database that you're working with doesn't have one function that will load them all in.
 
 We need to start by creating a table that will fill in with data.
-The easiest way to do this is by creating template for the existing data.
-So we begin by loading a single row from one file and adding the year to it:
+The easiest way to do this is by creating a template, a dummy data frame that contains all the columns we want, but only a sampling of the data.
+For the gapminder data, we can make that template by reading a single file and adding the year to it:
 
 ```{r}
-template <- readxl::read_excel(paths[[1]], n_max = 1)
+template <- readxl::read_excel(paths[[1]])
 template$year <- 1952
 template
 ```
 
-Now we can connect to the database, and `DBI::dbCreateTable()` to turn our template into database table:
+Now we can connect to the database, and use `DBI::dbCreateTable()` to turn our template into database table:
 
 ```{r}
 con <- DBI::dbConnect(duckdb::duckdb())
@@ -745,13 +762,14 @@ DBI::dbCreateTable(con, "gapminder", template)
 ```
 
 `dbCreateTable()` doesn't use the data in `template`, just variable names and types.
-So if we inspect the `gapminder` table now you'll see that it's empty but it has the variables we need:
+So if we inspect the `gapminder` table now you'll see that it's empty but it has the variables we need with the types we expect:
 
 ```{r}
 con |> tbl("gapminder")
 ```
 
-Next, we need a function that takes a single file path and reads it into R, and adds it to the `gapminder` table, the job of `DBI::dbAppendTable()`:
+Next, we need a function that takes a single file path and reads it into R, and adds it to the `gapminder` table.
+We can do that by combining `read_excel()` with `DBI::dbAppendTable()`:
 
 ```{r}
 append_file <- function(path) {
@@ -770,7 +788,7 @@ That's certainly possible with `map()`:
 paths |> map(append_file)
 ```
 
-But we don't actually care about the output, so instead of `map()` it's slightly nicer to use `walk()`.
+But we don't care about the output of `append_file()`, so instead of `map()` it's slightly nicer to use `walk()`.
 `walk()` does exactly the same thing as `map()` but throws the output away:
 
 ```{r}
@@ -794,7 +812,7 @@ DBI::dbDisconnect(con, shutdown = TRUE)
 The same basic principle applies if we want to write multiple csv files, one for each group.
 Let's imagine that we want to take the `ggplot2::diamonds` data and save our one csv file for each `clarity`.
 First we need to make those individual datasets.
-One way to do that is with dplyr's `group_nest()`:
+There are many ways you could that, but there's one way we particularly like: `group_nest()`.
 
 ```{r}
 by_clarity <- diamonds |> 
@@ -810,20 +828,7 @@ This gives us a new tibble with eight rows and two columns.
 by_clarity$data[[1]]
 ```
 
-If we were going to save these data frames by hand, we might write something like:
-
-```{r}
-#| eval: false
-write_csv(by_clarity$data[[1]], "diamonds-I1.csv")
-write_csv(by_clarity$data[[2]], "diamonds-SI2.csv")
-write_csv(by_clarity$data[[3]], "diamonds-SI1.csv")
-...
-write_csv(by_clarity$data[[8]], "diamonds-IF.csv")
-```
-
-This is a little different to our previous uses of `map()` because there are two arguments changing, not just one.
-That means that we'll need to use `map2()` instead of `map()`.
-But before we can use `map2()` we need to figure out the names for those files, using `mutate()` and `str_glue()`:
+While we're here, lets create a column that gives the name of output file, using `mutate()` and `str_glue()`:
 
 ```{r}
 by_clarity <- by_clarity |> 
@@ -832,13 +837,7 @@ by_clarity <- by_clarity |>
 by_clarity
 ```
 
-Now that we have all the pieces in place, we can eliminate the need to copy and paste with `walk2()`:
-
-```{r}
-walk2(by_clarity$data, by_clarity$path, write_csv)
-```
-
-This is shorthand for:
+So if we were going to save these data frames by hand, we might write something like:
 
 ```{r}
 #| eval: false
@@ -847,6 +846,15 @@ write_csv(by_clarity$data[[2]], by_clarity$path[[2]])
 write_csv(by_clarity$data[[3]], by_clarity$path[[3]])
 ...
 write_csv(by_clarity$by_clarity[[8]], by_clarity$path[[8]])
+```
+
+This is a little different to our previous uses of `map()` because there are two arguments changing, not just one.
+That means we need a new function: `map2()`, which varies both the first and second arguments.
+And because we again don't care about the output, we want `walk2()` rather than `map2()`.
+That gives us:
+
+```{r}
+walk2(by_clarity$data, by_clarity$path, write_csv)
 ```
 
 ```{r}
@@ -869,7 +877,7 @@ carat_histogram(by_clarity$data[[1]])
 
 Now we can use `map()` to create a list of many plots[^iteration-5]:
 
-[^iteration-5]: You can print `plots` to get a crude animation --- you'll get one plot for each element of `plots`.
+[^iteration-5]: You can print `by_clarity$plot` to get a crude animation --- you'll get one plot for each element of `plots`.
 
 ```{r}
 by_clarity <- by_clarity |> 
@@ -913,7 +921,7 @@ unlink(by_clarity$paths)
 
 In this chapter you learn iteration tools to solve three problems that come up frequently when doing data science: manipulating multiple columns, reading multiple files, and saving multiple outputs.
 But in general, iteration is a super power: if you know the right iteration technique, you can easily go from fixing one problems to fixing any number of problems.
-Once you've mastered the techniques in this chapter, we highly recommend learning more by reading <https://purrr.tidyverse.org> and the [Functionals chapter](https://adv-r.hadley.nz/functionals.html) of *Advanced R*.
+Once you've mastered the techniques in this chapter, we highly recommend learning more by reading [Functionals chapter](https://adv-r.hadley.nz/functionals.html) of *Advanced R* and consulting the [purrr website](https://purrr.tidyverse.org and the).
 
 If you know much about iteration in other languages you might be surprised that we didn't discuss the `for` loop.
-That comes up in the next chapter where we'll discuss some important base R functions that we don't otherwise use in the book but are important to know about.
+That comes up in the next chapter where we'll discuss some important base R functions.
