@@ -406,10 +406,10 @@ You could do it with copy and paste:
 
 ```{r}
 #| eval: false
-data2019 <- readr::read_excel("data/y2019.xls")
-data2020 <- readr::read_excel("data/y2020.xls")
-data2021 <- readr::read_excel("data/y2021.xls")
-data2022 <- readr::read_excel("data/y2022.xls")
+data2019 <- readr::read_excel("data/y2019.xlsx")
+data2020 <- readr::read_excel("data/y2020.xlsx")
+data2021 <- readr::read_excel("data/y2021.xlsx")
+data2022 <- readr::read_excel("data/y2022.xlsx")
 ```
 
 And then use `dplyr::bind_rows()` to combine them all together:
@@ -448,21 +448,45 @@ paths
 
 ### Lists
 
-Now that we have these 12 paths, we could call `read_excel()` 12 times to get 12 data frames.
-In general, we won't know how files there are to read, so instead of saving each data frame to its own variable, we'll put them all into a list, something like this:
+Now that we have these 12 paths, we could call `read_excel()` 12 times to get 12 data frames:
 
 ```{r}
 #| eval: false
-list(
-  readxl::read_excel("data/gapminder/1952.xls"),
-  readxl::read_excel("data/gapminder/1957.xls"),
-  readxl::read_excel("data/gapminder/1962.xls"),
+gapminder_1952 <- readxl::read_excel("data/gapminder/1952.xlsx")
+gapminder_1957 <- readxl::read_excel("data/gapminder/1957.xlsx")
+gapminder_1962 <- readxl::read_excel("data/gapminder/1962.xlsx")
+ ...
+gapminder_2007 <- readxl::read_excel("data/gapminder/2007.xlsx")
+```
+
+But putting each sheet into its own variable is going to make it hard to work them a few steps down the road.
+Instead, they'll be easier to work with if we put them into a single object.
+A list is the perfect tool for this job:
+
+```{r}
+#| eval: false
+files <- list(
+  readxl::read_excel("data/gapminder/1952.xlsx"),
+  readxl::read_excel("data/gapminder/1957.xlsx"),
+  readxl::read_excel("data/gapminder/1962.xlsx"),
   ...,
-  readxl::read_excel("data/gapminder/2007.xls")
+  readxl::read_excel("data/gapminder/2007.xlsx")
 )
 ```
 
-Something about `[[`
+```{r}
+#| include: false
+files <- map(paths, readxl::read_excel)
+```
+
+Now that you have these data frames in a list, how do you get one out?
+You can use `files[[i]]` to extract the ith element:
+
+```{r}
+files[[3]]
+```
+
+We'll come back to `[[` in more detail in @sec-subset-one.
 
 ### `purrr::map()` and `list_rbind()`
 
@@ -530,17 +554,34 @@ The easiest way to do this is with the `set_names()` function, which can take a 
 Here we use `basename()` to extract just the file name from the full path:
 
 ```{r}
-paths <- paths |> set_names(basename) 
-paths
+paths |> set_names(basename) 
 ```
 
 Those paths are automatically carried along by all the map functions, so the list of data frames will have those same names:
 
 ```{r}
+files <- paths |> 
+  set_names(basename) |> 
+  map(readxl::read_excel)
+```
+
+That makes this call to `map()` shorthand for:
+
+```{r}
 #| eval: false
-paths |> 
-  map(readxl::read_excel) |> 
-  names()
+files <- list(
+  "1952.xlsx" = readxl::read_excel("data/gapminder/1952.xlsx"),
+  "1957.xlsx" = readxl::read_excel("data/gapminder/1957.xlsx"),
+  "1962.xlsx" = readxl::read_excel("data/gapminder/1962.xlsx"),
+  ...,
+  "2007.xlsx" = readxl::read_excel("data/gapminder/2007.xlsx")
+)
+```
+
+You can also use `[[` to extract elements by name:
+
+```{r}
+files[["1962.xlsx"]]
 ```
 
 Then we use the `names_to` argument to `list_rbind()` to tell it to save the names into a new column called `year` then use `readr::parse_number()` to extract the number from the string.
@@ -921,7 +962,7 @@ unlink(by_clarity$paths)
 
 In this chapter you learn iteration tools to solve three problems that come up frequently when doing data science: manipulating multiple columns, reading multiple files, and saving multiple outputs.
 But in general, iteration is a super power: if you know the right iteration technique, you can easily go from fixing one problems to fixing any number of problems.
-Once you've mastered the techniques in this chapter, we highly recommend learning more by reading [Functionals chapter](https://adv-r.hadley.nz/functionals.html) of *Advanced R* and consulting the [purrr website](https://purrr.tidyverse.org and the).
+Once you've mastered the techniques in this chapter, we highly recommend learning more by reading [Functionals chapter](https://adv-r.hadley.nz/functionals.html) of *Advanced R* and consulting the [purrr website](https://purrr.tidyverse.org%20and%20the).
 
 If you know much about iteration in other languages you might be surprised that we didn't discuss the `for` loop.
 That comes up in the next chapter where we'll discuss some important base R functions.
