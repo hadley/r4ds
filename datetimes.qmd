@@ -46,7 +46,7 @@ library(lubridate)
 library(nycflights13)
 ```
 
-## Creating date/times
+## Creating date/times {#sec-creating-datetimes}
 
 There are three types of date/time data that refer to an instant in time:
 
@@ -82,12 +82,93 @@ Otherwise, there are three ways you're likely to create a date/time:
 
 They work as follows.
 
+### During import
+
+If you're reading a file with readr, you can choose to parse dates during input, by using `col_date()`, `col_time()`, or `col_datetime()` depending on whether you want a date, time, or date-time.
+
+If your data contains an ISO8601 date-time, you don't need to do anything; readr will automatically recognize it.
+ISO8601 is an international standard in which the components of a date are organised from biggest to smallest: year, month, day, hour, minute, second.
+Year, month, and day are separated by `-`, hour, minute, and second are separated by `:` and the date and time components are separated by either a `T` or a space.
+
+```{r}
+
+```
+
+@sec-col-types
+
+-   `parse_datetime()` expects an ISO8601 date-time.
+
+    ```{r}
+    parse_datetime("2010-10-01T2010")
+    # If time is omitted, it will be set to midnight
+    parse_datetime("20101010")
+    ```
+
+    This is the most important date/time standard, and if you work with dates and times frequently, we recommend reading <https://en.wikipedia.org/wiki/ISO_8601>.
+
+-   `parse_date()` expects a four digit year, a `-` or `/`, the month, a `-` or `/`, then the day:
+
+    ```{r}
+    parse_date("2010-10-01")
+    ```
+
+-   `parse_time()` expects the hour, `:`, minutes, optionally `:` and seconds, and an optional am/pm specifier:
+
+    ```{r}
+    library(hms)
+    parse_time("01:10 am")
+    parse_time("20:10:01")
+    ```
+
+    Base R doesn't have a great built in class for time data, so we use the one provided in the hms package.
+
+If these defaults don't work for your data you can supply your own date-time `format`, built up of the following pieces:
+
+| Type  | Code  | Meaning                        | Example         |
+|-------|-------|--------------------------------|-----------------|
+| Year  | `%Y`  | 4 digit year                   | 2021            |
+|       | `%y`  | 2 digit year                   | 21              |
+| Month | `%m`  | Number                         | 2               |
+|       | `%b`  | Abbreviated name               | Feb             |
+|       | `%B`  | Full name                      | Februrary       |
+| Day   | `%d`  | Two digits                     | 02              |
+|       | `%e`  | One or two digits              | 2               |
+| Time  | `%H`  | 24-hour hour                   | 13              |
+|       | `%I`  | 12-hour hour                   | 1               |
+|       | `%p`  | AM/PM                          | pm              |
+|       | `%M`  | Minutes                        | 35              |
+|       | `%S`  | Seconds                        | 45              |
+|       | `%OS` | Seconds with decimal component | 45.35           |
+|       | `%Z`  | Time zone name                 | America/Chicago |
+|       | `%z`  | Offset from UTC                | +0800           |
+| Other | `%.`  | Skip one non-digit             | :               |
+|       | `%*`  | Skip any number of non-digits  |                 |
+
+The best way to figure out the correct format is to create a few examples in a character vector, and test with one of the parsing functions.
+For example:
+
+```{r}
+parse_date("01/02/15", "%m/%d/%y")
+parse_date("01/02/15", "%d/%m/%y")
+parse_date("01/02/15", "%y/%m/%d")
+```
+
+If you're using `%b` or `%B` and working with non-English names, you'll also need to provide a `locale()`.
+See the list of built-in languages in `date_names_langs()`, or create your own with `date_names()`.
+
+```{r}
+csv <- "date\n1 janvier 2015"
+read_csv(
+  csv,
+  col_types = list(date = col_date("%d %B %Y")),
+  locale = locale("fr")
+)
+```
+
 ### From strings
 
-Date/time data often comes as strings.
-You've seen one approach to parsing strings into date-times in [date-times](#readr-datetimes).
-Another approach is to use the helpers provided by lubridate.
-They automatically work out the format once you specify the order of the component.
+The date-time specification language is powerful, but requires careful analysis of the date format.
+An alternative approach is to use lubridate's helpers which attempt to automatically determine the format once you specify the order of the component.
 To use them, identify the order in which year, month, and day appear in your dates, then arrange "y", "m", and "d" in the same order.
 That gives you the name of the lubridate function that will parse your date.
 For example:
@@ -217,7 +298,7 @@ as_date(365 * 10 + 2)
 2.  What does the `tzone` argument to `today()` do?
     Why is it important?
 
-3.  Use the appropriate lubridate function to parse each of the following dates:
+3.  For each of the following date-times show how you'd parse it using a readr column-specification and a lubridate function.
 
     ```{r}
     d1 <- "January 1, 2010"
@@ -225,6 +306,8 @@ as_date(365 * 10 + 2)
     d3 <- "06-Jun-2017"
     d4 <- c("August 19 (2015)", "July 1 (2015)")
     d5 <- "12/30/14" # Dec 30, 2014
+    t1 <- "1705"
+    t2 <- "11:15:10.12 PM"
     ```
 
 ## Date-time components
