@@ -74,8 +74,9 @@ today()
 now()
 ```
 
-Otherwise, there are three ways you're likely to create a date/time:
+Otherwise, there are four ways you're likely to create a date/time:
 
+-   While reading a file with readr.
 -   From a string.
 -   From individual date-time components.
 -   From an existing date/time object.
@@ -84,45 +85,24 @@ They work as follows.
 
 ### During import
 
-If you're reading a file with readr, you can choose to parse dates during input, by using `col_date()`, `col_time()`, or `col_datetime()` depending on whether you want a date, time, or date-time.
+If your data contains an ISO8601 date or date-time, you don't need to do anything; readr will automatically recognize it:
 
-If your data contains an ISO8601 date-time, you don't need to do anything; readr will automatically recognize it.
+```{r}
+#| message: false
+csv <- "
+  date,datetime
+  2022-01-02,2022-01-02 05:12
+"
+read_csv(csv)
+```
+
 ISO8601 is an international standard in which the components of a date are organised from biggest to smallest: year, month, day, hour, minute, second.
 Year, month, and day are separated by `-`, hour, minute, and second are separated by `:` and the date and time components are separated by either a `T` or a space.
 
-```{r}
-
-```
-
-@sec-col-types
-
--   `parse_datetime()` expects an ISO8601 date-time.
-
-    ```{r}
-    parse_datetime("2010-10-01T2010")
-    # If time is omitted, it will be set to midnight
-    parse_datetime("20101010")
-    ```
-
-    This is the most important date/time standard, and if you work with dates and times frequently, we recommend reading <https://en.wikipedia.org/wiki/ISO_8601>.
-
--   `parse_date()` expects a four digit year, a `-` or `/`, the month, a `-` or `/`, then the day:
-
-    ```{r}
-    parse_date("2010-10-01")
-    ```
-
--   `parse_time()` expects the hour, `:`, minutes, optionally `:` and seconds, and an optional am/pm specifier:
-
-    ```{r}
-    library(hms)
-    parse_time("01:10 am")
-    parse_time("20:10:01")
-    ```
-
-    Base R doesn't have a great built in class for time data, so we use the one provided in the hms package.
-
-If these defaults don't work for your data you can supply your own date-time `format`, built up of the following pieces:
+For other date/time formats, you'll need to use `col_types` plus `col_date()`, `col_datetime()`, or `col_time()`, along with a date-time formatting string.
+This is a mini-language for describing dates that's used across many programming languages, mostly consisting of `%` followed by a single character.
+For example, `%Y-%m-%d` specifies a date that's a year, `-`, month (as number) `-`, day.
+Table @tbl-date-formats lists all the options.
 
 | Type  | Code  | Meaning                        | Example         |
 |-------|-------|--------------------------------|-----------------|
@@ -144,26 +124,29 @@ If these defaults don't work for your data you can supply your own date-time `fo
 | Other | `%.`  | Skip one non-digit             | :               |
 |       | `%*`  | Skip any number of non-digits  |                 |
 
-The best way to figure out the correct format is to create a few examples in a character vector, and test with one of the parsing functions.
-For example:
+: All date formats understood by readr {#tbl-date-formats}
+
+This example shows some a few options applied to a very ambiguous date:
 
 ```{r}
-parse_date("01/02/15", "%m/%d/%y")
-parse_date("01/02/15", "%d/%m/%y")
-parse_date("01/02/15", "%y/%m/%d")
+#| messages: false
+
+csv <- "
+  date
+  01/02/15
+"
+
+read_csv(csv, col_types = cols(date = col_date("%m/%d/%y")))
+
+read_csv(csv, col_types = cols(date = col_date("%d/%m/%y")))
+
+read_csv(csv, col_types = cols(date = col_date("%y/%m/%d")))
 ```
 
-If you're using `%b` or `%B` and working with non-English names, you'll also need to provide a `locale()`.
-See the list of built-in languages in `date_names_langs()`, or create your own with `date_names()`.
+Note that no matter how you specify the date format, it's always displayed the same way once you get it into R.
 
-```{r}
-csv <- "date\n1 janvier 2015"
-read_csv(
-  csv,
-  col_types = list(date = col_date("%d %B %Y")),
-  locale = locale("fr")
-)
-```
+If you're using `%b` or `%B` and working with non-English dates, you'll also need to provide a `locale()`.
+See the list of built-in languages in `date_names_langs()`, or create your own with `date_names()`,
 
 ### From strings
 

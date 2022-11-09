@@ -256,6 +256,12 @@ Once you've mastered `read_csv()`, using readr's other functions is straightforw
 
 ## Controlling column types {#sec-col-types}
 
+A csv file doesn't contain any information about the type of each variable, so readr either has to guess what they are or you have to tell it.
+This section will teach you how that guessing process works, how to resolve some common problems that cause it to fail, and how to supply your own column types.
+Finally, we'll mention a couple of general strategies that are a useful if readr is failing catastrophically and you need to get more insight in to the structure of your file.
+
+### Guessing types
+
 readr uses a heuristic to figure out the column types.
 For each column, it pulls the values of 1,000[^data-import-2] rows spaced evenly from the first row to the last.
 It then works through the following questions:
@@ -278,8 +284,7 @@ read_csv("
 )
 ```
 
-This heuristic works well if you have a clean dataset, but in real life you'll encounter all sorts of odd problems.
-The following sections cover some of the most common issues you're like to encounter in practice, starting with non-standard missing values, .
+This heuristic works well if you have a clean dataset, but in real life you'll encounter a selection of weird and wonderful failures.
 
 ### Non-standard missing values
 
@@ -303,7 +308,7 @@ df <- read_csv(sample_data)
 You can do that with the `col_types` argument which takes a named list:
 
 ```{r}
-df <- read_csv(sample_data, col_types = list(x = col_double()))
+df <- read_csv(sample_data, col_types = cols(x = col_double()))
 ```
 
 Now `read_csv()` reports that there was a problem, and that we can find out more about it with `problems()`:
@@ -318,6 +323,40 @@ That suggests this dataset uses `.` for missing values:
 ```{r}
 df <- read_csv(sample_data, na = ".")
 ```
+
+### Column types
+
+There are :
+
+-   `col_logical()`, `col_integer()`, `col_double()`, `col_character()` which read logical, integers, doubles, and strings respectively.
+-   `col_factor()` creates factors, which you'll learn more about in @sec-factors.
+-   `col_date()` and `col_datetime()` create dates and date-times which you'll learn about @sec-date-and-times.
+-   `col_number()` reads flexibly formatted numbers. It ignores all leading and trailing non-numbers, and ignores the "grouping mark" specified by the locale.
+-   `col_skip()` skips a column so it's not included in the result.
+
+`col_number()` is particularly useful when working with currencies, because readr can't automatically identify them:
+
+```{r}
+#| message: false
+
+csv <- '
+money
+"$100.23"
+"$1,456,500"
+'
+read_csv(csv)
+
+read_csv(csv, col_types = cols(money = col_number()))
+```
+
+You can also use `cols()` to set the default column type.
+It's usually set to `col_guess()` which automatically guesses the type as described above, but you might want to set `col_guess(.default = col_skip())` if you only want to read in the columns you specify.
+
+There are three common reasons you might want to avoid type guessing, and tell readr the types directly:
+
+-   You might have a column that looks like a number, but it's actually a unique identifier that should be treated like a character.
+-   The column type is something that isn't guessed automatically, like a `col_number()` or `col_factor()` or non-ISO8601 dates.
+-   If you're reading from a data source that changes over time, you might to explicit specify the column types to ensure that any
 
 ### String encodings
 
@@ -379,6 +418,8 @@ Encodings are a rich and complex topic, and we've only scratched the surface her
 If you'd like to learn more we recommend reading the detailed explanation at <http://kunststube.net/encoding/>.
 
 ### More problems?
+
+Particularly the `quote`, `escape_backslash`, `escape_double`, `comment`,
 
 Sometimes it's easier to diagnose problems if you just read in all the columns as character vectors:
 
