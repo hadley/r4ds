@@ -29,7 +29,8 @@ If you want to live life on the edge you can get the dev version with `devtools:
 :::
 
 In this chapter, we'll focus on tools provided by dplyr and purrr, both core members of the tidyverse.
-You've seen dplyr before, but purrr is new.
+You've seen dplyr before, but purrr LINK?
+is new.
 We're going to use just a couple of purrr functions from in this chapter, but it's a great package to explore as you improve your programming skills.
 
 ```{r}
@@ -76,13 +77,13 @@ df |> summarise(
 
 `across()` has three particularly important arguments, which we'll discuss in detail in the following sections.
 You'll use the first two every time you use `across()`: the first argument, `.cols`, specifies which columns you want to iterate over, and the second argument, `.fns`, specifies what to do with each column.
-You also the `.names` argument when you need additional control over the output names, which is particularly important when you use `across()` with `mutate()`.
+You can use the `.names` argument when you need additional control over the names of output columns, which is particularly important when you use `across()` with `mutate()`.
 We'll also discuss two important variations, `if_any()` and `if_all()`, which work with `filter()`.
 
 ### Selecting columns with `.cols`
 
 The first argument to `across()` selects the columns to transform.
-This argument uses the same specifications as `select()`, @sec-select, so you can use functions like `starts_with()` and `ends_with()` to select variables based on their name.
+The `.cols` argument uses the same specifications as `select()`, @sec-select, so you can use functions like `starts_with()` and `ends_with()` to select variables based on their name.
 
 There are two additional selection techniques that are particularly useful for `across()`: `everything()` and `where()`.
 `everything()` is straightforward: it selects every (non-grouping) column:
@@ -101,7 +102,7 @@ df |>
   summarise(across(everything(), median))
 ```
 
-Note grouping columns (`grp` here) are not included in `across()` because they're automatically preserved by `summarise()`.
+Note grouping columns (`grp` here) are not included in `across()`, because they're automatically preserved by `summarise()`.
 
 `where()` allows you to select columns based on their type:
 
@@ -134,8 +135,8 @@ For example, `!where(is.numeric)` selects all non-numeric columns and `starts_wi
 The second argument to `across()` defines how each column will be transformed.
 In simple cases, this will be the name of existing function, but you might want to supply additional arguments or perform multiple transformations, as described below.
 
-Lets motivate this problem with an simple example: what happens if we have some missing values in our data?
-`median()` will preserve those missing values giving us a suboptimal output:
+Lets motivate this problem with a simple example: what happens if we have some missing values in our data?
+`median()` propagates those missing values, giving us a suboptimal output:
 
 ```{r}
 rnorm_na <- function(n, n_na, mean = 0, sd = 1) {
@@ -155,8 +156,8 @@ df |>
   )
 ```
 
-It'd be nice to be able to pass along `na.rm = TRUE` to `median()` to remove these missing values.
-To do so, instead of calling `median()` directly, we need to create a new function that calls `median()` with the correct arguments:
+It would be nice if we could pass along `na.rm = TRUE` to `median()` to remove these missing values.
+To do so, instead of calling `median()` directly, we need to create a new function that calls `median()` with the desired arguments:
 
 ```{r}
 df |> 
@@ -168,7 +169,10 @@ df |>
 
 This is a little verbose, so R comes with a handy shortcut: for this sort of throw away, or **anonymous**[^iteration-1], function you can replace `function` with `\`:
 
-[^iteration-1]: Anonymous, because didn't give it a name with `<-.`
+[^iteration-1]: Anonymous, because we never explicitly created it and gave it a name with `<-`.
+    Another term programmers use for this is "lambda function".
+
+    MAYBE: explain the older syntax `~` in case people see it?
 
 ```{r}
 #| results: false
@@ -195,7 +199,7 @@ df |> summarise(
 
 When we remove the missing values from the `median()`, it would be nice to know just how many values we were removing.
 We can find that out by supplying two functions to `across()`: one to compute the median and the other to count the missing values.
-You supply multiple functions by using a named list:
+You supply multiple functions by using a named list to `.fns`:
 
 ```{r}
 df |> 
@@ -214,7 +218,7 @@ As you'll learn in the next section, you can use `.names` argument to supply you
 
 ### Column names
 
-The result of `across()` is named according to the specification provided in the `.names` variable.
+The result of `across()` is named according to the specification provided in the `.names` argument.
 We could specify our own if we wanted the name of the function to come first[^iteration-2]:
 
 [^iteration-2]: You can't currently change the order of the columns, but you could reorder them after the fact using `relocate()` or similar.
@@ -246,18 +250,19 @@ df |>
   )
 ```
 
-If you'd like to instead create new columns, you can use the `.names` argument give the output new names:
+If you'd like to instead create new columns, you can use the `.names` argument to give the output new names:
 
 ```{r}
 df |> 
   mutate(
-    across(a:d, \(x) x * 2, .names = "{.col}_double")
+    across(a:d, \(x) abs(x), .names = "{.col}_abs")
   )
 ```
 
 ### Filtering
 
-`across()` is a great match for `summarise()` and `mutate()` but it's not such a great fit for `filter()` because you usually string together calls to multiple functions either with `|` or `&`.
+`across()` is a great match for `summarise()` and `mutate()` but it's more awkward to use with `filter()`, because you usually combine multiple conditions with either `|` or `&`.
+It's clear that `across()` can help to create multiple logical columns, but then what?
 So dplyr provides two variants of `across()` called `if_any()` and `if_all()`:
 
 ```{r}
@@ -285,9 +290,18 @@ expand_dates <- function(df) {
       )
     )
 }
+
+df2 <- tibble(
+  name = c("Amy", "Bob"),
+  date = as.Date(c("2009-08-03", "2010-01-16"))
+)
+
+df2 |> 
+  expand_dates()
+# I think deserves to be applied to some actual data, i.e. complete the example. Most readers won't be able to imagine what the `list()` thing does. And I guess my immediate attempt to use it has failed?
 ```
 
-`across()` also makes it easy to supply multiple variables in a single argument because the first argument uses tidy-select; you just need to remember to embrace that argument.
+`across()` also makes it easy to supply multiple variables in a single argument because the first argument uses tidy-select; you just need to remember to embrace that argument LINK.
 For example, this function will compute the means of numeric variables by default.
 But by supplying the second argument you can choose to summarize just selected variables:
 
@@ -310,7 +324,7 @@ diamonds |>
 
 ### Vs `pivot_longer()`
 
-Before we go on, it's worth pointing out an interesting connection between `across()` and `pivot_longer()`.
+Before we go on, it's worth pointing out an interesting connection between `across()` and `pivot_longer()` LINK.
 In many cases, you perform the same calculations by first pivoting the data and then performing the operations by group rather than by column.
 For example, we could rewrite our multiple summary `across()` as:
 
@@ -322,21 +336,25 @@ df |>
     median = median(value, na.rm = TRUE),
     n_miss = sum(is.na(value))
   )
+
+# this feels unfinished, i.e. lacking the direct head-to-head comparison to something using across()
 ```
 
 This is a useful technique to know about because sometimes you'll hit a problem that's not currently possible to solve with `across()`: when you have groups of variables that you want to compute with simultaneously.
 For example, imagine that our data frame contains both values and weights and we want to compute a weighted mean:
 
 ```{r}
+# now **I** have inserted df2 as a suggestion for the lubridate example, but otherwise I don't understand why this is df3
+
 df3 <- tibble(
   a_val = rnorm(10),
-  a_w = runif(10),
+  a_wts = runif(10),
   b_val = rnorm(10),
-  b_w = runif(10),
+  b_wts = runif(10),
   c_val = rnorm(10),
-  c_w = runif(10),
+  c_wts = runif(10),
   d_val = rnorm(10),
-  d_w = runif(10)
+  d_wts = runif(10)
 )
 ```
 
@@ -355,7 +373,7 @@ df3_long
 
 df3_long |> 
   group_by(group) |> 
-  summarise(mean = weighted.mean(val, w))
+  summarise(mean = weighted.mean(val, wts))
 ```
 
 If needed, you could `pivot_wider()` this back to the original form.
@@ -376,9 +394,11 @@ If needed, you could `pivot_wider()` this back to the original form.
 
 6.  Adjust `expand_dates()` to automatically remove the date columns after they've been expanded.
     Do you need to embrace any arguments?
+    TODO: this callback is more reason why that example needs some more work
 
 7.  Explain what each step of the pipeline in this function does.
     What special feature of `where()` are we taking advantage of?
+    TODO: this chapter also depends on dev dplyr (pick()) but that's not called out as it is for purrr
 
     ```{r}
     #| results: false
