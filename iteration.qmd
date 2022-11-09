@@ -476,7 +476,7 @@ Now that we have these 12 paths, we could call `read_excel()` 12 times to get 12
 gapminder_1952 <- readxl::read_excel("data/gapminder/1952.xlsx")
 gapminder_1957 <- readxl::read_excel("data/gapminder/1957.xlsx")
 gapminder_1962 <- readxl::read_excel("data/gapminder/1962.xlsx")
- ...
+ ...,
 gapminder_2007 <- readxl::read_excel("data/gapminder/2007.xlsx")
 ```
 
@@ -619,6 +619,7 @@ In more complicated cases, there might be other variables stored in the director
 In that case, use `set_names()` (without any arguments) to record the full path, and then use `tidyr::separate_wider_delim()` and friends to turn them into useful columns.
 
 ```{r}
+# NOTE: this chapter also depends on dev tidyr (in addition to dev purrr and dev dplyr)
 paths |> 
   set_names() |> 
   map(readxl::read_excel) |> 
@@ -793,7 +794,7 @@ We'll explore this challenge using three examples:
 Sometimes when working with many files at once, it's not possible to fit all your data into memory at once, and you can't do `map(files, read_csv)`.
 One approach to deal with this problem is to load your into a database so you can access just the bits you need with dbplyr.
 
-If you're lucky, the database package will provide a handy function that will take a vector of paths and load them all into the database.
+If you're lucky, the database package you're using will provide a handy function that takes a vector of paths and loads them all into the database.
 This is the case with duckdb's `duckdb_read_csv()`:
 
 ```{r}
@@ -802,9 +803,9 @@ con <- DBI::dbConnect(duckdb::duckdb())
 duckdb::duckdb_read_csv(con, "gapminder", paths)
 ```
 
-This would work great here, but we don't have csv files, we have excel spreadsheets.
+This would work well here, but we don't have csv files, instead we have excel spreadsheets.
 So we're going to have to do it "by hand".
-And learning to do it by hand, will also help you when you have a bunch of csvs and the database that you're working with doesn't have one function that will load them all in.
+Learning to do it by hand will also help you when you have a bunch of csvs and the database that you're working with doesn't have one function that will load them all in.
 
 We need to start by creating a table that will fill in with data.
 The easiest way to do this is by creating a template, a dummy data frame that contains all the columns we want, but only a sampling of the data.
@@ -823,14 +824,14 @@ con <- DBI::dbConnect(duckdb::duckdb())
 DBI::dbCreateTable(con, "gapminder", template)
 ```
 
-`dbCreateTable()` doesn't use the data in `template`, just variable names and types.
+`dbCreateTable()` doesn't use the data in `template`, just the variable names and types.
 So if we inspect the `gapminder` table now you'll see that it's empty but it has the variables we need with the types we expect:
 
 ```{r}
 con |> tbl("gapminder")
 ```
 
-Next, we need a function that takes a single file path and reads it into R, and adds it to the `gapminder` table.
+Next, we need a function that takes a single file path, reads it into R, and adds the result to the `gapminder` table.
 We can do that by combining `read_excel()` with `DBI::dbAppendTable()`:
 
 ```{r}
@@ -842,7 +843,7 @@ append_file <- function(path) {
 }
 ```
 
-Now we need to call `append_csv()` once for `path`.
+Now we need to call `append_csv()` once for each element of `paths`.
 That's certainly possible with `map()`:
 
 ```{r}
@@ -857,7 +858,7 @@ But we don't care about the output of `append_file()`, so instead of `map()` it'
 paths |> walk(append_file)
 ```
 
-Now if we can see we have all the data in our table:
+Now we can see if we have all the data in our table:
 
 ```{r}
 con |> 
@@ -866,15 +867,16 @@ con |>
 ```
 
 ```{r, include = FALSE}
+# why not show this?
 DBI::dbDisconnect(con, shutdown = TRUE)
 ```
 
 ### Writing csv files
 
 The same basic principle applies if we want to write multiple csv files, one for each group.
-Let's imagine that we want to take the `ggplot2::diamonds` data and save our one csv file for each `clarity`.
+Let's imagine that we want to take the `ggplot2::diamonds` data and save one csv file for each `clarity`.
 First we need to make those individual datasets.
-There are many ways you could that, but there's one way we particularly like: `group_nest()`.
+There are many ways you could do that, but there's one way we particularly like: `group_nest()`.
 
 ```{r}
 by_clarity <- diamonds |> 
@@ -910,7 +912,7 @@ write_csv(by_clarity$data[[3]], by_clarity$path[[3]])
 write_csv(by_clarity$by_clarity[[8]], by_clarity$path[[8]])
 ```
 
-This is a little different to our previous uses of `map()` because there are two arguments changing, not just one.
+This is a little different to our previous uses of `map()` because there are two arguments that are changing, not just one.
 That means we need a new function: `map2()`, which varies both the first and second arguments.
 And because we again don't care about the output, we want `walk2()` rather than `map2()`.
 That gives us:
@@ -921,6 +923,7 @@ walk2(by_clarity$data, by_clarity$path, write_csv)
 
 ```{r}
 #| include: false
+# why not show this?
 unlink(by_clarity$path)
 ```
 
@@ -937,9 +940,10 @@ carat_histogram <- function(df) {
 carat_histogram(by_clarity$data[[1]])
 ```
 
-Now we can use `map()` to create a list of many plots[^iteration-5]:
+Now we can use `map()` to create a list of many plots[^iteration-5] and their eventual file paths:
 
 [^iteration-5]: You can print `by_clarity$plot` to get a crude animation --- you'll get one plot for each element of `plots`.
+    NOTE: this didn't happen for me.
 
 ```{r}
 by_clarity <- by_clarity |> 
@@ -953,8 +957,8 @@ Then use `walk2()` with `ggsave()` to save each plot:
 
 ```{r}
 walk2(
-  by_clarity$paths,
-  by_clarity$plots,
+  by_clarity$path,
+  by_clarity$plot,
   \(path, plot) ggsave(path, plot, width = 6, height = 6)
 )
 ```
@@ -972,7 +976,7 @@ ggsave(by_clarity$path[[8]], by_clarity$plot[[8]], width = 6, height = 6)
 
 ```{r}
 #| include: false
-unlink(by_clarity$paths)
+unlink(by_clarity$path)
 ```
 
 ### Exercises
@@ -981,9 +985,9 @@ unlink(by_clarity$paths)
 
 ## Summary
 
-In this chapter you learn iteration tools to solve three problems that come up frequently when doing data science: manipulating multiple columns, reading multiple files, and saving multiple outputs.
-But in general, iteration is a super power: if you know the right iteration technique, you can easily go from fixing one problems to fixing any number of problems.
-Once you've mastered the techniques in this chapter, we highly recommend learning more by reading [Functionals chapter](https://adv-r.hadley.nz/functionals.html) of *Advanced R* and consulting the [purrr website](https://purrr.tidyverse.org%20and%20the).
+In this chapter you've seen how to use explicit iteration to solve three problems that come up frequently when doing data science: manipulating multiple columns, reading multiple files, and saving multiple outputs.
+But in general, iteration is a super power: if you know the right iteration technique, you can easily go from fixing one problem to fixing all the problems.
+Once you've mastered the techniques in this chapter, we highly recommend learning more by reading the [Functionals chapter](https://adv-r.hadley.nz/functionals.html) of *Advanced R* and consulting the [purrr website](https://purrr.tidyverse.org).
 
 If you know much about iteration in other languages you might be surprised that we didn't discuss the `for` loop.
 That comes up in the next chapter where we'll discuss some important base R functions.
