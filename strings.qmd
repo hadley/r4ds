@@ -14,7 +14,7 @@ Now it's time to dive into them, learning what makes strings tick, and mastering
 
 We'll begin with the details of creating strings and character vectors.
 You'll then dive into creating strings from data, then the opposite; extracting strings from data.
-The chapter finishes up with functions that work with individual letters and a brief discussion of where your expectations from English might steer you wrong when working with other languages.
+We'll then discuss tools that work with individual letters, and finish off with a brief discussion of how English The chapter finishes up with functions that work with individual letters and a brief discussion of where your expectations from English might steer you wrong when working with other languages.
 
 We'll keep working with strings in the next chapter, where you'll learn more about the power of regular expressions.
 
@@ -452,9 +452,6 @@ df |>
 ## Letters
 
 This section discusses stringr functions that work with individual letters.
-This is straightforward for English because it uses an alphabet with 26 letters, but things rapidly get complicated when you move beyond English.
-Even languages that use the same alphabet but add additional accents (e.g. å, é, ï, ô, ū) are non-trivial because those letters might be represented as an individual character or by combing an unaccented letter (e.g. e) with a diacritic mark (e.g. ´).
-And other languages "letters" look quite different: in Japanese each "letter" is a syllable, in Chinese each "letter" is a complex logogram, and in Arabic letters look radically different depending on their location in the word.
 
 In this section, we'll assume that you're working with English text as we introduce to functions for finding the length of a string, extracting substrings, and handling long strings in plots and tables.
 
@@ -534,56 +531,131 @@ str_view(str_wrap(x, 30))
 1.  Use `str_length()` and `str_sub()` to extract the middle letter from each baby name. What will you do if the string has an even number of characters?
 2.  Are there any major trends in the length of babynames over time? What about the popularity of first and last letters?
 
-## Locale dependent {#sec-other-languages}
+## Non-English text {#sec-other-languages}
 
-There are a handful of stringr functions whose behavior depends on your **locale**.
-Locale is similar to language, but includes an optional region specifier to handle the fact that (e.g.) many countries speak Spanish, but with regional variations.
+So far, we've focused on English language text which is particularly easy to work with for two reasons.
+Firstly, the English alphabet is fairly simple: there are just 26 letters.
+Secondly (and maybe more importantly), the computing infrastructure we use today was predominantly designed by English speakers.
+Unfortunately we don't have room for a full treatment of non-English languages, but I wanted to draw your attention to some of the biggest challenges you might encounter: encoding, letter variations, and locale dependent functions.
+
+### Encoding
+
+When working with non-English text the first challenge is often the **encoding**.
+To understand what's going on, we need to dive into the details of how computers represent strings.
+In R, we can get at the underlying representation of a string using `charToRaw()`:
+
+```{r}
+charToRaw("Hadley")
+```
+
+Each of these six hexadecimal numbers represents one letter: `48` is H, `61` is a, and so on.
+The mapping from hexadecimal number to character is called the encoding, and in this case the encoding is called ASCII.
+ASCII does a great job of representing English characters, because it's the **American** Standard Code for Information Interchange.
+
+Things aren't so easy for languages other than English.
+In the early days of computing there were many competing standards for encoding non-English characters.
+For example, there were two different encodings for Europe: Latin1 (aka ISO-8859-1) was used for Western European languages and Latin2 (aka ISO-8859-2) was used for Central European languages.
+In Latin1, the byte `b1` is "±", but in Latin2, it's "ą"!
+Fortunately, today there is one standard that is supported almost everywhere: UTF-8.
+UTF-8 can encode just about every character used by humans today, as well as many extra symbols like emoji.
+
+readr uses UTF-8 everywhere.
+This is a good default, but will fail for data produced by older systems that don't know use UTF-8.
+If this happens to you, your strings will look weird when you print them.
+Sometimes just one or two characters might be messed up; other times you'll get complete gibberish.
+For example here are two inline csvs with unusual encodings[^strings-8]:
+
+[^strings-8]: Here I'm using the special `\x` to encode binary data directly into a string.
+
+```{r}
+#| message: false
+x1 <- "text\nEl Ni\xf1o was particularly bad this year"
+read_csv(x1)
+
+x2 <- "text\n\x82\xb1\x82\xf1\x82\xc9\x82\xbf\x82\xcd"
+read_csv(x2)
+```
+
+To read these correctly you specify the encoding via the `locale` argument:
+
+```{r}
+#| message: false
+read_csv(x1, locale = locale(encoding = "Latin1"))
+
+read_csv(x2, locale = locale(encoding = "Shift-JIS"))
+```
+
+How do you find the correct encoding?
+If you're lucky, it'll be included somewhere in the data documentation.
+Unfortunately, that's rarely the case, so readr provides `guess_encoding()` to help you figure it out.
+It's not foolproof, and it works better when you have lots of text (unlike here), but it's a reasonable place to start.
+Expect to try a few different encodings before you find the right one.
+
+```{r}
+guess_encoding(x1)
+guess_encoding(x2)
+```
+
+Encodings are a rich and complex topic, and we've only scratched the surface here.
+If you'd like to learn more we recommend reading the detailed explanation at <http://kunststube.net/encoding/>.
+
+### Letter variations
+
+If you're working with individual letters (e.g. with `str_length()` and `str_sub()`) there's an important challenge if you're working with an language that has accents because letters might be represented as an individual character or by combing an unaccented letter (e.g. ü) with a diacritic mark (e.g. ¨).
+For example, this code shows two ways of representing ü that look identical:
+
+```{r}
+u <- c("\u00fc", "u\u0308")
+str_view(u)
+```
+
+But they have a different length and the first character is different:
+
+```{r}
+str_length(u)
+str_sub(u, 1, 1)
+```
+
+Finally note that these strings look differently when you compare them with `==`, which is stringr provides the handy `str_equal()` function:
+
+```{r}
+u[[1]] == u[[2]]
+
+str_equal(u[[1]], u[[2]])
+```
+
+### Locale-dependent function
+
+Finally, there are a handful of stringr functions whose behavior depends on your **locale**.
+A locale is similar to a language, but includes an optional region specifier to handle regional variations within a language.
 A locale is specified by lower-case language abbreviation, optionally followed by a `_` and a upper-case region identifier.
 For example, "en" is English, "en_GB" is British English, and "en_US" is American English.
 If you don't already know the code for your language, [Wikipedia](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes) has a good list, and you can see which are supported in stringr by looking at `stringi::stri_locale_list()`.
 
 Base R string functions automatically use the locale set by your operating system.
-This means that base R string functions usually use the rules associated with your native language, but such might work differently when you share it with someone who lives in different country.
-To avoid this problem, stringr defaults to the "en" locale, and requires you to specify the `locale` argument to override it.
-This also makes it easy to tell if a function might behave differently in different locales.
+This means that base R string functions do what you expect for your language, but your code might work differently if you share it with someone who lives in different country.
+To avoid this problem, stringr defaults to using English rules, by using the "en" locale, and requires you to specify the `locale` argument to override it.
+Fortunately there are two sets of functions where the locale really matters: changing case and sorting.
 
-Fortunately there are two sets of functions where the locale matters:
+**T**he rules for changing case are not the same in every language.
+For example, Turkish has two i's: with and without a dot, and it capitalizes them in a different way to English:
 
--   **Changing case**: the rules for changing case are not the same in every language.
-    For example, Turkish has two i's: with and without a dot, and it has a different rule to English for capitalizing them:
+```{r}
+str_to_upper(c("i", "ı"))
+str_to_upper(c("i", "ı"), locale = "tr")
+```
 
-    ```{r}
-    str_to_upper(c("i", "ı"))
-    str_to_upper(c("i", "ı"), locale = "tr")
-    ```
+Sorting strings depends on the order of the alphabet, and order of the alphabet is not the same in every language[^strings-9]!
+Here's an example: in Czech, "ch" is a compound letter that appears after `h` in the alphabet.
 
-    This also effects `str_equal()` which can optionally ignore:
+[^strings-9]: Sorting in languages that don't have an alphabet, like Chinese, is more complicated still.
 
-    ```{r}
-    str_equal("i", "I", ignore_case = TRUE)
-    str_equal("i", "I", ignore_case = TRUE, locale = "tr")
-    ```
+```{r}
+str_sort(c("a", "c", "ch", "h", "z"))
+str_sort(c("a", "c", "ch", "h", "z"), locale = "cs")
+```
 
--   **Sorting strings**: `str_sort()` and `str_order()` sort vectors alphabetically, but the alphabet is not the same in every language[^strings-8]!
-    Here's an example: in Czech, "ch" is a compound letter that appears after `h` in the alphabet.
-
-    ```{r}
-    str_sort(c("a", "c", "ch", "h", "z"))
-    str_sort(c("a", "c", "ch", "h", "z"), locale = "cs")
-    ```
-
-    A similar situation arises in Danish.
-    Normally, characters with diacritics (e.g. à, á, â) sort after the plain character (e.g. a).
-    But in Danish ø and å are their own letters that come at the end of the alphabet:
-
-    ```{r}
-    str_sort(c("a", "å", "o", "ø", "z"))
-    str_sort(c("a", "å", "o", "ø", "z"), locale = "da")
-    ```
-
-    This also comes up when sorting strings with `dplyr::arrange()` which is why it also has a `locale` argument.
-
-[^strings-8]: Sorting in languages that don't have an alphabet (like Chinese) is more complicated still.
+This also comes up when sorting strings with `dplyr::arrange()` which is why it also has a `locale` argument.
 
 ## Summary
 
