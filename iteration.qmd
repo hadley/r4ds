@@ -24,13 +24,12 @@ We'll finish off with a brief discussion of how you might might the same tools i
 ### Prerequisites
 
 ::: callout-important
-This chapter relies on features only found in purrr 1.0.0, which is still in development.
-If you want to live life on the edge you can get the dev version with `devtools::install_github("tidyverse/purrr")`.
+This chapter relies on features only found in purrr 1.0.0 and dplyr 1.1.0, which are still in development.
+If you want to live life on the edge you can get the dev version with `devtools::install_github(c("tidyverse/purrr", "tidyverse/dplyr"))`.
 :::
 
 In this chapter, we'll focus on tools provided by dplyr and purrr, both core members of the tidyverse.
-You've seen dplyr before, but purrr LINK?
-is new.
+You've seen dplyr before, but [purrr](http://purrr.tidyverse.org/) is new.
 We're going to use just a couple of purrr functions from in this chapter, but it's a great package to explore as you improve your programming skills.
 
 ```{r}
@@ -65,7 +64,7 @@ df |> summarise(
 )
 ```
 
-That breaks our rule of thumb to never copy and paste more than twice, and you can imagine that this will get very tedious if you have tens or even hundreds of variables.
+That breaks our rule of thumb to never copy and paste more than twice, and you can imagine that this will get very tedious if you have tens or even hundreds of columns.
 Instead you can use `across()`:
 
 ```{r}
@@ -82,8 +81,8 @@ We'll also discuss two important variations, `if_any()` and `if_all()`, which wo
 
 ### Selecting columns with `.cols`
 
-The first argument to `across()` selects the columns to transform.
-The `.cols` argument uses the same specifications as `select()`, @sec-select, so you can use functions like `starts_with()` and `ends_with()` to select variables based on their name.
+The first argument to `across()`, `.cols`, selects the columns to transform.
+This uses the same specifications as `select()`, @sec-select, so you can use functions like `starts_with()` and `ends_with()` to select columns based on their name.
 
 There are two additional selection techniques that are particularly useful for `across()`: `everything()` and `where()`.
 `everything()` is straightforward: it selects every (non-grouping) column:
@@ -113,17 +112,17 @@ Note grouping columns (`grp` here) are not included in `across()`, because they'
 -   `where(is.logical)` selects all logical columns.
 
 ```{r}
-df <- tibble(
+df_types <- tibble(
   x1 = 1:3,
   x2 = runif(3),
   y1 = sample(letters, 3),
   y2 = c("banana", "apple", "egg")
 )
 
-df |> 
+df_types |> 
   summarise(across(where(is.numeric), mean))
 
-df |> 
+df_types |> 
   summarise(across(where(is.character), str_flatten))
 ```
 
@@ -143,13 +142,13 @@ rnorm_na <- function(n, n_na, mean = 0, sd = 1) {
   sample(c(rnorm(n - n_na, mean = mean, sd = 1), rep(NA, n_na)))
 }
 
-df <- tibble(
+df_miss <- tibble(
   a = rnorm_na(5, 1),
   b = rnorm_na(5, 1),
   c = rnorm_na(5, 2),
   d = rnorm(5)
 )
-df |> 
+df_miss |> 
   summarise(
     across(a:d, median),
     n = n()
@@ -160,23 +159,25 @@ It would be nice if we could pass along `na.rm = TRUE` to `median()` to remove t
 To do so, instead of calling `median()` directly, we need to create a new function that calls `median()` with the desired arguments:
 
 ```{r}
-df |> 
+df_miss |> 
   summarise(
     across(a:d, function(x) median(x, na.rm = TRUE)),
     n = n()
   )
 ```
 
-This is a little verbose, so R comes with a handy shortcut: for this sort of throw away, or **anonymous**[^iteration-1], function you can replace `function` with `\`:
+This is a little verbose, so R comes with a handy shortcut: for this sort of throw away, or **anonymous**[^iteration-1], function you can replace `function` with `\`[^iteration-2]:
 
-[^iteration-1]: Anonymous, because we never explicitly created it and gave it a name with `<-`.
+[^iteration-1]: Anonymous, because we never explicitly gave it a name with `<-`.
     Another term programmers use for this is "lambda function".
 
-    MAYBE: explain the older syntax `~` in case people see it?
+[^iteration-2]: In older code you might see syntax that looks like `~ .x + 1`.
+    This is another way to write anonymous functions but it only works inside tidyverse functions and always uses the variable name `.x`.
+    We now recommend the base syntax, `\(x) x + 1`.
 
 ```{r}
 #| results: false
-df |> 
+df_miss |> 
   summarise(
     across(a:d, \(x) median(x, na.rm = TRUE)),
     n = n()
@@ -188,13 +189,14 @@ In either case, `across()` effectively expands to the following code:
 ```{r}
 #| eval: false
 
-df |> summarise(
-  a = median(a, na.rm = TRUE),
-  b = median(b, na.rm = TRUE),
-  c = median(c, na.rm = TRUE),
-  d = median(d, na.rm = TRUE),
-  n = n()
-)
+df_miss |> 
+  summarise(
+    a = median(a, na.rm = TRUE),
+    b = median(b, na.rm = TRUE),
+    c = median(c, na.rm = TRUE),
+    d = median(d, na.rm = TRUE),
+    n = n()
+  )
 ```
 
 When we remove the missing values from the `median()`, it would be nice to know just how many values we were removing.
@@ -202,7 +204,7 @@ We can find that out by supplying two functions to `across()`: one to compute th
 You supply multiple functions by using a named list to `.fns`:
 
 ```{r}
-df |> 
+df_miss |> 
   summarise(
     across(a:d, list(
       median = \(x) median(x, na.rm = TRUE),
@@ -219,19 +221,19 @@ As you'll learn in the next section, you can use `.names` argument to supply you
 ### Column names
 
 The result of `across()` is named according to the specification provided in the `.names` argument.
-We could specify our own if we wanted the name of the function to come first[^iteration-2]:
+We could specify our own if we wanted the name of the function to come first[^iteration-3]:
 
-[^iteration-2]: You can't currently change the order of the columns, but you could reorder them after the fact using `relocate()` or similar.
+[^iteration-3]: You can't currently change the order of the columns, but you could reorder them after the fact using `relocate()` or similar.
 
 ```{r}
-df |> 
+df_miss |> 
   summarise(
     across(
-      a:d, 
+      a:d,
       list(
         median = \(x) median(x, na.rm = TRUE),
         n_miss = \(x) sum(is.na(x))
-      ), 
+      ),
       .names = "{.fn}_{.col}"
     ),
     n = n(),
@@ -244,7 +246,7 @@ This means that `across()` inside of `mutate()` will replace existing columns.
 For example, here we use `coalesce()` to replace `NA`s with `0`:
 
 ```{r}
-df |> 
+df_miss |> 
   mutate(
     across(a:d, \(x) coalesce(x, 0))
   )
@@ -253,7 +255,7 @@ df |>
 If you'd like to instead create new columns, you can use the `.names` argument to give the output new names:
 
 ```{r}
-df |> 
+df_miss |> 
   mutate(
     across(a:d, \(x) abs(x), .names = "{.col}_abs")
   )
@@ -266,44 +268,42 @@ It's clear that `across()` can help to create multiple logical columns, but then
 So dplyr provides two variants of `across()` called `if_any()` and `if_all()`:
 
 ```{r}
-df |> filter(is.na(a) | is.na(b) | is.na(c) | is.na(d))
+df_miss |> filter(is.na(a) | is.na(b) | is.na(c) | is.na(d))
 # same as:
-df |> filter(if_any(a:d, is.na))
+df_miss |> filter(if_any(a:d, is.na))
 
-df |> filter(is.na(a) & is.na(b) & is.na(c) & is.na(d))
+df_miss |> filter(is.na(a) & is.na(b) & is.na(c) & is.na(d))
 # same as:
-df |> filter(if_all(a:d, is.na))
+df_miss |> filter(if_all(a:d, is.na))
 ```
 
 ### `across()` in functions
 
-`across()` is particularly useful to program with because it allows you to operate on multiple variables.
-For example, [Jacob Scott](https://twitter.com/_wurli/status/1571836746899283969) uses this little helper to expand all date variables into year, month, and day variables:
+`across()` is particularly useful to program with because it allows you to operate on multiple columns.
+For example, [Jacob Scott](https://twitter.com/_wurli/status/1571836746899283969) uses this little helper which wraps a bunch of lubridate function to expand all date columns into year, month, and day columns:
 
-```{r error = TRUE}
+```{r}
+library(lubridate)
+
 expand_dates <- function(df) {
   df |> 
     mutate(
-      across(
-        where(lubridate::is.Date), 
-        list(year = year, month = month, day = mday)
-      )
+      across(where(is.Date), list(year = year, month = month, day = mday))
     )
 }
 
-df2 <- tibble(
+df_date <- tibble(
   name = c("Amy", "Bob"),
-  date = as.Date(c("2009-08-03", "2010-01-16"))
+  date = ymd(c("2009-08-03", "2010-01-16"))
 )
 
-df2 |> 
+df_date |> 
   expand_dates()
-# I think deserves to be applied to some actual data, i.e. complete the example. Most readers won't be able to imagine what the `list()` thing does. And I guess my immediate attempt to use it has failed?
 ```
 
-`across()` also makes it easy to supply multiple variables in a single argument because the first argument uses tidy-select; you just need to remember to embrace that argument LINK.
-For example, this function will compute the means of numeric variables by default.
-But by supplying the second argument you can choose to summarize just selected variables:
+`across()` also makes it easy to supply multiple columns in a single argument because the first argument uses tidy-select; you just need to remember to embrace that argument, as we discussed in @sec-embracing.
+For example, this function will compute the means of numeric columns by default.
+But by supplying the second argument you can choose to summarize just selected columns:
 
 ```{r}
 summarise_means <- function(df, summary_vars = where(is.numeric)) {
@@ -324,29 +324,45 @@ diamonds |>
 
 ### Vs `pivot_longer()`
 
-Before we go on, it's worth pointing out an interesting connection between `across()` and `pivot_longer()` LINK.
+Before we go on, it's worth pointing out an interesting connection between `across()` and `pivot_longer()` (@sec-pivoting).
 In many cases, you perform the same calculations by first pivoting the data and then performing the operations by group rather than by column.
-For example, we could rewrite our multiple summary `across()` as:
+For example, take this multi-function summary:
 
 ```{r}
 df |> 
+  summarise(across(a:d, list(median = median, mean = mean)))
+```
+
+We could compute the same values by pivoting longer and then summarizing:
+
+```{r}
+long <- df |> 
   pivot_longer(a:d) |> 
   group_by(name) |> 
   summarise(
-    median = median(value, na.rm = TRUE),
-    n_miss = sum(is.na(value))
+    median = median(value),
+    mean = mean(value)
   )
-
-# this feels unfinished, i.e. lacking the direct head-to-head comparison to something using across()
+long
 ```
 
-This is a useful technique to know about because sometimes you'll hit a problem that's not currently possible to solve with `across()`: when you have groups of variables that you want to compute with simultaneously.
+And if you wanted the same structure as `across()` you could pivot again:
+
+```{r}
+long |> 
+  pivot_wider(
+    names_from = name,
+    values_from = c(median, mean),
+    names_vary = "slowest",
+    names_glue = "{name}_{.value}"
+  )
+```
+
+This is a useful technique to know about because sometimes you'll hit a problem that's not currently possible to solve with `across()`: when you have groups of columns that you want to compute with simultaneously.
 For example, imagine that our data frame contains both values and weights and we want to compute a weighted mean:
 
 ```{r}
-# now **I** have inserted df2 as a suggestion for the lubridate example, but otherwise I don't understand why this is df3
-
-df3 <- tibble(
+df_paired <- tibble(
   a_val = rnorm(10),
   a_wts = runif(10),
   b_val = rnorm(10),
@@ -358,20 +374,20 @@ df3 <- tibble(
 )
 ```
 
-There's currently no way to do this with `across()`[^iteration-3], but it's relatively straightforward with `pivot_longer()`:
+There's currently no way to do this with `across()`[^iteration-4], but it's relatively straightforward with `pivot_longer()`:
 
-[^iteration-3]: Maybe there will be one day, but currently we don't see how.
+[^iteration-4]: Maybe there will be one day, but currently we don't see how.
 
 ```{r}
-df3_long <- df3 |> 
+df_long <- df_paired |> 
   pivot_longer(
     everything(), 
     names_to = c("group", ".value"), 
     names_sep = "_"
   )
-df3_long
+df_long
 
-df3_long |> 
+df_long |> 
   group_by(group) |> 
   summarise(mean = weighted.mean(val, wts))
 ```
@@ -384,7 +400,7 @@ If needed, you could `pivot_wider()` this back to the original form.
 
 2.  Compute the mean of every column in `mtcars`.
 
-3.  Group `diamonds` by `cut`, `clarity`, and `color` then count the number of observations and the mean of each numeric variable.
+3.  Group `diamonds` by `cut`, `clarity`, and `color` then count the number of observations and the mean of each numeric column.
 
 4.  What happens if you use a list of functions, but don't name them?
     How is the output named?
@@ -394,11 +410,9 @@ If needed, you could `pivot_wider()` this back to the original form.
 
 6.  Adjust `expand_dates()` to automatically remove the date columns after they've been expanded.
     Do you need to embrace any arguments?
-    TODO: this callback is more reason why that example needs some more work
 
 7.  Explain what each step of the pipeline in this function does.
     What special feature of `where()` are we taking advantage of?
-    TODO: this chapter also depends on dev dplyr (pick()) but that's not called out as it is for purrr
 
     ```{r}
     #| results: false
@@ -419,10 +433,10 @@ If needed, you could `pivot_wider()` this back to the original form.
 
 In the previous section, you learned how to use `dplyr::across()` to repeat a transformation on multiple columns.
 In this section, you'll learn how to use `purrr::map()` to do something to every file in a directory.
-Let's start with a little motivation: imagine you have a directory full of excel spreadsheets[^iteration-4] you want to read.
+Let's start with a little motivation: imagine you have a directory full of excel spreadsheets[^iteration-5] you want to read.
 You could do it with copy and paste:
 
-[^iteration-4]: If you instead had a directory of csv files with the same format, you can use the technique from @sec-readr-directory.
+[^iteration-5]: If you instead had a directory of csv files with the same format, you can use the technique from @sec-readr-directory.
 
 ```{r}
 #| eval: false
@@ -441,12 +455,12 @@ data <- bind_rows(data2019, data2020, data2021, data2022)
 
 You can imagine that this would get tedious quickly, especially if you had hundreds of files, not just four.
 The following sections show you how to automate this sort of task.
-There are three basic steps: use `dir()` to list all the files in a directory, then use `purrr::map()` to read each of them into a list, then use `purrr::list_rbind()` to combine them into a single data frame.
+There are three basic steps: use `list.files()` to list all the files in a directory, then use `purrr::map()` to read each of them into a list, then use `purrr::list_rbind()` to combine them into a single data frame.
 We'll then discuss how you can handle situations of increasing heterogeneity, where you can't do exactly the same thing to every file.
 
 ### Listing files in a directory
 
-`dir()` lists the files in a directory.
+As the name suggests, `list.files()` lists the files in a directory.
 TO CONSIDER: why not use it via the more obvious name `list.files()`?
 You'll almost always use three arguments:
 
@@ -460,10 +474,10 @@ You'll almost always use three arguments:
 
 To make our motivating example concrete, this book contains a folder with 12 excel spreadsheets containing data from the gapminder package.
 Each file contains one year's worth of data for 142 countries.
-We can list them all with the appropriate call to `dir()`:
+We can list them all with the appropriate call to `list.files()`:
 
 ```{r}
-paths <- dir("data/gapminder", pattern = "[.]xlsx$", full.names = TRUE)
+paths <- list.files("data/gapminder", pattern = "[.]xlsx$", full.names = TRUE)
 paths
 ```
 
@@ -866,8 +880,8 @@ con |>
   count(year)
 ```
 
-```{r, include = FALSE}
-# why not show this?
+```{r}
+#| include: false
 DBI::dbDisconnect(con, shutdown = TRUE)
 ```
 
@@ -923,7 +937,6 @@ walk2(by_clarity$data, by_clarity$path, write_csv)
 
 ```{r}
 #| include: false
-# why not show this?
 unlink(by_clarity$path)
 ```
 
@@ -940,9 +953,9 @@ carat_histogram <- function(df) {
 carat_histogram(by_clarity$data[[1]])
 ```
 
-Now we can use `map()` to create a list of many plots[^iteration-5] and their eventual file paths:
+Now we can use `map()` to create a list of many plots[^iteration-6] and their eventual file paths:
 
-[^iteration-5]: You can print `by_clarity$plot` to get a crude animation --- you'll get one plot for each element of `plots`.
+[^iteration-6]: You can print `by_clarity$plot` to get a crude animation --- you'll get one plot for each element of `plots`.
     NOTE: this didn't happen for me.
 
 ```{r}
@@ -963,7 +976,7 @@ walk2(
 )
 ```
 
-This is short hand for:
+This is shorthand for:
 
 ```{r}
 #| eval: false
