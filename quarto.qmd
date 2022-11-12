@@ -272,16 +272,19 @@ This has three advantages:
     ```
 
 2.  Graphics produced by the chunks will have useful names that make them easier to use elsewhere.
-    More on that in @sec-graphics-communication.
+    More on that in @sec-figures.
 
 3.  You can set up networks of cached chunks to avoid re-performing expensive computations on every run.
-    More on that below.
+    More on that in @sec-caching.
 
 Your chunk labels should be short but evocative and should not contain spaces.
-We recommend using dashes (`-`) to separate words and avoiding other special characters in chunk labels.
+We recommend using dashes (`-`) to separate words (instead of underscores, `_`) and avoiding other special characters in chunk labels.
 
 You are generally free to label your chunk however you like, but there is one chunk name that imbues special behavior: `setup`.
 When you're in a notebook mode, the chunk named setup will be run automatically once, before any other code is run.
+
+Additionally, chunk labels cannot be duplicated.
+Each chunk label must be unique.
 
 ### Chunk options
 
@@ -309,7 +312,7 @@ The most important set of options controls if your code block is executed and wh
 -   `error: true` causes the render to continue even if code returns an error.
     This is rarely something you'll want to include in the final version of your report, but can be very useful if you need to debug exactly what is going on inside your `.qmd`.
     It's also useful if you're teaching R and want to deliberately include an error.
-    The default, `error: false` causes knitting to fail if there is a single error in the document.
+    The default, `error: false` causes rendering to fail if there is a single error in the document.
 
 Each of these chunk options get added to the header of the chunk, following `#|`, e.g., in the following chunk the result is not printed since `eval` is set to false.
 
@@ -333,116 +336,6 @@ The following table summarizes which types of output each option suppresses:
 | `message: false` |          |           |        |       |    \-    |          |
 | `warning: false` |          |           |        |       |          |    \-    |
 
-### Caching
-
-Normally, each render of a document starts from a completely clean slate.
-This is great for reproducibility, because it ensures that you've captured every important computation in code.
-However, it can be painful if you have some computations that take a long time.
-The solution is `cache: true`.
-
-You can enable the Knitr cache at the document level for caching the results of all computations in a document using standard YAML options:
-
-``` yaml
----
-title: "My Document"
-execute: 
-  cache: true
----
-```
-
-You can also enable caching at the chunk level for caching the results of computation in a specific chunk:
-
-```{r}
-#| echo: fenced
-#| cache: true
-
-# code for lengthy computation...
-```
-
-When set, this will save the output of the chunk to a specially named file on disk.
-On subsequent runs, knitr will check to see if the code has changed, and if it hasn't, it will reuse the cached results.
-
-The caching system must be used with care, because by default it is based on the code only, not its dependencies.
-For example, here the `processed_data` chunk depends on the `raw_data` chunk:
-
-    `r chunk`{r}
-    #| label: raw_data
-
-    rawdata <- readr::read_csv("a_very_large_file.csv")
-    `r chunk`
-
-    `r chunk`{r}
-    #| label: processed_data
-    #| cache: true
-
-    processed_data <- rawdata |> 
-      filter(!is.na(import_var)) |> 
-      mutate(new_variable = complicated_transformation(x, y, z))
-    `r chunk`
-
-Caching the `processed_data` chunk means that it will get re-run if the dplyr pipeline is changed, but it won't get rerun if the `read_csv()` call changes.
-You can avoid that problem with the `dependson` chunk option:
-
-    `r chunk`{r}
-    #| label: processed_data
-    #| cache: true
-    #| dependson: "raw_data"
-
-    processed_data <- rawdata |> 
-      filter(!is.na(import_var)) |> 
-      mutate(new_variable = complicated_transformation(x, y, z))
-    `r chunk`
-
-`dependson` should contain a character vector of *every* chunk that the cached chunk depends on.
-Knitr will update the results for the cached chunk whenever it detects that one of its dependencies have changed.
-
-Note that the chunks won't update if `a_very_large_file.csv` changes, because knitr caching only tracks changes within the `.qmd` file.
-If you want to also track changes to that file you can use the `cache.extra` option.
-This is an arbitrary R expression that will invalidate the cache whenever it changes.
-A good function to use is `file.info()`: it returns a bunch of information about the file including when it was last modified.
-Then you can write:
-
-    `r chunk`{r}
-    #| label: raw_data
-    #| cache.extra: file.info("a_very_large_file.csv")
-
-    rawdata <- readr::read_csv("a_very_large_file.csv")
-    `r chunk`
-
-As your caching strategies get progressively more complicated, it's a good idea to regularly clear out all your caches with `knitr::clean_cache()`.
-
-We've followed the advice of [David Robinson](https://twitter.com/drob/status/738786604731490304) to name these chunks: each chunk is named after the primary object that it creates.
-This makes it easier to understand the `dependson` specification.
-
-### Global options
-
-As you work more with knitr, you will discover that some of the default chunk options don't fit your needs and you want to change them.
-
-You can do this by adding the preferred options in the document YAML, under `execute`.
-For example, if you are preparing a report for an audience who does not need to see your code but only your results and narrative, you might set `echo: false` at the document level.
-That will hide the code by default, so only showing the chunks you deliberately choose to show (with `echo: true`).
-You might consider setting `message: false` and `warning: false`, but that would make it harder to debug problems because you wouldn't see any messages in the final document.
-
-``` yaml
-title: "My report"
-execute:
-  echo: false
-```
-
-Since Quarto is designed to be multi-lingual (works with R as well as other languages like Python, Julia, etc.), all of the knitr options are not available at the document execution level since some of them only work with knitr and not other engines Quarto uses for running code in other languages (e.g., Jupyter).
-You can, however, still set these as global options for your document under the `knitr` field, under `opts_chunk`.
-For example, when writing books and tutorials we set:
-
-``` yaml
-title: "Tutorial"
-knitr:
-  opts_chunk:
-    comment: "#>"
-    collapse: true
-```
-
-This uses our preferred comment formatting and ensures that the code and output are kept closely entwined.
-
 ### Inline code
 
 There is one other way to embed R code into a Quarto document: directly into the text, with: `r inline()`.
@@ -453,7 +346,7 @@ For example, the example document used at the start of the chapter had:
 > Only `r inline('nrow(diamonds) - nrow(smaller)')` are larger than 2.5 carats.
 > The distribution of the remainder is shown below:
 
-When the report is knit, the results of these computations are inserted into the text:
+When the report is rendered, the results of these computations are inserted into the text:
 
 > We have data about 53940 diamonds.
 > Only 126 are larger than 2.5 carats.
@@ -477,13 +370,10 @@ comma(.12358124331)
 2.  Download `diamond-sizes.qmd` from <https://github.com/hadley/r4ds/tree/main/quarto>.
     Add a section that describes the largest 20 diamonds, including a table that displays their most important attributes.
 
-3.  Modify `diamonds-sizes.qmd` to use `comma()` to produce nicely formatted output.
+3.  Modify `diamonds-sizes.qmd` to use `label_comma()` to produce nicely formatted output.
     Also include the percentage of diamonds that are larger than 2.5 carats.
 
-4.  Set up a network of chunks where `d` depends on `c` and `b`, and both `b` and `c` depend on `a`.
-    Have each chunk print `lubridate::now()`, set `cache: true`, then verify your understanding of caching.
-
-## Figures
+## Figures {#sec-figures}
 
 The figures in a Quarto document can be embedded (e.g., a PNG or JPEG file) or generated as a result of a code chunk.
 
@@ -603,10 +493,100 @@ You'll learn about these in @sec-graphics-communication.
 
 <!--# TO DO: Add exercises -->
 
-## Troubleshooting
+## Caching {#sec-caching}
+
+Normally, each render of a document starts from a completely clean slate.
+This is great for reproducibility, because it ensures that you've captured every important computation in code.
+However, it can be painful if you have some computations that take a long time.
+The solution is `cache: true`.
+
+You can enable the Knitr cache at the document level for caching the results of all computations in a document using standard YAML options:
+
+``` yaml
+---
+title: "My Document"
+execute: 
+  cache: true
+---
+```
+
+You can also enable caching at the chunk level for caching the results of computation in a specific chunk:
+
+```{r}
+#| echo: fenced
+#| cache: true
+
+# code for lengthy computation...
+```
+
+When set, this will save the output of the chunk to a specially named file on disk.
+On subsequent runs, knitr will check to see if the code has changed, and if it hasn't, it will reuse the cached results.
+
+The caching system must be used with care, because by default it is based on the code only, not its dependencies.
+For example, here the `processed_data` chunk depends on the `raw-data` chunk:
+
+    `r chunk`{r}
+    #| label: raw-data
+
+    rawdata <- readr::read_csv("a_very_large_file.csv")
+    `r chunk`
+
+    `r chunk`{r}
+    #| label: processed_data
+    #| cache: true
+
+    processed_data <- rawdata |> 
+      filter(!is.na(import_var)) |> 
+      mutate(new_variable = complicated_transformation(x, y, z))
+    `r chunk`
+
+Caching the `processed_data` chunk means that it will get re-run if the dplyr pipeline is changed, but it won't get rerun if the `read_csv()` call changes.
+You can avoid that problem with the `dependson` chunk option:
+
+    `r chunk`{r}
+    #| label: processed-data
+    #| cache: true
+    #| dependson: "raw-data"
+
+    processed_data <- rawdata |> 
+      filter(!is.na(import_var)) |> 
+      mutate(new_variable = complicated_transformation(x, y, z))
+    `r chunk`
+
+`dependson` should contain a character vector of *every* chunk that the cached chunk depends on.
+Knitr will update the results for the cached chunk whenever it detects that one of its dependencies have changed.
+
+Note that the chunks won't update if `a_very_large_file.csv` changes, because knitr caching only tracks changes within the `.qmd` file.
+If you want to also track changes to that file you can use the `cache.extra` option.
+This is an arbitrary R expression that will invalidate the cache whenever it changes.
+A good function to use is `file.info()`: it returns a bunch of information about the file including when it was last modified.
+Then you can write:
+
+    `r chunk`{r}
+    #| label: raw-data
+    #| cache.extra: file.info("a_very_large_file.csv")
+
+    rawdata <- readr::read_csv("a_very_large_file.csv")
+    `r chunk`
+
+As your caching strategies get progressively more complicated, it's a good idea to regularly clear out all your caches with `knitr::clean_cache()`.
+
+We've followed the advice of [David Robinson](https://twitter.com/drob/status/738786604731490304) to name these chunks: each chunk is named after the primary object that it creates.
+This makes it easier to understand the `dependson` specification.
+
+### Exercises
+
+1.  Set up a network of chunks where `d` depends on `c` and `b`, and both `b` and `c` depend on `a`. Have each chunk print `lubridate::now()`, set `cache: true`, then verify your understanding of caching.
+
+> > > > > > > 7ff2b1502187f15a978d74f59a88534fa6f1012e \## Troubleshooting
 
 Troubleshooting Quarto documents can be challenging because you are no longer in an interactive R environment, and you will need to learn some new tricks.
-The first thing you should always try is to recreate the problem in an interactive session.
+Additionally, the error could be due to issues with the Quarto document itself or due to the R code in the Quarto document.
+
+One common error in documents with code chunks is duplicated chunk labels, which are especially pervasive if your workflow involves copying and pasting code chunks.
+To address this issue, all you need to do is to change one of your duplicated labels.
+
+If the errors are due to the R code in the document, the first thing you should always try is to recreate the problem in an interactive session.
 Restart R, then "Run all chunks" (either from Code menu, under Run region), or with the keyboard shortcut Ctrl + Alt + R.
 If you're lucky, that will recreate the problem, and you can figure out what's going on interactively.
 
@@ -628,7 +608,7 @@ Here we'll discuss three: self-contained documents, document parameters, and bib
 
 ### Self-contained
 
-HTML documents typically have a number of external dependencies (e.g. images, CSS style sheets, JavaScript, etc.) and, by default, Quarto places these dependencies in a `_files` folder in the same directory as your `.qmd` file.
+HTML documents typically have a number of external dependencies (e.g. images, CSS style sheets, JavaScript, etc.) and, by default, Quarto places these dependencies in a `_files` folder in the same directory as your `.qmd` file.
 If you publish the HTML file on a hosting platform (e.g., QuartoPub, <https://quartopub.com/>), the dependencies in this directory are published with your document and hence are available in the published report.
 However, if you want to email the report to a colleague, you might prefer to have a single, self-contained, HTML document that embeds all of its dependencies.
 You can do this by specifying the `embed-resources` option:
@@ -733,12 +713,12 @@ A good place to find CSL style files for common bibliography styles is <https://
 Quarto is still relatively young, and is still growing rapidly.
 The best place to stay on top of innovations is the official Quarto website: [https://quarto.org](https://quarto.org/){.uri}.
 
-There are two important topics that we haven't covered here: collaboration, and the details of accurately communicating your ideas to other humans.
+There are two important topics that we haven't covered here: collaboration and the details of accurately communicating your ideas to other humans.
 Collaboration is a vital part of modern data science, and you can make your life much easier by using version control tools, like Git and GitHub.
 We recommend "Happy Git with R", a user friendly introduction to Git and GitHub from R users, by Jenny Bryan.
-The book is freely available online: <https://happygitwithr.com>
+The book is freely available online: <https://happygitwithr.com>.
 
-We have not touched on what you should actually write in order to clearly communicate the results of your analysis.
+We have also not touched on what you should actually write in order to clearly communicate the results of your analysis.
 To improve your writing, we highly recommend reading either [*Style: Lessons in Clarity and Grace*](https://www.amazon.com/Style-Lessons-Clarity-Grace-12th/dp/0134080416) by Joseph M. Williams & Joseph Bizup, or [*The Sense of Structure: Writing from the Reader's Perspective*](https://www.amazon.com/Sense-Structure-Writing-Readers-Perspective/dp/0205296327) by George Gopen.
 Both books will help you understand the structure of sentences and paragraphs, and give you the tools to make your writing more clear.
 (These books are rather expensive if purchased new, but they're used by many English classes so there are plenty of cheap second-hand copies).
