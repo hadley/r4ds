@@ -4,7 +4,7 @@
 #| results: "asis"
 #| echo: false
 source("_common.R")
-status("restructuring")
+status("polishing")
 ```
 
 ## Introduction
@@ -16,7 +16,14 @@ We'll begin with the details of creating strings and character vectors.
 You'll then dive into creating strings from data, then the opposite; extracting strings from data.
 The chapter finishes up with functions that work with individual letters and a brief discussion of where your expectations from English might steer you wrong when working with other languages.
 
+We'll keep working with strings in the next chapter, where you'll learn more about the power of regular expressions.
+
 ### Prerequisites
+
+::: callout-important
+This chapter relies on features only found in stringr 1.5.0 and tidyr 1.3.0 which are still in development.
+If you want to live life on the edge you can get the dev versions with `devtools::install_github(c("tidyverse/stringr", "tidyverse/tidyr"))`.
+:::
 
 In this chapter, we'll use functions from the stringr package which is part of the core tidyverse.
 We'll also use the babynames data since it provides some fun strings to manipulate.
@@ -54,9 +61,9 @@ If you forget to close a quote, you'll see `+`, the continuation character:
     > "This is a string without a closing quote
     + 
     + 
-    + HELP I'M STUCK
+    + HELP I'M STUCK IN A STRING
 
-If this happen to you and you can't figure out which quote you need to close, press Escape to cancel, and try again.
+If this happens to you and you can't figure out which quote you need to close, press Escape to cancel, and try again.
 
 ### Escapes
 
@@ -67,7 +74,7 @@ double_quote <- "\"" # or '"'
 single_quote <- '\'' # or "'"
 ```
 
-And if you want to include a literal backslash in your string, you'll need to double it up: `"\\"`:
+So if you want to include a literal backslash in your string, you'll need to escape it: `"\\"`:
 
 ```{r}
 backslash <- "\\"
@@ -81,6 +88,7 @@ To see the raw contents of the string, use `str_view()`[^strings-1]:
 ```{r}
 x <- c(single_quote, double_quote, backslash)
 x
+
 str_view(x)
 ```
 
@@ -146,15 +154,15 @@ One of the challenges of working with text is that there's a variety of ways tha
 Now that you've learned the basics of creating a string or two by "hand", we'll go into the details of creating strings from other strings.
 This will help you solve the common problem where you have some text that you wrote that you want to combine with strings from a data frame.
 For example, to create a greeting you might combine "Hello" with a `name` variable.
-We'll show you how to do this with `str_c()` and `str_glue()` and how you might use them with `mutate()`.
-That naturally raises the question of what functions you might use with `summarise()`, so we'll finish this section with a discussion of `str_flatten()` which is a summary function for strings.
+We'll show you how to do this with `str_c()` and `str_glue()` and how you can you use them with `mutate()`.
+That naturally raises the question of what string functions you might use with `summarise()`, so we'll finish this section with a discussion of `str_flatten()` which is a summary function for strings.
 
 ### `str_c()`
 
 `str_c()`[^strings-3] takes any number of vectors as arguments and returns a character vector:
 
 [^strings-3]: `str_c()` is very similar to the base `paste0()`.
-    There are two main reasons we recommend: it obeys the usual rules for propagating `NA`s and it uses the tidyverse recycling rules.
+    There are two main reasons we recommend it: it propagates `NA`s (rather than converting them to `"NA"`) and it uses the tidyverse recycling rules.
 
 ```{r}
 str_c("x", "y")
@@ -170,20 +178,20 @@ df <- tibble(name = c(wakefield::name(3), NA))
 df |> mutate(greeting = str_c("Hi ", name, "!"))
 ```
 
-If you want missing values to display in some other way, use `coalesce()` either inside or outside of `str_c()`:
+If you want missing values to display in some other way, use `coalesce()`.
+Depending on what you want, you might use it either inside or outside of `str_c()`:
 
 ```{r}
-df |> mutate(
-  greeting1 = str_c("Hi ", coalesce(name, "you"), "!"),
-  greeting2 = coalesce(str_c("Hi ", name, "!"), "Hi!")
-)
+df |> 
+  mutate(
+    greeting1 = str_c("Hi ", coalesce(name, "you"), "!"),
+    greeting2 = coalesce(str_c("Hi ", name, "!"), "Hi!")
+  )
 ```
 
 ### `str_glue()` {#sec-glue}
 
-If you are mixing many fixed and variable strings with `str_c()`, you'll notice that you have to type `""` repeatedly, and this can make it hard to see the overall goal of the code.
-An alternative approach is provided by the [glue package](https://glue.tidyverse.org) via `str_glue()`[^strings-4] .
-You give it a single string containing `{}`; anything inside `{}` will be evaluated like it's outside of the string:
+If you are mixing many fixed and variable strings with `str_c()`, you'll notice that you type a lot of `"`s, making it hard to see the overall goal of the code. An alternative approach is provided by the [glue package](https://glue.tidyverse.org) via `str_glue()`[^strings-4]. You give it a single string that has a special feature: anything inside `{}` will be evaluated like it's outside of the quotes:
 
 [^strings-4]: If you're not using stringr, you can also access it directly with `glue::glue()`.
 
@@ -191,10 +199,7 @@ You give it a single string containing `{}`; anything inside `{}` will be evalua
 df |> mutate(greeting = str_glue("Hi {name}!"))
 ```
 
-As you can see, `str_glue()` currently converts missing values to the string "NA" making it inconsistent with `str_c()`.
-We'll hopefully have fixed that by the time you're reading this[^strings-5].
-
-[^strings-5]: Track our progress at <https://github.com/tidyverse/glue/issues/246>.
+As you can see, `str_glue()` currently converts missing values to the string `"NA"` unfortunately making it inconsistent with `str_c()`.
 
 You also might wonder what happens if you need to include a regular `{` or `}` in your string.
 If you guess that you'll need to somehow escape it, you're on the right track.
@@ -208,9 +213,9 @@ df |> mutate(greeting = str_glue("{{Hi {name}!}}"))
 
 `str_c()` and `glue()` work well with `mutate()` because their output is the same length as their inputs.
 What if you want a function that works well with `summarise()`, i.e. something that always returns a single string?
-That's the job of `str_flatten()`[^strings-6]: it takes a character vector and combines each element of the vector into a single string:
+That's the job of `str_flatten()`[^strings-5]: it takes a character vector and combines each element of the vector into a single string:
 
-[^strings-6]: The base R equivalent is `paste()` used with the `collapse` argument.
+[^strings-5]: The base R equivalent is `paste()` used with the `collapse` argument.
 
 ```{r}
 str_flatten(c("x", "y", "z"))
@@ -250,36 +255,36 @@ df |>
 
     a.  `str_c("The price of ", food, " is ", price)`
 
-    b.  `glue("I'm {age} years old and live in {country}")`
+    b.  `str_glue("I'm {age} years old and live in {country}")`
 
     c.  `str_c("\\section{", title, "}")`
 
 ## Extracting data from strings
 
-Working from <https://github.com/tidyverse/tidyr/pull/1304>.
-
 It's very common for multiple variables to be crammed together into a single string.
-In this section you'll learn how to use four tidyr to extract them:
+In this section you'll learn how to use four tidyr functions to extract them:
 
 -   `df |> separate_longer_delim(col, delim)`
 -   `df |> separate_longer_position(col, width)`
 -   `df |> separate_wider_delim(col, delim, names)`
--   `df |> separate_wider_(col, widths)`
+-   `df |> separate_wider_position(col, widths)`
 
-If you look closely you can see there's a common pattern here: `separate` followed by `by` or `at`, followed by longer or `wider`.
-`by` splits up a string with a separator like `", "` or `" "`.
-`at` splits at given locations, like 5, 10, and 17.
-`longer` makes input data frame longer, making new rows; `wider` makes the input data frame wider, add new columns.
+If you look closely you can see there's a common pattern here: `separate_`, then `longer` or `wider`, then `_`, then by `delim` or `position`.
+That's because these four functions are composed from two simpler primitives:
 
-There's one more member of this family, `separate_regex_wider()`, that we'll come back in @sec-regular-expressions.
-It's the most flexible of the `at` forms but you need to know a bit about regular expression in order to use it.
+-   `longer` makes input data frame longer, creating new rows; `wider` makes the input data frame wider, generating new columns.
+-   `delim` splits up a string with a delimiter like `", "` or `" "`; `position` splits at specified widths, like `c(3, 5, 2)`.
 
-The next two sections will give you the basic idea behind these separate functions, and then we'll work through a few case studies that require mutliple uses.
+We'll come back the last member of this family, `separate_regex_wider()`, in @sec-regular-expressions.
+It's the most flexible of the `wider` functions but you need to know something about regular expression before you can use it.
 
-### Splitting into rows
+The next two sections will give you the basic idea behind these separate functions, first separating into rows (which is a little simpler) and then separating in to columns.
+We'll finish off my discussing the tools that the `wider` functions give you to diagnose problems.
 
-`separate_longer_delim()` and `separate_longer_position()` are most useful when the number of components varies from row to row.
-`separate_longer_delim()` arises most commonly:
+### Separating into rows
+
+Separating a string into rows tends to be most useful when the number of components varies from row to row.
+The most common case is requiring `separate_longer_delim()` to split based on a delimiter:
 
 ```{r}
 df1 <- tibble(x = c("a,b,c", "d,e", "f"))
@@ -287,9 +292,7 @@ df1 |>
   separate_longer_delim(x, delim = ",")
 ```
 
-(If the separators have some variation you can use a regular expression instead, if you know about it.)
-
-It's rarer to see `separate_longer_position()` in the wild, but some older datasets can adopt a very compact format where each character is used to record a value:
+It's rarer to see `separate_longer_position()` in the wild, but some older datasets do use very compact format where each character is used to record a value:
 
 ```{r}
 df2 <- tibble(x = c("1211", "131", "21"))
@@ -297,30 +300,32 @@ df2 |>
   separate_longer_position(x, width = 1)
 ```
 
-### Splitting into columns
+### Separating into columns {#sec-string-columns}
 
-`separate_wider_delim()` and `separate_wider_position()` are most useful when there are a fixed number of components in each string, and you want to spread them into columns.
-They are more complicated that their `by` equivalents because you need to name the columns.
+Separating a string into columns tends to be most useful when there are a fixed number of components in each string, and you want to spread them into columns.
+They are slightly more complicated than their `longer` equivalents because you need to name the columns.
+For example, in this following dataset `x` is made up of a code, an edition number, and a year, separated by `"."`.
+To use `separate_wider_delim()` we supply the delimiter and the names in two arguments:
 
 ```{r}
-df3 <- tibble(x = c("a,1,2022", "b,2,2011", "e,5,2015"))
+df3 <- tibble(x = c("a10.1.2022", "b10.2.2011", "e15.1.2015"))
 df3 |> 
-  separate_wider_delim(x, delim = ",", names = c("letter", "number", "year"))
+  separate_wider_delim(
+    x,
+    delim = ".",
+    names = c("code", "edition", "year")
+  )
 ```
 
-If a specific value is not useful you can use `NA` to omit it from the results:
-
-```{r}
-df3 <- tibble(x = c("a,1,2022", "b,2,2011", "e,5,2015"))
-df3 |> 
-  separate_wider_delim(x, delim = ",", names = c("letter", NA, "year"))
-```
-
-Alternatively, you can provide `names_sep` and `separate_wider_delim()` will use that separator to name automatically:
+If a specific piece is not useful you can use an `NA` name to omit it from the results:
 
 ```{r}
 df3 |> 
-  separate_wider_delim(x, delim = ",", names_sep = "_")
+  separate_wider_delim(
+    x,
+    delim = ".",
+    names = c("code", NA, "year")
+  )
 ```
 
 `separate_wider_position()` works a little differently, because you typically want to specify the width of each column.
@@ -330,21 +335,128 @@ You can omit values from the output by not naming them:
 ```{r}
 df4 <- tibble(x = c("202215TX", "202122LA", "202325CA")) 
 df4 |> 
-  separate_wider_position(x, c(year = 4, age = 2, state = 2))
+  separate_wider_position(
+    x,
+    widths = c(year = 4, age = 2, state = 2)
+  )
 ```
 
-### Case studies
+### Diagnosing widening problems
+
+`separate_wider_delim()`[^strings-6] requires a fixed and known set of columns.
+What happens if some of the rows don't have the expected number of pieces?
+There are two possible problems, too few or too many pieces, so `separate_wider_delim()` provides two arguments to help: `too_few` and `too_many`. Let's first look at the `too_few` case with the following sample dataset:
+
+[^strings-6]: The same principles apply to `separate_wider_position()` and `separate_wider_regex()`.
+
+```{r}
+#| error: true
+df <- tibble(x = c("1-1-1", "1-1-2", "1-3", "1-3-2", "1"))
+
+df |> 
+  separate_wider_delim(
+    x,
+    delim = "-",
+    names = c("x", "y", "z")
+  )
+```
+
+You'll notice that we get an error, but the error gives us some suggestions as to how you might proceed.
+Let's start by debugging the problem:
+
+```{r}
+debug <- df |> 
+  separate_wider_delim(
+    x,
+    delim = "-",
+    names = c("x", "y", "z"),
+    too_few = "debug"
+  )
+debug
+```
+
+When you use the debug mode you get three extra columns add to the output: `x_ok`, `x_pieces`, and `x_remainder` (if you separate variable with a different name, you'll get a different prefix).
+Here, `x_ok` lets you quickly find the inputs that failed:
+
+```{r}
+debug |> filter(!x_ok)
+```
+
+`x_pieces` tells us how many pieces were found, compared to the expected 3 (the length of `names`).
+`x_remainder` isn't useful when there are too few pieces, but we'll see it again shortly.
+
+Sometimes looking at this debugging information will reveal a problem with your delimiter strategy or suggest that you need to do more preprocessing before separating.
+In that case, fix the problem upstream and make sure to remove `too_few = "debug"` to ensure that new problem become errors.
+
+In other cases you may just want to fill in the missing pieces with `NA`s and move on.
+That's the job of `too_few = "align_start"` and `too_few = "align_end"` which allow you to control where the `NA`s should go:
+
+```{r}
+df |> 
+  separate_wider_delim(
+    x,
+    delim = "-",
+    names = c("x", "y", "z"),
+    too_few = "align_start"
+  )
+```
+
+The same principles apply if you have too many pieces:
+
+```{r}
+#| error: true
+df <- tibble(x = c("1-1-1", "1-1-2", "1-3-5-6", "1-3-2", "1-3-5-7-9"))
+
+df |> 
+  separate_wider_delim(
+    x,
+    delim = "-",
+    names = c("x", "y", "z")
+  )
+```
+
+But now when we debug the result, you can see the purpose of `x_remainder`:
+
+```{r}
+debug <- df |> 
+  separate_wider_delim(
+    x,
+    delim = "-",
+    names = c("x", "y", "z"),
+    too_many = "debug"
+  )
+debug |> filter(!x_ok)
+```
+
+You have a slightly different set of options for handling too many pieces: you can either silently "drop" any additional pieces or "merge" them all into the final column:
+
+```{r}
+df |> 
+  separate_wider_delim(
+    x,
+    delim = "-",
+    names = c("x", "y", "z"),
+    too_many = "drop"
+  )
+
+
+df |> 
+  separate_wider_delim(
+    x,
+    delim = "-",
+    names = c("x", "y", "z"),
+    too_many = "merge"
+  )
+```
 
 ## Letters
 
-This section discusses string function that work with individual characters.
-In English, characters are easy to understand because they're correspond to the 26 letters of the alphabet (plus a handful of punctuation characters).
-Things get complicated quickly when you move beyond English.
-Even languages that use the same alphabet, but add additional accents (like å, é, ï, ô, ū) are non-trivial because these extra letters might be represented as an individual character or by composing an unaccented letter with a diacritic mark.
-Things get more complicated still as you move further away.
-To give just a few examples in Japanese each "letter" is a syllable, in Chinese each "letter" is a complex logogram, and in Arabic, letters look radically different depending on where in the word they fail.
+This section discusses stringr functions that work with individual letters.
+This is straightforward for English because it uses an alphabet with 26 letters, but things rapidly get complicated when you move beyond English.
+Even languages that use the same alphabet but add additional accents (e.g. å, é, ï, ô, ū) are non-trivial because those letters might be represented as an individual character or by combining an unaccented letter (e.g. e) with a diacritic mark (e.g. ´).
+And other languages "letters" look quite different: in Japanese each "letter" is a syllable, in Chinese each "letter" is a complex logogram, and in Arabic letters look radically different depending on their location in the word.
 
-In this section, we'll you're using English (or a nearby language); if you're working with another language, these examples either may not applty or need radically different approaches.
+In this section, we'll assume that you're working with English text as we introduce to functions for finding the length of a string, extracting substrings, and handling long strings in plots and tables.
 
 ### Length
 
@@ -356,7 +468,7 @@ str_length(c("a", "R for data science", NA))
 
 You could use this with `count()` to find the distribution of lengths of US babynames, and then with `filter()` to look at the longest names[^strings-7]:
 
-[^strings-7]: Looking at these entries, we'd guess that the babynames data removes spaces or hyphens from names and truncates after 15 letters.
+[^strings-7]: Looking at these entries, we'd guess that the babynames data drops spaces or hyphens and truncates after 15 letters.
 
 ```{r}
 babynames |>
@@ -369,7 +481,7 @@ babynames |>
 
 ### Subsetting
 
-You can extract parts of a string using `str_sub(string, start, end)`.
+You can extract parts of a string using `str_sub(string, start, end)`, where `start` and `end` are the letters where the substring should start and end.
 The `start` and `end` arguments are inclusive, so the length of the returned string will be `end - start + 1`:
 
 ```{r}
@@ -404,9 +516,11 @@ babynames |>
 Sometimes the reason you care about the length of a string is because you're trying to fit it into a label on a plot or in a table.
 stringr provides two useful tools for cases where your string is too long:
 
--   `str_trunc(x, 30)` ensures that no string is longer than 20 characters, replacing any thing too long with `…`.
+-   `str_trunc(x, 30)` ensures that no string is longer than 30 characters, replacing any letters after 30 with `…`.
 
 -   `str_wrap(x, 30)` wraps a string introducing new lines so that each line is at most 30 characters (it doesn't hyphenate, however, so any word longer than 30 characters will make a longer line)
+
+The following code shows these functions in action with a made up string:
 
 ```{r}
 x <- "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat."
@@ -415,8 +529,6 @@ str_view(str_trunc(x, 30))
 str_view(str_wrap(x, 30))
 ```
 
-TODO: add example with a plot.
-
 ### Exercises
 
 1.  Use `str_length()` and `str_sub()` to extract the middle letter from each baby name. What will you do if the string has an even number of characters?
@@ -424,30 +536,28 @@ TODO: add example with a plot.
 
 ## Locale dependent {#sec-other-languages}
 
-So far all of our examples have been using English.
-The details of the many ways other languages are different to English are too diverse to detail here, but we wanted to give a quick outline of the functions who's behavior differs based on your **locale**, the set of settings that vary from country to country.
-
-Locale is specified with lower-case language abbreviation, optionally followed by a `_` and a upper-case region identifier.
+There are a handful of stringr functions whose behavior depends on your **locale**.
+Locale is similar to language, but includes an optional region specifier to handle the fact that (e.g.) many countries speak Spanish, but with regional variations.
+A locale is specified by lower-case language abbreviation, optionally followed by a `_` and a upper-case region identifier.
 For example, "en" is English, "en_GB" is British English, and "en_US" is American English.
-If you don't already know the code for your language, [Wikipedia](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes) has a good list, and you can see which are supported with `stringi::stri_locale_list()`.
+If you don't already know the code for your language, [Wikipedia](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes) has a good list, and you can see which are supported in stringr by looking at `stringi::stri_locale_list()`.
 
-Base R string functions automatically use your locale current locale.
-This means that string manipulation code works the way you expect when you're working with text in your native language, but it might work differently when you share it with someone who lives in another country.
+Base R string functions automatically use the locale set by your operating system.
+This means that base R string functions usually use the rules associated with your native language, but such might work differently when you share it with someone who lives in different country.
 To avoid this problem, stringr defaults to the "en" locale, and requires you to specify the `locale` argument to override it.
-This also makes it easy to tell if a function might have different behavior in different locales.
+This also makes it easy to tell if a function might behave differently in different locales.
 
-Fortunately there are three sets of functions where the locale matters:
+Fortunately there are two sets of functions where the locale matters:
 
--   **Changing case**: while only relatively few languages have upper and lower case (Latin, Greek, and Cyrillic, plus a handful of lessor known languages).
-    The rules are not the same in every language that uses these alphabets.
-    For example, Turkish has two i's: with and without a dot, and it has a different rule for capitalizing them:
+-   **Changing case**: the rules for changing case are not the same in every language.
+    For example, Turkish has two i's: with and without a dot, and it has a different rule to English for capitalizing them:
 
     ```{r}
     str_to_upper(c("i", "ı"))
     str_to_upper(c("i", "ı"), locale = "tr")
     ```
 
--   **Comparing strings**: `str_equal()` lets you compare if two strings are equal, optionally ignoring case:
+    This also effects `str_equal()` which can optionally ignore:
 
     ```{r}
     str_equal("i", "I", ignore_case = TRUE)
@@ -462,7 +572,7 @@ Fortunately there are three sets of functions where the locale matters:
     str_sort(c("a", "c", "ch", "h", "z"), locale = "cs")
     ```
 
-    Danish has a similar problem.
+    A similar situation arises in Danish.
     Normally, characters with diacritics (e.g. à, á, â) sort after the plain character (e.g. a).
     But in Danish ø and å are their own letters that come at the end of the alphabet:
 
