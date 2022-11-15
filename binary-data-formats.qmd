@@ -7,23 +7,38 @@ source("_common.R")
 status("drafting")
 ```
 
-## Introduction to arrow
+## Introduction
 
--   out of memory, fast
--   cross-language
+### Prerequisites
 
-## The Seattle library data
+This chapter focuses on large data sets, and binary file formats that are well suited to working with them.
+We'll use a data set of item checkouts from Seattle public libraries, available online at [data.seattle.gov/Community/Checkouts-by-Title/tmmm-ytt6](https://data.seattle.gov/Community/Checkouts-by-Title/tmmm-ytt6).
+The data is distributed as a single 9GB csv file, so it may take some time to download.
+For the purposes of this chapter we'll assume that you have a local copy of the file at `data/seattle-library-checkout.csv`.
 
-The data set is available at [data.seattle.gov/Community/Checkouts-by-Title/tmmm-ytt6](https://data.seattle.gov/Community/Checkouts-by-Title/tmmm-ytt6), formatted as a single 9GB csv file.
-Let's suppose we have downloaded this file to `data/seattle-library-checkout.csv`.
+```{r}
+#| message: false
+#| warning: false
+library(tidyverse)
+library(arrow)
+library(duckdb)
+library(dbplyr)
+```
+
+## The arrow package
+
+In this chapter we'll rely on Apache Arrow ([arrow.apache.org](https://arrow.apache.org/)), a multi-language toolbox designed for efficient analysis and transport of large data sets.
+The arrow package provides a standard way to use Apache Arrow in R, and allows you to analyze larger-than-memory datasets using familiar dplyr syntax.
+As an additional benefit, arrow is extremely fast: you'll see some examples later in the chapter.
+
+### Opening a dataset
+
+Let's start by taking a look at the Seattle library checkout data.
+At 9GB in size, the csv file is large enough that we probably don't want to load the whole thing into memory.
+Instead of using `read_csv()` we'll use the `open_dataset()` function from the arrow package:
+
 The data set is large enough that we might not want to try loading the entire thing into memory.
 Instead, we'll use `arrow::open_dataset()` to scan the file on-disk and create an Arrow Dataset object called `seattle_lib`:
-
-```{r load-packages-1}
-library(tibble)
-library(dplyr, warn.conflicts = FALSE)
-library(arrow, warn.conflicts = FALSE)
-```
 
 ```{r open-dataset}
 seattle_lib <- open_dataset(
@@ -32,38 +47,187 @@ seattle_lib <- open_dataset(
 )
 ```
 
-This object doesn't store the library checkout data in memory, which we can verify by comparing the on-disk size calculated by `fs::file_size()` to the in-memory size calculated by `lobstr::obj_size()`:
-
-```{r compare-sizes}
-#| cache: true
-fs::file_size("data/seattle-library-checkouts.csv")
-lobstr::obj_size(seattle_lib)
-```
-
-The `seattle_lib` Dataset occupies 13MB in-memory, much smaller than the on-disk file size of 9GB.
-
-Though the data remain on disk and are not stored in R, it is still possible to interact with a Dataset using dplyr functions as if it were.
-Let's use `glimpse()` to take a look at the data:
+When this code is run, `open_dataset()` scans the file to work out its structure and creates the `seattle_lib` object that stores metadata.
+The data remain on-disk, and are not loaded into memory.
+Nevertheless, we are able to call dplyr functions to interact with the data:
 
 ```{r glimpse-data}
 #| cache: true
 glimpse(seattle_lib)
 ```
 
-## Reencoding the data as a parquet file
+The first line in the output tell you that `seattle_lib` is stored locally on-disk as a single csv file.
+The second line indicates that the data are stored as a tabular data set with 41 million rows and 12 columns.
+
+### Using dplyr with arrow
+
+Writing dplyr code for arrow data is conceptually similar to dbplyr, described in @sec-import-databases.
+The dplyr code that you write in R is internally transformed to a query that the Apache Arrow C++ library understands, which is then executed when you call `collect()`.
+Here's an example that counts the total number of books checked out in each year:
+
+```{r books-by-year}
+#| cache: true
+seattle_lib |> 
+  filter(MaterialType == "BOOK") |>
+  group_by(CheckoutYear) |>
+  summarise(TotalCheckouts = sum(Checkouts)) |>
+  arrange(desc(CheckoutYear)) |>
+  collect()
+```
+
+Only some R expressions are understood by arrow, so you will not necessarily be able to write exactly the same code you usually would.
+However, the list of operations and functions supported is fairly extensive and growing.
+A complete list is provided in the arrow package documentation at [arrow.apache.org/docs/r/reference/acero.html](https://arrow.apache.org/docs/r/reference/acero.html).
+
+## The parquet file format
+
+### Advantages of parquet
+
+When working with small data sets, it's often convenient to use csv files because they extremely simple: they're plain text files, human readable, and supported by almost every data analysis tool you might want to use.
+However, there are some drawbacks that become a problem when your data set becomes large:
+
+-   Ambiguity.
+    A csv file does not uniquely specify what data structure should be read.
+    For example, a csv reader has to guess whether `"2022-10-08"` should be parsed as a string or a date.
+    If it is a date, it has to guess whether the date refers to October 8th or August 10th.
+
+-   Inaccuracy.
+    Plain text files can be inaccurate in storing binary numeric data because of precision issues.
+    As an example, let's try writing 1000 random numbers to a csv file and then reloading the data from the file
+
+    ```{r csv-precision-failure}
+    #| message: false
+    csv_file <- tempfile()
+    original <- tibble(old_x = rnorm(1000))
+    write_csv(original, csv_file)
+    reloaded <- read_csv(csv_file) |>
+      rename(new_x = old_x)
+    ```
+
+    Now let's compare the two, counting the number of times the original value is strictly identical to the reloaded one:
+
+    ```{r csv-precision-failure-2}
+    bind_cols(original, reloaded) |> 
+      mutate(same_value = old_x == new_x) |>
+      count(same_value)
+    ```
+
+    A substantial proportion of the reloaded values differ from the original ones.
+    These differences are very small, caused by the csv representing numeric values in limited precision, but this can still be a source of problems in your analysis code.
+
+-   Poor performance.
+    Compared to other formats, csv files can be slow to read and write because the on-disk format is very different to how the data needs to be represented in-memory.
+
+The [Apache Parquet file format](https://parquet.apache.org/) is designed to address these limitations.
+A parquet file stores data in binary format, avoiding inaccuracies in encoding and making it faster to read and write.
+It also stores metadata that specify the data types stored in each column, avoiding the ambiguity of csv files and -- in some situations -- speeding up data analysis.
+Finally, parquet files are compressed by default, and are typically much smaller than csv files.
+
+### Reading and writing parquet files
+
+The arrow package supplies `read_parquet()` and `write_parquet()` functions that can read and write data in the parquet format.
+To see both in action, let's repeat the example from the last section, this time using parquet format:
+
+```{r parquet-precision-success}
+#| message: false
+parquet_file <- tempfile()
+original <- tibble(old_x = rnorm(1000))
+write_parquet(original, parquet_file)
+
+reloaded <- read_parquet(parquet_file) |>
+  rename(new_x = old_x)
+
+bind_cols(original, reloaded) |> 
+  mutate(same_value = old_x == new_x) |>
+  count(same_value)
+```
+
+As you can see, numeric values stored in parquet files are stored faithfully.
+Loading the data from file produces the same values in the original data set.
+
+### Parquet files are smaller
+
+We can use the Seattle library data set to highlight the advantage in file size.
+The `write_parquet()` function can take an Arrow Dataset object like `seattle_lib` as the input, so we can write the file like this:
 
 ```{r write-parquet}
 #| eval: false
 write_parquet(seattle_lib, "data/seattle-library-checkouts.parquet")
 ```
 
-The file is smaller:
+Now let's compare the two files in size:
 
 ```{r}
-fs::file_size("data/seattle-library-checkouts.parquet")
+file.size("data/seattle-library-checkouts.csv")
+file.size("data/seattle-library-checkouts.parquet")
 ```
 
-## Splitting the data across multiple parquet files
+The parquet file is about half the size of the csv file.
+
+### Parquet files are faster
+
+The format of your data file can have a substantial impact on how long a data analysis pipeline takes to execute.
+To see this, let's time how long it takes to count the number of books checked out per year when the data are stored in csv format:
+
+```{r dataset-performance-csv}
+#| cache: true
+system.time({
+  open_dataset(
+    sources = "data/seattle-library-checkouts.csv", 
+    format = "csv"
+  ) |>
+    filter(CheckoutYear == 2021, MaterialType == "BOOK") |>
+    group_by(CheckoutMonth) |>
+    summarise(TotalCheckouts = sum(Checkouts)) |>
+    arrange(desc(CheckoutMonth)) |>
+    collect()
+})
+```
+
+Now let's repeat the exercise using the parquet file:
+
+```{r dataset-performance-parquet}
+#| cache: true
+system.time({
+  open_dataset(
+    sources = "data/seattle-library-checkouts.parquet", 
+    format = "parquet"
+  ) |>
+    filter(CheckoutYear == 2021, MaterialType == "BOOK") |>
+    group_by(CheckoutMonth) |>
+    summarise(TotalCheckouts = sum(Checkouts)) |>
+    arrange(desc(CheckoutMonth)) |>
+    collect()
+})
+```
+
+The analysis of the parquet data finishes in about one tenth the time it takes to perform the same analysis with the csv data.
+
+## Multi-file data sets
+
+When data sets become large it is often useful to split the data across many files rather than storing everything in a single large file.
+When this structuring is done intelligently, the multi-file strategy can lead to significant improvements in performance.
+We'll illustrate this using the Seattle library data and the arrow package.
+
+### Writing multi-file data sets
+
+When deciding to pursue a multi-file strategy, the first task is to decide how to partition your data set.
+If you break the data set into too few files you won't gain the performance improvements you're hoping for, but if you break it into too many you won't gain much either.
+If you split the data in a meaningful way, you'll get some performance advantages, but if you split the data randomly you probably won't see a lot of gains.
+There are no hard and fast rules about how to partition a data set: the results will depend on your data, access patterns, and the systems that read the data.
+As a rough guide, the arrow package documentation suggests the following heuristics:
+
+-   Avoid files smaller than 20MB and larger than 2GB.
+-   Avoid partitioning layouts that produce more than 10,000 distinct files.
+
+According to these guidelines, the Seattle library data is a little too large to be stored as a single 4GB parquet file.
+We should consider splitting it up.
+
+As a general rule, a useful strategy for partitioning a large dataset is to create meaningful subsets based on a variable that you're likely to query on.
+For the library data it seems likely that we would often want to analyze the data separately by year, so the `CheckoutYear` column seems like a good candidate.
+
+Partitioning a data set can be done using the `write_dataset()` function from the arrow package, which respects the grouping created by the dplyr `group_by()` function.
+To create a multi-file data set with one parquet file per year of library data we would do the following:
 
 ```{r write-dataset}
 #| eval: false
@@ -78,10 +242,9 @@ seattle_lib |>
 Let's take a look at the files:
 
 ```{r show-parquet-files}
-seattle_lib_files <- fs::dir_ls(
+seattle_lib_files <- list.files(
   path = "data/seattle-library-checkouts",
-  type = "file",
-  recurse = TRUE
+  recursive = TRUE
 ) 
 seattle_lib_files
 ```
@@ -90,65 +253,24 @@ seattle_lib_files
 -   something general about the multiple files strategy
 -   mention arrow (e.g.) S3 support
 
-## Using dplyr with arrow
-
-Find the top 10 books in 2021:
-
-```{r arrow-dplyr-example}
-open_dataset("data/seattle-library-checkouts/") |>
-  filter(CheckoutYear == 2021, MaterialType == "BOOK") |> 
-  group_by(Title) |> 
-  summarize(AnnualCheckouts = sum(Checkouts)) |> 
-  ungroup() |>
-  slice_max(AnnualCheckouts, n = 10, with_ties = FALSE) |>
-  collect()
-```
-
--   it's just dplyr
--   collect()
--   things that don't work (yet)
-
-## Performance advantages
-
-```{r top-10-function}
-top_10_books <- function(source, format) {
-  open_dataset(source, format = format) |>
-    filter(CheckoutYear == 2021, MaterialType == "BOOK") |> 
-    group_by(Title) |> 
-    summarize(AnnualCheckouts = sum(Checkouts)) |> 
-    ungroup() |>
-    slice_max(AnnualCheckouts, n = 10, with_ties = FALSE) |>
-    collect()
-}
-```
-
-```{r dataset-performance-csv}
-#| cache: true
-system.time(
-  top_10_books("data/seattle-library-checkouts.csv", "csv")
-)
-```
-
-```{r dataset-performance-parquet}
-#| cache: true
-system.time(
-  top_10_books("data/seattle-library-checkouts.parquet", "parquet")
-)
-```
+### Performance considerations
 
 ```{r dataset-performance-multiple-parquet}
 #| cache: true
-system.time(
-  top_10_books("data/seattle-library-checkouts", "parquet")
-)
+system.time({
+  open_dataset(
+    sources = "data/seattle-library-checkouts/", 
+    format = "parquet"
+  ) |>
+    filter(CheckoutYear == 2021, MaterialType == "BOOK") |>
+    group_by(CheckoutMonth) |>
+    summarise(TotalCheckouts = sum(Checkouts)) |>
+    arrange(desc(CheckoutMonth)) |>
+    collect()
+})
 ```
 
 ## Using duckdb with arrow
-
-```{r load-packages-2}
-library(duckdb)
-library(dbplyr)
-```
 
 ```{r use-duckdb}
 open_dataset("data/seattle-library-checkouts/") |>
@@ -163,3 +285,4 @@ open_dataset("data/seattle-library-checkouts/") |>
 
 -   show how you can also access via duckdb and dbplyr
 -   keep it brief; point is to illustrate using same data source in multiple tools
+
