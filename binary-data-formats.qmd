@@ -81,23 +81,43 @@ A complete list is provided in the arrow package documentation at [arrow.apache.
 
 ## The parquet file format
 
-### Advantages of parquet
-
-When working with small data sets, it's often convenient to use csv files because they extremely simple: they're plain text files, human readable, and supported by almost every data analysis tool you might want to use.
-However, there are some drawbacks that become a problem when your data set becomes large:
+When working with small data sets, csv files can be convenient: they're human readable plain text files, and most analysis tools can read data from a csv.
+However, there are some drawbacks:
 
 -   Ambiguity.
-    A csv file does not uniquely specify what data structure should be read.
+    A csv file does not uniquely specify the data structure.
     For example, a csv reader has to guess whether `"2022-10-08"` should be parsed as a string or a date.
     If it is a date, it has to guess whether the date refers to October 8th or August 10th.
+    Here is a slightly contrived example.
+    Here is a small tibble that contains some integers and some strings that look suspiciously like dates:
+
+    ```{r csv-ambiguity-example}
+    original <- tibble(
+      integers = 1L:3L,
+      strings = c("2022-01-01", "1980-12-01", "1900-12-12")
+    )
+    original
+    ```
+
+    Simple though it is, this data set poses problems for a csv file.
+    The csv version of this data does not explicitly specify that the first column contains integers and the second column contains strings.
+    This produces ambiguity because the csv reader guesses that the data types are double and character respectively:
+
+    ```{r csv-ambiguity-failure}
+    csv_file <- tempfile(fileext = ".csv")
+    write_csv(original, csv_file)
+    read_csv(csv_file, show_col_types = FALSE)
+    ```
+
+    The `read_csv()` and `write_csv()` functions are designed to avoid this issue to an extent, but it is impossible to avoid it completely because the csv format is inherently ambiguous.
 
 -   Inaccuracy.
-    Plain text files can be inaccurate in storing binary numeric data because of precision issues.
-    As an example, let's try writing 1000 random numbers to a csv file and then reloading the data from the file
+    Plain text files store binary numeric data inaccurately due to precision limits.
+    We can verify this by writing 1000 random numbers to a csv file and then reloading the data from the file
 
     ```{r csv-precision-failure}
     #| message: false
-    csv_file <- tempfile()
+    csv_file <- tempfile(fileext = ".csv")
     original <- tibble(old_x = rnorm(1000))
     write_csv(original, csv_file)
     reloaded <- read_csv(csv_file) |>
@@ -113,30 +133,72 @@ However, there are some drawbacks that become a problem when your data set becom
     ```
 
     A substantial proportion of the reloaded values differ from the original ones.
-    These differences are very small, caused by the csv representing numeric values in limited precision, but this can still be a source of problems in your analysis code.
+    These differences are very small in magnitude, and occur because the csv represents numeric values with limited precision.
+    Even so this can still be a source of problems in your analysis code.
 
 -   Poor performance.
     Compared to other formats, csv files can be slow to read and write because the on-disk format is very different to how the data needs to be represented in-memory.
+    We'll see some examples of this later in the chapter.
 
 The [Apache Parquet file format](https://parquet.apache.org/) is designed to address these limitations.
-A parquet file stores data in binary format, avoiding inaccuracies in encoding and making it faster to read and write.
-It also stores metadata that specify the data types stored in each column, avoiding the ambiguity of csv files and -- in some situations -- speeding up data analysis.
-Finally, parquet files are compressed by default, and are typically much smaller than csv files.
+Like a csv file, a parquet file stores a single rectangular data set.
+Features of the parquet format that make it appealing for data scientists include:
 
-### Reading and writing parquet files
+-   Parquet files store data in a binary format (not plain text), avoiding inaccuracies in encoding and making it faster to read and write than a csv file.
+-   Parquet files store metadata that uniquely identifies the data types stored in each column, which avoids the ambiguity of csv files.
+-   Parquet files are compressed by default, and are typically much smaller than the corresponding csv files would be.
+-   Parquet files internally break the data into distinct "chunks" each with associated metadata, making it possible to write intelligent file readers that can jump straight to a specific part of the data when the full data set is not needed.
+
+All these factors together make the parquet format appealing when working with larger data sets.
 
 The arrow package supplies `read_parquet()` and `write_parquet()` functions that can read and write data in the parquet format.
-To see both in action, let's repeat the example from the last section, this time using parquet format:
+We'll use these functions to explore the advantages to parquet files.
 
-```{r parquet-precision-success}
+### Parquet files are unambiguous
+
+Recall this example from earlier:
+
+```{r}
+original <- tibble(
+  integers = 1L:3L,
+  strings = c("2022-01-01", "1980-12-01", "1900-12-12")
+)
+original
+```
+
+As we saw, writing this data to a csv file and reading it back in leads to a mistake in identifying the data types for each column.
+The parquet format avoids this ambiguity.
+When we write the data set to a parquet file using `write_parquet()` and then read it back in with `read_parquet()`, the data types are preserved:
+
+```{r}
+parquet_file <- tempfile(fileext = ".parquet")
+write_parquet(original, parquet_file)
+read_parquet(parquet_file)
+```
+
+### Parquet files are binary
+
+Earlier in this section we saw an example in which csv files store numeric data inaccurately because they use plain text rather than binary format.
+Let's repeat the exercise using the binary parquet format.
+We first write some random numbers to a parquet file:
+
+```{r parquet-precision-write}
 #| message: false
-parquet_file <- tempfile()
+parquet_file <- tempfile(fileext = ".parquet")
 original <- tibble(old_x = rnorm(1000))
 write_parquet(original, parquet_file)
+```
 
+Next we load the file and give the reloaded variable a new name:
+
+```{r parquet-precision-read}
 reloaded <- read_parquet(parquet_file) |>
   rename(new_x = old_x)
+```
 
+Finally we bind the old and new data sets together and compare them:
+
+```{r parquet-precision-success}
 bind_cols(original, reloaded) |> 
   mutate(same_value = old_x == new_x) |>
   count(same_value)
