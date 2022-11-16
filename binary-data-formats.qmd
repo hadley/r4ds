@@ -140,7 +140,7 @@ However, there are some drawbacks:
     Compared to other formats, csv files can be slow to read and write because the on-disk format is very different to how the data needs to be represented in-memory.
     We'll see some examples of this later in the chapter.
 
-The [Apache Parquet file format](https://parquet.apache.org/) is designed to address these limitations.
+The Apache Parquet file format ([parquet.apache.org](https://parquet.apache.org/)) is designed to address these limitations.
 Like a csv file, a parquet file stores a single rectangular data set.
 Features of the parquet format that make it appealing for data scientists include:
 
@@ -229,7 +229,7 @@ The parquet file is about half the size of the csv file.
 ### Parquet files are faster
 
 The format of your data file can have a substantial impact on how long a data analysis pipeline takes to execute.
-To see this, let's time how long it takes to count the number of books checked out per year when the data are stored in csv format:
+To see this, let's time how long it takes to count the number of books checked out in each month of 2021 when the data are stored in csv format:
 
 ```{r dataset-performance-csv}
 #| cache: true
@@ -271,7 +271,7 @@ When data sets become large it is often useful to split the data across many fil
 When this structuring is done intelligently, the multi-file strategy can lead to significant improvements in performance.
 We'll illustrate this using the Seattle library data and the arrow package.
 
-### Writing multi-file data sets
+### Writing multi-file data
 
 When deciding to pursue a multi-file strategy, the first task is to decide how to partition your data set.
 If you break the data set into too few files you won't gain the performance improvements you're hoping for, but if you break it into too many you won't gain much either.
@@ -311,11 +311,14 @@ seattle_lib_files <- list.files(
 seattle_lib_files
 ```
 
--   show how to convert to parquet
--   something general about the multiple files strategy
--   mention arrow (e.g.) S3 support
+These filenames follow a "self-describing" convention used by the Apache Hive project ([hive.apache.org](https://hive.apache.org/)).
+Hive-style partitions name folders using a "key=value" convention, and the data files in that folder contain the subset of the data for which the key has the relevant value.
+Following this convention makes it easier to locate files relevant to a particular query.
 
-### Performance considerations
+### Performance advantages
+
+Partitioning a large data set into many smaller, meaningful files can produce substantial improvements in performance.
+To illustrate, we'll repeat the analysis of the 2021 Seattle library book checkouts by month using the partitioned data:
 
 ```{r dataset-performance-multiple-parquet}
 #| cache: true
@@ -332,19 +335,69 @@ system.time({
 })
 ```
 
-## Using duckdb with arrow
+This is a 10-fold speed up compared to a single parquet file, and a 100-fold speed up compared to the original csv file.
+
+## Other topics
+
+I haven't quite worked out the best way to integrate these sections.
+
+### Using duckdb with arrow
+
+One useful feature of arrow is that it is interoperable with duckdb and dbplyr.
+It is possible to open a multi-file data set using arrow and then pass it to duckdb using the `to_duckdb()` function.
+Doing so means that your dplyr code will now be interpreted by dbplyr (rather than arrow) and executed by duckdb.
 
 ```{r use-duckdb}
 open_dataset("data/seattle-library-checkouts/") |>
   to_duckdb() |>
-  filter(CheckoutYear == 2021, MaterialType == "BOOK") |> 
-  group_by(Title) |> 
-  summarize(AnnualCheckouts = sum(Checkouts)) |> 
-  ungroup() |>
-  slice_max(AnnualCheckouts, n = 10, with_ties = FALSE) |>
+  filter(CheckoutYear == 2021, MaterialType == "BOOK") |>
+  group_by(CheckoutMonth) |>
+  summarise(TotalCheckouts = sum(Checkouts)) |>
+  arrange(desc(CheckoutMonth)) |>
   collect()
 ```
 
--   show how you can also access via duckdb and dbplyr
--   keep it brief; point is to illustrate using same data source in multiple tools
+There is an analogous function `to_arrow()` that passes control back to arrow, meaning that it is possible to swap back and forth between the duckdb and arrow back ends within a single analysis pipeline.
+This operation is extremely efficient (only the metadata need to be copied from one system to the other) can occasionally be valuable when one system implements functionality that the other does not.
 
+### The arrow in-memory and on-disk format
+
+The main focus in this chapter has been on the parquet format, but it is worth noting in passing that arrow defines its own binary data format that represents data on-disk in (almost) the exact format that it uses when representing rectangular data in-memory.
+To unpack this a little, let's load the parquet file storing the 2021 Seattle library data:
+
+```{r}
+checkouts2021 <- read_parquet(
+  file = "data/seattle-library-checkouts/CheckoutYear=2021/part-0.parquet",
+  as_data_frame = FALSE
+)
+glimpse(checkouts2021)
+```
+
+Note that the first line of output tells us this is a Table object.
+A Table is the Apache Arrow analog to a data frame: it is represented in-memory, and arrow computations are done using these objects.
+For our purposes, the important thing to understand is that the arrow file format is designed to be an exact on-disk analog of an in-memory Table.
+You can read and write these files using the `read_ipc_file()` and `write_ipc_file()` functions in the arrow package:
+
+```{r}
+arrow_file <- tempfile(fileext = ".arrow")
+write_ipc_file(checkouts2021, arrow_file)
+```
+
+Note that for future releases of arrow, these functions are likely to deprecated in favour of the names `read_arrow()` and `write_arrow()` respectively.
+Also note that the arrow file format was previously known as the "feather" file format, and you are likely to see references to it by that name.
+
+To learn more about Datasets, Tables, and other arrow data objects, see the documentation on the arrow package website: [arrow.apache.org/docs/r/](https://arrow.apache.org/docs/r/).
+
+### Data in the cloud
+
+Sometimes when working with large datasets you encounter the situation when data files are stored remotely on cloud storage services such as Amazon's Simple Storage Service (S3) or Google Cloud Storage (GCS).
+Functions in arrow that read and write data, including `open_dataset()`, are able to read and write from remote data sources with the help of the `s3_bucket()` function (for Amazon S3) or the `gs_bucket()` function (for Google cloud).
+An example is shown below:
+
+```{r}
+#| cache: true
+diamonds <- s3_bucket("voltrondata-labs-datasets/diamonds")
+diamonds |> 
+  open_dataset() |>
+  glimpse()
+```
