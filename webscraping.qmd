@@ -7,4 +7,478 @@ source("_common.R")
 status("drafting")
 ```
 
-<!--# TO DO: Write chapter. -->
+This vignette introduces you to the basics of web scraping with [rvest](https://rvest.tidyverse.org).
+Web scraping is a very useful tool for extracting data from web pages.
+Fortunately many web pages are often generated with code, so there's often some underlying structure that you can use to extract data.
+
+In this chapter, you'll first learn the basics of HTML and how to use CSS selectors to refer to specific elements, then you'll learn how to use rvest functions to get data out of HTML and into R.
+
+```{r}
+library(rvest)
+```
+
+### Prerequisites
+
+In this chapter, we'll focus on tools provided by rvest.
+rvest is a member of the tidyverse, but is not a core member so you'll need to load it explicitly.
+We'll also load the full tidyverse since we'll find it generally useful working with the data we've scraped.
+
+```{r}
+#| label: setup
+#| message: false
+
+library(tidyverse)
+library(rvest)
+```
+
+## Ethics and legalities
+
+Overall, it's complicated and what's legal depends on where you live and, not just how you collect it, but what you plan to do with it.
+
+If the data is non-personal, public, and factual, you're likely ok.
+Otherwise, or if you're making a business off the data you're scraping, talk to a lawyer.
+Just be respectful of the server and don't hammer it with thousands of requests.
+<https://dmi3kno.github.io/polite/>
+
+Some good principles in <https://towardsdatascience.com/ethics-in-web-scraping-b96b18136f01>
+
+### Personally identifiable information
+
+Just be very careful if you make that data public and it includes personally indefinable information.
+The data might already be technically public, but aggregating it and publishing it changes things.
+<https://www.wired.com/2016/05/okcupid-study-reveals-perils-big-data-science/>
+
+### Copyright
+
+You also need to worry about copyright.
+This is more important if you're scraping large amounts of text or images, because facts generally aren't held to be copyrightable.
+i.e. if you're building a tibble of data, that's generally not protected by copyright law.
+But again laws here differ between the US and Europe.
+
+### Terms and conditions
+
+Whether or not you need to log in also comes into play here.
+In the US, courts have generally found that simply putting terms of service in the footer of the website isn't enough: you need to explicitly agree to them, typically my creating an account or taking some explicit action like checking a box.
+
+But the situation is different in Europe, where have courts have found that you need to respect the terms and conditions even without explicit consent.
+
+Websites will sometimes encode whether or not scraping is ok with a `robots.txt` file.
+You can use `robotstxt::paths_allowed()` to
+
+## HTML basics
+
+HTML stands for **H**yper**T**ext **M**arkup **L**anguage and looks something like this:
+
+``` html
+<html>
+<head>
+  <title>Page title</title>
+</head>
+<body>
+  <h1 id='first'>A heading</h1>
+  <p>Some text &amp; <b>some bold text.</b></p>
+  <img src='myimg.png' width='100' height='100'>
+</body>
+```
+
+HTML has a hierarchical structure formed by **elements** which consist of a start tag (e.g. `<tag>`), optional **attributes** (`id='first'`), an end tag[^webscraping-1] (like `</tag>`), and **contents** (everything in between the start and end tag).
+
+[^webscraping-1]: A number of tags (including `<p>` and `<li>)` don't require end tags, but I think it's best to include them because it makes seeing the structure of the HTML a little easier.
+
+Since `<` and `>` are used for start and end tags, you can't write them directly.
+Instead you have to use the HTML **escapes** `&gt;` (greater than) and `&lt;` (less than).
+And since those escapes use `&`, if you want a literal ampersand you have to escape it as `&amp;`.
+There are a wide range of possible HTML escapes but you don't need to worry about them too much because rvest automatically handles them for you.
+
+Web scraping is possible because most pages that contain data that you want to scrape generally have a consistent structure.
+
+### Elements
+
+All up, there are over 100 HTML elements.
+Some of the most important are:
+
+-   Every HTML page must be must be in an `<html>` element, and it must have two children: `<head>`, which contains document metadata like the page title, and `<body>`, which contains the content you see in the browser.
+
+-   Block tags like `<h1>` (heading 1), `<p>` (paragraph), and `<ol>` (ordered list) form the overall structure of the page.
+
+-   Inline tags like `<b>` (bold), `<i>` (italics), and `<a>` (links) formats text inside block tags.
+
+If you encounter a tag that you've never seen before, you can find out what it does with a little googling.
+I recommend the [MDN Web Docs](https://developer.mozilla.org/en-US/docs/Web/HTML) which are produced by Mozilla, the company that makes the Firefox web browser.
+
+Most elements can have content in between their start and end tags.
+This content can either be text or more elements.
+For example, the following HTML contains paragraph of text, with one word in bold.
+
+```{=html}
+<p>
+  Hi! My <b>name</b> is Hadley.
+</p>
+```
+The **children** of a node refers only to elements, so the `<p>` element above has one child, the `<b>` element.
+The `<b>` element has no children, but it does have contents (the text "name").
+
+Some elements, like `<img>` can't have children.
+These elements depend solely on attributes for their behavior.
+
+Tags can have named **attributes** which look like `name1='value1' name2='value2'`.
+Two of the most important attributes are `id` and `class`, which are used in conjunction with CSS (Cascading Style Sheets) to control the visual appearance of the page.
+These are often useful when scraping data off a page.
+
+### Reading HTML
+
+You'll usually start the scraping process with `read_html()`.
+This returns a `xml_document`[^webscraping-2] object which you'll then manipulate using rvest functions:
+
+[^webscraping-2]: This class comes from the [xml2](https://xml2.r-lib.org) package.
+    xml2 is a low-level package that rvest builds on top of.
+
+```{r}
+html <- read_html("http://rvest.tidyverse.org/")
+html
+```
+
+### Generating html
+
+For examples and experimentation, rvest also includes a function that lets you create an `xml_document` from literal HTML:
+
+```{r}
+html <- minimal_html("
+  <p>This is a paragraph<p>
+  <ul>
+    <li>This is a bulleted list</li>
+  </ul>
+")
+html
+```
+
+Regardless of how you get the HTML, you'll need some way to identify the elements that contain the data you care about.
+rvest provides two options: CSS selectors and XPath expressions.
+Here I'll focus on CSS selectors because they're simpler but still sufficiently powerful for most scraping tasks.
+
+## Extracting data
+
+### Tables
+
+HTML tables are composed four main elements: `<table>`, `<tr>` (table row), `<th>` (table heading), and `<td>` (table data).
+Here's a simple HTML table with two columns and three rows:
+
+```{r}
+html <- minimal_html("
+  <table>
+    <tr>
+      <th>x</th>
+      <th>y</th>
+    </tr>
+    <tr>
+      <td>1.5</td>
+      <td>2.7</td>
+    </tr>
+    <tr>
+      <td>4.9</td>
+      <td>1.3</td>
+    </tr>
+    <tr>
+      <td>7.2</td>
+      <td>8.1</td>
+    </tr>
+  </table>
+  ")
+```
+
+Because tables are a common way to store data, rvest includes the handy `html_table()` which converts a table into a data frame:
+
+```{r}
+tables <- html |> html_table()
+tables[[1]]
+```
+
+```{r}
+url <- "https://en.wikipedia.org/wiki/R_(programming_language)"
+html <- read_html(url)
+html |> 
+  html_table() |> 
+  nth(2) |> 
+  mutate(Date = parse_date(Date))
+```
+
+### Find elements
+
+CSS is short for cascading style sheets, and is a tool for defining the visual styling of HTML documents.
+CSS includes a miniature language for selecting elements on a page called **CSS selectors**.
+CSS selectors define patterns for locating HTML elements, and are useful for scraping because they provide a concise way of describing which elements you want to extract.
+
+The three most important selectors are:
+
+-   `p` selects all `<p>` elements.
+
+-   `.title` selects all elements with `class` "title".
+
+-   `#title` selects the element with the `id` attribute that equals "title".
+    Id attributes must be unique within a document, so this will only ever select a single element.
+
+Lets try out the most important selectors with a simple example:
+
+```{r}
+html <- minimal_html("
+  <h1>This is a heading</h1>
+  <p id='first'>This is a paragraph</p>
+  <p class='important'>This is an important paragraph</p>
+")
+```
+
+You can find all the elements that match the selector with `html_elements()`:
+
+```{r}
+html |> html_elements("p")
+html |> html_elements(".important")
+html |> html_elements("#first")
+```
+
+Another important function is `html_element()`, which you usually apply to a selection returned by `html_elements()`.
+It returns the first match for each element.
+
+```{r}
+html <- minimal_html("
+<ul>
+  <li>This is a <strong>a</strong> <strong>b</strong></li>
+  <li>This is a paragraph</li>
+  <li>This is an important paragraph <strong>c</strong></li>
+</ul>
+")
+```
+
+You can also apply `html_element()` and `html_elements()` repeatedly
+
+```{r}
+html |> html_elements("li")
+html |> html_elements("li") |> html_element("strong")
+```
+
+Compare this to the result of using `html_elements()` again:
+
+```{r}
+html |> html_elements("li") |> html_elements("strong")
+```
+
+This finds all `<strong>` elements, but loses the relationship to the original `<li>`.
+For this reason, when scraping you'll often use `html_elements()` to extract elements that correspond to the observation, and `html_element()` to identify the elements that correspond to the variables within that row.
+
+### Text
+
+Use `html_text2()` to extract the plain text contents of an HTML element:
+
+```{r}
+html <- minimal_html("
+  <ol>
+    <li>apple &amp; pear</li>
+    <li>banana</li>
+    <li>pineapple</li>
+  </ol>
+")
+html |> 
+  html_elements("li") |> 
+  html_text2()
+```
+
+Note that the escaped ampersand is automatically converted to `&`; you'll only ever see HTML escapes in the source HTML, not in the data returned by rvest.
+
+Note that we use `html_text2()` here, not `html_text()`.
+The main difference is how the two functions handle white space.
+In HTML, white space is largely ignored, and it's the structure of the elements that defines how text is laid out.
+`html_text2()` uses some heuristics to roughly mimic what you'd see in the browser.
+
+### Attributes
+
+Attributes are used to record the destination of links (the `href` attribute of `<a>` elements) and the source of images (the `src` attribute of the `<img>` element):
+
+```{r}
+html <- minimal_html("
+  <p><a href='https://en.wikipedia.org/wiki/Cat'>cats</a></p>
+  <img src='https://cataas.com/cat' width='100' height='200'>
+")
+```
+
+The value of an attribute can be retrieved with `html_attr()`:
+
+```{r}
+html |> 
+  html_elements("a") |> 
+  html_attr("href")
+
+html |> 
+  html_elements("img") |> 
+  html_attr("src")
+```
+
+Note that `html_attr()` always returns a string, so you may need to post-process with `as.integer()`/`readr::parse_integer()` or similar.
+
+```{r}
+html |> 
+  html_elements("img") |> 
+  html_attr("width") |> 
+  parse_integer()
+```
+
+### More about selectors
+
+Selectors can also be combined in various ways using **combinators**.
+For example,The most important combinator is `" "`, the **descendant** combination, because `p a` selects all `<a>` elements that are a child of a `<p>` element.
+
+`p > a` immediate child
+
+`[attr]`, `[attr=value]`
+
+`p.special` selects all `<p>` elements with `class` "special".
+
+`strong, b` selects `<strong>` or `<b>`.
+
+Lots more at <https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Selectors>.
+
+Similar to regular expressions: mini language for describing patterns in a tree.
+Like regular expressions they can be pretty opaque.
+<https://kittygiraudel.github.io/selectors-explained/>.
+`section.main h2 > small`
+
+If you want to learn more CSS selectors I recommend starting with the fun [CSS dinner](https://flukeout.github.io/) tutorial and then referring to the [MDN web docs](https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Selectors).
+
+CSS selectors can be quite complex, but fortunately you only need the simplest for rvest, because you can write R code to handle more complicated situations.
+As in @sec-boolean-operations, don't forget that you're in R, and sometimes it might be easier to solve the problem using R code rather than with a more complex selector.
+
+### Determining the selector
+
+Figuring out the selector you need for your data is typically the hardest part of the problem and you'll often need to do some experimenting to get something is a both specific (i.e. it doesn't select things you don't care about) and sensitive (i.e. it does select everything you care about).
+
+You have two main tools at your disposal: your browser's devtools (which allow you to easily see the source code of the page) and [SelectorGadget](https://rvest.tidyverse.org/articles/selectorgadget.html), a javascript widget that will generate the selector you need by supplying positive and negative examples in the browser.
+
+It's much easier to show this process than describe it, so we recommend you watch Mine's video: <https://www.youtube.com/watch?v=PetWV5g1Xsc>
+
+## Case study
+
+There's some risk that these examples may no longer work when you run them --- that's the fundamental challenge of web scraping, if the structure of the site changes, then you'll have to change your scraping code.
+
+```{r}
+url <- "https://www.imdb.com/chart/top"
+html <- read_html(url)
+
+html |> html_elements(".titleColumn") |> html_text2()
+html |> html_elements(".titleColumn a") |> html_text2()
+html |> html_elements(".secondaryInfo") |> html_text2()
+
+html |> html_elements("td strong") |> html_text2()
+html |> html_elements("td strong") |> html_attr("title")
+```
+
+```{r}
+df <- tibble(
+  rank_title_year = html |> html_elements(".titleColumn") |> html_text2(),
+  rating_n = html |> html_elements("td strong") |> html_attr("title")
+)
+df |> 
+  separate_wider_regex(
+    rank_title_year,
+    patterns = c(
+      rank = "\\d+", "\\. ",
+      title = ".+", " \\(",
+      year = "\\d+", "\\)"
+    )
+  ) |> 
+  separate_wider_regex(
+    rating_n,
+    patterns = c(
+      rating = "[0-9.]+", 
+      " based on ",
+      number = "[0-9,]+",
+      " user ratings"
+    )
+  ) |> 
+  mutate(
+    rank = parse_number(rank),
+    year = parse_integer(year),
+    rating = parse_double(rating),
+    number = parse_number(number)
+  )
+```
+
+```{r}
+url <- "https://rvest.tidyverse.org/articles/starwars.html"
+html <- read_html(url)
+
+section <- html |> html_elements("section")
+
+tibble(
+  title = section |> html_element("h2") |> html_text2(),
+  released = section |> html_element("p") |> html_text2() |> str_remove("Released: ") |> parse_date(),
+  intro = section |> html_element(".crawl") |> html_text2()
+)
+```
+
+```{r}
+url <- "https://rvest.tidyverse.org/reference/index.html"
+html <- read_html(url)
+
+html |> html_elements("#main a") |> html_text()
+html |> html_elements("#main a") |> html_attr("href")
+```
+
+### Element vs elements
+
+When using rvest, your eventual goal is usually to build up a data frame, and you want each row to correspond some repeated unit on the HTML page.
+In this case, you should generally start by using `html_elements()` to select the elements that contain each observation then use `html_element()` to extract the variables from each observation.
+This guarantees that you'll get the same number of values for each variable because `html_element()` always returns the same number of outputs as inputs.
+
+To illustrate this problem take a look at this simple example I constructed using a few entries from `dplyr::starwars`:
+
+```{r}
+html <- minimal_html("
+  <ul>
+    <li><b>C-3PO</b> is a <i>droid</i> that weighs <span class='weight'>167 kg</span></li>
+    <li><b>R2-D2</b> is a <i>droid</i> that weighs <span class='weight'>96 kg</span></li>
+    <li><b>Yoda</b> weighs <span class='weight'>66 kg</span></li>
+    <li><b>R4-P17</b> is a <i>droid</i></li>
+  </ul>
+  ")
+```
+
+If you try to extract name, species, and weight directly, you end up with one vector of length four and two vectors of length three, and no way to align them:
+
+```{r}
+html |> html_elements("b") |> html_text2()
+html |> html_elements("i") |> html_text2()
+html |> html_elements(".weight") |> html_text2()
+```
+
+Instead, use `html_elements()` to find a element that corresponds to each character, then use `html_element()` to extract each variable for all observations:
+
+```{r}
+characters <- html |> html_elements("li")
+
+characters |> html_element("b") |> html_text2()
+characters |> html_element("i") |> html_text2()
+characters |> html_element(".weight") |> html_text2()
+```
+
+As you can see, `html_element()` automatically fills in `NA` when no elements match, keeping all of the variables aligned and making it easy to create a tibble:
+
+```{r}
+tibble(
+  name = characters |> html_element("b") |> html_text2(),
+  species = characters |> html_element("i") |> html_text2(),
+  weight = characters |> html_element(".weight") |> html_text2()
+)
+```
+
+## Dynamic sites
+
+rvest works directly with HTML files, bypassing the browser entirely.
+This makes it rather more efficient (since it never has to try laying out the page or running any javascript), but it also means that it can't access any dynamic page content.
+Some modern websites don't include the data in the html that you download, but dynamically generate it in javascript.
+
+In that case, rvest can still help you via the chromote package.
+The chromote package actually runs chrome in the background --- it uses the website in exactly the same way you would manually.
+Then the trick is just interacting with the website like a human.
+
+Still possible but you need to simulate a complete browser.
+This is relatively straightforward in rvest: you just change how you access the data: <https://github.com/tidyverse/rvest/issues/245>
+
+## Summary
