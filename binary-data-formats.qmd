@@ -16,7 +16,7 @@ We'll use a data set of item checkouts from Seattle public libraries, available 
 The data is distributed as a single 9GB csv file, so it may take some time to download.
 For the purposes of this chapter we'll assume that you have a local copy of the file at `data/seattle-library-checkout.csv`.
 
-```{r}
+```{r load-packages}
 #| message: false
 #| warning: false
 library(tidyverse)
@@ -158,7 +158,7 @@ We'll use these functions to explore the advantages to parquet files.
 
 Recall this example from earlier:
 
-```{r}
+```{r ambiguous-data-frame}
 original <- tibble(
   integers = 1L:3L,
   strings = c("2022-01-01", "1980-12-01", "1900-12-12")
@@ -170,7 +170,7 @@ As we saw, writing this data to a csv file and reading it back in leads to a mis
 The parquet format avoids this ambiguity.
 When we write the data set to a parquet file using `write_parquet()` and then read it back in with `read_parquet()`, the data types are preserved:
 
-```{r}
+```{r read-parquet-unambigiously}
 parquet_file <- tempfile(fileext = ".parquet")
 write_parquet(original, parquet_file)
 read_parquet(parquet_file)
@@ -213,13 +213,13 @@ We can use the Seattle library data set to highlight the advantage in file size.
 The `write_parquet()` function can take an Arrow Dataset object like `seattle_lib` as the input, so we can write the file like this:
 
 ```{r write-parquet}
-#| eval: false
+#| eval: !expr "!file.exists('data/seattle-library-checkouts.parquet')"
 write_parquet(seattle_lib, "data/seattle-library-checkouts.parquet")
 ```
 
 Now let's compare the two files in size:
 
-```{r}
+```{r compare-file-sizes}
 file.size("data/seattle-library-checkouts.csv")
 file.size("data/seattle-library-checkouts.parquet")
 ```
@@ -292,7 +292,7 @@ Partitioning a data set can be done using the `write_dataset()` function from th
 To create a multi-file data set with one parquet file per year of library data we would do the following:
 
 ```{r write-dataset}
-#| eval: false
+#| eval: !expr "!file.exists('data/seattle-library-checkouts/CheckoutYear=2021/part-0.parquet')"
 seattle_lib |>
   group_by(CheckoutYear) |>
   write_dataset(
@@ -365,7 +365,8 @@ This operation is extremely efficient (only the metadata need to be copied from 
 The main focus in this chapter has been on the parquet format, but it is worth noting in passing that arrow defines its own binary data format that represents data on-disk in (almost) the exact format that it uses when representing rectangular data in-memory.
 To unpack this a little, let's load the parquet file storing the 2021 Seattle library data:
 
-```{r}
+```{r read-arrow-table}
+"!file.exists('data/seattle-library-checkouts/CheckoutYear=2021/part-0.parquet')"
 checkouts2021 <- read_parquet(
   file = "data/seattle-library-checkouts/CheckoutYear=2021/part-0.parquet",
   as_data_frame = FALSE
@@ -378,7 +379,7 @@ A Table is the Apache Arrow analog to a data frame: it is represented in-memory,
 For our purposes, the important thing to understand is that the arrow file format is designed to be an exact on-disk analog of an in-memory Table.
 You can read and write these files using the `read_ipc_file()` and `write_ipc_file()` functions in the arrow package:
 
-```{r}
+```{r write-arrow-file}
 arrow_file <- tempfile(fileext = ".arrow")
 write_ipc_file(checkouts2021, arrow_file)
 ```
@@ -394,7 +395,7 @@ Sometimes when working with large datasets you encounter the situation when data
 Functions in arrow that read and write data, including `open_dataset()`, are able to read and write from remote data sources with the help of the `s3_bucket()` function (for Amazon S3) or the `gs_bucket()` function (for Google cloud).
 An example is shown below:
 
-```{r}
+```{r open-s3-dataset}
 #| cache: true
 diamonds <- s3_bucket("voltrondata-labs-datasets/diamonds")
 diamonds |> 
