@@ -454,7 +454,7 @@ In the following sections we'll explore the sorts of handy functions you might w
 If you commonly perform the same set of summaries when doing initial data exploration, you might consider wrapping them up in a helper function:
 
 ```{r}
-summary6 <- function(data, var) {
+summary6 <- function(data, var, .by = NULL) {
   data |> summarise(
     min = min({{ var }}, na.rm = TRUE),
     mean = mean({{ var }}, na.rm = TRUE),
@@ -462,29 +462,22 @@ summary6 <- function(data, var) {
     max = max({{ var }}, na.rm = TRUE),
     n = n(),
     n_miss = sum(is.na({{ var }})),
-    .groups = "drop"
+    .by = {{ .by }}
   )
 }
 diamonds |> summary6(carat)
+
+diamonds |> summary6(carat, .by = cut)
 ```
 
-(Whenever you wrap `summarise()` in a helper, we think it's good practice to set `.groups = "drop"` to both avoid the message and leave the data in an ungrouped state.)
-
-The nice thing about this function is because it wraps `summarise()` you can used it on grouped data:
-
-```{r}
-diamonds |> 
-  group_by(cut) |> 
-  summary6(carat)
-```
+(Whenever you wrap `summarise()` in a helper, we think it's good practice to pass `.by` along so the user can choose the grouping.)
 
 Because the arguments to summarize are data-masking that also means that the `var` argument to `summary6()` is data-masking.
 That means you can also summarize computed variables:
 
 ```{r}
 diamonds |> 
-  group_by(cut) |> 
-  summary6(log10(carat))
+  summary6(log10(carat), .by = cut)
 ```
 
 To summarize multiple variables you'll need to wait until @sec-across, where you'll learn how to use `across()`.
@@ -538,16 +531,17 @@ flights_sub(dest == "IAH", contains("time"))
 
 ### Data-masking vs tidy-selection
 
+<!-- This section is totally invalidated -->
+
 Sometimes you want to select variables inside a function that uses data-masking.
 For example, imagine you want to write a `count_missing()` that counts the number of missing observations in rows.
 You might try writing something like:
 
 ```{r}
 #| error: true
-count_missing <- function(df, group_vars, x_var) {
+count_missing <- function(df, x_var) {
   df |> 
-    group_by({{ group_vars }}) |> 
-    summarise(n_miss = sum(is.na({{ x_var }})))
+    summarise(n_miss = sum(is.na({{ x_var }})), by = {{ by }})
 }
 flights |> 
   count_missing(c(year, month, day), dep_time)

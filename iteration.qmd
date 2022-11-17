@@ -17,7 +17,7 @@ In most other languages, you'd need to explicitly double each element of x using
 This book has already given you a small but powerful number of tools that perform the same action for multiple "things":
 
 -   `facet_wrap()` and `facet_grid()` draws a plot for each subset.
--   `group_by()` plus `summarise()` computes a summary statistics for each subset.
+-   `summarise()` plus `.by` computes a summary statistics for each subset.
 -   `unnest_wider()` and `unnest_longer()` create new rows and columns for each element of a list-column.
 
 Now it's time to learn some more general tools, often called **functional programming** tools because they are built around functions that take other functions as inputs.
@@ -99,8 +99,7 @@ df <- tibble(
 )
 
 df |> 
-  group_by(grp) |> 
-  summarise(across(everything(), median))
+  summarise(across(everything(), median), .by = grp)
 ```
 
 Note grouping columns (`grp` here) are not included in `across()`, because they're automatically preserved by `summarise()`.
@@ -145,8 +144,10 @@ If you forget, you'll get an error:
 ```{r}
 #| error: true
 df |> 
-  group_by(grp) |> 
-  summarise(across(everything(), median()))
+  summarise(
+    .by = grp,
+    across(everything(), median())
+  )
 ```
 
 This error arises because you're calling the function with no input, e.g.:
@@ -331,20 +332,19 @@ For example, this function will compute the means of numeric columns by default.
 But by supplying the second argument you can choose to summarize just selected columns:
 
 ```{r}
-summarise_means <- function(df, summary_vars = where(is.numeric)) {
+summarise_means <- function(df, summary_vars = where(is.numeric), by = NULL) {
   df |> 
     summarise(
+      .by = {{ by }},
       across({{ summary_vars }}, \(x) mean(x, na.rm = TRUE)),
       n = n()
     )
 }
 diamonds |> 
-  group_by(clarity) |> 
-  summarise_means()
+  summarise_means(by = clarity)
 
 diamonds |> 
-  group_by(clarity) |> 
-  summarise_means(c(carat, x:z))
+  summarise_means(c(carat, x:z), by = clarity)
 ```
 
 ### Vs `pivot_longer()`
@@ -363,8 +363,8 @@ We could compute the same values by pivoting longer and then summarizing:
 ```{r}
 long <- df |> 
   pivot_longer(a:d) |> 
-  group_by(name) |> 
   summarise(
+    .by = name,
     median = median(value),
     mean = mean(value)
   )
@@ -413,8 +413,10 @@ df_long <- df_paired |>
 df_long
 
 df_long |> 
-  group_by(group) |> 
-  summarise(mean = weighted.mean(val, wts))
+  summarise(
+    .by = group,
+    mean = weighted.mean(val, wts)
+  )
 ```
 
 If needed, you could `pivot_wider()` this back to the original form.
@@ -442,12 +444,11 @@ If needed, you could `pivot_wider()` this back to the original form.
     ```{r}
     #| results: false
 
-    show_missing <- function(df, group_vars, summary_vars = everything()) {
+    show_missing <- function(df, by, summary_vars = everything()) {
       df |> 
-        group_by(pick({{ group_vars }})) |> 
         summarise(
+          .by = {{ by }},
           across({{ summary_vars }}, \(x) sum(is.na(x))),
-          .groups = "drop"
         ) |>
         select(where(\(x) any(x > 0)))
     }

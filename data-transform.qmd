@@ -74,9 +74,9 @@ That makes it possible to get a sense of the following code even though you have
 
 flights |>
   filter(dest == "IAH") |> 
-  group_by(year, month, day) |> 
   summarize(
-    arr_delay = mean(arr_delay, na.rm = TRUE)
+    arr_delay = mean(arr_delay, na.rm = TRUE),
+    .by = c(year, month, day)
   )
 ```
 
@@ -402,33 +402,27 @@ ggplot(flights, aes(air_time - airtime2)) + geom_histogram()
 
 So far you've learned about functions that work with rows and columns.
 dplyr gets even more powerful when you add in the ability to work with groups.
-In this section, we'll focus on the most important functions: `group_by()`, `summarize()`, and the slice family of functions.
-
-### `group_by()`
-
-Use `group_by()` to divide your dataset into groups meaningful for your analysis:
-
-```{r}
-flights |> 
-  group_by(month)
-```
-
-`group_by()` doesn't change the data but, if you look closely at the output, you'll notice that it's now "grouped by" month.
-This means subsequent operations will now work "by month".
+In this section, you'll learn about the most important grouping function, `summarize()`, and well as how grouping can affect other variables.
 
 ### `summarize()` {#sec-summarize}
 
 The most important grouped operation is a summary.
-It collapses each group to a single row[^data-transform-3].
-Here we compute the average departure delay by month:
-
-[^data-transform-3]: This is a slightly simplification; later on you'll learn how to use `summarize()` to produce multiple summary rows for each group.
+It's not very useful when you call it by itself:
 
 ```{r}
 flights |> 
-  group_by(month) |> 
   summarize(
     delay = mean(dep_delay)
+  )
+```
+
+It becomes powerful when you use the `.by` argument to specify how to divide the data into groups:
+
+```{r}
+flights |> 
+  summarize(
+    delay = mean(dep_delay),
+    .by = month
   )
 ```
 
@@ -438,9 +432,9 @@ We'll come back to discuss missing values in @sec-missing-values, but for now we
 
 ```{r}
 flights |> 
-  group_by(month) |> 
   summarize(
-    delay = mean(dep_delay, na.rm = TRUE)
+    delay = mean(dep_delay, na.rm = TRUE),
+    .by = month
   )
 ```
 
@@ -449,10 +443,10 @@ You'll learn various useful summaries in the upcoming chapters, but one very use
 
 ```{r}
 flights |> 
-  group_by(month) |> 
   summarize(
     delay = mean(dep_delay, na.rm = TRUE), 
-    n = n()
+    n = n(),
+    by = month
   )
 ```
 
@@ -473,76 +467,73 @@ For example, the following code finds the most delayed flight to each destinatio
 
 ```{r}
 flights |> 
-  group_by(dest) |> 
-  slice_max(arr_delay, n = 1)
+  slice_max(arr_delay, n = 1, by = dest)
 ```
 
 This is similar to computing the max delay with `summarize()`, but you get the whole row instead of the single summary:
 
 ```{r}
 flights |> 
-  group_by(dest) |> 
-  summarize(max_delay = max(arr_delay, na.rm = TRUE))
+  summarize(
+    max_delay = max(arr_delay, na.rm = TRUE),
+    .by = dest
+  )
 ```
+
+You can also use `.by` with `filter()` to express the same idea in a slightly different way:
+
+```{r}
+flights |> 
+  filter(
+    arr_delay == max(arr_delay, na.rm = TRUE),
+    .by = dest
+  )
+```
+
+But as you can see, `slice_max()` takes care of a lot of the details for you.
 
 ### Grouping by multiple variables
 
-You can create groups using more than one variable.
-For example, we could make a group for each day:
+You can group by multiple variables with `c()`:
 
 ```{r}
-daily <- flights |>  
-  group_by(year, month, day)
-daily
-```
-
-When you summarize a tibble grouped by more than one variable, each summary peels off the last group.
-In hindsight, this wasn't great way to make this function work, but it's difficult to change without breaking existing code.
-To make it obvious what's happening, dplyr displays a message that tells you how you can change this behavior:
-
-```{r}
-daily_flights <- daily |> 
+flights |> 
   summarize(
-    n = n()
+    n = n(),
+    .by = c(year, month, day)
   )
 ```
 
-If you're happy with this behavior, you can explicitly request it in order to suppress the message:
+`.by` uses the same specification as `select()`, so you could also use `:`, `starts_with()`, `ends_with()`, or any other helper to select the variables:
 
 ```{r}
-#| results: false
-
-daily_flights <- daily |> 
+flights |> 
   summarize(
-    n = n(), 
-    .groups = "drop_last"
+    n = n(),
+    .by = year:day
   )
 ```
 
-Alternatively, change the default behavior by setting a different value, e.g. `"drop"` to drop all grouping or `"keep"` to preserve the same groups.
+### Grouped `mutate()`
 
-### Ungrouping
-
-You might also want to remove grouping outside of `summarize()`.
-You can do this with `ungroup()`.
+It's also possible to use `.by` with `mutate()`.
+This is particularly useful with the functions that you'll learn about in @sec-numbers, which allow you to do things like rank observations within a group:
 
 ```{r}
-daily |> 
-  ungroup() |>
-  summarize(
-    delay = mean(dep_delay, na.rm = TRUE), 
-    flights = n()
+flights |> 
+  mutate(
+    rank = min_rank(dep_delay),
+    .after = dep_delay,
+    .by = year:day
   )
 ```
-
-As you can see, when you summarize an ungrouped data frame, you get a single row back because dplyr treats all the rows in an ungrouped data frame as belonging to one group.
 
 ### Exercises
 
 1.  Which carrier has the worst delays?
     Challenge: can you disentangle the effects of bad airports vs. bad carriers?
     Why/why not?
-    (Hint: think about `flights |> group_by(carrier, dest) |> summarize(n())`)
+    (Hint: think about `flights |> summarize(n(), .by = c(carrier, dest))`)
 
 2.  Find the most delayed flight to each destination.
 
@@ -569,10 +560,10 @@ For example, let's look at the planes (identified by their tail number) that hav
 
 delays <- flights |>  
   filter(!is.na(arr_delay), !is.na(tailnum)) |> 
-  group_by(tailnum) |> 
   summarize(
     delay = mean(arr_delay, na.rm = TRUE),
-    n = n()
+    n = n(),
+    .by = tailnum
   )
 
 ggplot(delays, aes(delay)) + 
@@ -594,9 +585,9 @@ ggplot(delays, aes(n, delay)) +
 ```
 
 Not surprisingly, there is much greater variation in the average delay when there are few flights for a given plane.
-The shape of this plot is very characteristic: whenever you plot a mean (or other summary) vs. group size, you'll see that the variation decreases as the sample size increases[^data-transform-4].
+The shape of this plot is very characteristic: whenever you plot a mean (or other summary) vs. group size, you'll see that the variation decreases as the sample size increases[^data-transform-3].
 
-[^data-transform-4]: \*cough\* the central limit theorem \*cough\*.
+[^data-transform-3]: \*cough\* the central limit theorem \*cough\*.
 
 When looking at this sort of plot, it's often useful to filter out the groups with the smallest numbers of observations, so you can see more of the pattern and less of the extreme variation in the smallest groups:
 
@@ -625,10 +616,10 @@ The following code uses data from the **Lahman** package to compare what proport
 
 ```{r}
 batters <- Lahman::Batting |> 
-  group_by(playerID) |> 
   summarize(
     perf = sum(H, na.rm = TRUE) / sum(AB, na.rm = TRUE),
-    n = sum(AB, na.rm = TRUE)
+    n = sum(AB, na.rm = TRUE),
+    by = playerID
   )
 batters
 ```
@@ -668,7 +659,7 @@ You can find a good explanation of this problem and how to overcome it at <http:
 ## Summary
 
 In this chapter, you've learned the tools that dplyr provides for working with data frames.
-The tools are roughly grouped into three categories: those that manipulate the rows (like `filter()` and `arrange()`, those that manipulate the columns (like `select()` and `mutate()`), and those that manipulate groups (like `group_by()` and `summarise()`).
+The tools are roughly grouped into three categories: those that manipulate the rows (like `filter()` and `arrange()`, those that manipulate the columns (like `select()` and `mutate()`), and those that create summaries (like `summarise()`).
 In this chapter, we've focused on these "whole data frame" tools, but you haven't yet learned much about what you can do with the individual variable.
 We'll come back to that in the Transform part of the book, where each chapter will give you tools for a specific type of variable.
 

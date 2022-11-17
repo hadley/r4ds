@@ -49,13 +49,13 @@ flights |> count(dest, sort = TRUE)
 
 And remember that if you want to see all the values, you can use `|> View()` or `|> print(n = Inf)`.
 
-You can perform the same computation "by hand" with `group_by()`, `summarise()` and `n()`.
+You can perform the same computation "by hand" with `summarise()` and `n()`.
 This is useful because it allows you to compute other summaries at the same time:
 
 ```{r}
 flights |> 
-  group_by(dest) |> 
   summarise(
+    .by = dest,
     n = n(),
     delay = mean(arr_delay, na.rm = TRUE)
   )
@@ -77,8 +77,8 @@ There are a couple of variants of `n()` that you might find useful:
 
     ```{r}
     flights |> 
-      group_by(dest) |> 
       summarise(
+        .by = dest,
         carriers = n_distinct(carrier)
       ) |> 
       arrange(desc(carriers))
@@ -89,8 +89,10 @@ There are a couple of variants of `n()` that you might find useful:
 
     ```{r}
     flights |> 
-      group_by(tailnum) |> 
-      summarise(miles = sum(distance))
+      summarise(
+        .by = tailnum,
+        miles = sum(distance)
+      )
     ```
 
     Weighted counts are a common problem so `count()` has a `wt` argument that does the same thing:
@@ -104,14 +106,16 @@ There are a couple of variants of `n()` that you might find useful:
 
     ```{r}
     flights |> 
-      group_by(dest) |> 
-      summarise(n_cancelled = sum(is.na(dep_time))) 
+      summarise(
+        .by = dest,
+        n_cancelled = sum(is.na(dep_time))
+      ) 
     ```
 
 ### Exercises
 
 1.  How can you use `count()` to count the number rows with a missing value for a given variable?
-2.  Expand the following calls to `count()` to instead use `group_by()`, `summarise()`, and `arrange()`:
+2.  Expand the following calls to `count()` to instead use `summarise()` and `arrange()`:
     1.  `flights |> count(dest, sort = TRUE)`
 
     2.  `flights |> count(tailnum, wt = distance)`
@@ -232,8 +236,12 @@ The results are shown in @fig-prop-cancelled.
 #|   at 4% at 7pm. The proportion of cancelled flights then drops rapidly
 #|   getting down to around 1% by midnight.
 flights |> 
-  group_by(hour = sched_dep_time %/% 100) |> 
-  summarise(prop_cancelled = mean(is.na(dep_time)), n = n()) |> 
+  mutate(hour = sched_dep_time %/% 100) |> 
+  summarise(
+    .by = hour,
+    prop_cancelled = mean(is.na(dep_time)),
+    n = n()
+  ) |> 
   filter(hour > 1) |> 
   ggplot(aes(hour, prop_cancelled)) +
   geom_line(color = "grey50") + 
@@ -507,8 +515,8 @@ You can lead or lag by more than one position by using the second argument, `n`.
 
 3.  What time of day should you fly if you want to avoid delays as much as possible?
 
-4.  What does `flights |> group_by(dest() |> filter(row_number() < 4)` do?
-    What does `flights |> group_by(dest() |> filter(row_number(dep_delay) < 4)` do?
+4.  What does `flights |> filter(row_number() < 4, .by = dest)` do?
+    What does `flights |> filter(row_number(dep_delay) < 4, .by = dest)` do?
 
 5.  For each destination, compute the total minutes of delay.
     For each flight, compute the proportion of the total delay for its destination.
@@ -521,11 +529,10 @@ You can lead or lag by more than one position by using the second argument, `n`.
 
     flights |> 
       mutate(hour = dep_time %/% 100) |> 
-      group_by(year, month, day, hour) |> 
       summarise(
+        .by = c(year:day, hour),
         dep_delay = mean(dep_delay, na.rm = TRUE),
         n = n(),
-        .groups = "drop"
       ) |> 
       filter(n > 5)
     ```
@@ -567,12 +574,11 @@ The median delay is always smaller than the mean delay because because flights s
 #|   increases, the spread of the median also increases. There are two
 #|   outlying points with mean ~60, median ~50, and mean ~85, median ~55.
 flights |>
-  group_by(year, month, day) |>
   summarise(
+    .by = year:day,
     mean = mean(dep_delay, na.rm = TRUE),
     median = median(dep_delay, na.rm = TRUE),
     n = n(),
-    .groups = "drop"
   ) |> 
   ggplot(aes(mean, median)) + 
   geom_abline(slope = 1, intercept = 0, color = "white", size = 2) +
@@ -596,11 +602,10 @@ For the `flights` data, you might want to look at the 95% quantile of delays rat
 
 ```{r}
 flights |>
-  group_by(year, month, day) |>
   summarise(
+    .by = year:day,
     max = max(dep_delay, na.rm = TRUE),
     q95 = quantile(dep_delay, 0.95, na.rm = TRUE),
-    .groups = "drop"
   )
 ```
 
@@ -616,11 +621,10 @@ But the code below makes it looks like one airport, [EGE](https://en.wikipedia.o
 
 ```{r}
 flights |> 
-  group_by(origin, dest) |> 
   summarise(
+    .by = c(origin, dest),
     distance_sd = IQR(distance), 
     n = n(),
-    .groups = "drop"
   ) |> 
   filter(distance_sd > 0)
 ```
@@ -699,8 +703,8 @@ For example, we can find the first and last departure for each day:
 
 ```{r}
 flights |> 
-  group_by(year, month, day) |> 
   summarise(
+    .by = year:day,
     first_dep = first(dep_time), 
     fifth_dep = nth(dep_time, 5),
     last_dep = last(dep_time)
@@ -719,8 +723,10 @@ Filtering gives you all variables, with each observation in a separate row:
 
 ```{r}
 flights |> 
-  group_by(year, month, day) |> 
-  mutate(r = min_rank(desc(sched_dep_time))) |> 
+  mutate(
+    .by = year:day,
+    r = min_rank(desc(sched_dep_time))
+  ) |> 
   filter(r %in% c(1, max(r)))
 ```
 
