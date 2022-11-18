@@ -518,6 +518,61 @@ lead(x)
 
 You can lead or lag by more than one position by using the second argument, `n`.
 
+### Consecutive identifies
+
+Sometimes you want to start a new group every time some event occurs.
+For example, when you're looking at website data, it's common to want to break up events into sessions, where a session is defined as a gap of more than x minutes since the last activity.
+
+For example, imagine you have the times when someone visited a website:
+
+```{r}
+events <- tibble(
+  time = c(0, 1, 2, 3, 5, 10, 12, 15, 17, 19, 20, 27, 28, 30)
+)
+
+```
+
+And you've the time lag between the events, and figured out if there's a gap that's big enough to qualify:
+
+```{r}
+events <- events |> 
+  mutate(
+    diff = time - lag(time, default = first(time)),
+    gap = diff >= 5
+  )
+events
+```
+
+But how do we go from that logical vector to something that we can `group_by()`?
+`consecutive_id()` comes to the rescue:
+
+```{r}
+events |> mutate(
+  group = consecutive_id(gap)
+)
+```
+
+`consecutive_id()` starts a new group every time one of its arguments changes.
+That makes it useful both here, with logical vectors, and in many other place.
+For example, inspired by [this stackoverflow question](https://stackoverflow.com/questions/27482712), imagine you have a data frame with a bunch of repeated values:
+
+```{r}
+df <- tibble(
+  x = c("a", "a", "a", "b", "c", "c", "d", "e", "a", "a", "b", "b"),
+  y = c(1, 2, 3, 2, 4, 1, 3, 9, 4, 8, 10, 199)
+)
+df
+```
+
+You want to keep the first row from each repeated `x`.
+That's easier to express with a combination of `consecutive_id()` and `slice_head()`:
+
+```{r}
+df |> 
+  group_by(id = consecutive_id(x)) |> 
+  slice_head(n = 1)
+```
+
 ### Exercises
 
 1.  Find the 10 most delayed flights using a ranking function.
