@@ -16,7 +16,8 @@ options(
   stringr.view_n = 10,
   # Activate crayon output - temporarily disabled for quarto
   # crayon.enabled = TRUE,
-  pillar.bold = TRUE
+  pillar.bold = TRUE,
+  width = 80
 )
 
 ggplot2::theme_set(ggplot2::theme_gray(12))
