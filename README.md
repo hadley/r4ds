@@ -47,6 +47,17 @@ devtools::install_github("hadley/r4ds")
     knitr::include_graphics("screenshots/rstudio-wg.png")
     ```
 
+### O'Reilly
+
+To generate book for O'Reilly, build the book then:
+
+```{r}
+devtools::load_all("../minibook/"); process_book()
+
+html <- list.files("oreilly", pattern = "[.]html$", full.names = TRUE)
+file.copy(html, "../r-for-data-science-2e/", overwrite = TRUE)
+```
+
 ## Code of Conduct
 
 Please note that r4ds uses a [Contributor Code of Conduct](https://contributor-covenant.org/version/2/0/CODE_OF_CONDUCT.html).
