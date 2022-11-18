@@ -1,0 +1,446 @@
+<section data-type="chapter" id="chp-factors">
+<h1><span id="sec-factors" class="quarto-section-identifier d-none d-lg-block"><span class="chapter-title">Factors</span></span></h1><div data-type="note"><div class="callout-body d-flex">
+<div class="callout-icon-container">
+<i class="callout-icon"/>
+</div>
+
+</div>
+
+<p>You are reading the work-in-progress second edition of R for Data Science. This chapter is largely complete and just needs final proof reading. You can find the complete first edition at <a href="https://r4ds.had.co.nz" class="uri">https://r4ds.had.co.nz</a>.</p></div>
+
+<section id="introduction" data-type="sect1">
+<h1>
+Introduction</h1>
+<p>Factors are used for categorical variables, variables that have a fixed and known set of possible values. They are also useful when you want to display character vectors in a non-alphabetical order.</p>
+<p>We’ll start by motivating why factors are needed for data analysis and how you can create them with <code><a href="#chp-https://rdrr.io/r/base/factor" data-type="xref">#chp-https://rdrr.io/r/base/factor</a></code>. We’ll then introduce you to the <code>gss_cat</code> dataset which contains a bunch of categorical variables to experiment with. You’ll then use that dataset to practice modifying the order and values of factors, before we finish up with a discussion of ordered factors.</p>
+
+<section id="prerequisites" data-type="sect2">
+<h2>
+Prerequisites</h2>
+<p>Base R provides some basic tools for creating and manipulating factors. We’ll supplement these with the <strong>forcats</strong> package, which is part of the core tidyverse. It provides tools for dealing with <strong>cat</strong>egorical variables (and it’s an anagram of factors!) using a wide range of helpers for working with factors.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">library(tidyverse)</pre>
+</div>
+</section>
+</section>
+
+<section id="factor-basics" data-type="sect1">
+<h1>
+Factor basics</h1>
+<p>Imagine that you have a variable that records month:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">x1 &lt;- c("Dec", "Apr", "Jan", "Mar")</pre>
+</div>
+<p>Using a string to record this variable has two problems:</p>
+<ol type="1"><li>
+<p>There are only twelve possible months, and there’s nothing saving you from typos:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">x2 &lt;- c("Dec", "Apr", "Jam", "Mar")</pre>
+</div>
+</li>
+<li>
+<p>It doesn’t sort in a useful way:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">sort(x1)
+#&gt; [1] "Apr" "Dec" "Jan" "Mar"</pre>
+</div>
+</li>
+</ol><p>You can fix both of these problems with a factor. To create a factor you must start by creating a list of the valid <strong>levels</strong>:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">month_levels &lt;- c(
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun", 
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+)</pre>
+</div>
+<p>Now you can create a factor:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">y1 &lt;- factor(x1, levels = month_levels)
+y1
+#&gt; [1] Dec Apr Jan Mar
+#&gt; Levels: Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec
+
+sort(y1)
+#&gt; [1] Jan Mar Apr Dec
+#&gt; Levels: Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec</pre>
+</div>
+<p>And any values not in the level will be silently converted to NA:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">y2 &lt;- factor(x2, levels = month_levels)
+y2
+#&gt; [1] Dec  Apr  &lt;NA&gt; Mar 
+#&gt; Levels: Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec</pre>
+</div>
+<p>This seems risky, so you might want to use <code><a href="#chp-https://forcats.tidyverse.org/reference/fct" data-type="xref">#chp-https://forcats.tidyverse.org/reference/fct</a></code> instead:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">y2 &lt;- fct(x2, levels = month_levels)
+#&gt; Error in `fct()`:
+#&gt; ! All values of `x` must appear in `levels` or `na`
+#&gt; ℹ Missing level: "Jam"</pre>
+</div>
+<p>If you omit the levels, they’ll be taken from the data in alphabetical order:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">factor(x1)
+#&gt; [1] Dec Apr Jan Mar
+#&gt; Levels: Apr Dec Jan Mar</pre>
+</div>
+<p>Sometimes you’d prefer that the order of the levels matches the order of the first appearance in the data. You can do that when creating the factor by setting levels to <code>unique(x)</code>, or after the fact, with <code><a href="#chp-https://forcats.tidyverse.org/reference/fct_inorder" data-type="xref">#chp-https://forcats.tidyverse.org/reference/fct_inorder</a></code>:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">f1 &lt;- factor(x1, levels = unique(x1))
+f1
+#&gt; [1] Dec Apr Jan Mar
+#&gt; Levels: Dec Apr Jan Mar
+
+f2 &lt;- x1 |&gt; factor() |&gt; fct_inorder()
+f2
+#&gt; [1] Dec Apr Jan Mar
+#&gt; Levels: Dec Apr Jan Mar</pre>
+</div>
+<p>If you ever need to access the set of valid levels directly, you can do so with <code><a href="#chp-https://rdrr.io/r/base/levels" data-type="xref">#chp-https://rdrr.io/r/base/levels</a></code>:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">levels(f2)
+#&gt; [1] "Dec" "Apr" "Jan" "Mar"</pre>
+</div>
+<p>You can also create a factor when reading your data with readr with <code><a href="#chp-https://readr.tidyverse.org/reference/parse_factor" data-type="xref">#chp-https://readr.tidyverse.org/reference/parse_factor</a></code>:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">csv &lt;- "
+month,value
+Jan,12
+Feb,56
+Mar,12"
+
+df &lt;- read_csv(csv, col_types = cols(month = col_factor(month_levels)))
+df$month
+#&gt; [1] Jan Feb Mar
+#&gt; Levels: Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec</pre>
+</div>
+</section>
+
+<section id="general-social-survey" data-type="sect1">
+<h1>
+General Social Survey</h1>
+<p>For the rest of this chapter, we’re going to use <code><a href="#chp-https://forcats.tidyverse.org/reference/gss_cat" data-type="xref">#chp-https://forcats.tidyverse.org/reference/gss_cat</a></code>. It’s a sample of data from the <a href="#chp-https://gss.norc" data-type="xref">#chp-https://gss.norc</a>, a long-running US survey conducted by the independent research organization NORC at the University of Chicago. The survey has thousands of questions, so in <code>gss_cat</code> Hadley selected a handful that will illustrate some common challenges you’ll encounter when working with factors.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">gss_cat
+#&gt; # A tibble: 21,483 × 9
+#&gt;    year marital         age race  rincome        partyid     relig denom tvhours
+#&gt;   &lt;int&gt; &lt;fct&gt;         &lt;int&gt; &lt;fct&gt; &lt;fct&gt;          &lt;fct&gt;       &lt;fct&gt; &lt;fct&gt;   &lt;int&gt;
+#&gt; 1  2000 Never married    26 White $8000 to 9999  Ind,near r… Prot… Sout…      12
+#&gt; 2  2000 Divorced         48 White $8000 to 9999  Not str re… Prot… Bapt…      NA
+#&gt; 3  2000 Widowed          67 White Not applicable Independent Prot… No d…       2
+#&gt; 4  2000 Never married    39 White Not applicable Ind,near r… Orth… Not …       4
+#&gt; 5  2000 Divorced         25 White Not applicable Not str de… None  Not …       1
+#&gt; 6  2000 Married          25 White $20000 - 24999 Strong dem… Prot… Sout…      NA
+#&gt; # … with 21,477 more rows</pre>
+</div>
+<p>(Remember, since this dataset is provided by a package, you can get more information about the variables with <code><a href="#chp-https://forcats.tidyverse.org/reference/gss_cat" data-type="xref">#chp-https://forcats.tidyverse.org/reference/gss_cat</a></code>.)</p>
+<p>When factors are stored in a tibble, you can’t see their levels so easily. One way to view them is with <code><a href="#chp-https://dplyr.tidyverse.org/reference/count" data-type="xref">#chp-https://dplyr.tidyverse.org/reference/count</a></code>:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">gss_cat |&gt;
+  count(race)
+#&gt; # A tibble: 3 × 2
+#&gt;   race      n
+#&gt;   &lt;fct&gt; &lt;int&gt;
+#&gt; 1 Other  1959
+#&gt; 2 Black  3129
+#&gt; 3 White 16395</pre>
+</div>
+<p>Or with a bar chart:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">ggplot(gss_cat, aes(race)) +
+  geom_bar()</pre>
+<div class="cell-output-display">
+<p><img src="factors_files/figure-html/unnamed-chunk-16-1.png" class="img-fluid" alt="A bar chart showing the distribution of race. There are ~2000 records with race &quot;Other&quot;, 3000 with race &quot;Black&quot;, and other 15,000 with race &quot;White&quot;." width="576"/></p>
+</div>
+</div>
+<p>When working with factors, the two most common operations are changing the order of the levels, and changing the values of the levels. Those operations are described in the sections below.</p>
+
+<section id="exercise" data-type="sect2">
+<h2>
+Exercise</h2>
+<ol type="1"><li><p>Explore the distribution of <code>rincome</code> (reported income). What makes the default bar chart hard to understand? How could you improve the plot?</p></li>
+<li><p>What is the most common <code>relig</code> in this survey? What’s the most common <code>partyid</code>?</p></li>
+<li><p>Which <code>relig</code> does <code>denom</code> (denomination) apply to? How can you find out with a table? How can you find out with a visualization?</p></li>
+</ol></section>
+</section>
+
+<section id="modifying-factor-order" data-type="sect1">
+<h1>
+Modifying factor order</h1>
+<p>It’s often useful to change the order of the factor levels in a visualization. For example, imagine you want to explore the average number of hours spent watching TV per day across religions:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">relig_summary &lt;- gss_cat |&gt;
+  group_by(relig) |&gt;
+  summarise(
+    age = mean(age, na.rm = TRUE),
+    tvhours = mean(tvhours, na.rm = TRUE),
+    n = n()
+  )
+
+ggplot(relig_summary, aes(tvhours, relig)) + 
+  geom_point()</pre>
+<div class="cell-output-display">
+<p><img src="factors_files/figure-html/unnamed-chunk-17-1.png" class="img-fluid" alt="A scatterplot of with tvhours on the x-axis and religion on the y-axis. The y-axis is ordered seemingly aribtrarily making it hard to get any sense of overall pattern." width="576"/></p>
+</div>
+</div>
+<p>It is hard to read this plot because there’s no overall pattern. We can improve it by reordering the levels of <code>relig</code> using <code><a href="#chp-https://forcats.tidyverse.org/reference/fct_reorder" data-type="xref">#chp-https://forcats.tidyverse.org/reference/fct_reorder</a></code>. <code><a href="#chp-https://forcats.tidyverse.org/reference/fct_reorder" data-type="xref">#chp-https://forcats.tidyverse.org/reference/fct_reorder</a></code> takes three arguments:</p>
+<ul><li>
+<code>f</code>, the factor whose levels you want to modify.</li>
+<li>
+<code>x</code>, a numeric vector that you want to use to reorder the levels.</li>
+<li>Optionally, <code>fun</code>, a function that’s used if there are multiple values of <code>x</code> for each value of <code>f</code>. The default value is <code>median</code>.</li>
+</ul><div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">ggplot(relig_summary, aes(tvhours, fct_reorder(relig, tvhours))) +
+  geom_point()</pre>
+<div class="cell-output-display">
+<p><img src="factors_files/figure-html/unnamed-chunk-18-1.png" class="img-fluid" alt="The same scatterplot as above, but now the religion is displayed in increasing order of tvhours. &quot;Other eastern&quot; has the fewest tvhours under 2, and &quot;Don't know&quot; has the highest (over 5)." width="576"/></p>
+</div>
+</div>
+<p>Reordering religion makes it much easier to see that people in the “Don’t know” category watch much more TV, and Hinduism &amp; Other Eastern religions watch much less.</p>
+<p>As you start making more complicated transformations, we recommend moving them out of <code><a href="#chp-https://ggplot2.tidyverse.org/reference/aes" data-type="xref">#chp-https://ggplot2.tidyverse.org/reference/aes</a></code> and into a separate <code><a href="#chp-https://dplyr.tidyverse.org/reference/mutate" data-type="xref">#chp-https://dplyr.tidyverse.org/reference/mutate</a></code> step. For example, you could rewrite the plot above as:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">relig_summary |&gt;
+  mutate(
+    relig = fct_reorder(relig, tvhours)
+  ) |&gt;
+  ggplot(aes(tvhours, relig)) +
+  geom_point()</pre>
+</div>
+<p>What if we create a similar plot looking at how average age varies across reported income level?</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">rincome_summary &lt;- gss_cat |&gt;
+  group_by(rincome) |&gt;
+  summarise(
+    age = mean(age, na.rm = TRUE),
+    tvhours = mean(tvhours, na.rm = TRUE),
+    n = n()
+  )
+
+ggplot(rincome_summary, aes(age, fct_reorder(rincome, age))) + 
+  geom_point()</pre>
+<div class="cell-output-display">
+<p><img src="factors_files/figure-html/unnamed-chunk-20-1.png" class="img-fluid" alt="A scatterplot with age on the x-axis and income on the y-axis. Income has been reordered in order of average age which doesn't make much sense. One section of the y-axis goes from $6000-6999, then &lt;$1000, then $8000-9999." width="576"/></p>
+</div>
+</div>
+<p>Here, arbitrarily reordering the levels isn’t a good idea! That’s because <code>rincome</code> already has a principled order that we shouldn’t mess with. Reserve <code><a href="#chp-https://forcats.tidyverse.org/reference/fct_reorder" data-type="xref">#chp-https://forcats.tidyverse.org/reference/fct_reorder</a></code> for factors whose levels are arbitrarily ordered.</p>
+<p>However, it does make sense to pull “Not applicable” to the front with the other special levels. You can use <code><a href="#chp-https://forcats.tidyverse.org/reference/fct_relevel" data-type="xref">#chp-https://forcats.tidyverse.org/reference/fct_relevel</a></code>. It takes a factor, <code>f</code>, and then any number of levels that you want to move to the front of the line.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">ggplot(rincome_summary, aes(age, fct_relevel(rincome, "Not applicable"))) +
+  geom_point()</pre>
+<div class="cell-output-display">
+<p><img src="factors_files/figure-html/unnamed-chunk-21-1.png" class="img-fluid" alt="The same scatterplot but now &quot;Not Applicable&quot; is displayed at the bottom of the y-axis. Generally there is a positive association between income and age, and the income band with the highest average age is &quot;Not applicable&quot;." width="576"/></p>
+</div>
+</div>
+<p>Why do you think the average age for “Not applicable” is so high?</p>
+<p>Another type of reordering is useful when you are coloring the lines on a plot. <code>fct_reorder2(f, x, y)</code> reorders the factor <code>f</code> by the <code>y</code> values associated with the largest <code>x</code> values. This makes the plot easier to read because the colors of the line at the far right of the plot will line up with the legend.</p>
+<div>
+<pre data-type="programlisting" data-code-language="downlit">#|
+#|     Rearranging the legend makes the plot easier to read because the
+#|     legend colours now match the order of the lines on the far right 
+#|     of the plot. You can see some unsuprising patterns: the proportion
+#|     never marred decreases with age, married forms an upside down U 
+#|     shape, and widowed starts off low but increases steeply after age
+#|     60.
+by_age &lt;- gss_cat |&gt;
+  filter(!is.na(age)) |&gt;
+  count(age, marital) |&gt;
+  group_by(age) |&gt;
+  mutate(
+    prop = n / sum(n)
+  )
+
+ggplot(by_age, aes(age, prop, colour = marital)) +
+  geom_line(na.rm = TRUE)
+
+ggplot(by_age, aes(age, prop, colour = fct_reorder2(marital, age, prop))) +
+  geom_line() +
+  labs(colour = "marital")</pre>
+<div class="cell quarto-layout-panel">
+<div class="quarto-layout-row quarto-layout-valign-top">
+<div class="cell-output-display quarto-layout-cell" style="flex-basis: 50.0%;justify-content: center;">
+<p><img src="factors_files/figure-html/unnamed-chunk-22-1.png" class="img-fluid" alt="A line plot with age on the x-axis and proportion on the y-axis. There is one line for each category of marital status: no answer, never married, separated, divorced, widowed, and married. It is a little hard to read the plot because the order of the legend is unrelated to the lines on the plot." width="384"/></p>
+</div>
+<div class="cell-output-display quarto-layout-cell" style="flex-basis: 50.0%;justify-content: center;">
+<p><img src="factors_files/figure-html/unnamed-chunk-22-2.png" class="img-fluid" alt="A line plot with age on the x-axis and proportion on the y-axis. There is one line for each category of marital status: no answer, never married, separated, divorced, widowed, and married. It is a little hard to read the plot because the order of the legend is unrelated to the lines on the plot." width="384"/></p>
+</div>
+</div>
+</div>
+</div>
+<p>Finally, for bar plots, you can use <code><a href="#chp-https://forcats.tidyverse.org/reference/fct_inorder" data-type="xref">#chp-https://forcats.tidyverse.org/reference/fct_inorder</a></code> to order levels in decreasing frequency: this is the simplest type of reordering because it doesn’t need any extra variables. Combine it with <code><a href="#chp-https://forcats.tidyverse.org/reference/fct_rev" data-type="xref">#chp-https://forcats.tidyverse.org/reference/fct_rev</a></code> if you want them in increasing frequency so that in the bar plot largest values are on the right, not the left.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">gss_cat |&gt;
+  mutate(marital = marital |&gt; fct_infreq() |&gt; fct_rev()) |&gt;
+  ggplot(aes(marital)) +
+  geom_bar()</pre>
+<div class="cell-output-display">
+<p><img src="factors_files/figure-html/unnamed-chunk-23-1.png" class="img-fluid" alt="A bar char of marital status ordered in from least to most common: no answer (~0), separated (~1,000), widowed (~2,000), divorced (~3,000), never married (~5,000), married (~10,000)." width="576"/></p>
+</div>
+</div>
+
+<section id="exercises" data-type="sect2">
+<h2>
+Exercises</h2>
+<ol type="1"><li><p>There are some suspiciously high numbers in <code>tvhours</code>. Is the mean a good summary?</p></li>
+<li><p>For each factor in <code>gss_cat</code> identify whether the order of the levels is arbitrary or principled.</p></li>
+<li><p>Why did moving “Not applicable” to the front of the levels move it to the bottom of the plot?</p></li>
+</ol></section>
+</section>
+
+<section id="modifying-factor-levels" data-type="sect1">
+<h1>
+Modifying factor levels</h1>
+<p>More powerful than changing the orders of the levels is changing their values. This allows you to clarify labels for publication, and collapse levels for high-level displays. The most general and powerful tool is <code><a href="#chp-https://forcats.tidyverse.org/reference/fct_recode" data-type="xref">#chp-https://forcats.tidyverse.org/reference/fct_recode</a></code>. It allows you to recode, or change, the value of each level. For example, take the <code>gss_cat$partyid</code>:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">gss_cat |&gt; count(partyid)
+#&gt; # A tibble: 10 × 2
+#&gt;   partyid                n
+#&gt;   &lt;fct&gt;              &lt;int&gt;
+#&gt; 1 No answer            154
+#&gt; 2 Don't know             1
+#&gt; 3 Other party          393
+#&gt; 4 Strong republican   2314
+#&gt; 5 Not str republican  3032
+#&gt; 6 Ind,near rep        1791
+#&gt; # … with 4 more rows</pre>
+</div>
+<p>The levels are terse and inconsistent. Let’s tweak them to be longer and use a parallel construction. Like most rename and recoding functions in the tidyverse, the new values go on the left and the old values go on the right:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">gss_cat |&gt;
+  mutate(
+    partyid = fct_recode(partyid,
+      "Republican, strong"    = "Strong republican",
+      "Republican, weak"      = "Not str republican",
+      "Independent, near rep" = "Ind,near rep",
+      "Independent, near dem" = "Ind,near dem",
+      "Democrat, weak"        = "Not str democrat",
+      "Democrat, strong"      = "Strong democrat"
+    )
+  ) |&gt;
+  count(partyid)
+#&gt; # A tibble: 10 × 2
+#&gt;   partyid                   n
+#&gt;   &lt;fct&gt;                 &lt;int&gt;
+#&gt; 1 No answer               154
+#&gt; 2 Don't know                1
+#&gt; 3 Other party             393
+#&gt; 4 Republican, strong     2314
+#&gt; 5 Republican, weak       3032
+#&gt; 6 Independent, near rep  1791
+#&gt; # … with 4 more rows</pre>
+</div>
+<p><code><a href="#chp-https://forcats.tidyverse.org/reference/fct_recode" data-type="xref">#chp-https://forcats.tidyverse.org/reference/fct_recode</a></code> will leave the levels that aren’t explicitly mentioned as is, and will warn you if you accidentally refer to a level that doesn’t exist.</p>
+<p>To combine groups, you can assign multiple old levels to the same new level:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">gss_cat |&gt;
+  mutate(
+    partyid = fct_recode(partyid,
+      "Republican, strong"    = "Strong republican",
+      "Republican, weak"      = "Not str republican",
+      "Independent, near rep" = "Ind,near rep",
+      "Independent, near dem" = "Ind,near dem",
+      "Democrat, weak"        = "Not str democrat",
+      "Democrat, strong"      = "Strong democrat",
+      "Other"                 = "No answer",
+      "Other"                 = "Don't know",
+      "Other"                 = "Other party"
+    )
+  ) |&gt;
+  count(partyid)
+#&gt; # A tibble: 8 × 2
+#&gt;   partyid                   n
+#&gt;   &lt;fct&gt;                 &lt;int&gt;
+#&gt; 1 Other                   548
+#&gt; 2 Republican, strong     2314
+#&gt; 3 Republican, weak       3032
+#&gt; 4 Independent, near rep  1791
+#&gt; 5 Independent            4119
+#&gt; 6 Independent, near dem  2499
+#&gt; # … with 2 more rows</pre>
+</div>
+<p>Use this technique with care: if you group together categories that are truly different you will end up with misleading results.</p>
+<p>If you want to collapse a lot of levels, <code><a href="#chp-https://forcats.tidyverse.org/reference/fct_collapse" data-type="xref">#chp-https://forcats.tidyverse.org/reference/fct_collapse</a></code> is a useful variant of <code><a href="#chp-https://forcats.tidyverse.org/reference/fct_recode" data-type="xref">#chp-https://forcats.tidyverse.org/reference/fct_recode</a></code>. For each new variable, you can provide a vector of old levels:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">gss_cat |&gt;
+  mutate(
+    partyid = fct_collapse(partyid,
+      "other" = c("No answer", "Don't know", "Other party"),
+      "rep" = c("Strong republican", "Not str republican"),
+      "ind" = c("Ind,near rep", "Independent", "Ind,near dem"),
+      "dem" = c("Not str democrat", "Strong democrat")
+    )
+  ) |&gt;
+  count(partyid)
+#&gt; # A tibble: 4 × 2
+#&gt;   partyid     n
+#&gt;   &lt;fct&gt;   &lt;int&gt;
+#&gt; 1 other     548
+#&gt; 2 rep      5346
+#&gt; 3 ind      8409
+#&gt; 4 dem      7180</pre>
+</div>
+<p>Sometimes you just want to lump together the small groups to make a plot or table simpler. That’s the job of the <code>fct_lump_*()</code> family of functions. <code><a href="#chp-https://forcats.tidyverse.org/reference/fct_lump" data-type="xref">#chp-https://forcats.tidyverse.org/reference/fct_lump</a></code> is a simple starting point that progressively lumps the smallest groups categories into “Other”, always keeping “Other” as the smallest category.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">gss_cat |&gt;
+  mutate(relig = fct_lump_lowfreq(relig)) |&gt;
+  count(relig)
+#&gt; # A tibble: 2 × 2
+#&gt;   relig          n
+#&gt;   &lt;fct&gt;      &lt;int&gt;
+#&gt; 1 Protestant 10846
+#&gt; 2 Other      10637</pre>
+</div>
+<p>In this case it’s not very helpful: it is true that the majority of Americans in this survey are Protestant, but we’d probably like to see some more details! Instead, we can use the <code><a href="#chp-https://forcats.tidyverse.org/reference/fct_lump" data-type="xref">#chp-https://forcats.tidyverse.org/reference/fct_lump</a></code> to specify that we want exactly 10 groups:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">gss_cat |&gt;
+  mutate(relig = fct_lump_n(relig, n = 10)) |&gt;
+  count(relig, sort = TRUE) |&gt;
+  print(n = Inf)
+#&gt; # A tibble: 10 × 2
+#&gt;    relig                       n
+#&gt;    &lt;fct&gt;                   &lt;int&gt;
+#&gt;  1 Protestant              10846
+#&gt;  2 Catholic                 5124
+#&gt;  3 None                     3523
+#&gt;  4 Christian                 689
+#&gt;  5 Other                     458
+#&gt;  6 Jewish                    388
+#&gt;  7 Buddhism                  147
+#&gt;  8 Inter-nondenominational   109
+#&gt;  9 Moslem/islam              104
+#&gt; 10 Orthodox-christian         95</pre>
+</div>
+<p>Read the documentation to learn about <code><a href="#chp-https://forcats.tidyverse.org/reference/fct_lump" data-type="xref">#chp-https://forcats.tidyverse.org/reference/fct_lump</a></code> and <code><a href="#chp-https://forcats.tidyverse.org/reference/fct_lump" data-type="xref">#chp-https://forcats.tidyverse.org/reference/fct_lump</a></code> which are useful in other cases.</p>
+
+<section id="exercises-1" data-type="sect2">
+<h2>
+Exercises</h2>
+<ol type="1"><li><p>How have the proportions of people identifying as Democrat, Republican, and Independent changed over time?</p></li>
+<li><p>How could you collapse <code>rincome</code> into a small set of categories?</p></li>
+<li><p>Notice there are 9 groups (excluding other) in the <code>fct_lump</code> example above. Why not 10? (Hint: type <code><a href="#chp-https://forcats.tidyverse.org/reference/fct_lump" data-type="xref">#chp-https://forcats.tidyverse.org/reference/fct_lump</a></code>, and find the default for the argument <code>other_level</code> is “Other”.)</p></li>
+</ol></section>
+</section>
+
+<section id="ordered-factors" data-type="sect1">
+<h1>
+Ordered factors</h1>
+<p>Before we go on, there’s a special type of factor that needs to be mentioned briefly: ordered factors. Ordered factors, created with <code><a href="#chp-https://rdrr.io/r/base/factor" data-type="xref">#chp-https://rdrr.io/r/base/factor</a></code>, imply a strict ordering and equal distance between levels: the first level is “less than” the second level by the same amount that the second level is “less than” the third level, and so on.. You can recognize them when printing because they use <code>&lt;</code> between the factor levels:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">ordered(c("a", "b", "c"))
+#&gt; [1] a b c
+#&gt; Levels: a &lt; b &lt; c</pre>
+</div>
+<p>In practice, <code><a href="#chp-https://rdrr.io/r/base/factor" data-type="xref">#chp-https://rdrr.io/r/base/factor</a></code> factors behave very similarly to regular factors. There are only two places where you might notice different behavior:</p>
+<ul><li>If you map an ordered factor to color or fill in ggplot2, it will default to <code>scale_color_viridis()</code>/<code>scale_fill_viridis()</code>, a color scale that implies a ranking.</li>
+<li>If you use an ordered function in a linear model, it will use “polygonal contrasts”. These are mildly useful, but you are unlikely to have heard of them unless you have a PhD in Statistics, and even then you probably don’t routinely interpret them. If you want to learn more, we recommend <code>vignette("contrasts", package = "faux")</code> by Lisa DeBruine.</li>
+</ul><p>Given the arguable utility of these differences, we don’t generally recommend using ordered factors.</p>
+</section>
+
+<section id="summary" data-type="sect1">
+<h1>
+Summary</h1>
+<p>This chapter introduced you to the handy forcats package for working with factors, introducing you to the most commonly used functions. forcats contains a wide range of other helpers that we didn’t have space to discuss here, so whenever you’re facing a factor analysis challenge that you haven’t encountered before, I highly recommend skimming the <a href="#chp-https://forcats.tidyverse.org/reference/index" data-type="xref">#chp-https://forcats.tidyverse.org/reference/index</a> to see if there’s a canned function that can help solve your problem.</p>
+<p>If you want to learn more about factors after reading this chapter, we recommend reading Amelia McNamara and Nicholas Horton’s paper, <a href="#chp-https://peerj.com/preprints/3163/" data-type="xref">#chp-https://peerj.com/preprints/3163/</a>. This paper lays out some of the history discussed in <a href="#chp-https://simplystatistics.org/posts/2015-07-24-stringsasfactors-an-unauthorized-biography/" data-type="xref">#chp-https://simplystatistics.org/posts/2015-07-24-stringsasfactors-an-unauthorized-biography/</a> and <a href="#chp-https://notstatschat.tumblr.com/post/124987394001/stringsasfactors-sigh" data-type="xref">#chp-https://notstatschat.tumblr.com/post/124987394001/stringsasfactors-sigh</a>, and compares the tidy approaches to categorical data outlined in this book with base R methods. An early version of the paper helped motivate and scope the forcats package; thanks Amelia &amp; Nick!</p>
+<p>In the next chapter we’ll switch gears to start learning about dates and times in R. Dates and times seem deceptively simple, but as you’ll soon see, the more you learn about them, the more complex they seem to get!</p>
+
+
+</section>
+</section>

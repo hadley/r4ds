@@ -1,0 +1,1148 @@
+<section data-type="chapter" id="chp-rectangling">
+<h1><span id="sec-rectangling" class="quarto-section-identifier d-none d-lg-block"><span class="chapter-title">Data rectangling</span></span></h1><div data-type="note"><div class="callout-body d-flex">
+<div class="callout-icon-container">
+<i class="callout-icon"/>
+</div>
+
+</div><h1>
+Base R
+</h1><p>You are reading the work-in-progress second edition of R for Data Science. This chapter should be readable but is currently undergoing final polishing. You can find the complete first edition at <a href="https://r4ds.had.co.nz" class="uri">https://r4ds.had.co.nz</a>.</p>
+
+<p>It’s possible to put a list in a column of a <code>data.frame</code>, but it’s a lot fiddlier because <code><a href="#chp-https://rdrr.io/r/base/data.frame" data-type="xref">#chp-https://rdrr.io/r/base/data.frame</a></code> treats a list as a list of columns:</p><div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">data.frame(x = list(1:3, 3:5))
+#&gt;   x.1.3 x.3.5
+#&gt; 1     1     3
+#&gt; 2     2     4
+#&gt; 3     3     5</pre>
+</div><p>You can force <code><a href="#chp-https://rdrr.io/r/base/data.frame" data-type="xref">#chp-https://rdrr.io/r/base/data.frame</a></code> to treat a list as a list of rows by wrapping it in list <code><a href="#chp-https://rdrr.io/r/base/AsIs" data-type="xref">#chp-https://rdrr.io/r/base/AsIs</a></code>, but the result doesn’t print particularly well:</p><div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">data.frame(
+  x = I(list(1:2, 3:5)), 
+  y = c("1, 2", "3, 4, 5")
+)
+#&gt;         x       y
+#&gt; 1    1, 2    1, 2
+#&gt; 2 3, 4, 5 3, 4, 5</pre>
+</div><p>It’s easier to use list-columns with tibbles because <code><a href="#chp-https://tibble.tidyverse.org/reference/tibble" data-type="xref">#chp-https://tibble.tidyverse.org/reference/tibble</a></code> treats lists like either vectors and the print method has been designed with lists in mind.</p></div>
+
+<section id="introduction" data-type="sect1">
+<h1>
+Introduction</h1>
+<p>In this chapter, you’ll learn the art of data <strong>rectangling</strong>, taking data that is fundamentally tree-like and converting it into a rectangular data frames made up of rows and columns. This is important because hierarchical data is surprisingly common, especially when working with data that comes from the web.</p>
+<p>To learn about rectangling, you’ll need to first learn about lists, the data structure that makes hierarchical data possible. Then you’ll learn about two crucial tidyr functions: <code><a href="#chp-https://tidyr.tidyverse.org/reference/unnest_longer" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/unnest_longer</a></code> and <code><a href="#chp-https://tidyr.tidyverse.org/reference/unnest_wider" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/unnest_wider</a></code>. We’ll then show you a few case studies, applying these simple functions again and again to solve real problems. We’ll finish off by talking about JSON, the most frequent source of hierarchical datasets and a common format for data exchange on the web.</p>
+
+<section id="prerequisites" data-type="sect2">
+<h2>
+Prerequisites</h2>
+<p>In this chapter we’ll use many functions from tidyr, a core member of the tidyverse. We’ll also use repurrrsive to provide some interesting datasets for rectangling practice, and we’ll finish by using jsonlite to read JSON files into R lists.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">library(tidyverse)
+library(repurrrsive)
+library(jsonlite)</pre>
+</div>
+</section>
+</section>
+
+<section id="lists" data-type="sect1">
+<h1>
+Lists</h1>
+<p>So far you’ve worked with data frames that contain simple vectors like integers, numbers, characters, date-times, and factors. These vectors are simple because they’re homogeneous: every element is the same type. If you want to store element of different types in the same vector, you’ll need a <strong>list</strong>, which you create with <code><a href="#chp-https://rdrr.io/r/base/list" data-type="xref">#chp-https://rdrr.io/r/base/list</a></code>:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">x1 &lt;- list(1:4, "a", TRUE)
+x1
+#&gt; [[1]]
+#&gt; [1] 1 2 3 4
+#&gt; 
+#&gt; [[2]]
+#&gt; [1] "a"
+#&gt; 
+#&gt; [[3]]
+#&gt; [1] TRUE</pre>
+</div>
+<p>It’s often convenient to name the components, or <strong>children</strong>, of a list, which you can do in the same way as naming the columns of a tibble:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">x2 &lt;- list(a = 1:2, b = 1:3, c = 1:4)
+x2
+#&gt; $a
+#&gt; [1] 1 2
+#&gt; 
+#&gt; $b
+#&gt; [1] 1 2 3
+#&gt; 
+#&gt; $c
+#&gt; [1] 1 2 3 4</pre>
+</div>
+<p>Even for these very simple lists, printing takes up quite a lot of space. A useful alternative is <code><a href="#chp-https://rdrr.io/r/utils/str" data-type="xref">#chp-https://rdrr.io/r/utils/str</a></code>, which generates a compact display of the <strong>str</strong>ucture, de-emphasizing the contents:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">str(x1)
+#&gt; List of 3
+#&gt;  $ : int [1:4] 1 2 3 4
+#&gt;  $ : chr "a"
+#&gt;  $ : logi TRUE
+str(x2)
+#&gt; List of 3
+#&gt;  $ a: int [1:2] 1 2
+#&gt;  $ b: int [1:3] 1 2 3
+#&gt;  $ c: int [1:4] 1 2 3 4</pre>
+</div>
+<p>As you can see, <code><a href="#chp-https://rdrr.io/r/utils/str" data-type="xref">#chp-https://rdrr.io/r/utils/str</a></code> displays each child of the list on its own line. It displays the name, if present, then an abbreviation of the type, then the first few values.</p>
+
+<section id="hierarchy" data-type="sect2">
+<h2>
+Hierarchy</h2>
+<p>Lists can contain any type of object, including other lists. This makes them suitable for representing hierarchical (tree-like) structures:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">x3 &lt;- list(list(1, 2), list(3, 4))
+str(x3)
+#&gt; List of 2
+#&gt;  $ :List of 2
+#&gt;   ..$ : num 1
+#&gt;   ..$ : num 2
+#&gt;  $ :List of 2
+#&gt;   ..$ : num 3
+#&gt;   ..$ : num 4</pre>
+</div>
+<p>This is notably different to <code><a href="#chp-https://rdrr.io/r/base/c" data-type="xref">#chp-https://rdrr.io/r/base/c</a></code>, which generates a flat vector:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">c(c(1, 2), c(3, 4))
+#&gt; [1] 1 2 3 4
+
+x4 &lt;- c(list(1, 2), list(3, 4))
+str(x4)
+#&gt; List of 4
+#&gt;  $ : num 1
+#&gt;  $ : num 2
+#&gt;  $ : num 3
+#&gt;  $ : num 4</pre>
+</div>
+<p>As lists get more complex, <code><a href="#chp-https://rdrr.io/r/utils/str" data-type="xref">#chp-https://rdrr.io/r/utils/str</a></code> gets more useful, as it lets you see the hierarchy at a glance:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">x5 &lt;- list(1, list(2, list(3, list(4, list(5)))))
+str(x5)
+#&gt; List of 2
+#&gt;  $ : num 1
+#&gt;  $ :List of 2
+#&gt;   ..$ : num 2
+#&gt;   ..$ :List of 2
+#&gt;   .. ..$ : num 3
+#&gt;   .. ..$ :List of 2
+#&gt;   .. .. ..$ : num 4
+#&gt;   .. .. ..$ :List of 1
+#&gt;   .. .. .. ..$ : num 5</pre>
+</div>
+<p>As lists get even larger and more complex, <code><a href="#chp-https://rdrr.io/r/utils/str" data-type="xref">#chp-https://rdrr.io/r/utils/str</a></code> eventually starts to fail, and you’ll need to switch to <code><a href="#chp-https://rdrr.io/r/utils/View" data-type="xref">#chp-https://rdrr.io/r/utils/View</a></code><span data-type="footnote">This is an RStudio feature.</span>. <a href="#fig-view-collapsed" data-type="xref">#fig-view-collapsed</a> shows the result of calling <code>View(x4)</code>. The viewer starts by showing just the top level of the list, but you can interactively expand any of the components to see more, as in <a href="#fig-view-expand-1" data-type="xref">#fig-view-expand-1</a>. RStudio will also show you the code you need to access that element, as in <a href="#fig-view-expand-2" data-type="xref">#fig-view-expand-2</a>. We’ll come back to how this code works in <a href="#sec-subset-one" data-type="xref">#sec-subset-one</a>.</p>
+<div class="cell">
+<div class="cell-output-display">
+
+<figure id="fig-view-expand-2"><p><img src="screenshots/View-1.png" alt="A screenshot of RStudio showing the list-viewer. It shows the two children of x4: the first child is a double vector and the second child is a list. A rightward facing triable indicates that the second child itself has children but you can't see them. " width="689"/></p>
+<figcaption>Figure 22.1: The RStudio view lets you interactively explore a complex list. The viewer opens showing only the top level of the list.</figcaption>
+</figure>
+</div>
+</div>
+<div class="cell">
+<div class="cell-output-display">
+
+<figure class="figure"><p><img src="screenshots/View-2.png" alt="Another screenshot of the list-viewer having expand the second child of x2. It also has two children, a double vector and another list. " width="689"/></p>
+<figcaption class="figure-caption">Figure 22.2: Clicking on the rightward facing triangle expands that component of the list so that you can also see its children.</figcaption>
+</figure>
+</div>
+</div>
+<div class="cell">
+<div class="cell-output-display">
+
+<figure class="figure"><p><img src="screenshots/View-3.png" alt="Another screenshot, having expanded the grandchild of x4 to see its two children, again a double vector and a list. " width="689"/></p>
+<figcaption class="figure-caption">Figure 22.3: You can repeat this operation as many times as needed to get to the data you’re interested in. Note the bottom-left corner: if you click an element of the list, RStudio will give you the subsetting code needed to access it, in this case <code>x4[[2]][[2]][[2]]</code>.</figcaption>
+</figure>
+</div>
+</div>
+</section>
+
+<section id="list-columns" data-type="sect2">
+<h2>
+List-columns</h2>
+<p>Lists can also live inside a tibble, where we call them list-columns. List-columns are useful because they allow you to shoehorn in objects that wouldn’t usually belong in a tibble. In particular, list-columns are are used a lot in the <a href="#chp-https://www.tidymodels" data-type="xref">#chp-https://www.tidymodels</a> ecosystem, because they allow you to store things like models or resamples in a data frame.</p>
+<p>Here’s a simple example of a list-column:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">df &lt;- tibble(
+  x = 1:2, 
+  y = c("a", "b"),
+  z = list(list(1, 2), list(3, 4, 5))
+)
+df
+#&gt; # A tibble: 2 × 3
+#&gt;       x y     z         
+#&gt;   &lt;int&gt; &lt;chr&gt; &lt;list&gt;    
+#&gt; 1     1 a     &lt;list [2]&gt;
+#&gt; 2     2 b     &lt;list [3]&gt;</pre>
+</div>
+<p>There’s nothing special about lists in a tibble; they behave like any other column:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">df |&gt; 
+  filter(x == 1)
+#&gt; # A tibble: 1 × 3
+#&gt;       x y     z         
+#&gt;   &lt;int&gt; &lt;chr&gt; &lt;list&gt;    
+#&gt; 1     1 a     &lt;list [2]&gt;</pre>
+</div>
+<p>Computing with list-columns is harder, but that’s because computing with lists is harder in general; we’ll come back to that in <a href="#chp-iteration" data-type="xref">#chp-iteration</a>. In this chapter, we’ll focus on unnesting list-columns out into regular variables so you can use your existing tools on them.</p>
+<p>The default print method just displays a rough summary of the contents. The list column could be arbitrarily complex, so there’s no good way to print it. If you want to see it, you’ll need to pull the list-column out and apply one of the techniques that you learned above:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">df |&gt; 
+  filter(x == 1) |&gt; 
+  pull(z) |&gt; 
+  str()
+#&gt; List of 1
+#&gt;  $ :List of 2
+#&gt;   ..$ : num 1
+#&gt;   ..$ : num 2</pre>
+</div>
+<p>Similarly, if you <code><a href="#chp-https://rdrr.io/r/utils/View" data-type="xref">#chp-https://rdrr.io/r/utils/View</a></code> a data frame in RStudio, you’ll get the standard tabular view, which doesn’t allow you to selectively expand list columns. To explore those fields you’ll need to <code><a href="#chp-https://dplyr.tidyverse.org/reference/pull" data-type="xref">#chp-https://dplyr.tidyverse.org/reference/pull</a></code> and view, e.g. <code>df |&gt; pull(z) |&gt; View()</code>.</p>
+<div data-type="note"><h1>
+Base R
+</h1><p>You are reading the work-in-progress second edition of R for Data Science. This chapter should be readable but is currently undergoing final polishing. You can find the complete first edition at <a href="https://r4ds.had.co.nz" class="uri">https://r4ds.had.co.nz</a>.</p>
+
+<p>It’s possible to put a list in a column of a <code>data.frame</code>, but it’s a lot fiddlier because <code><a href="#chp-https://rdrr.io/r/base/data.frame" data-type="xref">#chp-https://rdrr.io/r/base/data.frame</a></code> treats a list as a list of columns:</p><div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">data.frame(x = list(1:3, 3:5))
+#&gt;   x.1.3 x.3.5
+#&gt; 1     1     3
+#&gt; 2     2     4
+#&gt; 3     3     5</pre>
+</div><p>You can force <code><a href="#chp-https://rdrr.io/r/base/data.frame" data-type="xref">#chp-https://rdrr.io/r/base/data.frame</a></code> to treat a list as a list of rows by wrapping it in list <code><a href="#chp-https://rdrr.io/r/base/AsIs" data-type="xref">#chp-https://rdrr.io/r/base/AsIs</a></code>, but the result doesn’t print particularly well:</p><div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">data.frame(
+  x = I(list(1:2, 3:5)), 
+  y = c("1, 2", "3, 4, 5")
+)
+#&gt;         x       y
+#&gt; 1    1, 2    1, 2
+#&gt; 2 3, 4, 5 3, 4, 5</pre>
+</div><p>It’s easier to use list-columns with tibbles because <code><a href="#chp-https://tibble.tidyverse.org/reference/tibble" data-type="xref">#chp-https://tibble.tidyverse.org/reference/tibble</a></code> treats lists like either vectors and the print method has been designed with lists in mind.</p></div>
+
+</section>
+</section>
+
+<section id="unnesting" data-type="sect1">
+<h1>
+Unnesting</h1>
+<p>Now that you’ve learned the basics of lists and list-columns, let’s explore how you can turn them back into regular rows and columns. Here we’ll use very simple sample data so you can get the basic idea; in the next section we’ll switch to real data.</p>
+<p>List-columns tend to come in two basic forms: named and unnamed. When the children are <strong>named</strong>, they tend to have the same names in every row. For example, in <code>df1</code>, every element of list-column <code>y</code> has two elements named <code>a</code> and <code>b</code>. Named list-columns naturally unnest into columns: each named element becomes a new named column.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">df1 &lt;- tribble(
+  ~x, ~y,
+  1, list(a = 11, b = 12),
+  2, list(a = 21, b = 22),
+  3, list(a = 31, b = 32),
+)</pre>
+</div>
+<p>When the children are <strong>unnamed</strong>, the number of elements tends to vary from row-to-row. For example, in <code>df2</code>, the elements of list-column <code>y</code> are unnamed and vary in length from one to three. Unnamed list-columns naturally unnest in to rows: you’ll get one row for each child.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">
+df2 &lt;- tribble(
+  ~x, ~y,
+  1, list(11, 12, 13),
+  2, list(21),
+  3, list(31, 32),
+)</pre>
+</div>
+<p>tidyr provides two functions for these two cases: <code><a href="#chp-https://tidyr.tidyverse.org/reference/unnest_wider" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/unnest_wider</a></code> and <code><a href="#chp-https://tidyr.tidyverse.org/reference/unnest_longer" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/unnest_longer</a></code>. The following sections explain how they work.</p>
+
+<section id="unnest_wider" data-type="sect2">
+<h2>
+<code>unnest_wider()</code>
+</h2>
+<p>When each row has the same number of elements with the same names, like <code>df1</code>, it’s natural to put each component into its own column with <code><a href="#chp-https://tidyr.tidyverse.org/reference/unnest_wider" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/unnest_wider</a></code>:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">df1 |&gt; 
+  unnest_wider(y)
+#&gt; # A tibble: 3 × 3
+#&gt;       x     a     b
+#&gt;   &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt;
+#&gt; 1     1    11    12
+#&gt; 2     2    21    22
+#&gt; 3     3    31    32</pre>
+</div>
+<p>By default, the names of the new columns come exclusively from the names of the list elements, but you can use the <code>names_sep</code> argument to request that they combine the column name and the element name. This is useful for disambiguating repeated names.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">df1 |&gt; 
+  unnest_wider(y, names_sep = "_")
+#&gt; # A tibble: 3 × 3
+#&gt;       x   y_a   y_b
+#&gt;   &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt;
+#&gt; 1     1    11    12
+#&gt; 2     2    21    22
+#&gt; 3     3    31    32</pre>
+</div>
+<p>We can also use <code><a href="#chp-https://tidyr.tidyverse.org/reference/unnest_wider" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/unnest_wider</a></code> with unnamed list-columns, as in <code>df2</code>. Since columns require names but the list lacks them, <code><a href="#chp-https://tidyr.tidyverse.org/reference/unnest_wider" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/unnest_wider</a></code> will label them with consecutive integers:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">df2 |&gt; 
+  unnest_wider(y, names_sep = "_")
+#&gt; # A tibble: 3 × 4
+#&gt;       x   y_1   y_2   y_3
+#&gt;   &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt;
+#&gt; 1     1    11    12    13
+#&gt; 2     2    21    NA    NA
+#&gt; 3     3    31    32    NA</pre>
+</div>
+<p>You’ll notice that <code><a href="#chp-https://tidyr.tidyverse.org/reference/unnest_wider" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/unnest_wider</a></code>, much like <code><a href="#chp-https://tidyr.tidyverse.org/reference/pivot_wider" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/pivot_wider</a></code>, turns implicit missing values in to explicit missing values.</p>
+</section>
+
+<section id="unnest_longer" data-type="sect2">
+<h2>
+<code>unnest_longer()</code>
+</h2>
+<p>When each row contains an unnamed list, it’s most natural to put each element into its own row with <code><a href="#chp-https://tidyr.tidyverse.org/reference/unnest_longer" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/unnest_longer</a></code>:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">df2 |&gt; 
+  unnest_longer(y)
+#&gt; # A tibble: 6 × 2
+#&gt;       x     y
+#&gt;   &lt;dbl&gt; &lt;dbl&gt;
+#&gt; 1     1    11
+#&gt; 2     1    12
+#&gt; 3     1    13
+#&gt; 4     2    21
+#&gt; 5     3    31
+#&gt; 6     3    32</pre>
+</div>
+<p>Note how <code>x</code> is duplicated for each element inside of <code>y</code>: we get one row of output for each element inside the list-column. But what happens if one of the elements is empty, as in the following example?</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">df6 &lt;- tribble(
+  ~x, ~y,
+  "a", list(1, 2),
+  "b", list(3),
+  "c", list()
+)
+df6 |&gt; unnest_longer(y)
+#&gt; # A tibble: 3 × 2
+#&gt;   x         y
+#&gt;   &lt;chr&gt; &lt;dbl&gt;
+#&gt; 1 a         1
+#&gt; 2 a         2
+#&gt; 3 b         3</pre>
+</div>
+<p>We get zero rows in the output, so the row effectively disappears. Once <a href="https://github.com/tidyverse/tidyr/issues/1339" class="uri">https://github.com/tidyverse/tidyr/issues/1339</a> is fixed, you’ll be able to keep this row, replacing <code>y</code> with <code>NA</code> by setting <code>keep_empty = TRUE</code>.</p>
+<p>You can also unnest named list-columns, like <code>df1$y</code>, into rows. Because the elements are named, and those names might be useful data, tidyr puts them in a new column with the suffix <code>_id</code>:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">df1 |&gt; 
+  unnest_longer(y)
+#&gt; # A tibble: 6 × 3
+#&gt;       x     y y_id 
+#&gt;   &lt;dbl&gt; &lt;dbl&gt; &lt;chr&gt;
+#&gt; 1     1    11 a    
+#&gt; 2     1    12 b    
+#&gt; 3     2    21 a    
+#&gt; 4     2    22 b    
+#&gt; 5     3    31 a    
+#&gt; 6     3    32 b</pre>
+</div>
+<p>If you don’t want these <code>ids</code>, you can suppress them with <code>indices_include = FALSE</code>. On the other hand, it’s sometimes useful to retain the position of unnamed elements in unnamed list-columns. You can do this with <code>indices_include = TRUE</code>:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">df2 |&gt; 
+  unnest_longer(y, indices_include = TRUE)
+#&gt; # A tibble: 6 × 3
+#&gt;       x     y  y_id
+#&gt;   &lt;dbl&gt; &lt;dbl&gt; &lt;int&gt;
+#&gt; 1     1    11     1
+#&gt; 2     1    12     2
+#&gt; 3     1    13     3
+#&gt; 4     2    21     1
+#&gt; 5     3    31     1
+#&gt; 6     3    32     2</pre>
+</div>
+</section>
+
+<section id="inconsistent-types" data-type="sect2">
+<h2>
+Inconsistent types</h2>
+<p>What happens if you unnest a list-column contains different types of vector? For example, take the following dataset where the list-column <code>y</code> contains two numbers, a factor, and a logical, which can’t normally be mixed in a single column.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">df4 &lt;- tribble(
+  ~x, ~y,
+  "a", list(1, "a"),
+  "b", list(TRUE, factor("a"), 5)
+)</pre>
+</div>
+<p><code><a href="#chp-https://tidyr.tidyverse.org/reference/unnest_longer" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/unnest_longer</a></code> always keeps the set of columns change, while changing the number of rows. So what happens? How does <code><a href="#chp-https://tidyr.tidyverse.org/reference/unnest_longer" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/unnest_longer</a></code> produce five rows while keeping everything in <code>y</code>?</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">df4 |&gt; 
+  unnest_longer(y)
+#&gt; # A tibble: 5 × 2
+#&gt;   x     y        
+#&gt;   &lt;chr&gt; &lt;list&gt;   
+#&gt; 1 a     &lt;dbl [1]&gt;
+#&gt; 2 a     &lt;chr [1]&gt;
+#&gt; 3 b     &lt;lgl [1]&gt;
+#&gt; 4 b     &lt;fct [1]&gt;
+#&gt; 5 b     &lt;dbl [1]&gt;</pre>
+</div>
+<p>As you can see, the output contains a list-column, but every element of the list-column contains a single element. Because <code><a href="#chp-https://tidyr.tidyverse.org/reference/unnest_longer" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/unnest_longer</a></code> can’t find a common type of vector, it keeps the original types in a list-column. You might wonder if this breaks the commandment that every element of a column must be the same type — not quite: every element is a still a list, even though the contents of each element is a different type.</p>
+<p>What happens if you find this problem in a dataset you’re trying to rectangle? There are two basic options. You could use the <code>transform</code> argument to coerce all inputs to a common type. It’s not particularly useful here because there’s only really one class that these five class can be converted to character.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">df4 |&gt; 
+  unnest_longer(y, transform = as.character)
+#&gt; # A tibble: 5 × 2
+#&gt;   x     y    
+#&gt;   &lt;chr&gt; &lt;chr&gt;
+#&gt; 1 a     1    
+#&gt; 2 a     a    
+#&gt; 3 b     TRUE 
+#&gt; 4 b     a    
+#&gt; 5 b     5</pre>
+</div>
+<p>Another option would be to filter down to the rows that have values of a specific type:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">df4 |&gt; 
+  unnest_longer(y) |&gt; 
+  filter(map_lgl(y, is.numeric))
+#&gt; # A tibble: 2 × 2
+#&gt;   x     y        
+#&gt;   &lt;chr&gt; &lt;list&gt;   
+#&gt; 1 a     &lt;dbl [1]&gt;
+#&gt; 2 b     &lt;dbl [1]&gt;</pre>
+</div>
+<p>Then you can call <code><a href="#chp-https://tidyr.tidyverse.org/reference/unnest_longer" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/unnest_longer</a></code> once more:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">df4 |&gt; 
+  unnest_longer(y) |&gt; 
+  filter(map_lgl(y, is.numeric)) |&gt; 
+  unnest_longer(y)
+#&gt; # A tibble: 2 × 2
+#&gt;   x         y
+#&gt;   &lt;chr&gt; &lt;dbl&gt;
+#&gt; 1 a         1
+#&gt; 2 b         5</pre>
+</div>
+<p>You’ll learn more about <code><a href="#chp-https://purrr.tidyverse.org/reference/map" data-type="xref">#chp-https://purrr.tidyverse.org/reference/map</a></code> in <a href="#chp-iteration" data-type="xref">#chp-iteration</a>.</p>
+</section>
+
+<section id="other-functions" data-type="sect2">
+<h2>
+Other functions</h2>
+<p>tidyr has a few other useful rectangling functions that we’re not going to cover in this book:</p>
+<ul><li>
+<code><a href="#chp-https://tidyr.tidyverse.org/reference/unnest_auto" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/unnest_auto</a></code> automatically picks between <code><a href="#chp-https://tidyr.tidyverse.org/reference/unnest_longer" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/unnest_longer</a></code> and <code><a href="#chp-https://tidyr.tidyverse.org/reference/unnest_wider" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/unnest_wider</a></code> based on the structure of the list-column. It’s a great for rapid exploration, but ultimately its a bad idea because it doesn’t force you to understand how your data is structured, and makes your code harder to understand.</li>
+<li>
+<code><a href="#chp-https://tidyr.tidyverse.org/reference/unnest" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/unnest</a></code> expands both rows and columns. It’s useful when you have a list-column that contains a 2d structure like a data frame, which you don’t see in this book.</li>
+<li>
+<code><a href="#chp-https://tidyr.tidyverse.org/reference/hoist" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/hoist</a></code> allows you to reach into a deeply nested list and extract just the components that you need. It’s mostly equivalent to repeated invocations of <code><a href="#chp-https://tidyr.tidyverse.org/reference/unnest_wider" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/unnest_wider</a></code> + <code><a href="#chp-https://dplyr.tidyverse.org/reference/select" data-type="xref">#chp-https://dplyr.tidyverse.org/reference/select</a></code> so read up on it if you’re trying to extract just a couple of important variables embedded in a bunch of data that you don’t care about.</li>
+</ul><p>These are good to know about when you’re reading other people’s code or tackling rarer rectangling challenges.</p>
+</section>
+
+<section id="exercises" data-type="sect2">
+<h2>
+Exercises</h2>
+<ol type="1"><li>
+<p>From time-to-time you encounter data frames with multiple list-columns with aligned values. For example, in the following data frame, the values of <code>y</code> and <code>z</code> are aligned (i.e. <code>y</code> and <code>z</code> will always have the same length within a row, and the first value of <code>y</code> corresponds to the first value of <code>z</code>). What happens if you apply two <code><a href="#chp-https://tidyr.tidyverse.org/reference/unnest_longer" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/unnest_longer</a></code> calls to this data frame? How can you preserve the relationship between <code>x</code> and <code>y</code>? (Hint: carefully read the docs).</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">df4 &lt;- tribble(
+  ~x, ~y, ~z,
+  "a", list("y-a-1", "y-a-2"), list("z-a-1", "z-a-2"),
+  "b", list("y-b-1", "y-b-2", "y-b-3"), list("z-b-1", "z-b-2", "z-b-3")
+)</pre>
+</div>
+</li>
+</ol></section>
+</section>
+
+<section id="case-studies" data-type="sect1">
+<h1>
+Case studies</h1>
+<p>The main difference between the simple examples we used above and real data is that real data typically contains multiple levels of nesting that require multiple calls to <code><a href="#chp-https://tidyr.tidyverse.org/reference/unnest_longer" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/unnest_longer</a></code> and/or <code><a href="#chp-https://tidyr.tidyverse.org/reference/unnest_wider" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/unnest_wider</a></code>. This section will work through four real rectangling challenges using datasets from the repurrrsive package, inspired by datasets that we’ve encountered in the wild.</p>
+
+<section id="very-wide-data" data-type="sect2">
+<h2>
+Very wide data</h2>
+<p>We’ll with <code>gh_repos</code>. This is a list that contains data about a collection of GitHub repositories retrieved using the GitHub API. It’s a very deeply nested list so it’s difficult to show the structure in this book; you might want to explore a little on your own with <code>View(gh_repos)</code> before we continue.</p>
+<p><code>gh_repos</code> is a list, but our tools work with list-columns, so we’ll begin by putting it into a tibble. We call the column <code>json</code> for reasons we’ll get to later.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">repos &lt;- tibble(json = gh_repos)
+repos
+#&gt; # A tibble: 6 × 1
+#&gt;   json       
+#&gt;   &lt;list&gt;     
+#&gt; 1 &lt;list [30]&gt;
+#&gt; 2 &lt;list [30]&gt;
+#&gt; 3 &lt;list [30]&gt;
+#&gt; 4 &lt;list [26]&gt;
+#&gt; 5 &lt;list [30]&gt;
+#&gt; 6 &lt;list [30]&gt;</pre>
+</div>
+<p>This tibble contains 6 rows, one row for each child of <code>gh_repos</code>. Each row contains a unnamed list with either 26 or 30 rows. Since these are unnamed, we’ll start with <code><a href="#chp-https://tidyr.tidyverse.org/reference/unnest_longer" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/unnest_longer</a></code> to put each child in its own row:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">repos |&gt; 
+  unnest_longer(json)
+#&gt; # A tibble: 176 × 1
+#&gt;   json             
+#&gt;   &lt;list&gt;           
+#&gt; 1 &lt;named list [68]&gt;
+#&gt; 2 &lt;named list [68]&gt;
+#&gt; 3 &lt;named list [68]&gt;
+#&gt; 4 &lt;named list [68]&gt;
+#&gt; 5 &lt;named list [68]&gt;
+#&gt; 6 &lt;named list [68]&gt;
+#&gt; # … with 170 more rows</pre>
+</div>
+<p>At first glance, it might seem like we haven’t improved the situation: while we have more rows (176 instead of 6) each element of <code>json</code> is still a list. However, there’s an important difference: now each element is a <strong>named</strong> list so we can use <code><a href="#chp-https://tidyr.tidyverse.org/reference/unnest_wider" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/unnest_wider</a></code> to put each element into its own column:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">repos |&gt; 
+  unnest_longer(json) |&gt; 
+  unnest_wider(json) 
+#&gt; # A tibble: 176 × 68
+#&gt;        id name  full_…¹ owner        private html_…² descr…³ fork  url   forks…⁴
+#&gt;     &lt;int&gt; &lt;chr&gt; &lt;chr&gt;   &lt;list&gt;       &lt;lgl&gt;   &lt;chr&gt;   &lt;chr&gt;   &lt;lgl&gt; &lt;chr&gt; &lt;chr&gt;  
+#&gt; 1  6.12e7 after gaborc… &lt;named list&gt; FALSE   https:… Run Co… FALSE http… https:…
+#&gt; 2  4.05e7 argu… gaborc… &lt;named list&gt; FALSE   https:… Declar… FALSE http… https:…
+#&gt; 3  3.64e7 ask   gaborc… &lt;named list&gt; FALSE   https:… Friend… FALSE http… https:…
+#&gt; 4  3.49e7 base… gaborc… &lt;named list&gt; FALSE   https:… Do we … FALSE http… https:…
+#&gt; 5  6.16e7 cite… gaborc… &lt;named list&gt; FALSE   https:… Test R… TRUE  http… https:…
+#&gt; 6  3.39e7 clis… gaborc… &lt;named list&gt; FALSE   https:… Unicod… FALSE http… https:…
+#&gt; # … with 170 more rows, 58 more variables: keys_url &lt;chr&gt;,
+#&gt; #   collaborators_url &lt;chr&gt;, teams_url &lt;chr&gt;, hooks_url &lt;chr&gt;,
+#&gt; #   issue_events_url &lt;chr&gt;, events_url &lt;chr&gt;, assignees_url &lt;chr&gt;,
+#&gt; #   branches_url &lt;chr&gt;, tags_url &lt;chr&gt;, blobs_url &lt;chr&gt;, git_tags_url &lt;chr&gt;,
+#&gt; #   git_refs_url &lt;chr&gt;, trees_url &lt;chr&gt;, statuses_url &lt;chr&gt;,
+#&gt; #   languages_url &lt;chr&gt;, stargazers_url &lt;chr&gt;, contributors_url &lt;chr&gt;,
+#&gt; #   subscribers_url &lt;chr&gt;, subscription_url &lt;chr&gt;, commits_url &lt;chr&gt;, …</pre>
+</div>
+<p>This has worked but the result is a little overwhelming: there are so many columns that tibble doesn’t even print all of them! We can see them all with <code><a href="#chp-https://rdrr.io/r/base/names" data-type="xref">#chp-https://rdrr.io/r/base/names</a></code>:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">repos |&gt; 
+  unnest_longer(json) |&gt; 
+  unnest_wider(json) |&gt; 
+  names()
+#&gt;  [1] "id"                "name"              "full_name"        
+#&gt;  [4] "owner"             "private"           "html_url"         
+#&gt;  [7] "description"       "fork"              "url"              
+#&gt; [10] "forks_url"         "keys_url"          "collaborators_url"
+#&gt; [13] "teams_url"         "hooks_url"         "issue_events_url" 
+#&gt; [16] "events_url"        "assignees_url"     "branches_url"     
+#&gt; [19] "tags_url"          "blobs_url"         "git_tags_url"     
+#&gt; [22] "git_refs_url"      "trees_url"         "statuses_url"     
+#&gt; [25] "languages_url"     "stargazers_url"    "contributors_url" 
+#&gt; [28] "subscribers_url"   "subscription_url"  "commits_url"      
+#&gt; [31] "git_commits_url"   "comments_url"      "issue_comment_url"
+#&gt; [34] "contents_url"      "compare_url"       "merges_url"       
+#&gt; [37] "archive_url"       "downloads_url"     "issues_url"       
+#&gt; [40] "pulls_url"         "milestones_url"    "notifications_url"
+#&gt; [43] "labels_url"        "releases_url"      "deployments_url"  
+#&gt; [46] "created_at"        "updated_at"        "pushed_at"        
+#&gt; [49] "git_url"           "ssh_url"           "clone_url"        
+#&gt; [52] "svn_url"           "homepage"          "size"             
+#&gt; [55] "stargazers_count"  "watchers_count"    "language"         
+#&gt; [58] "has_issues"        "has_downloads"     "has_wiki"         
+#&gt; [61] "has_pages"         "forks_count"       "mirror_url"       
+#&gt; [64] "open_issues_count" "forks"             "open_issues"      
+#&gt; [67] "watchers"          "default_branch"</pre>
+</div>
+<p>Let’s select a few that look interesting:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">repos |&gt; 
+  unnest_longer(json) |&gt; 
+  unnest_wider(json) |&gt; 
+  select(id, full_name, owner, description)
+#&gt; # A tibble: 176 × 4
+#&gt;         id full_name               owner             description                
+#&gt;      &lt;int&gt; &lt;chr&gt;                   &lt;list&gt;            &lt;chr&gt;                      
+#&gt; 1 61160198 gaborcsardi/after       &lt;named list [17]&gt; Run Code in the Background 
+#&gt; 2 40500181 gaborcsardi/argufy      &lt;named list [17]&gt; Declarative function argum…
+#&gt; 3 36442442 gaborcsardi/ask         &lt;named list [17]&gt; Friendly CLI interaction i…
+#&gt; 4 34924886 gaborcsardi/baseimports &lt;named list [17]&gt; Do we get warnings for und…
+#&gt; 5 61620661 gaborcsardi/citest      &lt;named list [17]&gt; Test R package and repo fo…
+#&gt; 6 33907457 gaborcsardi/clisymbols  &lt;named list [17]&gt; Unicode symbols for CLI ap…
+#&gt; # … with 170 more rows</pre>
+</div>
+<p>You can use this to work back to understand how <code>gh_repos</code> was strucured: each child was a GitHub user containing a list of up to 30 GitHub repositories that they created.</p>
+<p><code>owner</code> is another list-column, and since it contains a named list, we can use <code><a href="#chp-https://tidyr.tidyverse.org/reference/unnest_wider" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/unnest_wider</a></code> to get at the values:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">repos |&gt; 
+  unnest_longer(json) |&gt; 
+  unnest_wider(json) |&gt; 
+  select(id, full_name, owner, description) |&gt; 
+  unnest_wider(owner)
+#&gt; Error in `unpack()`:
+#&gt; ! Names must be unique.
+#&gt; ✖ These names are duplicated:
+#&gt;   * "id" at locations 1 and 4.
+#&gt; ℹ Use argument `names_repair` to specify repair strategy.</pre>
+</div>
+<!--# TODO: https://github.com/tidyverse/tidyr/issues/1390 -->
+<p>Uh oh, this list column also contains an <code>id</code> column and we can’t have two <code>id</code> columns in the same data frame. Rather than following the advice to use <code>names_repair</code> (which would also work), we’ll instead use <code>names_sep</code>:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">repos |&gt; 
+  unnest_longer(json) |&gt; 
+  unnest_wider(json) |&gt; 
+  select(id, full_name, owner, description) |&gt; 
+  unnest_wider(owner, names_sep = "_")
+#&gt; # A tibble: 176 × 20
+#&gt;       id full_…¹ owner…² owner…³ owner…⁴ owner…⁵ owner…⁶ owner…⁷ owner…⁸ owner…⁹
+#&gt;    &lt;int&gt; &lt;chr&gt;   &lt;chr&gt;     &lt;int&gt; &lt;chr&gt;   &lt;chr&gt;   &lt;chr&gt;   &lt;chr&gt;   &lt;chr&gt;   &lt;chr&gt;  
+#&gt; 1 6.12e7 gaborc… gaborc…  660288 https:… ""      https:… https:… https:… https:…
+#&gt; 2 4.05e7 gaborc… gaborc…  660288 https:… ""      https:… https:… https:… https:…
+#&gt; 3 3.64e7 gaborc… gaborc…  660288 https:… ""      https:… https:… https:… https:…
+#&gt; 4 3.49e7 gaborc… gaborc…  660288 https:… ""      https:… https:… https:… https:…
+#&gt; 5 6.16e7 gaborc… gaborc…  660288 https:… ""      https:… https:… https:… https:…
+#&gt; 6 3.39e7 gaborc… gaborc…  660288 https:… ""      https:… https:… https:… https:…
+#&gt; # … with 170 more rows, 10 more variables: owner_gists_url &lt;chr&gt;,
+#&gt; #   owner_starred_url &lt;chr&gt;, owner_subscriptions_url &lt;chr&gt;,
+#&gt; #   owner_organizations_url &lt;chr&gt;, owner_repos_url &lt;chr&gt;,
+#&gt; #   owner_events_url &lt;chr&gt;, owner_received_events_url &lt;chr&gt;, owner_type &lt;chr&gt;,
+#&gt; #   owner_site_admin &lt;lgl&gt;, description &lt;chr&gt;, and abbreviated variable names
+#&gt; #   ¹​full_name, ²​owner_login, ³​owner_id, ⁴​owner_avatar_url, ⁵​owner_gravatar_id,
+#&gt; #   ⁶​owner_url, ⁷​owner_html_url, ⁸​owner_followers_url, ⁹​owner_following_url</pre>
+</div>
+<p>This gives another wide dataset, but you can see that <code>owner</code> appears to contain a lot of additional data about the person who “owns” the repository.</p>
+</section>
+
+<section id="relational-data" data-type="sect2">
+<h2>
+Relational data</h2>
+<p>Nested data is sometimes used to represent data that we’d usually spread out into multiple data frames. For example, take <code>got_chars</code>. Like <code>gh_repos</code> it’s a list, so we start by turning it into a list-column of a tibble:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">chars &lt;- tibble(json = got_chars)
+chars
+#&gt; # A tibble: 30 × 1
+#&gt;   json             
+#&gt;   &lt;list&gt;           
+#&gt; 1 &lt;named list [18]&gt;
+#&gt; 2 &lt;named list [18]&gt;
+#&gt; 3 &lt;named list [18]&gt;
+#&gt; 4 &lt;named list [18]&gt;
+#&gt; 5 &lt;named list [18]&gt;
+#&gt; 6 &lt;named list [18]&gt;
+#&gt; # … with 24 more rows</pre>
+</div>
+<p>The <code>json</code> column contains named elements, so we’ll start by widening it:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">chars |&gt; 
+  unnest_wider(json)
+#&gt; # A tibble: 30 × 18
+#&gt;   url            id name  gender culture born  died  alive titles aliases father
+#&gt;   &lt;chr&gt;       &lt;int&gt; &lt;chr&gt; &lt;chr&gt;  &lt;chr&gt;   &lt;chr&gt; &lt;chr&gt; &lt;lgl&gt; &lt;list&gt; &lt;list&gt;  &lt;chr&gt; 
+#&gt; 1 https://ww…  1022 Theo… Male   "Ironb… "In … ""    TRUE  &lt;chr&gt;  &lt;chr&gt;   ""    
+#&gt; 2 https://ww…  1052 Tyri… Male   ""      "In … ""    TRUE  &lt;chr&gt;  &lt;chr&gt;   ""    
+#&gt; 3 https://ww…  1074 Vict… Male   "Ironb… "In … ""    TRUE  &lt;chr&gt;  &lt;chr&gt;   ""    
+#&gt; 4 https://ww…  1109 Will  Male   ""      ""    "In … FALSE &lt;chr&gt;  &lt;chr&gt;   ""    
+#&gt; 5 https://ww…  1166 Areo… Male   "Norvo… "In … ""    TRUE  &lt;chr&gt;  &lt;chr&gt;   ""    
+#&gt; 6 https://ww…  1267 Chett Male   ""      "At … "In … FALSE &lt;chr&gt;  &lt;chr&gt;   ""    
+#&gt; # … with 24 more rows, and 7 more variables: mother &lt;chr&gt;, spouse &lt;chr&gt;,
+#&gt; #   allegiances &lt;list&gt;, books &lt;list&gt;, povBooks &lt;list&gt;, tvSeries &lt;list&gt;,
+#&gt; #   playedBy &lt;list&gt;</pre>
+</div>
+<p>And selecting a few columns to make it easier to read:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">characters &lt;- chars |&gt; 
+  unnest_wider(json) |&gt; 
+  select(id, name, gender, culture, born, died, alive)
+characters
+#&gt; # A tibble: 30 × 7
+#&gt;      id name              gender culture    born                     died  alive
+#&gt;   &lt;int&gt; &lt;chr&gt;             &lt;chr&gt;  &lt;chr&gt;      &lt;chr&gt;                    &lt;chr&gt; &lt;lgl&gt;
+#&gt; 1  1022 Theon Greyjoy     Male   "Ironborn" "In 278 AC or 279 AC, a… ""    TRUE 
+#&gt; 2  1052 Tyrion Lannister  Male   ""         "In 273 AC, at Casterly… ""    TRUE 
+#&gt; 3  1074 Victarion Greyjoy Male   "Ironborn" "In 268 AC or before, a… ""    TRUE 
+#&gt; 4  1109 Will              Male   ""         ""                       "In … FALSE
+#&gt; 5  1166 Areo Hotah        Male   "Norvoshi" "In 257 AC or before, a… ""    TRUE 
+#&gt; 6  1267 Chett             Male   ""         "At Hag's Mire"          "In … FALSE
+#&gt; # … with 24 more rows</pre>
+</div>
+<p>There are also many list-columns:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">chars |&gt; 
+  unnest_wider(json) |&gt; 
+  select(id, where(is.list))
+#&gt; # A tibble: 30 × 8
+#&gt;      id titles    aliases    allegiances books     povBooks  tvSeries  playedBy 
+#&gt;   &lt;int&gt; &lt;list&gt;    &lt;list&gt;     &lt;list&gt;      &lt;list&gt;    &lt;list&gt;    &lt;list&gt;    &lt;list&gt;   
+#&gt; 1  1022 &lt;chr [3]&gt; &lt;chr [4]&gt;  &lt;chr [1]&gt;   &lt;chr [3]&gt; &lt;chr [2]&gt; &lt;chr [6]&gt; &lt;chr [1]&gt;
+#&gt; 2  1052 &lt;chr [2]&gt; &lt;chr [11]&gt; &lt;chr [1]&gt;   &lt;chr [2]&gt; &lt;chr [4]&gt; &lt;chr [6]&gt; &lt;chr [1]&gt;
+#&gt; 3  1074 &lt;chr [2]&gt; &lt;chr [1]&gt;  &lt;chr [1]&gt;   &lt;chr [3]&gt; &lt;chr [2]&gt; &lt;chr [1]&gt; &lt;chr [1]&gt;
+#&gt; 4  1109 &lt;chr [1]&gt; &lt;chr [1]&gt;  &lt;NULL&gt;      &lt;chr [1]&gt; &lt;chr [1]&gt; &lt;chr [1]&gt; &lt;chr [1]&gt;
+#&gt; 5  1166 &lt;chr [1]&gt; &lt;chr [1]&gt;  &lt;chr [1]&gt;   &lt;chr [3]&gt; &lt;chr [2]&gt; &lt;chr [2]&gt; &lt;chr [1]&gt;
+#&gt; 6  1267 &lt;chr [1]&gt; &lt;chr [1]&gt;  &lt;NULL&gt;      &lt;chr [2]&gt; &lt;chr [1]&gt; &lt;chr [1]&gt; &lt;chr [1]&gt;
+#&gt; # … with 24 more rows</pre>
+</div>
+<p>Lets explore the <code>titles</code> column. It’s an unnamed list-column, so we’ll unnest it into rows:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">chars |&gt; 
+  unnest_wider(json) |&gt; 
+  select(id, titles) |&gt; 
+  unnest_longer(titles)
+#&gt; # A tibble: 60 × 2
+#&gt;      id titles                                              
+#&gt;   &lt;int&gt; &lt;chr&gt;                                               
+#&gt; 1  1022 Prince of Winterfell                                
+#&gt; 2  1022 Captain of Sea Bitch                                
+#&gt; 3  1022 Lord of the Iron Islands (by law of the green lands)
+#&gt; 4  1052 Acting Hand of the King (former)                    
+#&gt; 5  1052 Master of Coin (former)                             
+#&gt; 6  1074 Lord Captain of the Iron Fleet                      
+#&gt; # … with 54 more rows</pre>
+</div>
+<p>You might expect to see this data in its own table because it would be easy to join to the characters data as needed. To do so, we’ll do a little cleaning: removing the rows containing empty strings and renaming <code>titles</code> to <code>title</code> since each row now only contains a single title.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">titles &lt;- chars |&gt; 
+  unnest_wider(json) |&gt; 
+  select(id, titles) |&gt; 
+  unnest_longer(titles) |&gt; 
+  filter(titles != "") |&gt; 
+  rename(title = titles)
+titles
+#&gt; # A tibble: 53 × 2
+#&gt;      id title                                               
+#&gt;   &lt;int&gt; &lt;chr&gt;                                               
+#&gt; 1  1022 Prince of Winterfell                                
+#&gt; 2  1022 Captain of Sea Bitch                                
+#&gt; 3  1022 Lord of the Iron Islands (by law of the green lands)
+#&gt; 4  1052 Acting Hand of the King (former)                    
+#&gt; 5  1052 Master of Coin (former)                             
+#&gt; 6  1074 Lord Captain of the Iron Fleet                      
+#&gt; # … with 47 more rows</pre>
+</div>
+<p>Now, for example, we could use this table tofind all the characters that are captains and see all their titles:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">captains &lt;- titles |&gt; filter(str_detect(title, "Captain"))
+captains
+#&gt; # A tibble: 5 × 2
+#&gt;      id title                                 
+#&gt;   &lt;int&gt; &lt;chr&gt;                                 
+#&gt; 1  1022 Captain of Sea Bitch                  
+#&gt; 2  1074 Lord Captain of the Iron Fleet        
+#&gt; 3  1166 Captain of the Guard at Sunspear      
+#&gt; 4   150 Captain of the Black Wind             
+#&gt; 5    60 Captain of the Golden Storm (formerly)
+
+characters |&gt; 
+  select(id, name) |&gt; 
+  inner_join(titles, by = "id", multiple = "all")
+#&gt; # A tibble: 53 × 3
+#&gt;      id name              title                                               
+#&gt;   &lt;int&gt; &lt;chr&gt;             &lt;chr&gt;                                               
+#&gt; 1  1022 Theon Greyjoy     Prince of Winterfell                                
+#&gt; 2  1022 Theon Greyjoy     Captain of Sea Bitch                                
+#&gt; 3  1022 Theon Greyjoy     Lord of the Iron Islands (by law of the green lands)
+#&gt; 4  1052 Tyrion Lannister  Acting Hand of the King (former)                    
+#&gt; 5  1052 Tyrion Lannister  Master of Coin (former)                             
+#&gt; 6  1074 Victarion Greyjoy Lord Captain of the Iron Fleet                      
+#&gt; # … with 47 more rows</pre>
+</div>
+<p>You could imagine creating a table like this for each of the list-columns, then using joins to combine them with the character data as you need it.</p>
+</section>
+
+<section id="a-dash-of-text-analysis" data-type="sect2">
+<h2>
+A dash of text analysis</h2>
+<p>What if we wanted to find the most common words in the title? One simple approach starts by using <code><a href="#chp-https://stringr.tidyverse.org/reference/str_split" data-type="xref">#chp-https://stringr.tidyverse.org/reference/str_split</a></code> to break each element of <code>title</code> up into words by spitting on <code>" "</code>:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">titles |&gt; 
+  mutate(word = str_split(title, " "), .keep = "unused")
+#&gt; # A tibble: 53 × 2
+#&gt;      id word      
+#&gt;   &lt;int&gt; &lt;list&gt;    
+#&gt; 1  1022 &lt;chr [3]&gt; 
+#&gt; 2  1022 &lt;chr [4]&gt; 
+#&gt; 3  1022 &lt;chr [11]&gt;
+#&gt; 4  1052 &lt;chr [6]&gt; 
+#&gt; 5  1052 &lt;chr [4]&gt; 
+#&gt; 6  1074 &lt;chr [6]&gt; 
+#&gt; # … with 47 more rows</pre>
+</div>
+<p>This creates a unnamed variable length list-column, so we can use <code><a href="#chp-https://tidyr.tidyverse.org/reference/unnest_longer" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/unnest_longer</a></code>:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">titles |&gt; 
+  mutate(word = str_split(title, " "), .keep = "unused") |&gt; 
+  unnest_longer(word)
+#&gt; # A tibble: 202 × 2
+#&gt;      id word      
+#&gt;   &lt;int&gt; &lt;chr&gt;     
+#&gt; 1  1022 Prince    
+#&gt; 2  1022 of        
+#&gt; 3  1022 Winterfell
+#&gt; 4  1022 Captain   
+#&gt; 5  1022 of        
+#&gt; 6  1022 Sea       
+#&gt; # … with 196 more rows</pre>
+</div>
+<p>And then we can count that column to find the most common words:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">titles |&gt; 
+  mutate(word = str_split(title, " "), .keep = "unused") |&gt; 
+  unnest_longer(word) |&gt; 
+  count(word, sort = TRUE)
+#&gt; # A tibble: 78 × 2
+#&gt;   word        n
+#&gt;   &lt;chr&gt;   &lt;int&gt;
+#&gt; 1 of         41
+#&gt; 2 the        29
+#&gt; 3 Lord        9
+#&gt; 4 Hand        6
+#&gt; 5 Captain     5
+#&gt; 6 King        5
+#&gt; # … with 72 more rows</pre>
+</div>
+<p>Some of those words are not very interesting so we could create a list of common words to drop. In text analysis these is commonly called stop words.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">stop_words &lt;- tibble(word = c("of", "the"))
+
+titles |&gt; 
+  mutate(word = str_split(title, " "), .keep = "unused") |&gt; 
+  unnest_longer(word) |&gt; 
+  anti_join(stop_words) |&gt; 
+  count(word, sort = TRUE)
+#&gt; Joining with `by = join_by(word)`
+#&gt; # A tibble: 76 × 2
+#&gt;   word         n
+#&gt;   &lt;chr&gt;    &lt;int&gt;
+#&gt; 1 Lord         9
+#&gt; 2 Hand         6
+#&gt; 3 Captain      5
+#&gt; 4 King         5
+#&gt; 5 Princess     5
+#&gt; 6 Queen        5
+#&gt; # … with 70 more rows</pre>
+</div>
+<p>Breaking up text into individual fragments is a powerful idea that underlies much of text analysis. If this sounds interesting, a good place to learn more is <a href="#chp-https://www.tidytextmining" data-type="xref">#chp-https://www.tidytextmining</a> by Julia Silge and David Robinson.</p>
+</section>
+
+<section id="deeply-nested" data-type="sect2">
+<h2>
+Deeply nested</h2>
+<p>We’ll finish off these case studies with a list-column that’s very deeply nested and requires repeated rounds of <code><a href="#chp-https://tidyr.tidyverse.org/reference/unnest_wider" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/unnest_wider</a></code> and <code><a href="#chp-https://tidyr.tidyverse.org/reference/unnest_longer" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/unnest_longer</a></code> to unravel: <code>gmaps_cities</code>. This is a two column tibble containing five city names and the results of using Google’s <a href="#chp-https://developers.google.com/maps/documentation/geocoding" data-type="xref">#chp-https://developers.google.com/maps/documentation/geocoding</a> to determine their location:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">gmaps_cities
+#&gt; # A tibble: 5 × 2
+#&gt;   city       json            
+#&gt;   &lt;chr&gt;      &lt;list&gt;          
+#&gt; 1 Houston    &lt;named list [2]&gt;
+#&gt; 2 Washington &lt;named list [2]&gt;
+#&gt; 3 New York   &lt;named list [2]&gt;
+#&gt; 4 Chicago    &lt;named list [2]&gt;
+#&gt; 5 Arlington  &lt;named list [2]&gt;</pre>
+</div>
+<p><code>json</code> is a list-column with internal names, so we start with an <code><a href="#chp-https://tidyr.tidyverse.org/reference/unnest_wider" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/unnest_wider</a></code>:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">gmaps_cities |&gt; 
+  unnest_wider(json)
+#&gt; # A tibble: 5 × 3
+#&gt;   city       results    status
+#&gt;   &lt;chr&gt;      &lt;list&gt;     &lt;chr&gt; 
+#&gt; 1 Houston    &lt;list [1]&gt; OK    
+#&gt; 2 Washington &lt;list [2]&gt; OK    
+#&gt; 3 New York   &lt;list [1]&gt; OK    
+#&gt; 4 Chicago    &lt;list [1]&gt; OK    
+#&gt; 5 Arlington  &lt;list [2]&gt; OK</pre>
+</div>
+<p>This gives us the <code>status</code> and the <code>results</code>. We’ll drop the status column since they’re all <code>OK</code>; in a real analysis, you’d also want capture all the rows where <code>status != "OK"</code> and figure out what went wrong. <code>results</code> is an unnamed list, with either one or two elements (we’ll see why shortly) so we’ll unnest it into rows:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">gmaps_cities |&gt; 
+  unnest_wider(json) |&gt; 
+  select(-status) |&gt; 
+  unnest_longer(results)
+#&gt; # A tibble: 7 × 2
+#&gt;   city       results         
+#&gt;   &lt;chr&gt;      &lt;list&gt;          
+#&gt; 1 Houston    &lt;named list [5]&gt;
+#&gt; 2 Washington &lt;named list [5]&gt;
+#&gt; 3 Washington &lt;named list [5]&gt;
+#&gt; 4 New York   &lt;named list [5]&gt;
+#&gt; 5 Chicago    &lt;named list [5]&gt;
+#&gt; 6 Arlington  &lt;named list [5]&gt;
+#&gt; # … with 1 more row</pre>
+</div>
+<p>Now <code>results</code> is a named list, so we’ll use <code><a href="#chp-https://tidyr.tidyverse.org/reference/unnest_wider" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/unnest_wider</a></code>:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">locations &lt;- gmaps_cities |&gt; 
+  unnest_wider(json) |&gt; 
+  select(-status) |&gt; 
+  unnest_longer(results) |&gt; 
+  unnest_wider(results)
+locations
+#&gt; # A tibble: 7 × 6
+#&gt;   city       address_components formatted_address   geometry     place_id types 
+#&gt;   &lt;chr&gt;      &lt;list&gt;             &lt;chr&gt;               &lt;list&gt;       &lt;chr&gt;    &lt;list&gt;
+#&gt; 1 Houston    &lt;list [4]&gt;         Houston, TX, USA    &lt;named list&gt; ChIJAYW… &lt;list&gt;
+#&gt; 2 Washington &lt;list [2]&gt;         Washington, USA     &lt;named list&gt; ChIJ-bD… &lt;list&gt;
+#&gt; 3 Washington &lt;list [4]&gt;         Washington, DC, USA &lt;named list&gt; ChIJW-T… &lt;list&gt;
+#&gt; 4 New York   &lt;list [3]&gt;         New York, NY, USA   &lt;named list&gt; ChIJOwg… &lt;list&gt;
+#&gt; 5 Chicago    &lt;list [4]&gt;         Chicago, IL, USA    &lt;named list&gt; ChIJ7cv… &lt;list&gt;
+#&gt; 6 Arlington  &lt;list [4]&gt;         Arlington, TX, USA  &lt;named list&gt; ChIJ05g… &lt;list&gt;
+#&gt; # … with 1 more row</pre>
+</div>
+<p>Now we can see why two cities got two results: Washington matched both Washington state and Washington, DC, and Arlington matched Arlington, Virginia and Arlington, Texas.</p>
+<p>There are few different places we could go from here. We might want to determine the exact location of the match, which is stored in the <code>geometry</code> list-column:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">locations |&gt; 
+  select(city, formatted_address, geometry) |&gt; 
+  unnest_wider(geometry)
+#&gt; # A tibble: 7 × 6
+#&gt;   city       formatted_address   bounds       location     locati…¹ viewport    
+#&gt;   &lt;chr&gt;      &lt;chr&gt;               &lt;list&gt;       &lt;list&gt;       &lt;chr&gt;    &lt;list&gt;      
+#&gt; 1 Houston    Houston, TX, USA    &lt;named list&gt; &lt;named list&gt; APPROXI… &lt;named list&gt;
+#&gt; 2 Washington Washington, USA     &lt;named list&gt; &lt;named list&gt; APPROXI… &lt;named list&gt;
+#&gt; 3 Washington Washington, DC, USA &lt;named list&gt; &lt;named list&gt; APPROXI… &lt;named list&gt;
+#&gt; 4 New York   New York, NY, USA   &lt;named list&gt; &lt;named list&gt; APPROXI… &lt;named list&gt;
+#&gt; 5 Chicago    Chicago, IL, USA    &lt;named list&gt; &lt;named list&gt; APPROXI… &lt;named list&gt;
+#&gt; 6 Arlington  Arlington, TX, USA  &lt;named list&gt; &lt;named list&gt; APPROXI… &lt;named list&gt;
+#&gt; # … with 1 more row, and abbreviated variable name ¹​location_type</pre>
+</div>
+<p>That gives us new <code>bounds</code> (a rectangular region) and <code>location</code> (a point). We can unnest <code>location</code> to see the latitude (<code>lat</code>) and longitude (<code>lng</code>):</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">locations |&gt; 
+  select(city, formatted_address, geometry) |&gt; 
+  unnest_wider(geometry) |&gt; 
+  unnest_wider(location)
+#&gt; # A tibble: 7 × 7
+#&gt;   city       formatted_address   bounds         lat    lng locati…¹ viewport    
+#&gt;   &lt;chr&gt;      &lt;chr&gt;               &lt;list&gt;       &lt;dbl&gt;  &lt;dbl&gt; &lt;chr&gt;    &lt;list&gt;      
+#&gt; 1 Houston    Houston, TX, USA    &lt;named list&gt;  29.8  -95.4 APPROXI… &lt;named list&gt;
+#&gt; 2 Washington Washington, USA     &lt;named list&gt;  47.8 -121.  APPROXI… &lt;named list&gt;
+#&gt; 3 Washington Washington, DC, USA &lt;named list&gt;  38.9  -77.0 APPROXI… &lt;named list&gt;
+#&gt; 4 New York   New York, NY, USA   &lt;named list&gt;  40.7  -74.0 APPROXI… &lt;named list&gt;
+#&gt; 5 Chicago    Chicago, IL, USA    &lt;named list&gt;  41.9  -87.6 APPROXI… &lt;named list&gt;
+#&gt; 6 Arlington  Arlington, TX, USA  &lt;named list&gt;  32.7  -97.1 APPROXI… &lt;named list&gt;
+#&gt; # … with 1 more row, and abbreviated variable name ¹​location_type</pre>
+</div>
+<p>Extracting the bounds requires a few more steps:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">locations |&gt; 
+  select(city, formatted_address, geometry) |&gt; 
+  unnest_wider(geometry) |&gt; 
+  # focus on the variables of interest
+  select(!location:viewport) |&gt;
+  unnest_wider(bounds)
+#&gt; # A tibble: 7 × 4
+#&gt;   city       formatted_address   northeast        southwest       
+#&gt;   &lt;chr&gt;      &lt;chr&gt;               &lt;list&gt;           &lt;list&gt;          
+#&gt; 1 Houston    Houston, TX, USA    &lt;named list [2]&gt; &lt;named list [2]&gt;
+#&gt; 2 Washington Washington, USA     &lt;named list [2]&gt; &lt;named list [2]&gt;
+#&gt; 3 Washington Washington, DC, USA &lt;named list [2]&gt; &lt;named list [2]&gt;
+#&gt; 4 New York   New York, NY, USA   &lt;named list [2]&gt; &lt;named list [2]&gt;
+#&gt; 5 Chicago    Chicago, IL, USA    &lt;named list [2]&gt; &lt;named list [2]&gt;
+#&gt; 6 Arlington  Arlington, TX, USA  &lt;named list [2]&gt; &lt;named list [2]&gt;
+#&gt; # … with 1 more row</pre>
+</div>
+<p>We then rename <code>southwest</code> and <code>northeast</code> (the corners of the rectangle) so we can use <code>names_sep</code> to create short but evocative names:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">locations |&gt; 
+  select(city, formatted_address, geometry) |&gt; 
+  unnest_wider(geometry) |&gt; 
+  select(!location:viewport) |&gt;
+  unnest_wider(bounds) |&gt; 
+  rename(ne = northeast, sw = southwest) |&gt; 
+  unnest_wider(c(ne, sw), names_sep = "_") 
+#&gt; # A tibble: 7 × 6
+#&gt;   city       formatted_address   ne_lat ne_lng sw_lat sw_lng
+#&gt;   &lt;chr&gt;      &lt;chr&gt;                &lt;dbl&gt;  &lt;dbl&gt;  &lt;dbl&gt;  &lt;dbl&gt;
+#&gt; 1 Houston    Houston, TX, USA      30.1  -95.0   29.5  -95.8
+#&gt; 2 Washington Washington, USA       49.0 -117.    45.5 -125. 
+#&gt; 3 Washington Washington, DC, USA   39.0  -76.9   38.8  -77.1
+#&gt; 4 New York   New York, NY, USA     40.9  -73.7   40.5  -74.3
+#&gt; 5 Chicago    Chicago, IL, USA      42.0  -87.5   41.6  -87.9
+#&gt; 6 Arlington  Arlington, TX, USA    32.8  -97.0   32.6  -97.2
+#&gt; # … with 1 more row</pre>
+</div>
+<p>Note how we unnest two columns simultaneously by supplying a vector of variable names to <code><a href="#chp-https://tidyr.tidyverse.org/reference/unnest_wider" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/unnest_wider</a></code>.</p>
+<p>This is somewhere that <code><a href="#chp-https://tidyr.tidyverse.org/reference/hoist" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/hoist</a></code>, mentioned briefly above, can be useful. Once you’ve discovered the path to get to the components you’re interested in, you can extract them directly using <code><a href="#chp-https://tidyr.tidyverse.org/reference/hoist" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/hoist</a></code>:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">locations |&gt; 
+  select(city, formatted_address, geometry) |&gt; 
+  hoist(
+    geometry,
+    ne_lat = c("bounds", "northeast", "lat"),
+    sw_lat = c("bounds", "southwest", "lat"),
+    ne_lng = c("bounds", "northeast", "lng"),
+    sw_lng = c("bounds", "southwest", "lng"),
+  )
+#&gt; # A tibble: 7 × 7
+#&gt;   city       formatted_address   ne_lat sw_lat ne_lng sw_lng geometry        
+#&gt;   &lt;chr&gt;      &lt;chr&gt;                &lt;dbl&gt;  &lt;dbl&gt;  &lt;dbl&gt;  &lt;dbl&gt; &lt;list&gt;          
+#&gt; 1 Houston    Houston, TX, USA      30.1   29.5  -95.0  -95.8 &lt;named list [4]&gt;
+#&gt; 2 Washington Washington, USA       49.0   45.5 -117.  -125.  &lt;named list [4]&gt;
+#&gt; 3 Washington Washington, DC, USA   39.0   38.8  -76.9  -77.1 &lt;named list [4]&gt;
+#&gt; 4 New York   New York, NY, USA     40.9   40.5  -73.7  -74.3 &lt;named list [4]&gt;
+#&gt; 5 Chicago    Chicago, IL, USA      42.0   41.6  -87.5  -87.9 &lt;named list [4]&gt;
+#&gt; 6 Arlington  Arlington, TX, USA    32.8   32.6  -97.0  -97.2 &lt;named list [4]&gt;
+#&gt; # … with 1 more row</pre>
+</div>
+<p>If these case studies have whetted your appetite for more real-life rectangling, you can see a few more examples in <code>vignette("rectangling", package = "tidyr")</code>.</p>
+</section>
+
+<section id="exercises-1" data-type="sect2">
+<h2>
+Exercises</h2>
+<ol type="1"><li><p>Roughly estimate when <code>gh_repos</code> was created. Why can you only roughly estimate the date?</p></li>
+<li><p>The <code>owner</code> column of <code>gh_repo</code> contains a lot of duplicated information because each owner can have many repos. Can you construct a <code>owners</code> data frame that contains one row for each owner? (Hint: does <code><a href="#chp-https://dplyr.tidyverse.org/reference/distinct" data-type="xref">#chp-https://dplyr.tidyverse.org/reference/distinct</a></code> work with <code>list-cols</code>?)</p></li>
+<li>
+<p>Explain the following code line-by-line. Why is it interesting? Why does it work for <code>got_chars</code> but might not work in general?</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">tibble(json = got_chars) |&gt; 
+  unnest_wider(json) |&gt; 
+  select(id, where(is.list)) |&gt; 
+  pivot_longer(
+    where(is.list), 
+    names_to = "name", 
+    values_to = "value"
+  ) |&gt;  
+  unnest_longer(value)</pre>
+</div>
+</li>
+<li><p>In <code>gmaps_cities</code>, what does <code>address_components</code> contain? Why does the length vary between rows? Unnest it appropriately to figure it out. (Hint: <code>types</code> always appears to contain two elements. Does <code><a href="#chp-https://tidyr.tidyverse.org/reference/unnest_wider" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/unnest_wider</a></code> make it easier to work with than <code><a href="#chp-https://tidyr.tidyverse.org/reference/unnest_longer" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/unnest_longer</a></code>?) .</p></li>
+</ol></section>
+</section>
+
+<section id="json" data-type="sect1">
+<h1>
+JSON</h1>
+<p>All of the case studies in the previous section were sourced from wild-caught JSON. JSON is short for <strong>j</strong>ava<strong>s</strong>cript <strong>o</strong>bject <strong>n</strong>otation and is the way that most web APIs return data. It’s important to understand it because while JSON and R’s data types are pretty similar, there isn’t a perfect 1-to-1 mapping, so it’s good to understand a bit about JSON if things go wrong.</p>
+
+<section id="data-types" data-type="sect2">
+<h2>
+Data types</h2>
+<p>JSON is a simple format designed to be easily read and written by machines, not humans. It has six key data types. Four of them are scalars:</p>
+<ul><li>The simplest type is a null (<code>null</code>) which plays the same role as both <code>NULL</code> and <code>NA</code> in R. It represents the absence of data.</li>
+<li>A <strong>string</strong> is much like a string in R, but must always use double quotes.</li>
+<li>A <strong>number</strong> is similar to R’s numbers: they can use integer (e.g. 123), decimal (e.g. 123.45), or scientific (e.g. 1.23e3) notation. JSON doesn’t support Inf, -Inf, or NaN.</li>
+<li>A <strong>boolean</strong> is similar to R’s <code>TRUE</code> and <code>FALSE</code>, but uses lowercase <code>true</code> and <code>false</code>.</li>
+</ul><p>JSON’s strings, numbers, and booleans are pretty similar to R’s character, numeric, and logical vectors. The main difference is that JSON’s scalars can only represent a single value. To represent multiple values you need to use one of the two remaining types: arrays and objects.</p>
+<p>Both arrays and objects are similar to lists in R; the difference is whether or not they’re named. An <strong>array</strong> is like an unnamed list, and is written with <code>[]</code>. For example <code>[1, 2, 3]</code> is an array containing 3 numbers, and <code>[null, 1, "string", false]</code> is an array that contains a null, a number, a string, and a boolean. An <strong>object</strong> is like a named list, and is written with <code><a href="#chp-https://rdrr.io/r/base/Paren" data-type="xref">#chp-https://rdrr.io/r/base/Paren</a></code>. The names (keys in JSON terminology) are strings, so must be surrounded by quotes. For example, <code>{"x": 1, "y": 2}</code> is an object that maps <code>x</code> to 1 and <code>y</code> to 2.</p>
+</section>
+
+<section id="jsonlite" data-type="sect2">
+<h2>
+jsonlite</h2>
+<p>To convert JSON into R data structures, we recommend the jsonlite package, by Jeroen Ooms. We’ll use only two jsonlite functions: <code><a href="#chp-https://rdrr.io/pkg/jsonlite/man/read_json" data-type="xref">#chp-https://rdrr.io/pkg/jsonlite/man/read_json</a></code> and <code><a href="#chp-https://rdrr.io/pkg/jsonlite/man/read_json" data-type="xref">#chp-https://rdrr.io/pkg/jsonlite/man/read_json</a></code>. In real life, you’ll use <code><a href="#chp-https://rdrr.io/pkg/jsonlite/man/read_json" data-type="xref">#chp-https://rdrr.io/pkg/jsonlite/man/read_json</a></code> to read a JSON file from disk. For example, the repurrsive package also provides the source for <code>gh_user</code> as a JSON file and you can read it with <code><a href="#chp-https://rdrr.io/pkg/jsonlite/man/read_json" data-type="xref">#chp-https://rdrr.io/pkg/jsonlite/man/read_json</a></code>:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit"># A path to a json file inside the package:
+gh_users_json()
+#&gt; [1] "/Users/hadleywickham/Library/R/arm64/4.2/library/repurrrsive/extdata/gh_users.json"
+
+# Read it with read_json()
+gh_users2 &lt;- read_json(gh_users_json())
+
+# Check it's the same as the data we were using previously
+identical(gh_users, gh_users2)
+#&gt; [1] TRUE</pre>
+</div>
+<p>In this book, I’ll also use <code><a href="#chp-https://rdrr.io/pkg/jsonlite/man/read_json" data-type="xref">#chp-https://rdrr.io/pkg/jsonlite/man/read_json</a></code>, since it takes a string containing JSON, which makes it good for generating simple examples. To get started, here’s three simple JSON datasets, starting with a number, then putting a few number in an array, then putting that array in an object:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">str(parse_json('1'))
+#&gt;  int 1
+str(parse_json('[1, 2, 3]'))
+#&gt; List of 3
+#&gt;  $ : int 1
+#&gt;  $ : int 2
+#&gt;  $ : int 3
+str(parse_json('{"x": [1, 2, 3]}'))
+#&gt; List of 1
+#&gt;  $ x:List of 3
+#&gt;   ..$ : int 1
+#&gt;   ..$ : int 2
+#&gt;   ..$ : int 3</pre>
+</div>
+<p>jsonlite has another important function called <code><a href="#chp-https://rdrr.io/pkg/jsonlite/man/fromJSON" data-type="xref">#chp-https://rdrr.io/pkg/jsonlite/man/fromJSON</a></code>. We don’t use it here because it performs automatic simplification (<code>simplifyVector = TRUE</code>). This often works well, particularly in simple cases, but we think you’re better off doing the rectangling yourself so you know exactly what’s happening and can more easily handle the most complicated nested structures.</p>
+</section>
+
+<section id="starting-the-rectangling-process" data-type="sect2">
+<h2>
+Starting the rectangling process</h2>
+<p>In most cases, JSON files contain a single top-level array, because they’re designed to provide data about multiple “things”, e.g. multiple pages, or multiple records, or multiple results. In this case, you’ll start your rectangling with <code>tibble(json)</code> so that each element becomes a row:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">json &lt;- '[
+  {"name": "John", "age": 34},
+  {"name": "Susan", "age": 27}
+]'
+df &lt;- tibble(json = parse_json(json))
+df
+#&gt; # A tibble: 2 × 1
+#&gt;   json            
+#&gt;   &lt;list&gt;          
+#&gt; 1 &lt;named list [2]&gt;
+#&gt; 2 &lt;named list [2]&gt;
+
+df |&gt; 
+  unnest_wider(json)
+#&gt; # A tibble: 2 × 2
+#&gt;   name    age
+#&gt;   &lt;chr&gt; &lt;int&gt;
+#&gt; 1 John     34
+#&gt; 2 Susan    27</pre>
+</div>
+<p>In rarer cases, the JSON consists of a single top-level JSON object, representing one “thing”. In this case, you’ll need to kick off the rectangling process by wrapping it a list, before you put it in a tibble.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">json &lt;- '{
+  "status": "OK", 
+  "results": [
+    {"name": "John", "age": 34},
+    {"name": "Susan", "age": 27}
+ ]
+}
+'
+df &lt;- tibble(json = list(parse_json(json)))
+df
+#&gt; # A tibble: 1 × 1
+#&gt;   json            
+#&gt;   &lt;list&gt;          
+#&gt; 1 &lt;named list [2]&gt;
+
+df |&gt; 
+  unnest_wider(json) |&gt; 
+  unnest_longer(results) |&gt; 
+  unnest_wider(results)
+#&gt; # A tibble: 2 × 3
+#&gt;   status name    age
+#&gt;   &lt;chr&gt;  &lt;chr&gt; &lt;int&gt;
+#&gt; 1 OK     John     34
+#&gt; 2 OK     Susan    27</pre>
+</div>
+<p>Alternatively, you can reach inside the parsed JSON and start with the bit that you actually care about:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">df &lt;- tibble(results = parse_json(json)$results)
+df |&gt; 
+  unnest_wider(results)
+#&gt; # A tibble: 2 × 2
+#&gt;   name    age
+#&gt;   &lt;chr&gt; &lt;int&gt;
+#&gt; 1 John     34
+#&gt; 2 Susan    27</pre>
+</div>
+</section>
+
+<section id="translation-challenges" data-type="sect2">
+<h2>
+Translation challenges</h2>
+<p>Since JSON doesn’t have any way to represent dates or date-times, they’re often stored as ISO8601 date times in strings, and you’ll need to use <code><a href="#chp-https://readr.tidyverse.org/reference/parse_datetime" data-type="xref">#chp-https://readr.tidyverse.org/reference/parse_datetime</a></code> or <code><a href="#chp-https://readr.tidyverse.org/reference/parse_datetime" data-type="xref">#chp-https://readr.tidyverse.org/reference/parse_datetime</a></code> to turn them into the correct data structure. Similarly, JSON’s rules for representing floating point numbers in JSON are a little imprecise, so you’ll also sometimes find numbers stored in strings. Apply <code><a href="#chp-https://readr.tidyverse.org/reference/parse_atomic" data-type="xref">#chp-https://readr.tidyverse.org/reference/parse_atomic</a></code> as needed to the get correct variable type.</p>
+</section>
+
+<section id="exercises-2" data-type="sect2">
+<h2>
+Exercises</h2>
+<ol type="1"><li>
+<p>Rectangle the <code>df_col</code> and <code>df_row</code> below. They represent the two ways of encoding a data frame in JSON.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">json_col &lt;- parse_json('
+  {
+    "x": ["a", "x", "z"],
+    "y": [10, null, 3]
+  }
+')
+json_row &lt;- parse_json('
+  [
+    {"x": "a", "y": 10},
+    {"x": "x", "y": null},
+    {"x": "z", "y": 3}
+  ]
+')
+
+df_col &lt;- tibble(json = list(json_col)) 
+df_row &lt;- tibble(json = json_row)</pre>
+</div>
+</li>
+</ol></section>
+</section>
+
+<section id="summary" data-type="sect1">
+<h1>
+Summary</h1>
+<p>In this chapter, you learned what lists are, how you can generate the from JSON files, and how turn them into rectangular data frames. Surprisingly we only need two new functions: <code><a href="#chp-https://tidyr.tidyverse.org/reference/unnest_longer" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/unnest_longer</a></code> to put list elements into rows and <code><a href="#chp-https://tidyr.tidyverse.org/reference/unnest_wider" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/unnest_wider</a></code> to put list elements into columns. It doesn’t matter how deeply nested the list-column is, all you need to do is repeatedly call these two functions.</p>
+<p>JSON is the most common data format returned by web APIs. What happens if the website doesn’t have an API, but you can see data you want on the website? That’s the topic of the next chapter: web scraping, extracting data from HTML webpages.</p>
+
+
+</section>
+</section>

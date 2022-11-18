@@ -1,0 +1,867 @@
+<section data-type="chapter" id="chp-data-tidy">
+<h1><span id="sec-data-tidy" class="quarto-section-identifier d-none d-lg-block"><span class="chapter-title">Data tidying</span></span></h1><div data-type="note"><div class="callout-body d-flex">
+<div class="callout-icon-container">
+<i class="callout-icon"/>
+</div>
+
+</div>
+
+<p>You are reading the work-in-progress second edition of R for Data Science. This chapter is largely complete and just needs final proof reading. You can find the complete first edition at <a href="https://r4ds.had.co.nz" class="uri">https://r4ds.had.co.nz</a>.</p></div>
+
+<section id="introduction" data-type="sect1">
+<h1>
+Introduction</h1>
+<blockquote class="blockquote">
+<p>“Happy families are all alike; every unhappy family is unhappy in its own way.”<br/>
+— Leo Tolstoy</p>
+</blockquote>
+<blockquote class="blockquote">
+<p>“Tidy datasets are all alike, but every messy dataset is messy in its own way.”<br/>
+— Hadley Wickham</p>
+</blockquote>
+<p>In this chapter, you will learn a consistent way to organize your data in R using a system called <strong>tidy data</strong>. Getting your data into this format requires some work up front, but that work pays off in the long term. Once you have tidy data and the tidy tools provided by packages in the tidyverse, you will spend much less time munging data from one representation to another, allowing you to spend more time on the data questions you care about.</p>
+<p>In this chapter, you’ll first learn the definition of tidy data and see it applied to simple toy dataset. Then we’ll dive into the main tool you’ll use for tidying data: pivoting. Pivoting allows you to change the form of your data, without changing any of the values. We’ll finish up with a discussion of usefully untidy data, and how you can create it if needed.</p>
+
+<section id="prerequisites" data-type="sect2">
+<h2>
+Prerequisites</h2>
+<p>In this chapter we’ll focus on tidyr, a package that provides a bunch of tools to help tidy up your messy datasets. tidyr is a member of the core tidyverse.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">library(tidyverse)</pre>
+</div>
+<p>From this chapter on, we’ll suppress the loading message from <code><a href="#chp-https://tidyverse.tidyverse" data-type="xref">#chp-https://tidyverse.tidyverse</a></code>.</p>
+</section>
+</section>
+
+<section id="sec-tidy-data" data-type="sect1">
+<h1>
+Tidy data</h1>
+<p>You can represent the same underlying data in multiple ways. The example below shows the same data organised in four different ways. Each dataset shows the same values of four variables: <em>country</em>, <em>year</em>, <em>population</em>, and <em>cases</em> of TB (tuberculosis), but each dataset organizes the values in a different way.</p>
+
+<!-- TODO redraw as tables -->
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">table1
+#&gt; # A tibble: 6 × 4
+#&gt;   country      year  cases population
+#&gt;   &lt;chr&gt;       &lt;int&gt;  &lt;int&gt;      &lt;int&gt;
+#&gt; 1 Afghanistan  1999    745   19987071
+#&gt; 2 Afghanistan  2000   2666   20595360
+#&gt; 3 Brazil       1999  37737  172006362
+#&gt; 4 Brazil       2000  80488  174504898
+#&gt; 5 China        1999 212258 1272915272
+#&gt; 6 China        2000 213766 1280428583
+table2
+#&gt; # A tibble: 12 × 4
+#&gt;   country      year type           count
+#&gt;   &lt;chr&gt;       &lt;int&gt; &lt;chr&gt;          &lt;int&gt;
+#&gt; 1 Afghanistan  1999 cases            745
+#&gt; 2 Afghanistan  1999 population  19987071
+#&gt; 3 Afghanistan  2000 cases           2666
+#&gt; 4 Afghanistan  2000 population  20595360
+#&gt; 5 Brazil       1999 cases          37737
+#&gt; 6 Brazil       1999 population 172006362
+#&gt; # … with 6 more rows
+table3
+#&gt; # A tibble: 6 × 3
+#&gt;   country      year rate             
+#&gt; * &lt;chr&gt;       &lt;int&gt; &lt;chr&gt;            
+#&gt; 1 Afghanistan  1999 745/19987071     
+#&gt; 2 Afghanistan  2000 2666/20595360    
+#&gt; 3 Brazil       1999 37737/172006362  
+#&gt; 4 Brazil       2000 80488/174504898  
+#&gt; 5 China        1999 212258/1272915272
+#&gt; 6 China        2000 213766/1280428583
+
+# Spread across two tibbles
+table4a # cases
+#&gt; # A tibble: 3 × 3
+#&gt;   country     `1999` `2000`
+#&gt; * &lt;chr&gt;        &lt;int&gt;  &lt;int&gt;
+#&gt; 1 Afghanistan    745   2666
+#&gt; 2 Brazil       37737  80488
+#&gt; 3 China       212258 213766
+table4b # population
+#&gt; # A tibble: 3 × 3
+#&gt;   country         `1999`     `2000`
+#&gt; * &lt;chr&gt;            &lt;int&gt;      &lt;int&gt;
+#&gt; 1 Afghanistan   19987071   20595360
+#&gt; 2 Brazil       172006362  174504898
+#&gt; 3 China       1272915272 1280428583</pre>
+</div>
+<p>These are all representations of the same underlying data, but they are not equally easy to use. One of them, <code>table1</code>, will be much easier to work with inside the tidyverse because it’s tidy.</p>
+<p>There are three interrelated rules that make a dataset tidy:</p>
+<ol type="1"><li>Each variable is a column; each column is a variable.</li>
+<li>Each observation is row; each row is an observation.</li>
+<li>Each value is a cell; each cell is a single value.</li>
+</ol><p><a href="#fig-tidy-structure" data-type="xref">#fig-tidy-structure</a> shows the rules visually.</p>
+<div class="cell">
+<div class="cell-output-display">
+
+<figure id="fig-pivot-names-and-values"><p><img src="images/tidy-1.png" alt="Three panels, each representing a tidy data frame. The first panel shows that each variable is a column. The second panel shows that each observation is a row. The third panel shows that each value is a cell." width="683"/></p>
+<figcaption>Figure 6.1: The following three rules make a dataset tidy: variables are columns, observations are rows, and values are cells.</figcaption>
+</figure>
+</div>
+</div>
+<p>Why ensure that your data is tidy? There are two main advantages:</p>
+<ol type="1"><li><p>There’s a general advantage to picking one consistent way of storing data. If you have a consistent data structure, it’s easier to learn the tools that work with it because they have an underlying uniformity.</p></li>
+<li><p>There’s a specific advantage to placing variables in columns because it allows R’s vectorised nature to shine. As you learned in <a href="#sec-mutate" data-type="xref">#sec-mutate</a> and <a href="#sec-summarize" data-type="xref">#sec-summarize</a>, most built-in R functions work with vectors of values. That makes transforming tidy data feel particularly natural.</p></li>
+</ol><p>dplyr, ggplot2, and all the other packages in the tidyverse are designed to work with tidy data. Here are a couple of small examples showing how you might work with <code>table1</code>.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit"># Compute rate per 10,000
+table1 |&gt;
+  mutate(
+    rate = cases / population * 10000
+  )
+#&gt; # A tibble: 6 × 5
+#&gt;   country      year  cases population  rate
+#&gt;   &lt;chr&gt;       &lt;int&gt;  &lt;int&gt;      &lt;int&gt; &lt;dbl&gt;
+#&gt; 1 Afghanistan  1999    745   19987071 0.373
+#&gt; 2 Afghanistan  2000   2666   20595360 1.29 
+#&gt; 3 Brazil       1999  37737  172006362 2.19 
+#&gt; 4 Brazil       2000  80488  174504898 4.61 
+#&gt; 5 China        1999 212258 1272915272 1.67 
+#&gt; 6 China        2000 213766 1280428583 1.67
+
+# Compute cases per year
+table1 |&gt;
+  count(year, wt = cases)
+#&gt; # A tibble: 2 × 2
+#&gt;    year      n
+#&gt;   &lt;int&gt;  &lt;int&gt;
+#&gt; 1  1999 250740
+#&gt; 2  2000 296920
+
+# Visualise changes over time
+ggplot(table1, aes(year, cases)) +
+  geom_line(aes(group = country), color = "grey50") +
+  geom_point(aes(color = country, shape = country)) +
+  scale_x_continuous(breaks = c(1999, 2000))</pre>
+<div class="cell-output-display">
+<p><img src="data-tidy_files/figure-html/unnamed-chunk-5-1.png" alt="This figure shows the numbers of cases in 1999 and 2000 for Afghanistan, Brazil, and China, with year on the x-axis and number of cases on the y-axis. Each point on the plot represents the number of cases in a given country in a given year. The points for each country are differentiated from others by color and shape and connected with a line, resulting in three, non-parallel, non-intersecting lines. The numbers of cases in China are highest for both 1999 and 2000, with values above 200,000 for both years. The number of cases in Brazil is approximately 40,000 in 1999 and approximately 75,000 in 2000. The numbers of cases in Afghanistan are lowest for both 1999 and 2000, with values that appear to be very close to 0 on this scale." width="480"/></p>
+</div>
+</div>
+
+<section id="exercises" data-type="sect2">
+<h2>
+Exercises</h2>
+<ol type="1"><li><p>Using prose, describe how the variables and observations are organised in each of the sample tables.</p></li>
+<li>
+<p>Sketch out the process you’d use to calculate the <code>rate</code> for <code>table2</code> and <code>table4a</code> + <code>table4b</code>. You will need to perform four operations:</p>
+<ol type="a"><li>Extract the number of TB cases per country per year.</li>
+<li>Extract the matching population per country per year.</li>
+<li>Divide cases by population, and multiply by 10000.</li>
+<li>Store back in the appropriate place.</li>
+</ol><p>You haven’t yet learned all the functions you’d need to actually perform these operations, but you should still be able to think through the transformations you’d need.</p>
+</li>
+<li><p>Recreate the plot showing change in cases over time using <code>table2</code> instead of <code>table1</code>. What do you need to do first?</p></li>
+</ol></section>
+</section>
+
+<section id="sec-pivoting" data-type="sect1">
+<h1>
+Pivoting</h1>
+<p>The principles of tidy data might seem so obvious that you wonder if you’ll ever encounter a dataset that isn’t tidy. Unfortunately, however, most real data is untidy. There are two main reasons:</p>
+<ol type="1"><li><p>Data is often organised to facilitate some goal other than analysis. For example, it’s common for data to be structured to make data entry, not analysis, easy.</p></li>
+<li><p>Most people aren’t familiar with the principles of tidy data, and it’s hard to derive them yourself unless you spend a lot of time working with data.</p></li>
+</ol><p>This means that most real analyses will require at least a little tidying. You’ll begin by figuring out what the underlying variables and observations are. Sometimes this is easy; other times you’ll need to consult with the people who originally generated the data. Next, you’ll <strong>pivot</strong> your data into a tidy form, with variables in the columns and observations in the rows.</p>
+<p>tidyr provides two functions for pivoting data: <code><a href="#chp-https://tidyr.tidyverse.org/reference/pivot_longer" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/pivot_longer</a></code>, which makes datasets <strong>longer</strong> by increasing rows and reducing columns, and <code><a href="#chp-https://tidyr.tidyverse.org/reference/pivot_wider" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/pivot_wider</a></code> which makes datasets <strong>wider</strong> by increasing columns and reducing rows. The following sections work through the use of <code><a href="#chp-https://tidyr.tidyverse.org/reference/pivot_longer" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/pivot_longer</a></code> and <code><a href="#chp-https://tidyr.tidyverse.org/reference/pivot_wider" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/pivot_wider</a></code> to tackle a wide range of realistic datasets. These examples are drawn from <code><a href="#chp-https://tidyr.tidyverse.org/articles/pivot" data-type="xref">#chp-https://tidyr.tidyverse.org/articles/pivot</a></code>, which you should check out if you want to see more variations and more challenging problems.</p>
+<p>Let’s dive in.</p>
+
+<section id="sec-billboard" data-type="sect2">
+<h2>
+Data in column names</h2>
+<p>The <code>billboard</code> dataset records the billboard rank of songs in the year 2000:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">billboard
+#&gt; # A tibble: 317 × 79
+#&gt;   artist  track date.ent…¹   wk1   wk2   wk3   wk4   wk5   wk6   wk7   wk8   wk9
+#&gt;   &lt;chr&gt;   &lt;chr&gt; &lt;date&gt;     &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt;
+#&gt; 1 2 Pac   Baby… 2000-02-26    87    82    72    77    87    94    99    NA    NA
+#&gt; 2 2Ge+her The … 2000-09-02    91    87    92    NA    NA    NA    NA    NA    NA
+#&gt; 3 3 Door… Kryp… 2000-04-08    81    70    68    67    66    57    54    53    51
+#&gt; 4 3 Door… Loser 2000-10-21    76    76    72    69    67    65    55    59    62
+#&gt; 5 504 Bo… Wobb… 2000-04-15    57    34    25    17    17    31    36    49    53
+#&gt; 6 98^0    Give… 2000-08-19    51    39    34    26    26    19     2     2     3
+#&gt; # … with 311 more rows, 67 more variables: wk10 &lt;dbl&gt;, wk11 &lt;dbl&gt;, wk12 &lt;dbl&gt;,
+#&gt; #   wk13 &lt;dbl&gt;, wk14 &lt;dbl&gt;, wk15 &lt;dbl&gt;, wk16 &lt;dbl&gt;, wk17 &lt;dbl&gt;, wk18 &lt;dbl&gt;,
+#&gt; #   wk19 &lt;dbl&gt;, wk20 &lt;dbl&gt;, wk21 &lt;dbl&gt;, wk22 &lt;dbl&gt;, wk23 &lt;dbl&gt;, wk24 &lt;dbl&gt;,
+#&gt; #   wk25 &lt;dbl&gt;, wk26 &lt;dbl&gt;, wk27 &lt;dbl&gt;, wk28 &lt;dbl&gt;, wk29 &lt;dbl&gt;, wk30 &lt;dbl&gt;,
+#&gt; #   wk31 &lt;dbl&gt;, wk32 &lt;dbl&gt;, wk33 &lt;dbl&gt;, wk34 &lt;dbl&gt;, wk35 &lt;dbl&gt;, wk36 &lt;dbl&gt;,
+#&gt; #   wk37 &lt;dbl&gt;, wk38 &lt;dbl&gt;, wk39 &lt;dbl&gt;, wk40 &lt;dbl&gt;, wk41 &lt;dbl&gt;, wk42 &lt;dbl&gt;,
+#&gt; #   wk43 &lt;dbl&gt;, wk44 &lt;dbl&gt;, wk45 &lt;dbl&gt;, wk46 &lt;dbl&gt;, wk47 &lt;dbl&gt;, wk48 &lt;dbl&gt;, …</pre>
+</div>
+<p>In this dataset, each observation is a song. The first three columns (<code>artist</code>, <code>track</code> and <code>date.entered</code>) are variables that describe the song. Then we have 76 columns (<code>wk1</code>-<code>wk76</code>) that describe the rank of the song in each week. Here, the column names are one variable (the <code>week</code>) and the cell values are another (the <code>rank</code>).</p>
+<p>To tidy this data, we’ll use <code><a href="#chp-https://tidyr.tidyverse.org/reference/pivot_longer" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/pivot_longer</a></code>. After the data, there are three key arguments:</p>
+<ul><li>
+<code>cols</code> specifies which columns need to be pivoted, i.e. which columns aren’t variables. This argument uses the same syntax as <code><a href="#chp-https://dplyr.tidyverse.org/reference/select" data-type="xref">#chp-https://dplyr.tidyverse.org/reference/select</a></code> so here we could use <code>!c(artist, track, date.entered)</code> or <code>starts_with("wk")</code>.</li>
+<li>
+<code>names_to</code> names of the variable stored in the column names, here <code>"week"</code>.</li>
+<li>
+<code>values_to</code> names the variable stored in the cell values, here <code>"rank"</code>.</li>
+</ul><p>That gives the following call:</p>
+<div class="cell" data-r.options="{&quot;pillar.print_min&quot;:10}">
+<pre data-type="programlisting" data-code-language="downlit">billboard |&gt; 
+  pivot_longer(
+    cols = starts_with("wk"), 
+    names_to = "week", 
+    values_to = "rank"
+  )
+#&gt; # A tibble: 24,092 × 5
+#&gt;    artist track                   date.entered week   rank
+#&gt;    &lt;chr&gt;  &lt;chr&gt;                   &lt;date&gt;       &lt;chr&gt; &lt;dbl&gt;
+#&gt;  1 2 Pac  Baby Don't Cry (Keep... 2000-02-26   wk1      87
+#&gt;  2 2 Pac  Baby Don't Cry (Keep... 2000-02-26   wk2      82
+#&gt;  3 2 Pac  Baby Don't Cry (Keep... 2000-02-26   wk3      72
+#&gt;  4 2 Pac  Baby Don't Cry (Keep... 2000-02-26   wk4      77
+#&gt;  5 2 Pac  Baby Don't Cry (Keep... 2000-02-26   wk5      87
+#&gt;  6 2 Pac  Baby Don't Cry (Keep... 2000-02-26   wk6      94
+#&gt;  7 2 Pac  Baby Don't Cry (Keep... 2000-02-26   wk7      99
+#&gt;  8 2 Pac  Baby Don't Cry (Keep... 2000-02-26   wk8      NA
+#&gt;  9 2 Pac  Baby Don't Cry (Keep... 2000-02-26   wk9      NA
+#&gt; 10 2 Pac  Baby Don't Cry (Keep... 2000-02-26   wk10     NA
+#&gt; # … with 24,082 more rows</pre>
+</div>
+<p>What happens if a song is in the top 100 for less than 76 weeks? Take 2 Pac’s “Baby Don’t Cry”, for example. The above output suggests that it was only the top 100 for 7 weeks, and all the remaining weeks are filled in with missing values. These <code>NA</code>s don’t really represent unknown observations; they’re forced to exist by the structure of the dataset<span data-type="footnote">We’ll come back to this idea in <a href="#chp-missing-values" data-type="xref">#chp-missing-values</a>.</span>, so we can ask <code><a href="#chp-https://tidyr.tidyverse.org/reference/pivot_longer" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/pivot_longer</a></code> to get rid of them by setting <code>values_drop_na = TRUE</code>:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">billboard |&gt; 
+  pivot_longer(
+    cols = starts_with("wk"), 
+    names_to = "week", 
+    values_to = "rank",
+    values_drop_na = TRUE
+  )
+#&gt; # A tibble: 5,307 × 5
+#&gt;   artist track                   date.entered week   rank
+#&gt;   &lt;chr&gt;  &lt;chr&gt;                   &lt;date&gt;       &lt;chr&gt; &lt;dbl&gt;
+#&gt; 1 2 Pac  Baby Don't Cry (Keep... 2000-02-26   wk1      87
+#&gt; 2 2 Pac  Baby Don't Cry (Keep... 2000-02-26   wk2      82
+#&gt; 3 2 Pac  Baby Don't Cry (Keep... 2000-02-26   wk3      72
+#&gt; 4 2 Pac  Baby Don't Cry (Keep... 2000-02-26   wk4      77
+#&gt; 5 2 Pac  Baby Don't Cry (Keep... 2000-02-26   wk5      87
+#&gt; 6 2 Pac  Baby Don't Cry (Keep... 2000-02-26   wk6      94
+#&gt; # … with 5,301 more rows</pre>
+</div>
+<p>You might also wonder what happens if a song is in the top 100 for more than 76 weeks? We can’t tell from this data, but you might guess that additional columns <code>wk77</code>, <code>wk78</code>, … would be added to the dataset.</p>
+<p>This data is now tidy, but we could make future computation a bit easier by converting <code>week</code> into a number using <code><a href="#chp-https://dplyr.tidyverse.org/reference/mutate" data-type="xref">#chp-https://dplyr.tidyverse.org/reference/mutate</a></code> and <code><a href="#chp-https://readr.tidyverse.org/reference/parse_number" data-type="xref">#chp-https://readr.tidyverse.org/reference/parse_number</a></code>. <code><a href="#chp-https://readr.tidyverse.org/reference/parse_number" data-type="xref">#chp-https://readr.tidyverse.org/reference/parse_number</a></code> is a handy function that will extract the first number from a string, ignoring all other text.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">billboard_tidy &lt;- billboard |&gt; 
+  pivot_longer(
+    cols = starts_with("wk"), 
+    names_to = "week", 
+    values_to = "rank",
+    values_drop_na = TRUE
+  ) |&gt; 
+  mutate(
+    week = parse_number(week)
+  )
+billboard_tidy
+#&gt; # A tibble: 5,307 × 5
+#&gt;   artist track                   date.entered  week  rank
+#&gt;   &lt;chr&gt;  &lt;chr&gt;                   &lt;date&gt;       &lt;dbl&gt; &lt;dbl&gt;
+#&gt; 1 2 Pac  Baby Don't Cry (Keep... 2000-02-26       1    87
+#&gt; 2 2 Pac  Baby Don't Cry (Keep... 2000-02-26       2    82
+#&gt; 3 2 Pac  Baby Don't Cry (Keep... 2000-02-26       3    72
+#&gt; 4 2 Pac  Baby Don't Cry (Keep... 2000-02-26       4    77
+#&gt; 5 2 Pac  Baby Don't Cry (Keep... 2000-02-26       5    87
+#&gt; 6 2 Pac  Baby Don't Cry (Keep... 2000-02-26       6    94
+#&gt; # … with 5,301 more rows</pre>
+</div>
+<p>Now we’re in a good position to look at how song ranks vary over time by drawing a plot. The code is shown below and the result is <a href="#fig-billboard-ranks" data-type="xref">#fig-billboard-ranks</a>.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">billboard_tidy |&gt; 
+  ggplot(aes(week, rank, group = track)) + 
+  geom_line(alpha = 1/3) + 
+  scale_y_reverse()</pre>
+<div class="cell-output-display">
+
+<figure class="figure"><p><img src="data-tidy_files/figure-html/fig-billboard-ranks-1.png" alt="A line plot with week on the x-axis and rank on the y-axis, where each line represents a song. Most songs appear to start at a high rank, rapidly accelerate to a low rank, and then decay again. There are suprisingly few tracks in the region when week is &gt;20 and rank is &gt;50." width="576"/></p>
+<figcaption class="figure-caption">Figure 6.2: A line plot showing how the rank of a song changes over time.</figcaption>
+</figure>
+</div>
+</div>
+</section>
+
+<section id="how-does-pivoting-work" data-type="sect2">
+<h2>
+How does pivoting work?</h2>
+<p>Now that you’ve seen what pivoting can do for you, it’s worth taking a little time to gain some intuition about what it does to the data. Let’s start with a very simple dataset to make it easier to see what’s happening:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">df &lt;- tribble(
+  ~var, ~col1, ~col2,
+   "A",     1,     2,
+   "B",     3,     4,
+   "C",     5,     6
+)</pre>
+</div>
+<p>Here we’ll say there are three variables: <code>var</code> (already in a variable), <code>name</code> (the column names in the column names), and <code>value</code> (the cell values). So we can tidy it with:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">df |&gt; 
+  pivot_longer(
+    cols = col1:col2,
+    names_to = "names",
+    values_to = "values"
+  )
+#&gt; # A tibble: 6 × 3
+#&gt;   var   names values
+#&gt;   &lt;chr&gt; &lt;chr&gt;  &lt;dbl&gt;
+#&gt; 1 A     col1       1
+#&gt; 2 A     col2       2
+#&gt; 3 B     col1       3
+#&gt; 4 B     col2       4
+#&gt; 5 C     col1       5
+#&gt; 6 C     col2       6</pre>
+</div>
+<p>How does this transformation take place? It’s easier to see if we take it component by component. Columns that are already variables need to be repeated, once for each column in <code>cols</code>, as shown in <a href="#fig-pivot-variables" data-type="xref">#fig-pivot-variables</a>.</p>
+<div class="cell">
+<div class="cell-output-display">
+
+<figure class="figure"><p><img src="diagrams/tidy-data/variables.png" alt="A diagram showing how `pivot_longer()` transforms a simple dataset, using color to highlight how the values in the `var` column (&quot;A&quot;, &quot;B&quot;, &quot;C&quot;) are each repeated twice in the output because there are two columns being pivotted (&quot;col1&quot; and &quot;col2&quot;)." width="469"/></p>
+<figcaption class="figure-caption">Figure 6.3: Columns that are already variables need to be repeated, once for each column that is pivotted.</figcaption>
+</figure>
+</div>
+</div>
+<p>The column names become values in a new variable, whose name is given by <code>names_to</code>, as shown in <a href="#fig-pivot-names" data-type="xref">#fig-pivot-names</a>. They need to be repeated once for each row in the original dataset.</p>
+<div class="cell">
+<div class="cell-output-display">
+
+<figure class="figure"><p><img src="diagrams/tidy-data/column-names.png" alt="A diagram showing how `pivot_longer()` transforms a simple data set, using color to highlight how column names (&quot;col1&quot; and &quot;col2&quot;) become the values in a new `var` column. They are repeated three times because there were three rows in the input." width="469"/></p>
+<figcaption class="figure-caption">Figure 6.4: The column names of pivoted columns become a new column.</figcaption>
+</figure>
+</div>
+</div>
+<p>The cell values also become values in a new variable, with a name given by <code>values_to</code>. They are unwound row by row. <a href="#fig-pivot-values" data-type="xref">#fig-pivot-values</a> illustrates the process.</p>
+<div class="cell">
+<div class="cell-output-display">
+
+<figure class="figure"><p><img src="diagrams/tidy-data/cell-values.png" alt="A diagram showing how `pivot_longer()` transforms data, using color to highlight how the cell values (the numbers 1 to 6) become the values in a new `value` column. They are unwound row-by-row, so the original rows (1,2), then (3,4), then (5,6), become a column running from 1 to 6." width="469"/></p>
+<figcaption class="figure-caption">Figure 6.5: The number of values is preserved (not repeated), but unwound row-by-row.</figcaption>
+</figure>
+</div>
+</div>
+</section>
+
+<section id="many-variables-in-column-names" data-type="sect2">
+<h2>
+Many variables in column names</h2>
+<p>A more challenging situation occurs when you have multiple variables crammed into the column names. For example, take the <code>who2</code> dataset:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">who2
+#&gt; # A tibble: 7,240 × 58
+#&gt;   country   year sp_m_…¹ sp_m_…² sp_m_…³ sp_m_…⁴ sp_m_…⁵ sp_m_…⁶ sp_m_65 sp_f_…⁷
+#&gt;   &lt;chr&gt;    &lt;dbl&gt;   &lt;dbl&gt;   &lt;dbl&gt;   &lt;dbl&gt;   &lt;dbl&gt;   &lt;dbl&gt;   &lt;dbl&gt;   &lt;dbl&gt;   &lt;dbl&gt;
+#&gt; 1 Afghani…  1980      NA      NA      NA      NA      NA      NA      NA      NA
+#&gt; 2 Afghani…  1981      NA      NA      NA      NA      NA      NA      NA      NA
+#&gt; 3 Afghani…  1982      NA      NA      NA      NA      NA      NA      NA      NA
+#&gt; 4 Afghani…  1983      NA      NA      NA      NA      NA      NA      NA      NA
+#&gt; 5 Afghani…  1984      NA      NA      NA      NA      NA      NA      NA      NA
+#&gt; 6 Afghani…  1985      NA      NA      NA      NA      NA      NA      NA      NA
+#&gt; # … with 7,234 more rows, 48 more variables: sp_f_1524 &lt;dbl&gt;, sp_f_2534 &lt;dbl&gt;,
+#&gt; #   sp_f_3544 &lt;dbl&gt;, sp_f_4554 &lt;dbl&gt;, sp_f_5564 &lt;dbl&gt;, sp_f_65 &lt;dbl&gt;,
+#&gt; #   sn_m_014 &lt;dbl&gt;, sn_m_1524 &lt;dbl&gt;, sn_m_2534 &lt;dbl&gt;, sn_m_3544 &lt;dbl&gt;,
+#&gt; #   sn_m_4554 &lt;dbl&gt;, sn_m_5564 &lt;dbl&gt;, sn_m_65 &lt;dbl&gt;, sn_f_014 &lt;dbl&gt;,
+#&gt; #   sn_f_1524 &lt;dbl&gt;, sn_f_2534 &lt;dbl&gt;, sn_f_3544 &lt;dbl&gt;, sn_f_4554 &lt;dbl&gt;,
+#&gt; #   sn_f_5564 &lt;dbl&gt;, sn_f_65 &lt;dbl&gt;, ep_m_014 &lt;dbl&gt;, ep_m_1524 &lt;dbl&gt;,
+#&gt; #   ep_m_2534 &lt;dbl&gt;, ep_m_3544 &lt;dbl&gt;, ep_m_4554 &lt;dbl&gt;, ep_m_5564 &lt;dbl&gt;, …</pre>
+</div>
+<p>This dataset records information about tuberculosis data collected by the WHO. There are two columns that are already variables and are easy to interpret: <code>country</code> and <code>year</code>. They are followed by 56 columns like <code>sp_m_014</code>, <code>ep_m_4554</code>, and <code>rel_m_3544</code>. If you stare at these columns for long enough, you’ll notice there’s a pattern. Each column name is made up of three pieces separated by <code>_</code>. The first piece, <code>sp</code>/<code>rel</code>/<code>ep</code>, describes the method used for the <code>diagnosis</code>, the second piece, <code>m</code>/<code>f</code> is the <code>gender</code>, and the third piece, <code>014</code>/<code>1524</code>/<code>2535</code>/<code>3544</code>/<code>4554</code>/<code>65</code> is the <code>age</code> range.</p>
+<p>So in this case we have six variables: two variables are already columns, three variables are contained in the column name, and one variable is in the cell name. This requires two changes to our call to <code><a href="#chp-https://tidyr.tidyverse.org/reference/pivot_longer" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/pivot_longer</a></code>: <code>names_to</code> gets a vector of column names and <code>names_sep</code> describes how to split the variable name up into pieces:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">who2 |&gt; 
+  pivot_longer(
+    cols = !(country:year),
+    names_to = c("diagnosis", "gender", "age"), 
+    names_sep = "_",
+    values_to = "count"
+  )
+#&gt; # A tibble: 405,440 × 6
+#&gt;   country      year diagnosis gender age   count
+#&gt;   &lt;chr&gt;       &lt;dbl&gt; &lt;chr&gt;     &lt;chr&gt;  &lt;chr&gt; &lt;dbl&gt;
+#&gt; 1 Afghanistan  1980 sp        m      014      NA
+#&gt; 2 Afghanistan  1980 sp        m      1524     NA
+#&gt; 3 Afghanistan  1980 sp        m      2534     NA
+#&gt; 4 Afghanistan  1980 sp        m      3544     NA
+#&gt; 5 Afghanistan  1980 sp        m      4554     NA
+#&gt; 6 Afghanistan  1980 sp        m      5564     NA
+#&gt; # … with 405,434 more rows</pre>
+</div>
+<p>An alternative to <code>names_sep</code> is <code>names_pattern</code>, which you can use to extract variables from more complicated naming scenarios, once you’ve learned about regular expressions in <a href="#chp-regexps" data-type="xref">#chp-regexps</a>.</p>
+<p>Conceptually, this is only a minor variation on the simpler case you’ve already seen. <a href="#fig-pivot-multiple-names" data-type="xref">#fig-pivot-multiple-names</a> shows the basic idea: now, instead of the column names pivoting into a single column, they pivot into multiple columns. You can imagine this happening in two steps (first pivoting and then separating) but under the hood it happens in a single step because that gives better performance.</p>
+<div class="cell">
+<div class="cell-output-display">
+
+<figure class="figure"><p><img src="diagrams/tidy-data/multiple-names.png" alt="A diagram that uses color to illustrate how supplying `names_sep` and multiple `names_to` creates multiple variables in the output. The input has variable names &quot;x_1&quot; and &quot;y_2&quot; which are split up by &quot;_&quot; to create name and number columns in the output. This is is similar case with a single `names_to`, but what would have been a single output variable is now separated into multiple variables." width="600"/></p>
+<figcaption class="figure-caption">Figure 6.6: Pivotting with many variables in the column names means that each column name now fills in values in multiple output columns.</figcaption>
+</figure>
+</div>
+</div>
+</section>
+
+<section id="data-and-variable-names-in-the-column-headers" data-type="sect2">
+<h2>
+Data and variable names in the column headers</h2>
+<p>The next step up in complexity is when the column names include a mix of variable values and variable names. For example, take the <code>household</code> dataset:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">household
+#&gt; # A tibble: 5 × 5
+#&gt;   family dob_child1 dob_child2 name_child1 name_child2
+#&gt;    &lt;int&gt; &lt;date&gt;     &lt;date&gt;     &lt;chr&gt;       &lt;chr&gt;      
+#&gt; 1      1 1998-11-26 2000-01-29 Susan       Jose       
+#&gt; 2      2 1996-06-22 NA         Mark        &lt;NA&gt;       
+#&gt; 3      3 2002-07-11 2004-04-05 Sam         Seth       
+#&gt; 4      4 2004-10-10 2009-08-27 Craig       Khai       
+#&gt; 5      5 2000-12-05 2005-02-28 Parker      Gracie</pre>
+</div>
+<p>This dataset contains data about five families, with the names and dates of birth of up to two children. The new challenge in this dataset is that the column names contain the names of two variables (<code>dob</code>, <code>name)</code> and the values of another (<code>child,</code> with values 1 and 2). To solve this problem we again need to supply a vector to <code>names_to</code> but this time we use the special <code>".value"</code> sentinel. This overrides the usual <code>values_to</code> argument to use the first component of the pivoted column name as a variable name in the output.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">household |&gt; 
+  pivot_longer(
+    cols = !family, 
+    names_to = c(".value", "child"), 
+    names_sep = "_", 
+    values_drop_na = TRUE
+  ) |&gt; 
+  mutate(
+    child = parse_number(child)
+  )
+#&gt; # A tibble: 9 × 4
+#&gt;   family child dob        name 
+#&gt;    &lt;int&gt; &lt;dbl&gt; &lt;date&gt;     &lt;chr&gt;
+#&gt; 1      1     1 1998-11-26 Susan
+#&gt; 2      1     2 2000-01-29 Jose 
+#&gt; 3      2     1 1996-06-22 Mark 
+#&gt; 4      3     1 2002-07-11 Sam  
+#&gt; 5      3     2 2004-04-05 Seth 
+#&gt; 6      4     1 2004-10-10 Craig
+#&gt; # … with 3 more rows</pre>
+</div>
+<p>We again use <code>values_drop_na = TRUE</code>, since the shape of the input forces the creation of explicit missing variables (e.g. for families with only one child), and <code><a href="#chp-https://readr.tidyverse.org/reference/parse_number" data-type="xref">#chp-https://readr.tidyverse.org/reference/parse_number</a></code> to convert (e.g.) <code>child1</code> into 1.</p>
+<p><a href="#fig-pivot-names-and-values" data-type="xref">#fig-pivot-names-and-values</a> illustrates the basic idea with a simpler example. When you use <code>".value"</code> in <code>names_to</code>, the column names in the input contribute to both values and variable names in the output.</p>
+<div class="cell">
+<div class="cell-output-display">
+
+<figure class="figure"><p><img src="diagrams/tidy-data/names-and-values.png" alt="A diagram that uses color to illustrate how the special &quot;.value&quot; sentinel works. The input has names &quot;x_1&quot;, &quot;x_2&quot;, &quot;y_1&quot;, and &quot;y_2&quot;, and we want to use the first component (&quot;x&quot;, &quot;y&quot;) as a variable name and the second (&quot;1&quot;, &quot;2&quot;) as the value for a new &quot;id&quot; column." width="540"/></p>
+<figcaption class="figure-caption">Figure 6.7: Pivoting with <code>names_to = c(".value", "id")</code> splits the column names into two components: the first part determines the output column name (<code>x</code> or <code>y</code>), and the second part determines the value of the <code>id</code> column.</figcaption>
+</figure>
+</div>
+</div>
+</section>
+
+<section id="widening-data" data-type="sect2">
+<h2>
+Widening data</h2>
+<p>So far we’ve used <code><a href="#chp-https://tidyr.tidyverse.org/reference/pivot_longer" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/pivot_longer</a></code> to solve the common class of problems where values have ended up in column names. Next we’ll pivot (HA HA) to <code><a href="#chp-https://tidyr.tidyverse.org/reference/pivot_wider" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/pivot_wider</a></code>, which helps when one observation is spread across multiple rows. This seems to arise less commonly in the wild, but it does seem to crop up a lot when dealing with governmental data.</p>
+<p>We’ll start by looking at <code>cms_patient_experience</code>, a dataset from the Centers of Medicare and Medicaid services that collects data about patient experiences:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">cms_patient_experience
+#&gt; # A tibble: 500 × 5
+#&gt;   org_pac_id org_nm                     measure_cd   measure_title       prf_r…¹
+#&gt;   &lt;chr&gt;      &lt;chr&gt;                      &lt;chr&gt;        &lt;chr&gt;                 &lt;dbl&gt;
+#&gt; 1 0446157747 USC CARE MEDICAL GROUP INC CAHPS_GRP_1  CAHPS for MIPS SSM…      63
+#&gt; 2 0446157747 USC CARE MEDICAL GROUP INC CAHPS_GRP_2  CAHPS for MIPS SSM…      87
+#&gt; 3 0446157747 USC CARE MEDICAL GROUP INC CAHPS_GRP_3  CAHPS for MIPS SSM…      86
+#&gt; 4 0446157747 USC CARE MEDICAL GROUP INC CAHPS_GRP_5  CAHPS for MIPS SSM…      57
+#&gt; 5 0446157747 USC CARE MEDICAL GROUP INC CAHPS_GRP_8  CAHPS for MIPS SSM…      85
+#&gt; 6 0446157747 USC CARE MEDICAL GROUP INC CAHPS_GRP_12 CAHPS for MIPS SSM…      24
+#&gt; # … with 494 more rows, and abbreviated variable name ¹​prf_rate</pre>
+</div>
+<p>An observation is an organisation, but each organisation is spread across six rows, with one row for each variable, or measure. We can see the complete set of values for <code>measure_cd</code> and <code>measure_title</code> by using <code><a href="#chp-https://dplyr.tidyverse.org/reference/distinct" data-type="xref">#chp-https://dplyr.tidyverse.org/reference/distinct</a></code>:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">cms_patient_experience |&gt; 
+  distinct(measure_cd, measure_title)
+#&gt; # A tibble: 6 × 2
+#&gt;   measure_cd   measure_title                                                    
+#&gt;   &lt;chr&gt;        &lt;chr&gt;                                                            
+#&gt; 1 CAHPS_GRP_1  CAHPS for MIPS SSM: Getting Timely Care, Appointments, and Infor…
+#&gt; 2 CAHPS_GRP_2  CAHPS for MIPS SSM: How Well Providers Communicate               
+#&gt; 3 CAHPS_GRP_3  CAHPS for MIPS SSM: Patient's Rating of Provider                 
+#&gt; 4 CAHPS_GRP_5  CAHPS for MIPS SSM: Health Promotion and Education               
+#&gt; 5 CAHPS_GRP_8  CAHPS for MIPS SSM: Courteous and Helpful Office Staff           
+#&gt; 6 CAHPS_GRP_12 CAHPS for MIPS SSM: Stewardship of Patient Resources</pre>
+</div>
+<p>Neither of these columns will make particularly great variable names: <code>measure_cd</code> doesn’t hint at the meaning of the variable and <code>measure_title</code> is a long sentence containing spaces. We’ll use <code>measure_cd</code> for now, but in a real analysis you might want to create your own variable names that are both short and meaningful.</p>
+<p><code><a href="#chp-https://tidyr.tidyverse.org/reference/pivot_wider" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/pivot_wider</a></code> has the opposite interface to <code><a href="#chp-https://tidyr.tidyverse.org/reference/pivot_longer" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/pivot_longer</a></code>: we need to provide the existing columns that define the values (<code>values_from</code>) and the column name (<code>names_from)</code>:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">cms_patient_experience |&gt; 
+  pivot_wider(
+    names_from = measure_cd,
+    values_from = prf_rate
+  )
+#&gt; # A tibble: 500 × 9
+#&gt;   org_pac_id org_nm      measu…¹ CAHPS…² CAHPS…³ CAHPS…⁴ CAHPS…⁵ CAHPS…⁶ CAHPS…⁷
+#&gt;   &lt;chr&gt;      &lt;chr&gt;       &lt;chr&gt;     &lt;dbl&gt;   &lt;dbl&gt;   &lt;dbl&gt;   &lt;dbl&gt;   &lt;dbl&gt;   &lt;dbl&gt;
+#&gt; 1 0446157747 USC CARE M… CAHPS …      63      NA      NA      NA      NA      NA
+#&gt; 2 0446157747 USC CARE M… CAHPS …      NA      87      NA      NA      NA      NA
+#&gt; 3 0446157747 USC CARE M… CAHPS …      NA      NA      86      NA      NA      NA
+#&gt; 4 0446157747 USC CARE M… CAHPS …      NA      NA      NA      57      NA      NA
+#&gt; 5 0446157747 USC CARE M… CAHPS …      NA      NA      NA      NA      85      NA
+#&gt; 6 0446157747 USC CARE M… CAHPS …      NA      NA      NA      NA      NA      24
+#&gt; # … with 494 more rows, and abbreviated variable names ¹​measure_title,
+#&gt; #   ²​CAHPS_GRP_1, ³​CAHPS_GRP_2, ⁴​CAHPS_GRP_3, ⁵​CAHPS_GRP_5, ⁶​CAHPS_GRP_8,
+#&gt; #   ⁷​CAHPS_GRP_12</pre>
+</div>
+<p>The output doesn’t look quite right; we still seem to have multiple rows for each organization. That’s because, by default, <code><a href="#chp-https://tidyr.tidyverse.org/reference/pivot_wider" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/pivot_wider</a></code> will attempt to preserve all the existing columns including <code>measure_title</code> which has six distinct observations for each organisations. To fix this problem we need to tell <code><a href="#chp-https://tidyr.tidyverse.org/reference/pivot_wider" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/pivot_wider</a></code> which columns identify each row; in this case those are the variables starting with <code>"org"</code>:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">cms_patient_experience |&gt; 
+  pivot_wider(
+    id_cols = starts_with("org"),
+    names_from = measure_cd,
+    values_from = prf_rate
+  )
+#&gt; # A tibble: 95 × 8
+#&gt;   org_pac_id org_nm              CAHPS…¹ CAHPS…² CAHPS…³ CAHPS…⁴ CAHPS…⁵ CAHPS…⁶
+#&gt;   &lt;chr&gt;      &lt;chr&gt;                 &lt;dbl&gt;   &lt;dbl&gt;   &lt;dbl&gt;   &lt;dbl&gt;   &lt;dbl&gt;   &lt;dbl&gt;
+#&gt; 1 0446157747 USC CARE MEDICAL G…      63      87      86      57      85      24
+#&gt; 2 0446162697 ASSOCIATION OF UNI…      59      85      83      63      88      22
+#&gt; 3 0547164295 BEAVER MEDICAL GRO…      49      NA      75      44      73      12
+#&gt; 4 0749333730 CAPE PHYSICIANS AS…      67      84      85      65      82      24
+#&gt; 5 0840104360 ALLIANCE PHYSICIAN…      66      87      87      64      87      28
+#&gt; 6 0840109864 REX HOSPITAL INC         73      87      84      67      91      30
+#&gt; # … with 89 more rows, and abbreviated variable names ¹​CAHPS_GRP_1,
+#&gt; #   ²​CAHPS_GRP_2, ³​CAHPS_GRP_3, ⁴​CAHPS_GRP_5, ⁵​CAHPS_GRP_8, ⁶​CAHPS_GRP_12</pre>
+</div>
+<p>This gives us the output that we’re looking for.</p>
+</section>
+
+<section id="how-does-pivot_wider-work" data-type="sect2">
+<h2>
+How does<code>pivot_wider()</code> work?</h2>
+<p>To understand how <code><a href="#chp-https://tidyr.tidyverse.org/reference/pivot_wider" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/pivot_wider</a></code> works, let’s again start with a very simple dataset:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">df &lt;- tribble(
+  ~id, ~name, ~value,
+  "A", "x", 1,
+  "B", "y", 2,
+  "B", "x", 3, 
+  "A", "y", 4,
+  "A", "z", 5,
+)</pre>
+</div>
+<p>We’ll take the values from the <code>value</code> column and the names from the <code>name</code> column:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">df |&gt; 
+  pivot_wider(
+    names_from = name,
+    values_from = value
+  )
+#&gt; # A tibble: 2 × 4
+#&gt;   id        x     y     z
+#&gt;   &lt;chr&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt;
+#&gt; 1 A         1     4     5
+#&gt; 2 B         3     2    NA</pre>
+</div>
+<p>The connection between the position of the row in the input and the cell in the output is weaker than in <code><a href="#chp-https://tidyr.tidyverse.org/reference/pivot_longer" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/pivot_longer</a></code> because the rows and columns in the output are primarily determined by the values of variables, not their locations.</p>
+<p>To begin the process <code><a href="#chp-https://tidyr.tidyverse.org/reference/pivot_wider" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/pivot_wider</a></code> needs to first figure out what will go in the rows and columns. Finding the column names is easy: it’s just the values of <code>name</code>.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">df |&gt; 
+  distinct(name)
+#&gt; # A tibble: 3 × 1
+#&gt;   name 
+#&gt;   &lt;chr&gt;
+#&gt; 1 x    
+#&gt; 2 y    
+#&gt; 3 z</pre>
+</div>
+<p>By default, the rows in the output are formed by all the variables that aren’t going into the names or values. These are called the <code>id_cols</code>.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">df |&gt; 
+  select(-name, -value) |&gt; 
+  distinct()
+#&gt; # A tibble: 2 × 1
+#&gt;   id   
+#&gt;   &lt;chr&gt;
+#&gt; 1 A    
+#&gt; 2 B</pre>
+</div>
+<p><code><a href="#chp-https://tidyr.tidyverse.org/reference/pivot_wider" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/pivot_wider</a></code> then combines these results to generate an empty data frame:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">df |&gt; 
+  select(-name, -value) |&gt; 
+  distinct() |&gt; 
+  mutate(x = NA, y = NA, z = NA)
+#&gt; # A tibble: 2 × 4
+#&gt;   id    x     y     z    
+#&gt;   &lt;chr&gt; &lt;lgl&gt; &lt;lgl&gt; &lt;lgl&gt;
+#&gt; 1 A     NA    NA    NA   
+#&gt; 2 B     NA    NA    NA</pre>
+</div>
+<p>It then fills in all the missing values using the data in the input. In this case, not every cell in the output has corresponding value in the input as there’s no entry for id “B” and name “z”, so that cell remains missing. We’ll come back to this idea that <code><a href="#chp-https://tidyr.tidyverse.org/reference/pivot_wider" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/pivot_wider</a></code> can “make” missing values in <a href="#chp-missing-values" data-type="xref">#chp-missing-values</a>.</p>
+<p>You might also wonder what happens if there are multiple rows in the input that correspond to one cell in the output. The example below has two rows that correspond to id “A” and name “x”:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">df &lt;- tribble(
+  ~id, ~name, ~value,
+  "A", "x", 1,
+  "A", "x", 2,
+  "A", "y", 3,
+  "B", "x", 4, 
+  "B", "y", 5, 
+)</pre>
+</div>
+<p>If we attempt to pivot this we get an output that contains list-columns, which you’ll learn more about in <a href="#chp-rectangling" data-type="xref">#chp-rectangling</a>:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">df |&gt; pivot_wider(
+  names_from = name,
+  values_from = value
+)
+#&gt; Warning: Values from `value` are not uniquely identified; output will contain list-cols.
+#&gt; • Use `values_fn = list` to suppress this warning.
+#&gt; • Use `values_fn = {summary_fun}` to summarise duplicates.
+#&gt; • Use the following dplyr code to identify duplicates.
+#&gt;   {data} %&gt;%
+#&gt;   dplyr::group_by(id, name) %&gt;%
+#&gt;   dplyr::summarise(n = dplyr::n(), .groups = "drop") %&gt;%
+#&gt;   dplyr::filter(n &gt; 1L)
+#&gt; # A tibble: 2 × 3
+#&gt;   id    x         y        
+#&gt;   &lt;chr&gt; &lt;list&gt;    &lt;list&gt;   
+#&gt; 1 A     &lt;dbl [2]&gt; &lt;dbl [1]&gt;
+#&gt; 2 B     &lt;dbl [1]&gt; &lt;dbl [1]&gt;</pre>
+</div>
+<p>Since you don’t know how to work with this sort of data yet, you’ll want to follow the hint in the warning to figure out where the problem is:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">df |&gt; 
+  group_by(id, name) |&gt; 
+  summarize(n = n(), .groups = "drop") |&gt; 
+  filter(n &gt; 1L) 
+#&gt; # A tibble: 1 × 3
+#&gt;   id    name      n
+#&gt;   &lt;chr&gt; &lt;chr&gt; &lt;int&gt;
+#&gt; 1 A     x         2</pre>
+</div>
+<p>It’s then up to you to figure out what’s gone wrong with your data and either repair the underlying damage or use your grouping and summarizing skills to ensure that each combination of row and column values only has a single row.</p>
+</section>
+</section>
+
+<section id="untidy-data" data-type="sect1">
+<h1>
+Untidy data</h1>
+<p>While <code><a href="#chp-https://tidyr.tidyverse.org/reference/pivot_wider" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/pivot_wider</a></code> is occasionally useful for making tidy data, its real strength is making <strong>untidy</strong> data. While that sounds like a bad thing, untidy isn’t a pejorative term: there are many untidy data structures that are extremely useful. Tidy data is a great starting point for most analyses but it’s not the only data format you’ll ever need.</p>
+<p>The following sections will show a few examples of <code><a href="#chp-https://tidyr.tidyverse.org/reference/pivot_wider" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/pivot_wider</a></code> making usefully untidy data for presenting data to other humans, for input to multivariate statistics algorithms, and for pragmatically solving data manipulation challenges.</p>
+
+<section id="presenting-data-to-humans" data-type="sect2">
+<h2>
+Presenting data to humans</h2>
+<p>As you’ve seen, <code><a href="#chp-https://dplyr.tidyverse.org/reference/count" data-type="xref">#chp-https://dplyr.tidyverse.org/reference/count</a></code> produces tidy data: it makes one row for each group, with one column for each grouping variable, and one column for the number of observations.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">diamonds |&gt; 
+  count(clarity, color)
+#&gt; # A tibble: 56 × 3
+#&gt;   clarity color     n
+#&gt;   &lt;ord&gt;   &lt;ord&gt; &lt;int&gt;
+#&gt; 1 I1      D        42
+#&gt; 2 I1      E       102
+#&gt; 3 I1      F       143
+#&gt; 4 I1      G       150
+#&gt; 5 I1      H       162
+#&gt; 6 I1      I        92
+#&gt; # … with 50 more rows</pre>
+</div>
+<p>This is easy to visualize or summarize further, but it’s not the most compact form for display. You can use <code><a href="#chp-https://tidyr.tidyverse.org/reference/pivot_wider" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/pivot_wider</a></code> to create a form more suitable for display to other humans:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">diamonds |&gt; 
+  count(clarity, color) |&gt; 
+  pivot_wider(
+    names_from = color, 
+    values_from = n
+  )
+#&gt; # A tibble: 8 × 8
+#&gt;   clarity     D     E     F     G     H     I     J
+#&gt;   &lt;ord&gt;   &lt;int&gt; &lt;int&gt; &lt;int&gt; &lt;int&gt; &lt;int&gt; &lt;int&gt; &lt;int&gt;
+#&gt; 1 I1         42   102   143   150   162    92    50
+#&gt; 2 SI2      1370  1713  1609  1548  1563   912   479
+#&gt; 3 SI1      2083  2426  2131  1976  2275  1424   750
+#&gt; 4 VS2      1697  2470  2201  2347  1643  1169   731
+#&gt; 5 VS1       705  1281  1364  2148  1169   962   542
+#&gt; 6 VVS2      553   991   975  1443   608   365   131
+#&gt; # … with 2 more rows</pre>
+</div>
+<p>This display also makes it easy to compare in two directions, horizontally and vertically, much like <code><a href="#chp-https://ggplot2.tidyverse.org/reference/facet_grid" data-type="xref">#chp-https://ggplot2.tidyverse.org/reference/facet_grid</a></code>.</p>
+<p><code><a href="#chp-https://tidyr.tidyverse.org/reference/pivot_wider" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/pivot_wider</a></code> can be great for quickly sketching out a table. But for real presentation tables, we highly suggest learning a package like <a href="#chp-https://gt.rstudio" data-type="xref">#chp-https://gt.rstudio</a>. gt is similar to ggplot2 in that it provides an extremely powerful grammar for laying out tables. It takes some work to learn but the payoff is the ability to make just about any table you can imagine.</p>
+</section>
+
+<section id="multivariate-statistics" data-type="sect2">
+<h2>
+Multivariate statistics</h2>
+<p>Most classical multivariate statistical methods (like dimension reduction and clustering) require your data in matrix form, where each column is a time point, or a location, or a gene, or a species, but definitely not a variable. Sometimes these formats have substantial performance or space advantages, or sometimes they’re just necessary to get closer to the underlying matrix mathematics.</p>
+<p>We’re not going to cover these statistical methods here, but it is useful to know how to get your data into the form that they need. For example, let’s imagine you wanted to cluster the gapminder data to find countries that had similar progression of <code>gdpPercap</code> over time. To do this, we need one row for each country and one column for each year:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">library(gapminder)
+
+col_year &lt;- gapminder |&gt; 
+  mutate(gdpPercap = log10(gdpPercap)) |&gt; 
+  pivot_wider(
+    id_cols = country, 
+    names_from = year,
+    values_from = gdpPercap
+  ) 
+col_year
+#&gt; # A tibble: 142 × 13
+#&gt;   country  `1952` `1957` `1962` `1967` `1972` `1977` `1982` `1987` `1992` `1997`
+#&gt;   &lt;fct&gt;     &lt;dbl&gt;  &lt;dbl&gt;  &lt;dbl&gt;  &lt;dbl&gt;  &lt;dbl&gt;  &lt;dbl&gt;  &lt;dbl&gt;  &lt;dbl&gt;  &lt;dbl&gt;  &lt;dbl&gt;
+#&gt; 1 Afghani…   2.89   2.91   2.93   2.92   2.87   2.90   2.99   2.93   2.81   2.80
+#&gt; 2 Albania    3.20   3.29   3.36   3.44   3.52   3.55   3.56   3.57   3.40   3.50
+#&gt; 3 Algeria    3.39   3.48   3.41   3.51   3.62   3.69   3.76   3.75   3.70   3.68
+#&gt; 4 Angola     3.55   3.58   3.63   3.74   3.74   3.48   3.44   3.39   3.42   3.36
+#&gt; 5 Argenti…   3.77   3.84   3.85   3.91   3.98   4.00   3.95   3.96   3.97   4.04
+#&gt; 6 Austral…   4.00   4.04   4.09   4.16   4.23   4.26   4.29   4.34   4.37   4.43
+#&gt; # … with 136 more rows, and 2 more variables: `2002` &lt;dbl&gt;, `2007` &lt;dbl&gt;</pre>
+</div>
+<p><code><a href="#chp-https://tidyr.tidyverse.org/reference/pivot_wider" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/pivot_wider</a></code> produces a tibble where each row is labelled by the <code>country</code> variable. But most classic statistical algorithms don’t want the identifier as an explicit variable; they want as a <strong>row name</strong>. We can turn the <code>country</code> variable into row names with <code>column_to_rowname()</code>:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">col_year &lt;- col_year |&gt; 
+  column_to_rownames("country") 
+
+head(col_year)
+#&gt;                 1952     1957     1962     1967     1972     1977     1982
+#&gt; Afghanistan 2.891786 2.914265 2.931000 2.922309 2.869221 2.895485 2.990344
+#&gt; Albania     3.204407 3.288313 3.364155 3.440940 3.520277 3.548144 3.560012
+#&gt; Algeria     3.388990 3.479140 3.406679 3.511481 3.621453 3.691118 3.759302
+#&gt; Angola      3.546618 3.582965 3.630354 3.742157 3.738248 3.478371 3.440429
+#&gt; Argentina   3.771684 3.836125 3.853282 3.905955 3.975112 4.003419 3.954141
+#&gt; Australia   4.001716 4.039400 4.086973 4.162150 4.225015 4.263262 4.289522
+#&gt;                 1987     1992     1997     2002     2007
+#&gt; Afghanistan 2.930641 2.812473 2.803007 2.861376 2.988818
+#&gt; Albania     3.572748 3.397495 3.504206 3.663155 3.773569
+#&gt; Algeria     3.754452 3.700982 3.680996 3.723295 3.794025
+#&gt; Angola      3.385644 3.419600 3.357390 3.442995 3.680991
+#&gt; Argentina   3.960931 3.968876 4.040099 3.944366 4.106510
+#&gt; Australia   4.340224 4.369675 4.431331 4.486965 4.537005</pre>
+</div>
+<p>This makes a data frame, because tibbles don’t support row names<span data-type="footnote">tibbles don’t use row names because they only work for a subset of important cases: when observations can be identified by a single character vector.</span>.</p>
+<p>We’re now ready to cluster with (e.g.) <code><a href="#chp-https://rdrr.io/r/stats/kmeans" data-type="xref">#chp-https://rdrr.io/r/stats/kmeans</a></code>:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">cluster &lt;- stats::kmeans(col_year, centers = 6)</pre>
+</div>
+<p>Extracting the data out of this object into a form you can work with is a challenge you’ll need to come back to later in the book, once you’ve learned more about lists. But for now, you can get the clustering membership out with this code:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">cluster_id &lt;- cluster$cluster |&gt; 
+  enframe() |&gt; 
+  rename(country = name, cluster_id = value)
+cluster_id
+#&gt; # A tibble: 142 × 2
+#&gt;   country     cluster_id
+#&gt;   &lt;chr&gt;            &lt;int&gt;
+#&gt; 1 Afghanistan          4
+#&gt; 2 Albania              2
+#&gt; 3 Algeria              6
+#&gt; 4 Angola               2
+#&gt; 5 Argentina            5
+#&gt; 6 Australia            1
+#&gt; # … with 136 more rows</pre>
+</div>
+<p>You could then combine this back with the original data using one of the joins you’ll learn about in <a href="#chp-joins" data-type="xref">#chp-joins</a>.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">gapminder |&gt; left_join(cluster_id)
+#&gt; Joining with `by = join_by(country)`
+#&gt; # A tibble: 1,704 × 7
+#&gt;   country     continent  year lifeExp      pop gdpPercap cluster_id
+#&gt;   &lt;chr&gt;       &lt;fct&gt;     &lt;int&gt;   &lt;dbl&gt;    &lt;int&gt;     &lt;dbl&gt;      &lt;int&gt;
+#&gt; 1 Afghanistan Asia       1952    28.8  8425333      779.          4
+#&gt; 2 Afghanistan Asia       1957    30.3  9240934      821.          4
+#&gt; 3 Afghanistan Asia       1962    32.0 10267083      853.          4
+#&gt; 4 Afghanistan Asia       1967    34.0 11537966      836.          4
+#&gt; 5 Afghanistan Asia       1972    36.1 13079460      740.          4
+#&gt; 6 Afghanistan Asia       1977    38.4 14880372      786.          4
+#&gt; # … with 1,698 more rows</pre>
+</div>
+</section>
+
+<section id="pragmatic-computation" data-type="sect2">
+<h2>
+Pragmatic computation</h2>
+<p>Sometimes it’s just easier to answer a question using untidy data. For example, if you’re interested in just the total number of missing values in <code>cms_patient_experience</code>, it’s easier to work with the untidy form:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">cms_patient_experience |&gt; 
+  group_by(org_pac_id) |&gt; 
+  summarize(
+    n_miss = sum(is.na(prf_rate)),
+    n = n(),
+  )
+#&gt; # A tibble: 95 × 3
+#&gt;   org_pac_id n_miss     n
+#&gt;   &lt;chr&gt;       &lt;int&gt; &lt;int&gt;
+#&gt; 1 0446157747      0     6
+#&gt; 2 0446162697      0     6
+#&gt; 3 0547164295      1     6
+#&gt; 4 0749333730      0     6
+#&gt; 5 0840104360      0     6
+#&gt; 6 0840109864      0     6
+#&gt; # … with 89 more rows</pre>
+</div>
+<p>This is partly a reflection of our definition of tidy data, where we said tidy data has one variable in each column, but we didn’t actually define what a variable is (and it’s surprisingly hard to do so). It’s totally fine to be pragmatic and to say a variable is whatever makes your analysis easiest.</p>
+<p>So if you’re stuck figuring out how to do some computation, maybe it’s time to switch up the organisation of your data. For computations involving a fixed number of values (like computing differences or ratios), it’s usually easier if the data is in columns; for those with a variable number of values (like sums or means) it’s usually easier in rows. Don’t be afraid to untidy, transform, and re-tidy if needed.</p>
+<p>Let’s explore this idea by looking at <code>cms_patient_care</code>, which has a similar structure to <code>cms_patient_experience</code>:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">cms_patient_care
+#&gt; # A tibble: 252 × 5
+#&gt;   ccn    facility_name   measure_abbr      score type       
+#&gt;   &lt;chr&gt;  &lt;chr&gt;           &lt;chr&gt;             &lt;dbl&gt; &lt;chr&gt;      
+#&gt; 1 011500 BAPTIST HOSPICE beliefs_addressed 202   denominator
+#&gt; 2 011500 BAPTIST HOSPICE beliefs_addressed 100   observed   
+#&gt; 3 011500 BAPTIST HOSPICE composite_process 202   denominator
+#&gt; 4 011500 BAPTIST HOSPICE composite_process  88.1 observed   
+#&gt; 5 011500 BAPTIST HOSPICE dyspena_treatment 110   denominator
+#&gt; 6 011500 BAPTIST HOSPICE dyspena_treatment  99.1 observed   
+#&gt; # … with 246 more rows</pre>
+</div>
+<p>It contains information about 9 measures (<code>beliefs_addressed</code>, <code>composite_process</code>, <code>dyspena_treatment</code>, …) on 14 different facilities (identified by <code>ccn</code> with a name given by <code>facility_name</code>). Compared to <code>cms_patient_experience</code>, however, each measurement is recorded in two rows with a <code>score</code>, the percentage of patients who answered yes to the survey question, and a denominator, the number of patients that the question applies to. Depending on what you want to do next, you may find any of the following three structures useful:</p>
+<ul><li>
+<p>If you want to compute the number of patients that answered yes to the question, you may pivot <code>type</code> into the columns:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">cms_patient_care |&gt; 
+  pivot_wider(
+    names_from = type,
+    values_from = score
+  ) |&gt; 
+  mutate(
+    numerator = round(observed / 100 * denominator)
+  )
+#&gt; # A tibble: 126 × 6
+#&gt;   ccn    facility_name   measure_abbr      denominator observed numerator
+#&gt;   &lt;chr&gt;  &lt;chr&gt;           &lt;chr&gt;                   &lt;dbl&gt;    &lt;dbl&gt;     &lt;dbl&gt;
+#&gt; 1 011500 BAPTIST HOSPICE beliefs_addressed         202    100         202
+#&gt; 2 011500 BAPTIST HOSPICE composite_process         202     88.1       178
+#&gt; 3 011500 BAPTIST HOSPICE dyspena_treatment         110     99.1       109
+#&gt; 4 011500 BAPTIST HOSPICE dyspnea_screening         202    100         202
+#&gt; 5 011500 BAPTIST HOSPICE opioid_bowel               61    100          61
+#&gt; 6 011500 BAPTIST HOSPICE pain_assessment           107    100         107
+#&gt; # … with 120 more rows</pre>
+</div>
+</li>
+<li>
+<p>If you want to display the distribution of each metric, you may keep it as is so you could facet by <code>measure_abbr</code>.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">cms_patient_care |&gt; 
+  filter(type == "observed") |&gt; 
+  ggplot(aes(score)) + 
+  geom_histogram(binwidth = 2) + 
+  facet_wrap(vars(measure_abbr))
+#&gt; Warning: Removed 1 rows containing non-finite values (`stat_bin()`).</pre>
+</div>
+</li>
+<li>
+<p>If you want to explore how different metrics are related, you may put the measure names in the columns so you could compare them in scatterplots.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">cms_patient_care |&gt; 
+  filter(type == "observed") |&gt; 
+  select(-type) |&gt; 
+  pivot_wider(
+    names_from = measure_abbr,
+    values_from = score
+  ) |&gt; 
+  ggplot(aes(dyspnea_screening, dyspena_treatment)) + 
+  geom_point() + 
+  coord_equal()</pre>
+</div>
+</li>
+</ul></section>
+</section>
+
+<section id="summary" data-type="sect1">
+<h1>
+Summary</h1>
+<p>In this chapter you learned about tidy data: data that has variables in columns and observations in rows. Tidy data makes working in the tidyverse easier, because it’s a consistent structure understood by most functions: the main challenge is data from whatever structure you receive it in to a tidy format. To that end, you learn about <code><a href="#chp-https://tidyr.tidyverse.org/reference/pivot_longer" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/pivot_longer</a></code> and <code><a href="#chp-https://tidyr.tidyverse.org/reference/pivot_wider" data-type="xref">#chp-https://tidyr.tidyverse.org/reference/pivot_wider</a></code> which allow you to tidy up many untidy datasets. Of course, tidy data can’t solve every problem so we also showed you some places were you might want to deliberately untidy your data into order to present to humans, feed into statistical models, or just pragmatically get shit done. If you particularly enjoyed this chapter and want to learn more about the underlying theory, you can learn more about the history and theoretical underpinnings in the <a href="#chp-https://www.jstatsoft.org/article/view/v059i10" data-type="xref">#chp-https://www.jstatsoft.org/article/view/v059i10</a> paper published in the Journal of Statistical Software.</p>
+<p>In the next chapter, we’ll pivot back to workflow to discuss the importance of code style, keeping your code “tidy” (ha!) in order to make it easy for you and others to read and understand your code.</p>
+
+
+</section>
+</section>

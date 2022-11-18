@@ -1,0 +1,771 @@
+<section data-type="chapter" id="chp-datetimes">
+<h1><span id="sec-dates-and-times" class="quarto-section-identifier d-none d-lg-block"><span class="chapter-title">Dates and times</span></span></h1><div data-type="note"><div class="callout-body d-flex">
+<div class="callout-icon-container">
+<i class="callout-icon"/>
+</div>
+
+</div>
+
+<p>You are reading the work-in-progress second edition of R for Data Science. This chapter should be readable but is currently undergoing final polishing. You can find the complete first edition at <a href="https://r4ds.had.co.nz" class="uri">https://r4ds.had.co.nz</a>.</p></div>
+
+<section id="introduction" data-type="sect1">
+<h1>
+Introduction</h1>
+<p>This chapter will show you how to work with dates and times in R. At first glance, dates and times seem simple. You use them all the time in your regular life, and they don’t seem to cause much confusion. However, the more you learn about dates and times, the more complicated they seem to get!</p>
+<p>To warm up think about how many days there are in a year, and how many hours there are in a day. You probably remembered that most years have 365 days, but leap years have 366. Do you know the full rule for determining if a year is a leap year<span data-type="footnote">A year is a leap year if it’s divisible by 4, unless it’s also divisible by 100, except if it’s also divisible by 400. In other words, in every set of 400 years, there’s 97 leap years.</span>? The number of hours in a day is a little less obvious: most days have 24 hours, but in places that use daylight saving time (DST), one day each year has 23 hours and another has 25.</p>
+<p>Dates and times are hard because they have to reconcile two physical phenomena (the rotation of the Earth and its orbit around the sun) with a whole raft of geopolitical phenomena including months, time zones, and DST. This chapter won’t teach you every last detail about dates and times, but it will give you a solid grounding of practical skills that will help you with common data analysis challenges.</p>
+<p>We’ll begin by showing you how to create date-times from various inputs, and then once you’ve got a date-time, how you can extract components like year, month, and day. We’ll then dive into the tricky topic of working with time spans, which come in a variety of flavors depending on what you’re trying to do. We’ll conclude with a brief discussion of the additional challenges posed by time zones.</p>
+
+<section id="prerequisites" data-type="sect2">
+<h2>
+Prerequisites</h2>
+<p>This chapter will focus on the <strong>lubridate</strong> package, which makes it easier to work with dates and times in R. lubridate is not part of core tidyverse because you only need it when you’re working with dates/times. We will also need nycflights13 for practice data.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">library(tidyverse)
+
+library(lubridate)
+library(nycflights13)</pre>
+</div>
+</section>
+</section>
+
+<section id="sec-creating-datetimes" data-type="sect1">
+<h1>
+Creating date/times</h1>
+<p>There are three types of date/time data that refer to an instant in time:</p>
+<ul><li><p>A <strong>date</strong>. Tibbles print this as <code>&lt;date&gt;</code>.</p></li>
+<li><p>A <strong>time</strong> within a day. Tibbles print this as <code>&lt;time&gt;</code>.</p></li>
+<li><p>A <strong>date-time</strong> is a date plus a time: it uniquely identifies an instant in time (typically to the nearest second). Tibbles print this as <code>&lt;dttm&gt;</code>. Base R calls these POSIXct, but doesn’t exactly trip off the tongue.</p></li>
+</ul><p>In this chapter we are going to focus on dates and date-times as R doesn’t have a native class for storing times. If you need one, you can use the <strong>hms</strong> package.</p>
+<p>You should always use the simplest possible data type that works for your needs. That means if you can use a date instead of a date-time, you should. Date-times are substantially more complicated because of the need to handle time zones, which we’ll come back to at the end of the chapter.</p>
+<p>To get the current date or date-time you can use <code><a href="#chp-https://lubridate.tidyverse.org/reference/now" data-type="xref">#chp-https://lubridate.tidyverse.org/reference/now</a></code> or <code><a href="#chp-https://lubridate.tidyverse.org/reference/now" data-type="xref">#chp-https://lubridate.tidyverse.org/reference/now</a></code>:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">today()
+#&gt; [1] "2022-11-18"
+now()
+#&gt; [1] "2022-11-18 10:21:36 CST"</pre>
+</div>
+<p>Otherwise, the following sections describe the four ways you’re likely to create a date/time:</p>
+<ul><li>While reading a file with readr.</li>
+<li>From a string.</li>
+<li>From individual date-time components.</li>
+<li>From an existing date/time object.</li>
+</ul>
+<section id="during-import" data-type="sect2">
+<h2>
+During import</h2>
+<p>If your CSV contains an ISO8601 date or date-time, you don’t need to do anything; readr will automatically recognize it:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">csv &lt;- "
+  date,datetime
+  2022-01-02,2022-01-02 05:12
+"
+read_csv(csv)
+#&gt; # A tibble: 1 × 2
+#&gt;   date       datetime           
+#&gt;   &lt;date&gt;     &lt;dttm&gt;             
+#&gt; 1 2022-01-02 2022-01-02 05:12:00</pre>
+</div>
+<p>If you haven’t heard of <strong>ISO8601</strong> before, it’s an international standard<span data-type="footnote"><a href="https://xkcd.com/1179/" class="uri">https://xkcd.com/1179/</a></span> for writing dates where the components of a date are organised from biggest to smallest separated by <code>-</code>. For example, in ISO8601 March 5 2022 is <code>2022-05-03</code>. ISO8601 dates can also include times, where hour, minute, and second are separated by <code>:</code>, and the date and time components are separated by either a <code>T</code> or a space. For example, you could write 4:26pm on March 5 2022 as either <code>2022-05-03 16:26</code> or <code>2022-05-03T16:26</code>.</p>
+<p>For other date-time formats, you’ll need to use <code>col_types</code> plus <code><a href="#chp-https://readr.tidyverse.org/reference/parse_datetime" data-type="xref">#chp-https://readr.tidyverse.org/reference/parse_datetime</a></code> or <code><a href="#chp-https://readr.tidyverse.org/reference/parse_datetime" data-type="xref">#chp-https://readr.tidyverse.org/reference/parse_datetime</a></code> along with a date-time format. The date-time format used by readr is a standard used across many programming languages, describing a date component with a <code>%</code> followed by a single character. For example, <code>%Y-%m-%d</code> specifies a date that’s a year, <code>-</code>, month (as number) <code>-</code>, day. Table <a href="#tbl-date-formats" data-type="xref">#tbl-date-formats</a> lists all the options.</p>
+<div id="tbl-date-formats" class="anchored">
+<table class="table"><caption>Table 17.1: All date formats understood by readr</caption>
+<thead><tr class="header"><th>Type</th>
+<th>Code</th>
+<th>Meaning</th>
+<th>Example</th>
+</tr></thead><tbody><tr class="odd"><td>Year</td>
+<td><code>%Y</code></td>
+<td>4 digit year</td>
+<td>2021</td>
+</tr><tr class="even"><td/>
+<td><code>%y</code></td>
+<td>2 digit year</td>
+<td>21</td>
+</tr><tr class="odd"><td>Month</td>
+<td><code>%m</code></td>
+<td>Number</td>
+<td>2</td>
+</tr><tr class="even"><td/>
+<td><code>%b</code></td>
+<td>Abbreviated name</td>
+<td>Feb</td>
+</tr><tr class="odd"><td/>
+<td><code>%B</code></td>
+<td>Full name</td>
+<td>Februrary</td>
+</tr><tr class="even"><td>Day</td>
+<td><code>%d</code></td>
+<td>Two digits</td>
+<td>02</td>
+</tr><tr class="odd"><td/>
+<td><code>%e</code></td>
+<td>One or two digits</td>
+<td>2</td>
+</tr><tr class="even"><td>Time</td>
+<td><code>%H</code></td>
+<td>24-hour hour</td>
+<td>13</td>
+</tr><tr class="odd"><td/>
+<td><code>%I</code></td>
+<td>12-hour hour</td>
+<td>1</td>
+</tr><tr class="even"><td/>
+<td><code>%p</code></td>
+<td>AM/PM</td>
+<td>pm</td>
+</tr><tr class="odd"><td/>
+<td><code>%M</code></td>
+<td>Minutes</td>
+<td>35</td>
+</tr><tr class="even"><td/>
+<td><code>%S</code></td>
+<td>Seconds</td>
+<td>45</td>
+</tr><tr class="odd"><td/>
+<td><code>%OS</code></td>
+<td>Seconds with decimal component</td>
+<td>45.35</td>
+</tr><tr class="even"><td/>
+<td><code>%Z</code></td>
+<td>Time zone name</td>
+<td>America/Chicago</td>
+</tr><tr class="odd"><td/>
+<td><code>%z</code></td>
+<td>Offset from UTC</td>
+<td>+0800</td>
+</tr><tr class="even"><td>Other</td>
+<td><code>%.</code></td>
+<td>Skip one non-digit</td>
+<td>:</td>
+</tr><tr class="odd"><td/>
+<td><code>%*</code></td>
+<td>Skip any number of non-digits</td>
+<td/>
+</tr></tbody></table></div>
+<p>And this code shows some a few options applied to a very ambiguous date:</p>
+<div class="cell" data-messages="false">
+<pre data-type="programlisting" data-code-language="downlit">csv &lt;- "
+  date
+  01/02/15
+"
+
+read_csv(csv, col_types = cols(date = col_date("%m/%d/%y")))
+#&gt; # A tibble: 1 × 1
+#&gt;   date      
+#&gt;   &lt;date&gt;    
+#&gt; 1 2015-01-02
+
+read_csv(csv, col_types = cols(date = col_date("%d/%m/%y")))
+#&gt; # A tibble: 1 × 1
+#&gt;   date      
+#&gt;   &lt;date&gt;    
+#&gt; 1 2015-02-01
+
+read_csv(csv, col_types = cols(date = col_date("%y/%m/%d")))
+#&gt; # A tibble: 1 × 1
+#&gt;   date      
+#&gt;   &lt;date&gt;    
+#&gt; 1 2001-02-15</pre>
+</div>
+<p>Note that no matter how you specify the date format, it’s always displayed the same way once you get it into R.</p>
+<p>If you’re using <code>%b</code> or <code>%B</code> and working with non-English dates, you’ll also need to provide a <code><a href="#chp-https://readr.tidyverse.org/reference/locale" data-type="xref">#chp-https://readr.tidyverse.org/reference/locale</a></code>. See the list of built-in languages in <code><a href="#chp-https://readr.tidyverse.org/reference/date_names" data-type="xref">#chp-https://readr.tidyverse.org/reference/date_names</a></code>, or create your own with <code><a href="#chp-https://readr.tidyverse.org/reference/date_names" data-type="xref">#chp-https://readr.tidyverse.org/reference/date_names</a></code>,</p>
+</section>
+
+<section id="from-strings" data-type="sect2">
+<h2>
+From strings</h2>
+<p>The date-time specification language is powerful, but requires careful analysis of the date format. An alternative approach is to use lubridate’s helpers which attempt to automatically determine the format once you specify the order of the component. To use them, identify the order in which year, month, and day appear in your dates, then arrange “y”, “m”, and “d” in the same order. That gives you the name of the lubridate function that will parse your date. For example:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">ymd("2017-01-31")
+#&gt; [1] "2017-01-31"
+mdy("January 31st, 2017")
+#&gt; [1] "2017-01-31"
+dmy("31-Jan-2017")
+#&gt; [1] "2017-01-31"</pre>
+</div>
+<p><code><a href="#chp-https://lubridate.tidyverse.org/reference/ymd" data-type="xref">#chp-https://lubridate.tidyverse.org/reference/ymd</a></code> and friends create dates. To create a date-time, add an underscore and one or more of “h”, “m”, and “s” to the name of the parsing function:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">ymd_hms("2017-01-31 20:11:59")
+#&gt; [1] "2017-01-31 20:11:59 UTC"
+mdy_hm("01/31/2017 08:01")
+#&gt; [1] "2017-01-31 08:01:00 UTC"</pre>
+</div>
+<p>You can also force the creation of a date-time from a date by supplying a timezone:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">ymd("2017-01-31", tz = "UTC")
+#&gt; [1] "2017-01-31 UTC"</pre>
+</div>
+</section>
+
+<section id="from-individual-components" data-type="sect2">
+<h2>
+From individual components</h2>
+<p>Instead of a single string, sometimes you’ll have the individual components of the date-time spread across multiple columns. This is what we have in the <code>flights</code> data:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">flights |&gt; 
+  select(year, month, day, hour, minute)
+#&gt; # A tibble: 336,776 × 5
+#&gt;    year month   day  hour minute
+#&gt;   &lt;int&gt; &lt;int&gt; &lt;int&gt; &lt;dbl&gt;  &lt;dbl&gt;
+#&gt; 1  2013     1     1     5     15
+#&gt; 2  2013     1     1     5     29
+#&gt; 3  2013     1     1     5     40
+#&gt; 4  2013     1     1     5     45
+#&gt; 5  2013     1     1     6      0
+#&gt; 6  2013     1     1     5     58
+#&gt; # … with 336,770 more rows</pre>
+</div>
+<p>To create a date/time from this sort of input, use <code><a href="#chp-https://lubridate.tidyverse.org/reference/make_datetime" data-type="xref">#chp-https://lubridate.tidyverse.org/reference/make_datetime</a></code> for dates, or <code><a href="#chp-https://lubridate.tidyverse.org/reference/make_datetime" data-type="xref">#chp-https://lubridate.tidyverse.org/reference/make_datetime</a></code> for date-times:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">flights |&gt; 
+  select(year, month, day, hour, minute) |&gt; 
+  mutate(departure = make_datetime(year, month, day, hour, minute))
+#&gt; # A tibble: 336,776 × 6
+#&gt;    year month   day  hour minute departure          
+#&gt;   &lt;int&gt; &lt;int&gt; &lt;int&gt; &lt;dbl&gt;  &lt;dbl&gt; &lt;dttm&gt;             
+#&gt; 1  2013     1     1     5     15 2013-01-01 05:15:00
+#&gt; 2  2013     1     1     5     29 2013-01-01 05:29:00
+#&gt; 3  2013     1     1     5     40 2013-01-01 05:40:00
+#&gt; 4  2013     1     1     5     45 2013-01-01 05:45:00
+#&gt; 5  2013     1     1     6      0 2013-01-01 06:00:00
+#&gt; 6  2013     1     1     5     58 2013-01-01 05:58:00
+#&gt; # … with 336,770 more rows</pre>
+</div>
+<p>Let’s do the same thing for each of the four time columns in <code>flights</code>. The times are represented in a slightly odd format, so we use modulus arithmetic to pull out the hour and minute components. Once we’ve created the date-time variables, we focus in on the variables we’ll explore in the rest of the chapter.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">make_datetime_100 &lt;- function(year, month, day, time) {
+  make_datetime(year, month, day, time %/% 100, time %% 100)
+}
+
+flights_dt &lt;- flights |&gt; 
+  filter(!is.na(dep_time), !is.na(arr_time)) |&gt; 
+  mutate(
+    dep_time = make_datetime_100(year, month, day, dep_time),
+    arr_time = make_datetime_100(year, month, day, arr_time),
+    sched_dep_time = make_datetime_100(year, month, day, sched_dep_time),
+    sched_arr_time = make_datetime_100(year, month, day, sched_arr_time)
+  ) |&gt; 
+  select(origin, dest, ends_with("delay"), ends_with("time"))
+
+flights_dt
+#&gt; # A tibble: 328,063 × 9
+#&gt;   origin dest  dep_delay arr_delay dep_time            sched_dep_time     
+#&gt;   &lt;chr&gt;  &lt;chr&gt;     &lt;dbl&gt;     &lt;dbl&gt; &lt;dttm&gt;              &lt;dttm&gt;             
+#&gt; 1 EWR    IAH           2        11 2013-01-01 05:17:00 2013-01-01 05:15:00
+#&gt; 2 LGA    IAH           4        20 2013-01-01 05:33:00 2013-01-01 05:29:00
+#&gt; 3 JFK    MIA           2        33 2013-01-01 05:42:00 2013-01-01 05:40:00
+#&gt; 4 JFK    BQN          -1       -18 2013-01-01 05:44:00 2013-01-01 05:45:00
+#&gt; 5 LGA    ATL          -6       -25 2013-01-01 05:54:00 2013-01-01 06:00:00
+#&gt; 6 EWR    ORD          -4        12 2013-01-01 05:54:00 2013-01-01 05:58:00
+#&gt; # … with 328,057 more rows, and 3 more variables: arr_time &lt;dttm&gt;,
+#&gt; #   sched_arr_time &lt;dttm&gt;, air_time &lt;dbl&gt;</pre>
+</div>
+<p>With this data, we can visualize the distribution of departure times across the year:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">flights_dt |&gt; 
+  ggplot(aes(dep_time)) + 
+  geom_freqpoly(binwidth = 86400) # 86400 seconds = 1 day</pre>
+<div class="cell-output-display">
+<p><img src="datetimes_files/figure-html/unnamed-chunk-12-1.png" class="img-fluid" alt="A frequency polyon with departure time (Jan-Dec 2013) on the x-axis and number of flights on the y-axis (0-1000). The frequency polygon is binned by day so you see a time series of flights by day. The pattern is dominated by a weekly pattern; there are fewer flights on weekends. The are few days that stand out as having a surprisingly few flights in early Februrary, early July, late November, and late December." width="576"/></p>
+</div>
+</div>
+<p>Or within a single day:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">flights_dt |&gt; 
+  filter(dep_time &lt; ymd(20130102)) |&gt; 
+  ggplot(aes(dep_time)) + 
+  geom_freqpoly(binwidth = 600) # 600 s = 10 minutes</pre>
+<div class="cell-output-display">
+<p><img src="datetimes_files/figure-html/unnamed-chunk-13-1.png" class="img-fluid" alt="A frequency polygon with departure time (6am - midnight Jan 1) on the x-axis, number of flights on the y-axis (0-17), binned into 10 minute increments. It's hard to see much pattern because of high variability, but most bins have 8-12 flights, and there are markedly fewer flights before 6am and after 8pm." width="576"/></p>
+</div>
+</div>
+<p>Note that when you use date-times in a numeric context (like in a histogram), 1 means 1 second, so a binwidth of 86400 means one day. For dates, 1 means 1 day.</p>
+</section>
+
+<section id="from-other-types" data-type="sect2">
+<h2>
+From other types</h2>
+<p>You may want to switch between a date-time and a date. That’s the job of <code><a href="#chp-https://lubridate.tidyverse.org/reference/as_date" data-type="xref">#chp-https://lubridate.tidyverse.org/reference/as_date</a></code> and <code><a href="#chp-https://lubridate.tidyverse.org/reference/as_date" data-type="xref">#chp-https://lubridate.tidyverse.org/reference/as_date</a></code>:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">as_datetime(today())
+#&gt; [1] "2022-11-18 UTC"
+as_date(now())
+#&gt; [1] "2022-11-18"</pre>
+</div>
+<p>Sometimes you’ll get date/times as numeric offsets from the “Unix Epoch”, 1970-01-01. If the offset is in seconds, use <code><a href="#chp-https://lubridate.tidyverse.org/reference/as_date" data-type="xref">#chp-https://lubridate.tidyverse.org/reference/as_date</a></code>; if it’s in days, use <code><a href="#chp-https://lubridate.tidyverse.org/reference/as_date" data-type="xref">#chp-https://lubridate.tidyverse.org/reference/as_date</a></code>.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">as_datetime(60 * 60 * 10)
+#&gt; [1] "1970-01-01 10:00:00 UTC"
+as_date(365 * 10 + 2)
+#&gt; [1] "1980-01-01"</pre>
+</div>
+</section>
+
+<section id="exercises" data-type="sect2">
+<h2>
+Exercises</h2>
+<ol type="1"><li>
+<p>What happens if you parse a string that contains invalid dates?</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">ymd(c("2010-10-10", "bananas"))</pre>
+</div>
+</li>
+<li><p>What does the <code>tzone</code> argument to <code><a href="#chp-https://lubridate.tidyverse.org/reference/now" data-type="xref">#chp-https://lubridate.tidyverse.org/reference/now</a></code> do? Why is it important?</p></li>
+<li>
+<p>For each of the following date-times show how you’d parse it using a readr column-specification and a lubridate function.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">d1 &lt;- "January 1, 2010"
+d2 &lt;- "2015-Mar-07"
+d3 &lt;- "06-Jun-2017"
+d4 &lt;- c("August 19 (2015)", "July 1 (2015)")
+d5 &lt;- "12/30/14" # Dec 30, 2014
+t1 &lt;- "1705"
+t2 &lt;- "11:15:10.12 PM"</pre>
+</div>
+</li>
+</ol></section>
+</section>
+
+<section id="date-time-components" data-type="sect1">
+<h1>
+Date-time components</h1>
+<p>Now that you know how to get date-time data into R’s date-time data structures, let’s explore what you can do with them. This section will focus on the accessor functions that let you get and set individual components. The next section will look at how arithmetic works with date-times.</p>
+
+<section id="getting-components" data-type="sect2">
+<h2>
+Getting components</h2>
+<p>You can pull out individual parts of the date with the accessor functions <code><a href="#chp-https://lubridate.tidyverse.org/reference/year" data-type="xref">#chp-https://lubridate.tidyverse.org/reference/year</a></code>, <code><a href="#chp-https://lubridate.tidyverse.org/reference/month" data-type="xref">#chp-https://lubridate.tidyverse.org/reference/month</a></code>, <code><a href="#chp-https://lubridate.tidyverse.org/reference/day" data-type="xref">#chp-https://lubridate.tidyverse.org/reference/day</a></code> (day of the month), <code><a href="#chp-https://lubridate.tidyverse.org/reference/day" data-type="xref">#chp-https://lubridate.tidyverse.org/reference/day</a></code> (day of the year), <code><a href="#chp-https://lubridate.tidyverse.org/reference/day" data-type="xref">#chp-https://lubridate.tidyverse.org/reference/day</a></code> (day of the week), <code><a href="#chp-https://lubridate.tidyverse.org/reference/hour" data-type="xref">#chp-https://lubridate.tidyverse.org/reference/hour</a></code>, <code><a href="#chp-https://lubridate.tidyverse.org/reference/minute" data-type="xref">#chp-https://lubridate.tidyverse.org/reference/minute</a></code>, and <code><a href="#chp-https://lubridate.tidyverse.org/reference/second" data-type="xref">#chp-https://lubridate.tidyverse.org/reference/second</a></code>.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">datetime &lt;- ymd_hms("2026-07-08 12:34:56")
+
+year(datetime)
+#&gt; [1] 2026
+month(datetime)
+#&gt; [1] 7
+mday(datetime)
+#&gt; [1] 8
+
+yday(datetime)
+#&gt; [1] 189
+wday(datetime)
+#&gt; [1] 4</pre>
+</div>
+<p>For <code><a href="#chp-https://lubridate.tidyverse.org/reference/month" data-type="xref">#chp-https://lubridate.tidyverse.org/reference/month</a></code> and <code><a href="#chp-https://lubridate.tidyverse.org/reference/day" data-type="xref">#chp-https://lubridate.tidyverse.org/reference/day</a></code> you can set <code>label = TRUE</code> to return the abbreviated name of the month or day of the week. Set <code>abbr = FALSE</code> to return the full name.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">month(datetime, label = TRUE)
+#&gt; [1] Jul
+#&gt; 12 Levels: Jan &lt; Feb &lt; Mar &lt; Apr &lt; May &lt; Jun &lt; Jul &lt; Aug &lt; Sep &lt; ... &lt; Dec
+wday(datetime, label = TRUE, abbr = FALSE)
+#&gt; [1] Wednesday
+#&gt; 7 Levels: Sunday &lt; Monday &lt; Tuesday &lt; Wednesday &lt; Thursday &lt; ... &lt; Saturday</pre>
+</div>
+<p>We can use <code><a href="#chp-https://lubridate.tidyverse.org/reference/day" data-type="xref">#chp-https://lubridate.tidyverse.org/reference/day</a></code> to see that more flights depart during the week than on the weekend:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">flights_dt |&gt; 
+  mutate(wday = wday(dep_time, label = TRUE)) |&gt; 
+  ggplot(aes(x = wday)) +
+    geom_bar()</pre>
+<div class="cell-output-display">
+<p><img src="datetimes_files/figure-html/unnamed-chunk-20-1.png" class="img-fluid" alt="A bar chart with days of the week on the x-axis and number of flights on the y-axis. Monday-Friday have roughly the same number of flights, ~48,0000, decreasingly slightly over the course of the week. Sunday is a little lower (~45,000), and Saturday is much lower (~38,000)." width="576"/></p>
+</div>
+</div>
+<p>There’s an interesting pattern if we look at the average departure delay by minute within the hour. It looks like flights leaving in minutes 20-30 and 50-60 have much lower delays than the rest of the hour!</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">flights_dt |&gt; 
+  mutate(minute = minute(dep_time)) |&gt; 
+  group_by(minute) |&gt; 
+  summarise(
+    avg_delay = mean(dep_delay, na.rm = TRUE),
+    n = n()) |&gt; 
+  ggplot(aes(minute, avg_delay)) +
+    geom_line()</pre>
+<div class="cell-output-display">
+<p><img src="datetimes_files/figure-html/unnamed-chunk-21-1.png" class="img-fluid" alt="A line chart with minute of actual departure (0-60) on the x-axis and average delay (4-20) on the y-axis. Average delay starts at (0, 12), steadily increases to (18, 20), then sharply drops, hitting at minimum at ~23 minute past the hour and 9 minutes of delay. It then increases again to (17, 35), and sharply decreases to (55, 4). It finishes off with an increase to (60, 9)." width="576"/></p>
+</div>
+</div>
+<p>Interestingly, if we look at the <em>scheduled</em> departure time we don’t see such a strong pattern:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">sched_dep &lt;- flights_dt |&gt; 
+  mutate(minute = minute(sched_dep_time)) |&gt; 
+  group_by(minute) |&gt; 
+  summarise(
+    avg_delay = mean(arr_delay, na.rm = TRUE),
+    n = n())
+
+ggplot(sched_dep, aes(minute, avg_delay)) +
+  geom_line()</pre>
+<div class="cell-output-display">
+<p><img src="datetimes_files/figure-html/unnamed-chunk-22-1.png" class="img-fluid" alt="A line chart with minute of scheduled departure (0-60) on the x-axis and average delay (4-16). There is relatively little pattern, just a small suggestion that the average delay decreases from maybe 10 minutes to 8 minutes over the course of the hour." width="576"/></p>
+</div>
+</div>
+<p>So why do we see that pattern with the actual departure times? Well, like much data collected by humans, there’s a strong bias towards flights leaving at “nice” departure times. Always be alert for this sort of pattern whenever you work with data that involves human judgement!</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">ggplot(sched_dep, aes(minute, n)) +
+  geom_line()</pre>
+<div class="cell-output-display">
+<p><img src="datetimes_files/figure-html/unnamed-chunk-23-1.png" class="img-fluid" alt="A line plot with departure minute (0-60) on the x-axis and number of flights (0-60000) on the y-axis. Most flights are scheduled to depart on either the hour (~60,000) or the half hour (~35,000). Otherwise, all most all flights are scheduled to depart on multiples of five, with a few extra at 15, 45, and 55 minutes." width="576"/></p>
+</div>
+</div>
+</section>
+
+<section id="rounding" data-type="sect2">
+<h2>
+Rounding</h2>
+<p>An alternative approach to plotting individual components is to round the date to a nearby unit of time, with <code><a href="#chp-https://lubridate.tidyverse.org/reference/round_date" data-type="xref">#chp-https://lubridate.tidyverse.org/reference/round_date</a></code>, <code><a href="#chp-https://lubridate.tidyverse.org/reference/round_date" data-type="xref">#chp-https://lubridate.tidyverse.org/reference/round_date</a></code>, and <code><a href="#chp-https://lubridate.tidyverse.org/reference/round_date" data-type="xref">#chp-https://lubridate.tidyverse.org/reference/round_date</a></code>. Each function takes a vector of dates to adjust and then the name of the unit round down (floor), round up (ceiling), or round to. This, for example, allows us to plot the number of flights per week:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">flights_dt |&gt; 
+  count(week = floor_date(dep_time, "week")) |&gt; 
+  ggplot(aes(week, n)) +
+  geom_line() + 
+  geom_point()</pre>
+<div class="cell-output-display">
+<p><img src="datetimes_files/figure-html/unnamed-chunk-24-1.png" class="img-fluid" alt="A line plot with week (Jan-Dec 2013) on the x-axis and number of flights (2,000-7,000) on the y-axis. The pattern is fairly flat from February to November with around 7,000 flights per week. There are far fewer flights on the first (approximately 4,500 flights) and last weeks of the year (approximately 2,500 flights)." width="576"/></p>
+</div>
+</div>
+<p>You can use rounding to show the distribution of flights across the course of a day by computing the difference between <code>dep_time</code> and the earliest instant of that day:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">flights_dt |&gt; 
+  mutate(dep_hour = dep_time - floor_date(dep_time, "day")) |&gt; 
+  ggplot(aes(dep_hour)) +
+    geom_freqpoly(binwidth = 60 * 30)
+#&gt; Don't know how to automatically pick scale for object of type &lt;difftime&gt;.
+#&gt; Defaulting to continuous.</pre>
+<div class="cell-output-display">
+<p><img src="datetimes_files/figure-html/unnamed-chunk-25-1.png" class="img-fluid" alt="A line plot with depature time on the x-axis. This is units of seconds since midnight so it's hard to interpret." width="576"/></p>
+</div>
+</div>
+<p>Computing the difference between a pair of date-times yields a difftime (more on that in <a href="#sec-intervals" data-type="xref">#sec-intervals</a>). We can convert that to an <code>hms</code> object to get a more useful x-axis:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">flights_dt |&gt; 
+  mutate(dep_hour = hms::as_hms(dep_time - floor_date(dep_time, "day"))) |&gt; 
+  ggplot(aes(dep_hour)) +
+    geom_freqpoly(binwidth = 60 * 30)</pre>
+<div class="cell-output-display">
+<p><img src="datetimes_files/figure-html/unnamed-chunk-26-1.png" class="img-fluid" alt="A line plot with depature time (midnight to midnight) on the x-axis and number of flights on the y-axis (0 to 15,000). There are very few (&lt;100) flights before 5am. The number of flights then rises rapidly to 12,000 / hour, peaking at 15,000 at 9am, before falling to around 8,000 / hour for 10am to 2pm. Number of flights then increases to around 12,000 per hour until 8pm, when they rapidly drop again." width="576"/></p>
+</div>
+</div>
+</section>
+
+<section id="modifying-components" data-type="sect2">
+<h2>
+Modifying components</h2>
+<p>You can also use each accessor function to modify the components of a date/time:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">(datetime &lt;- ymd_hms("2026-07-08 12:34:56"))
+#&gt; [1] "2026-07-08 12:34:56 UTC"
+
+year(datetime) &lt;- 2030
+datetime
+#&gt; [1] "2030-07-08 12:34:56 UTC"
+month(datetime) &lt;- 01
+datetime
+#&gt; [1] "2030-01-08 12:34:56 UTC"
+hour(datetime) &lt;- hour(datetime) + 1
+datetime
+#&gt; [1] "2030-01-08 13:34:56 UTC"</pre>
+</div>
+<p>Alternatively, rather than modifying an existing variabke, you can create a new date-time with <code><a href="#chp-https://rdrr.io/r/stats/update" data-type="xref">#chp-https://rdrr.io/r/stats/update</a></code>. This also allows you to set multiple values in one step:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">update(datetime, year = 2030, month = 2, mday = 2, hour = 2)
+#&gt; [1] "2030-02-02 02:34:56 UTC"</pre>
+</div>
+<p>If values are too big, they will roll-over:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">update(ymd("2023-02-01"), mday = 30)
+#&gt; [1] "2023-03-02"
+update(ymd("2023-02-01"), hour = 400)
+#&gt; [1] "2023-02-17 16:00:00 UTC"</pre>
+</div>
+</section>
+
+<section id="exercises-1" data-type="sect2">
+<h2>
+Exercises</h2>
+<ol type="1"><li><p>How does the distribution of flight times within a day change over the course of the year?</p></li>
+<li><p>Compare <code>dep_time</code>, <code>sched_dep_time</code> and <code>dep_delay</code>. Are they consistent? Explain your findings.</p></li>
+<li><p>Compare <code>air_time</code> with the duration between the departure and arrival. Explain your findings. (Hint: consider the location of the airport.)</p></li>
+<li><p>How does the average delay time change over the course of a day? Should you use <code>dep_time</code> or <code>sched_dep_time</code>? Why?</p></li>
+<li><p>On what day of the week should you leave if you want to minimise the chance of a delay?</p></li>
+<li><p>What makes the distribution of <code>diamonds$carat</code> and <code>flights$sched_dep_time</code> similar?</p></li>
+<li><p>Confirm my hypothesis that the early departures of flights in minutes 20-30 and 50-60 are caused by scheduled flights that leave early. Hint: create a binary variable that tells you whether or not a flight was delayed.</p></li>
+</ol></section>
+</section>
+
+<section id="time-spans" data-type="sect1">
+<h1>
+Time spans</h1>
+<p>Next you’ll learn about how arithmetic with dates works, including subtraction, addition, and division. Along the way, you’ll learn about three important classes that represent time spans:</p>
+<ul><li>
+<strong>Durations</strong>, which represent an exact number of seconds.</li>
+<li>
+<strong>Periods</strong>, which represent human units like weeks and months.</li>
+<li>
+<strong>Intervals</strong>, which represent a starting and ending point.</li>
+</ul><p>How do you pick between duration, periods, and intervals? As always, pick the simplest data structure that solves your problem. If you only care about physical time, use a duration; if you need to add human times, use a period; if you need to figure out how long a span is in human units, use an interval.</p>
+
+<section id="durations" data-type="sect2">
+<h2>
+Durations</h2>
+<p>In R, when you subtract two dates, you get a difftime object:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit"># How old is Hadley?
+h_age &lt;- today() - ymd("1979-10-14")
+h_age
+#&gt; Time difference of 15741 days</pre>
+</div>
+<p>A difftime class object records a time span of seconds, minutes, hours, days, or weeks. This ambiguity can make difftimes a little painful to work with, so lubridate provides an alternative which always uses seconds: the <strong>duration</strong>.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">as.duration(h_age)
+#&gt; [1] "1360022400s (~43.1 years)"</pre>
+</div>
+<p>Durations come with a bunch of convenient constructors:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">dseconds(15)
+#&gt; [1] "15s"
+dminutes(10)
+#&gt; [1] "600s (~10 minutes)"
+dhours(c(12, 24))
+#&gt; [1] "43200s (~12 hours)" "86400s (~1 days)"
+ddays(0:5)
+#&gt; [1] "0s"                "86400s (~1 days)"  "172800s (~2 days)"
+#&gt; [4] "259200s (~3 days)" "345600s (~4 days)" "432000s (~5 days)"
+dweeks(3)
+#&gt; [1] "1814400s (~3 weeks)"
+dyears(1)
+#&gt; [1] "31557600s (~1 years)"</pre>
+</div>
+<p>Durations always record the time span in seconds. Larger units are created by converting minutes, hours, days, weeks, and years to seconds: 60 seconds in a minute, 60 minutes in an hour, 24 hours in a day, and 7 days in a week. Larger time units are more problematic. A year is uses the “average” number of days in a year, i.e. 365.25. There’s no way to convert a month to a duration, because there’s just too much variation.</p>
+<p>You can add and multiply durations:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">2 * dyears(1)
+#&gt; [1] "63115200s (~2 years)"
+dyears(1) + dweeks(12) + dhours(15)
+#&gt; [1] "38869200s (~1.23 years)"</pre>
+</div>
+<p>You can add and subtract durations to and from days:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">tomorrow &lt;- today() + ddays(1)
+last_year &lt;- today() - dyears(1)</pre>
+</div>
+<p>However, because durations represent an exact number of seconds, sometimes you might get an unexpected result:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">one_pm &lt;- ymd_hms("2026-03-12 13:00:00", tz = "America/New_York")
+
+one_pm
+#&gt; [1] "2026-03-12 13:00:00 EDT"
+one_pm + ddays(1)
+#&gt; [1] "2026-03-13 13:00:00 EDT"</pre>
+</div>
+<p>Why is one day after 1pm March 12, 2pm March 13? If you look carefully at the date you might also notice that the time zones have changed. March 12 only has 23 hours because it’s when DST starts, so if we add a full days worth of seconds we end up with a different time.</p>
+</section>
+
+<section id="periods" data-type="sect2">
+<h2>
+Periods</h2>
+<p>To solve this problem, lubridate provides <strong>periods</strong>. Periods are time spans but don’t have a fixed length in seconds, instead they work with “human” times, like days and months. That allows them to work in a more intuitive way:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">one_pm
+#&gt; [1] "2026-03-12 13:00:00 EDT"
+one_pm + days(1)
+#&gt; [1] "2026-03-13 13:00:00 EDT"</pre>
+</div>
+<p>Like durations, periods can be created with a number of friendly constructor functions.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">hours(c(12, 24))
+#&gt; [1] "12H 0M 0S" "24H 0M 0S"
+days(7)
+#&gt; [1] "7d 0H 0M 0S"
+months(1:6)
+#&gt; [1] "1m 0d 0H 0M 0S" "2m 0d 0H 0M 0S" "3m 0d 0H 0M 0S" "4m 0d 0H 0M 0S"
+#&gt; [5] "5m 0d 0H 0M 0S" "6m 0d 0H 0M 0S"</pre>
+</div>
+<p>You can add and multiply periods:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">10 * (months(6) + days(1))
+#&gt; [1] "60m 10d 0H 0M 0S"
+days(50) + hours(25) + minutes(2)
+#&gt; [1] "50d 25H 2M 0S"</pre>
+</div>
+<p>And of course, add them to dates. Compared to durations, periods are more likely to do what you expect:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit"># A leap year
+ymd("2024-01-01") + dyears(1)
+#&gt; [1] "2024-12-31 06:00:00 UTC"
+ymd("2024-01-01") + years(1)
+#&gt; [1] "2025-01-01"
+
+# Daylight Savings Time
+one_pm + ddays(1)
+#&gt; [1] "2026-03-13 13:00:00 EDT"
+one_pm + days(1)
+#&gt; [1] "2026-03-13 13:00:00 EDT"</pre>
+</div>
+<p>Let’s use periods to fix an oddity related to our flight dates. Some planes appear to have arrived at their destination <em>before</em> they departed from New York City.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">flights_dt |&gt; 
+  filter(arr_time &lt; dep_time) 
+#&gt; # A tibble: 10,640 × 9
+#&gt;   origin dest  dep_delay arr_delay dep_time            sched_dep_time     
+#&gt;   &lt;chr&gt;  &lt;chr&gt;     &lt;dbl&gt;     &lt;dbl&gt; &lt;dttm&gt;              &lt;dttm&gt;             
+#&gt; 1 EWR    BQN           9        -4 2013-01-01 19:29:00 2013-01-01 19:20:00
+#&gt; 2 JFK    DFW          59        NA 2013-01-01 19:39:00 2013-01-01 18:40:00
+#&gt; 3 EWR    TPA          -2         9 2013-01-01 20:58:00 2013-01-01 21:00:00
+#&gt; 4 EWR    SJU          -6       -12 2013-01-01 21:02:00 2013-01-01 21:08:00
+#&gt; 5 EWR    SFO          11       -14 2013-01-01 21:08:00 2013-01-01 20:57:00
+#&gt; 6 LGA    FLL         -10        -2 2013-01-01 21:20:00 2013-01-01 21:30:00
+#&gt; # … with 10,634 more rows, and 3 more variables: arr_time &lt;dttm&gt;,
+#&gt; #   sched_arr_time &lt;dttm&gt;, air_time &lt;dbl&gt;</pre>
+</div>
+<p>These are overnight flights. We used the same date information for both the departure and the arrival times, but these flights arrived on the following day. We can fix this by adding <code>days(1)</code> to the arrival time of each overnight flight.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">flights_dt &lt;- flights_dt |&gt; 
+  mutate(
+    overnight = arr_time &lt; dep_time,
+    arr_time = arr_time + days(if_else(overnight, 0, 1)),
+    sched_arr_time = sched_arr_time + days(overnight * 1)
+  )</pre>
+</div>
+<p>Now all of our flights obey the laws of physics.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">flights_dt |&gt; 
+  filter(overnight, arr_time &lt; dep_time) 
+#&gt; # A tibble: 10,640 × 10
+#&gt;   origin dest  dep_delay arr_delay dep_time            sched_dep_time     
+#&gt;   &lt;chr&gt;  &lt;chr&gt;     &lt;dbl&gt;     &lt;dbl&gt; &lt;dttm&gt;              &lt;dttm&gt;             
+#&gt; 1 EWR    BQN           9        -4 2013-01-01 19:29:00 2013-01-01 19:20:00
+#&gt; 2 JFK    DFW          59        NA 2013-01-01 19:39:00 2013-01-01 18:40:00
+#&gt; 3 EWR    TPA          -2         9 2013-01-01 20:58:00 2013-01-01 21:00:00
+#&gt; 4 EWR    SJU          -6       -12 2013-01-01 21:02:00 2013-01-01 21:08:00
+#&gt; 5 EWR    SFO          11       -14 2013-01-01 21:08:00 2013-01-01 20:57:00
+#&gt; 6 LGA    FLL         -10        -2 2013-01-01 21:20:00 2013-01-01 21:30:00
+#&gt; # … with 10,634 more rows, and 4 more variables: arr_time &lt;dttm&gt;,
+#&gt; #   sched_arr_time &lt;dttm&gt;, air_time &lt;dbl&gt;, overnight &lt;lgl&gt;</pre>
+</div>
+</section>
+
+<section id="sec-intervals" data-type="sect2">
+<h2>
+Intervals</h2>
+<p>It’s obvious what <code>dyears(1) / ddays(365)</code> should return: one, because durations are always represented by a number of seconds, and a duration of a year is defined as 365 days worth of seconds.</p>
+<p>What should <code>years(1) / days(1)</code> return? Well, if the year was 2015 it should return 365, but if it was 2016, it should return 366! There’s not quite enough information for lubridate to give a single clear answer. What it does instead is give an estimate:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">years(1) / days(1)
+#&gt; [1] 365.25</pre>
+</div>
+<p>If you want a more accurate measurement, you’ll have to use an <strong>interval</strong>. An interval is a pair of starting and ending date times, or you can think of it as a duration with a starting point.</p>
+<p>You can create an interval by writing <code>start %--% end</code>:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">y2023 &lt;- ymd("2023-01-01") %--% ymd("2024-01-01")
+y2024 &lt;- ymd("2024-01-01") %--% ymd("2025-01-01")
+
+y2023
+#&gt; [1] 2023-01-01 UTC--2024-01-01 UTC
+y2024
+#&gt; [1] 2024-01-01 UTC--2025-01-01 UTC</pre>
+</div>
+<p>You could then divide it by <code><a href="#chp-https://lubridate.tidyverse.org/reference/period" data-type="xref">#chp-https://lubridate.tidyverse.org/reference/period</a></code> to find out how many days fit in the year:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">y2023 / days(1)
+#&gt; [1] 365
+y2024 / days(1)
+#&gt; [1] 366</pre>
+</div>
+</section>
+
+<section id="exercises-2" data-type="sect2">
+<h2>
+Exercises</h2>
+<ol type="1"><li><p>Explain <code>days(overnight * 1)</code> to someone who has just started learning R. How does it work?</p></li>
+<li><p>Create a vector of dates giving the first day of every month in 2015. Create a vector of dates giving the first day of every month in the <em>current</em> year.</p></li>
+<li><p>Write a function that given your birthday (as a date), returns how old you are in years.</p></li>
+<li><p>Why can’t <code>(today() %--% (today() + years(1))) / months(1)</code> work?</p></li>
+</ol></section>
+</section>
+
+<section id="time-zones" data-type="sect1">
+<h1>
+Time zones</h1>
+<p>Time zones are an enormously complicated topic because of their interaction with geopolitical entities. Fortunately we don’t need to dig into all the details as they’re not all important for data analysis, but there are a few challenges we’ll need to tackle head on.</p>
+<!--# https://www.ietf.org/timezones/tzdb-2018a/theory.html -->
+<p>The first challenge is that everyday names of time zones tend to be ambiguous. For example, if you’re American you’re probably familiar with EST, or Eastern Standard Time. However, both Australia and Canada also have EST! To avoid confusion, R uses the international standard IANA time zones. These use a consistent naming scheme <code>{area}/{location}</code>, typically in the form <code>{continent}/{city}</code> or <code>{ocean}/{city}</code>. Examples include “America/New_York”, “Europe/Paris”, and “Pacific/Auckland”.</p>
+<p>You might wonder why the time zone uses a city, when typically you think of time zones as associated with a country or region within a country. This is because the IANA database has to record decades worth of time zone rules. Over the course of decades, countries change names (or break apart) fairly frequently, but city names tend to stay the same. Another problem is that the name needs to reflect not only the current behavior, but also the complete history. For example, there are time zones for both “America/New_York” and “America/Detroit”. These cities both currently use Eastern Standard Time but in 1969-1972 Michigan (the state in which Detroit is located), did not follow DST, so it needs a different name. It’s worth reading the raw time zone database (available at <a href="https://www.iana.org/time-zones" class="uri">https://www.iana.org/time-zones</a>) just to read some of these stories!</p>
+<p>You can find out what R thinks your current time zone is with <code><a href="#chp-https://rdrr.io/r/base/timezones" data-type="xref">#chp-https://rdrr.io/r/base/timezones</a></code>:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">Sys.timezone()
+#&gt; [1] "America/Chicago"</pre>
+</div>
+<p>(If R doesn’t know, you’ll get an <code>NA</code>.)</p>
+<p>And see the complete list of all time zone names with <code><a href="#chp-https://rdrr.io/r/base/timezones" data-type="xref">#chp-https://rdrr.io/r/base/timezones</a></code>:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">length(OlsonNames())
+#&gt; [1] 595
+head(OlsonNames())
+#&gt; [1] "Africa/Abidjan"     "Africa/Accra"       "Africa/Addis_Ababa"
+#&gt; [4] "Africa/Algiers"     "Africa/Asmara"      "Africa/Asmera"</pre>
+</div>
+<p>In R, the time zone is an attribute of the date-time that only controls printing. For example, these three objects represent the same instant in time:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">x1 &lt;- ymd_hms("2024-06-01 12:00:00", tz = "America/New_York")
+x1
+#&gt; [1] "2024-06-01 12:00:00 EDT"
+
+x2 &lt;- ymd_hms("2024-06-01 18:00:00", tz = "Europe/Copenhagen")
+x2
+#&gt; [1] "2024-06-01 18:00:00 CEST"
+
+x3 &lt;- ymd_hms("2024-06-02 04:00:00", tz = "Pacific/Auckland")
+x3
+#&gt; [1] "2024-06-02 04:00:00 NZST"</pre>
+</div>
+<p>You can verify that they’re the same time using subtraction:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">x1 - x2
+#&gt; Time difference of 0 secs
+x1 - x3
+#&gt; Time difference of 0 secs</pre>
+</div>
+<p>Unless otherwise specified, lubridate always uses UTC. UTC (Coordinated Universal Time) is the standard time zone used by the scientific community and is roughly equivalent to GMT (Greenwich Mean Time). It does not have DST, which makes a convenient representation for computation. Operations that combine date-times, like <code><a href="#chp-https://rdrr.io/r/base/c" data-type="xref">#chp-https://rdrr.io/r/base/c</a></code>, will often drop the time zone. In that case, the date-times will display in your local time zone:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">x4 &lt;- c(x1, x2, x3)
+x4
+#&gt; [1] "2024-06-01 12:00:00 EDT" "2024-06-01 12:00:00 EDT"
+#&gt; [3] "2024-06-01 12:00:00 EDT"</pre>
+</div>
+<p>You can change the time zone in two ways:</p>
+<ul><li>
+<p>Keep the instant in time the same, and change how it’s displayed. Use this when the instant is correct, but you want a more natural display.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">x4a &lt;- with_tz(x4, tzone = "Australia/Lord_Howe")
+x4a
+#&gt; [1] "2024-06-02 02:30:00 +1030" "2024-06-02 02:30:00 +1030"
+#&gt; [3] "2024-06-02 02:30:00 +1030"
+x4a - x4
+#&gt; Time differences in secs
+#&gt; [1] 0 0 0</pre>
+</div>
+<p>(This also illustrates another challenge of times zones: they’re not all integer hour offsets!)</p>
+</li>
+<li>
+<p>Change the underlying instant in time. Use this when you have an instant that has been labelled with the incorrect time zone, and you need to fix it.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="downlit">x4b &lt;- force_tz(x4, tzone = "Australia/Lord_Howe")
+x4b
+#&gt; [1] "2024-06-01 12:00:00 +1030" "2024-06-01 12:00:00 +1030"
+#&gt; [3] "2024-06-01 12:00:00 +1030"
+x4b - x4
+#&gt; Time differences in hours
+#&gt; [1] -14.5 -14.5 -14.5</pre>
+</div>
+</li>
+</ul></section>
+
+<section id="summary" data-type="sect1">
+<h1>
+Summary</h1>
+<p>This chapter has introduced you to the tools that lubridate provides to help you work with date-time data. Working with dates and times can seem harder than necessary, but hopefully this chapter has helped you see why — date-times are more complex than they seem at first glance, and handling every possible situation adds complexity. Even if your data never crosses a day light savings boundary or involves a leap year, the functions need to be able to handle it.</p>
+<p>The next chapter gives a round up of missing values. You’ve seen them in a few places and have no doubt encounter in your own analysis, and it’s how time to provide a grab bag of useful techniques for dealing with them.</p>
+
+
+</section>
+</section>
