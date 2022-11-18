@@ -56,6 +56,11 @@ devtools::load_all("../minibook/"); process_book()
 
 html <- list.files("oreilly", pattern = "[.]html$", full.names = TRUE)
 file.copy(html, "../r-for-data-science-2e/", overwrite = TRUE)
+
+pngs <- list.files("oreilly", pattern = "[.]png$", full.names = TRUE, recursive = TRUE)
+dest <- gsub("oreilly", "../r-for-data-science-2e/", pngs)
+fs::dir_create(unique(dirname(dest)))
+file.copy(pngs, dest, overwrite = TRUE)
 ```
 
 ## Code of Conduct
