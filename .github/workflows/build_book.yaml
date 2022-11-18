@@ -1,14 +1,10 @@
 on:
   push:
-    branches:
-      - master
+    branches: main
   pull_request:
-    branches:
-      - master
-  schedule:
-    # run every day at 11 PM
-    - cron: '0 23 * * *'
-
+    branches: main
+  # to be able to trigger a manual build
+  workflow_dispatch:
 name: Build book
 
 env:
@@ -16,47 +12,19 @@ env:
 
 jobs:
   build:
-    runs-on: macOS-latest
+    runs-on: ubuntu-latest
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v2
+     - uses: actions/checkout@v2
 
-      - name: Setup R
-        uses: r-lib/actions/setup-r@master
+     - uses: r-lib/actions/setup-r@v2
 
-      - name: Setup pandoc
-        uses: r-lib/actions/setup-pandoc@master
+     - uses: r-lib/actions/setup-pandoc@v2
 
-      - name: Get R version
-        id: get-r-version
-        run: |
-          echo "::set-output name=version::$(Rscript -e 'cat(as.character(getRversion()))')"
-        shell: bash
-
-      - name: Cache R packages
-        uses: actions/cache@v2
+      - uses: r-lib/actions/setup-r@v2
         with:
-          path: ${{ env.R_LIBS_USER }}
-          key: ${{ runner.os }}-${{ steps.get-r-version.outputs.version }}-3-
-
-      - name: Install pak
-        run: |
-          install.packages("pak", repos = "https://r-lib.github.io/p/pak/dev/")
-        shell: Rscript {0}
-
-      - name: Install dependencies
-        run: |
-          pak::local_install_dev_deps()
-        shell: Rscript {0}
-
-      - name: Cache bookdown results
-        uses: actions/cache@v2
-        with:
-          path: _bookdown_files
-          key: bookdown-3-${{ hashFiles('**/*Rmd') }}
-          restore-keys: bookdown-3-
+          use-public-rspm: true
 
       - name: Build site
         run: |
@@ -72,7 +40,7 @@ jobs:
         uses: nwtgck/actions-netlify@v1.1
         with:
           publish-dir: './_book'
-          production-branch: master
+          production-branch: first-ed-updates
           github-token: ${{ secrets.GITHUB_TOKEN }}
           deploy-message:
             'Deploy from GHA: ${{ github.event.pull_request.title || github.event.head_commit.message }} (${{ github.sha }})'
