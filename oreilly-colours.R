@@ -28,7 +28,7 @@ tints <- seq(0.1, 1, length.out = 10)
 
 oreilly |>
   group_by(name) |>
-  summarise(
+  summarize(
     tint = paste0("t", tints * 100),
     colour = tint(col, tints),
     .groups = "drop"
