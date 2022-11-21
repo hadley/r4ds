@@ -28,40 +28,58 @@ library(tidyverse)
 library(rvest)
 ```
 
-## Ethics and legalities
+## Scraping legalities
 
-Overall, it's complicated and what's legal depends on where you live and, not just how you collect it, but what you plan to do with it.
+Before we get started discussing the code you'll need to perform web scraping, we need to talk about whether or not legal for you to do so.
+Overall, the situation is complicated and it depends a lot on where you live.
+However, as general principle, if the data is public, non-personal, and factual, you're likely to be ok[^webscraping-1].
+These three factors are important because they're connected to the site's terms and conditions, personally identifiable information, and copyright, as we'll discuss below.
 
-If the data is non-personal, public, and factual, you're likely ok.
-Otherwise, or if you're making a business off the data you're scraping, talk to a lawyer.
-Just be respectful of the server and don't hammer it with thousands of requests.
-<https://dmi3kno.github.io/polite/>
+[^webscraping-1]: Obviously we're not lawyers, and this is not legal advice.
+    But this is the best summary we can give having read a bunch about this topic.
 
-Some good principles in <https://towardsdatascience.com/ethics-in-web-scraping-b96b18136f01>
+If the data isn't public, non-personal, or factual or you're scraping the data specifically to make money with it, you'll need to talk to a lawyer.
+In any case, you should be respectful of the resources of the server hosting the pages you are scraping.
+Most importantly, this means that if you're scraping many pages, you should make sure to wait a little between each request.
+One easy way to do so is to use the [polite](https://dmi3kno.github.io/polite/) package by Dmytro Perepolkin.
+It will automatically pause between requests and cache the results so you never ask for the same page twice.
+
+### Terms of service
+
+If you look closely, you'll find many websites include a "terms and conditions" or "terms of service" link somewhere on the page, and if you read that page closely you'll often discover that the site specifically prohibits web scraping.
+These pages tend to be a legal land grab where companies make very broad claims.
+It's polite to respect these terms of service where possible, but take any claims with a grain of salt.
+
+Additionally, US courts[^webscraping-2] have generally found that simply putting the terms of service in the footer of the website isn't sufficient for you be bound by them.
+Generally, to be bound to the terms of service, you must have taken some explicit action like creating an account or checking a box.
+This is why whether or not the data is **public** is important; if you don't need an account to access them, it is unlikely that you are bound to the terms of service.
+Note, however, the situation is rather different in Europe where counts have found that terms of service are enforceable even if you don't explicitly agree to them.
+
+[^webscraping-2]: e.g. <https://en.wikipedia.org/wiki/HiQ_Labs_v._LinkedIn>
 
 ### Personally identifiable information
 
-Just be very careful if you make that data public and it includes personally indefinable information.
-The data might already be technically public, but aggregating it and publishing it changes things.
-<https://www.wired.com/2016/05/okcupid-study-reveals-perils-big-data-science/>
+Even if the data is public, you should be extremely careful about scraping personally identifiable information like name, email address, phone numbers, date of birth etc.
+Europe has particularly strict laws about the collection of storage of such data (GDPR), and regardless of where you live you're likely to be entering an ethical quagmire.
+For example, in 2016, a researcher scraped a bunch of public profile information about 70,000 people on the dating site OkCupid.
+This work was widely condemned, and lead to some good articles about [why it is unethical](https://www.wired.com/2016/05/okcupid-study-reveals-perils-big-data-science/).
 
 ### Copyright
 
-You also need to worry about copyright.
-This is more important if you're scraping large amounts of text or images, because facts generally aren't held to be copyrightable.
-i.e. if you're building a tibble of data, that's generally not protected by copyright law.
-But again laws here differ between the US and Europe.
+Finally, you also need to worry about copyright law.
+Copyright law is also complicated, but it's worth taking a look at the [US law](https://www.law.cornell.edu/uscode/text/17/102) which describes exactly what's protected: "original works of authorship fixed in any tangible medium of expression".
+It then goes on to describe specific categories that it applies like literary woks, musical works, motions pictures and more.
+Notably absent from copyright protection are data.
+This means that as long as you limit your scraping to facts, copyright protection does not apply.
+(But note that Europe has a separate "[sui generis](https://en.wikipedia.org/wiki/Database_right)" right that protects databases.)
 
-### Terms and conditions
+As a brief example, in the US lists of ingredient and instructions are copyrightable, so copyright can not be used to protect a recipe.
+But if that list of recipes is accompanied by substantial novel literary content, that is is copyrightable.
+This is why when you're looking for a recipe on the internet there's always so much content before hand.
 
-Whether or not you need to log in also comes into play here.
-In the US, courts have generally found that simply putting terms of service in the footer of the website isn't enough: you need to explicitly agree to them, typically my creating an account or taking some explicit action like checking a box.
-
-But the situation is different in Europe, where have courts have found that you need to respect the terms and conditions even without explicit consent.
-
-Websites will sometimes encode whether or not scraping is ok with a `robots.txt` file.
-If it exists, you should respect it.
-You can use `robotstxt::paths_allowed()` to
+If you do need to scrape original content (like text or images), you may still be protected under the [doctrine of fair use](https://en.wikipedia.org/wiki/Fair_use).
+Fair use is not a hard and fast rule, but weighs up a number of factors.
+It's more likely to apply if you are collecting the data for research or non-commercial purposes, and if you limit what you scrape to just what you need.
 
 ## HTML basics
 
@@ -79,9 +97,9 @@ HTML stands for **H**yper**T**ext **M**arkup **L**anguage and looks something li
 </body>
 ```
 
-HTML has a hierarchical structure formed by **elements** which consist of a start tag (e.g. `<tag>`), optional **attributes** (`id='first'`), an end tag[^webscraping-1] (like `</tag>`), and **contents** (everything in between the start and end tag).
+HTML has a hierarchical structure formed by **elements** which consist of a start tag (e.g. `<tag>`), optional **attributes** (`id='first'`), an end tag[^webscraping-3] (like `</tag>`), and **contents** (everything in between the start and end tag).
 
-[^webscraping-1]: A number of tags (including `<p>` and `<li>)` don't require end tags, but I think it's best to include them because it makes seeing the structure of the HTML a little easier.
+[^webscraping-3]: A number of tags (including `<p>` and `<li>)` don't require end tags, but I think it's best to include them because it makes seeing the structure of the HTML a little easier.
 
 Since `<` and `>` are used for start and end tags, you can't write them directly.
 Instead you have to use the HTML **escapes** `&gt;` (greater than) and `&lt;` (less than).
@@ -126,9 +144,9 @@ These are often useful when scraping data off a page.
 ### Reading HTML
 
 You'll usually start the scraping process with `read_html()`.
-This returns a `xml_document`[^webscraping-2] object which you'll then manipulate using rvest functions:
+This returns a `xml_document`[^webscraping-4] object which you'll then manipulate using rvest functions:
 
-[^webscraping-2]: This class comes from the [xml2](https://xml2.r-lib.org) package.
+[^webscraping-4]: This class comes from the [xml2](https://xml2.r-lib.org) package.
     xml2 is a low-level package that rvest builds on top of.
 
 ```{r}
