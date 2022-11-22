@@ -83,6 +83,7 @@ It's more likely to apply if you are collecting the data for research or non-com
 
 ## HTML basics
 
+To scrape webpages, you need to first understand a little bit about **HTML**, the language that describes web pages.
 HTML stands for **H**yper**T**ext **M**arkup **L**anguage and looks something like this:
 
 ``` html
@@ -115,12 +116,12 @@ Some of the most important are:
 
 -   Every HTML page must be must be in an `<html>` element, and it must have two children: `<head>`, which contains document metadata like the page title, and `<body>`, which contains the content you see in the browser.
 
--   Block tags like `<h1>` (heading 1), `<p>` (paragraph), and `<ol>` (ordered list) form the overall structure of the page.
+-   Block tags like `<h1>` (heading 1), `<section>` (section), `<p>` (paragraph), and `<ol>` (ordered list) form the overall structure of the page.
 
--   Inline tags like `<b>` (bold), `<i>` (italics), and `<a>` (links) formats text inside block tags.
+-   Inline tags like `<b>` (bold), `<i>` (italics), and `<a>` (link) format text inside block tags.
 
 If you encounter a tag that you've never seen before, you can find out what it does with a little googling.
-I recommend the [MDN Web Docs](https://developer.mozilla.org/en-US/docs/Web/HTML) which are produced by Mozilla, the company that makes the Firefox web browser.
+Another good place to start are the [MDN Web Docs](https://developer.mozilla.org/en-US/docs/Web/HTML) which describe just about every aspect of web programming.
 
 Most elements can have content in between their start and end tags.
 This content can either be text or more elements.
@@ -134,16 +135,17 @@ For example, the following HTML contains paragraph of text, with one word in bol
 The **children** of a node refers only to elements, so the `<p>` element above has one child, the `<b>` element.
 The `<b>` element has no children, but it does have contents (the text "name").
 
-Some elements, like `<img>` can't have children.
-These elements depend solely on attributes for their behavior.
+### Attributes
 
 Tags can have named **attributes** which look like `name1='value1' name2='value2'`.
 Two of the most important attributes are `id` and `class`, which are used in conjunction with CSS (Cascading Style Sheets) to control the visual appearance of the page.
 These are often useful when scraping data off a page.
+Attributes are also used to record the destination of links (the `href` attribute of `<a>` elements) and the source of images (the `src` attribute of the `<img>` element).
 
-### Reading HTML
+## Extracting data
 
-You'll usually start the scraping process with `read_html()`.
+To get started scraping, you'll need the URL of the page you want to scrape, which you can usually copy from your web browser.
+You'll then need to read the HTML for that page into R with `read_html()`.
 This returns a `xml_document`[^webscraping-4] object which you'll then manipulate using rvest functions:
 
 [^webscraping-4]: This class comes from the [xml2](https://xml2.r-lib.org) package.
@@ -154,9 +156,8 @@ html <- read_html("http://rvest.tidyverse.org/")
 html
 ```
 
-### Generating html
-
-For examples and experimentation, rvest also includes a function that lets you create an `xml_document` from literal HTML:
+rvest also includes a function that lets you write HTML inline.
+We'll use this a bunch in this chapter as we teach how the various rvest functions work with simple examples.
 
 ```{r}
 html <- minimal_html("
@@ -168,20 +169,153 @@ html <- minimal_html("
 html
 ```
 
-Regardless of how you get the HTML, you'll need some way to identify the elements that contain the data you care about.
-rvest provides two options: CSS selectors and XPath expressions.
-Here I'll focus on CSS selectors because they're simpler but still sufficiently powerful for most scraping tasks.
+Now that you have the HTML in R, it's time to extract the data of interest.
+You'll first learn about the CSS selectors that allow you to identify the elements of interest, and the rvest functions that you can use to extract data from them.
+Then we'll briefly cover HTML tables, which have some special tools.
 
-## Extracting data
+### Find elements
+
+CSS is short for cascading style sheets, and is a tool for defining the visual styling of HTML documents.
+CSS includes a miniature language for selecting elements on a page called **CSS selectors**.
+CSS selectors define patterns for locating HTML elements, and are useful for scraping because they provide a concise way of describing which elements you want to extract.
+
+We'll come back to CSS selectors in more detail in @sec-css-selectors, but luckily you can get a long way with just three:
+
+-   `p` selects all `<p>` elements.
+
+-   `.title` selects all elements with `class` "title".
+
+-   `#title` selects the element with the `id` attribute that equals "title".
+    Id attributes must be unique within a document, so this will only ever select a single element.
+
+Lets try out these selectors with a simple example:
+
+```{r}
+html <- minimal_html("
+  <h1>This is a heading</h1>
+  <p id='first'>This is a paragraph</p>
+  <p class='important'>This is an important paragraph</p>
+")
+```
+
+Use `html_elements()` to find all elements that match the selector:
+
+```{r}
+html |> html_elements("p")
+html |> html_elements(".important")
+html |> html_elements("#first")
+```
+
+Another important function is `html_element()` which always the number of outputs as inputs.
+If you apply it to a whole document it'll give you the first match:
+
+```{r}
+html |> html_element("p")
+```
+
+There's an important difference between `html_elements()` and `html_elements()` when you use a selector that doesn't match any elements.
+`html_elements()` returns a vector of length 0, where `html_element()` returns a missing value.
+This will be important shortly.
+
+```{r}
+html |> html_elements("b")
+html |> html_element("b")
+```
+
+### Nesting selections
+
+In most cases, you'll use `html_elements()` and `html_element()` together, typically using `html_elements()` to identity elements that will become observations then using `html_element()` to find elements that will become variables.
+Lets see this in action using a simple example.
+Here we have an unordered list (`<ul>)` where each list item (`<li>`) contains some information about four characters from starwars:
+
+```{r}
+html <- minimal_html("
+  <ul>
+    <li><b>C-3PO</b> is a <i>droid</i> that weighs <span class='weight'>167 kg</span></li>
+    <li><b>R2-D2</b> is a <i>droid</i> that weighs <span class='weight'>96 kg</span></li>
+    <li><b>Yoda</b> weighs <span class='weight'>66 kg</span></li>
+    <li><b>R4-P17</b> is a <i>droid</i></li>
+  </ul>
+  ")
+```
+
+We can use `html_elements()` to make a vector where each element corresponds to a different character:
+
+```{r}
+characters <- html |> html_elements("li")
+characters
+```
+
+To extract the name of each character, we use `html_element()`, because when applied to the output of `html_elements()` its guaranteed to return one response per element:
+
+```{r}
+characters |> html_element("b")
+```
+
+The distinction between `html_element()` and `html_element()` isn't important for name, but it is important for weight.
+We want to try and get the weight for each character
+
+```{r}
+characters |> html_element(".weight")
+```
+
+If we instead used `html_elements()` we lose the connection between names and weights:
+
+```{r}
+characters |> html_elements(".weight")
+```
+
+Now that you've selected the elements of interest, you'll need to extract the data, either from the text contents or some attributes.
+
+### Text and attributes
+
+`html_text2()`[^webscraping-5] extracts the plain text contents of an HTML element:
+
+[^webscraping-5]: rvest also provides `html_text()` but you should almost always use `html_text2()` since it does a better job of converting nested HTML to text.
+
+```{r}
+html <- minimal_html("
+  <ol>
+    <li>apple &amp; pear</li>
+    <li>banana</li>
+    <li>pineapple</li>
+  </ol>
+")
+html |> 
+  html_element("ol") |> 
+  html_elements("li") |> 
+  html_text2()
+```
+
+Note that the escaped ampersand is automatically converted to `&`; you'll only ever see HTML escapes in the source HTML, not in the data returned by rvest.
+
+`html_attr()` extracts data from attributes:
+
+```{r}
+html <- minimal_html("
+  <p><a href='https://en.wikipedia.org/wiki/Cat'>cats</a></p>
+  <p><a href='https://en.wikipedia.org/wiki/Dog'>dogs</a></p>
+")
+
+html |> 
+  html_elements("p") |> 
+  html_element("a") |> 
+  html_attr("href")
+```
+
+`html_attr()` always returns a string, so if you're extracting numbers or dates, you'll need to do some post-processing.
 
 ### Tables
 
-HTML tables are composed four main elements: `<table>`, `<tr>` (table row), `<th>` (table heading), and `<td>` (table data).
+If you're lucky you data will be already stored in an HTML table, and it'll be a matter of just reading it from that table.
+It's usually straightforward to recognize a table in your browser: it'll have a rectangular structure of rows and columns, and you can copy and paste it into a tool like Excel.
+
+HTML tables are built up from four main elements: `<table>`, `<tr>` (table row), `<th>` (table heading), and `<td>` (table data).
 Here's a simple HTML table with two columns and three rows:
 
 ```{r}
 html <- minimal_html("
-  <table>
+  <table class='mytable'>
     <tr>
       <th>x</th>
       <th>y</th>
@@ -202,174 +336,46 @@ html <- minimal_html("
   ")
 ```
 
-Because tables are a common way to store data, rvest includes the handy `html_table()` which converts a table into a data frame:
-
-```{r}
-tables <- html |> html_table()
-tables[[1]]
-```
-
-```{r}
-url <- "https://en.wikipedia.org/wiki/R_(programming_language)"
-html <- read_html(url)
-html |> 
-  html_table() |> 
-  nth(2) |> 
-  mutate(Date = parse_date(Date))
-```
-
-### Find elements
-
-CSS is short for cascading style sheets, and is a tool for defining the visual styling of HTML documents.
-CSS includes a miniature language for selecting elements on a page called **CSS selectors**.
-CSS selectors define patterns for locating HTML elements, and are useful for scraping because they provide a concise way of describing which elements you want to extract.
-
-The three most important selectors are:
-
--   `p` selects all `<p>` elements.
-
--   `.title` selects all elements with `class` "title".
-
--   `#title` selects the element with the `id` attribute that equals "title".
-    Id attributes must be unique within a document, so this will only ever select a single element.
-
-Lets try out the most important selectors with a simple example:
-
-```{r}
-html <- minimal_html("
-  <h1>This is a heading</h1>
-  <p id='first'>This is a paragraph</p>
-  <p class='important'>This is an important paragraph</p>
-")
-```
-
-You can find all the elements that match the selector with `html_elements()`:
-
-```{r}
-html |> html_elements("p")
-html |> html_elements(".important")
-html |> html_elements("#first")
-```
-
-Another important function is `html_element()`, which you usually apply to a selection returned by `html_elements()`.
-It returns the first match for each element.
-
-```{r}
-html <- minimal_html("
-<ul>
-  <li>This is a <strong>a</strong> <strong>b</strong></li>
-  <li>This is a paragraph</li>
-  <li>This is an important paragraph <strong>c</strong></li>
-</ul>
-")
-```
-
-You can also apply `html_element()` and `html_elements()` repeatedly
-
-```{r}
-html |> html_elements("li")
-html |> html_elements("li") |> html_element("strong")
-```
-
-Compare this to the result of using `html_elements()` again:
-
-```{r}
-html |> html_elements("li") |> html_elements("strong")
-```
-
-This finds all `<strong>` elements, but loses the relationship to the original `<li>`.
-For this reason, when scraping you'll often use `html_elements()` to extract elements that correspond to the observation, and `html_element()` to identify the elements that correspond to the variables within that row.
-
-### Text
-
-Use `html_text2()` to extract the plain text contents of an HTML element:
-
-```{r}
-html <- minimal_html("
-  <ol>
-    <li>apple &amp; pear</li>
-    <li>banana</li>
-    <li>pineapple</li>
-  </ol>
-")
-html |> 
-  html_elements("li") |> 
-  html_text2()
-```
-
-Note that the escaped ampersand is automatically converted to `&`; you'll only ever see HTML escapes in the source HTML, not in the data returned by rvest.
-
-Note that we use `html_text2()` here, not `html_text()`.
-The main difference is how the two functions handle white space.
-In HTML, white space is largely ignored, and it's the structure of the elements that defines how text is laid out.
-`html_text2()` uses some heuristics to roughly mimic what you'd see in the browser.
-
-### Attributes
-
-Attributes are used to record the destination of links (the `href` attribute of `<a>` elements) and the source of images (the `src` attribute of the `<img>` element):
-
-```{r}
-html <- minimal_html("
-  <p><a href='https://en.wikipedia.org/wiki/Cat'>cats</a></p>
-  <img src='https://cataas.com/cat' width='100' height='200'>
-")
-```
-
-The value of an attribute can be retrieved with `html_attr()`:
+rvest provides a function that knows how to read this sort of data: `html_table()`.
+It returns a list containing with one tibble for each table found on the page.
+Use `html_element()` to identify the table you want to extract:
 
 ```{r}
 html |> 
-  html_elements("a") |> 
-  html_attr("href")
-
-html |> 
-  html_elements("img") |> 
-  html_attr("src")
+  html_element(".mytable") |> 
+  html_table()
 ```
 
-Note that `html_attr()` always returns a string, so you may need to post-process with `as.integer()`/`readr::parse_integer()` or similar.
+Note that `x` and `y` have automatically been converted to numbers.
+This automatic conversion doesn't always work, so in more complex scenarios you may want to turn it off with `convert = FALSE` and then do your own conversion.
 
-```{r}
-html |> 
-  html_elements("img") |> 
-  html_attr("width") |> 
-  parse_integer()
-```
+## CSS selectors {#sec-css-selectors}
 
-### More about selectors
+Figuring out the selector you need for your data is typically the hardest part of the problem.
+You'll often need to do some experimenting to a selector that is both specific (i.e. it doesn't select things you don't care about) and sensitive (i.e. it does select everything you care about).
+Lots of trial and error is a normal part of the process!
+There are two main tools that are available to help you with this process: SelectorGagdget and your browser's developer tools.
 
-Selectors can also be combined in various ways using **combinators**.
-For example,The most important combinator is `" "`, the **descendant** combination, because `p a` selects all `<a>` elements that are a child of a `<p>` element.
+[SelectorGadget](https://rvest.tidyverse.org/articles/selectorgadget.html) is a javascript bookmarklet that automatically generates css selectors based on the positive and negative examples that you provide.
+It doesn't always work, but when it it's magic!
+You can learn how to install and use SelectorGadget either by reading <https://rvest.tidyverse.org/articles/selectorgadget.html> or watching Mine's video at <https://www.youtube.com/watch?v=PetWV5g1Xsc>.
 
-`p > a` immediate child
+Every modern browser comes with some toolkit for developer, but we recommend Chrome, even if it isn't your regular browser: its web developer tools are some of the best, and they're immediately available.
+Right click on an element on the page and click `Inspect`.
+This will open a expandable view of the complete HTML page, centered on the element that you just clicked.
+You can use this to explore the page and get a sense of what selectors might work.
+Pay particular attention to the class and id attributes, since these are often used to form the visual structure of the page, and hence make for good tools to extract the data that you're looking for.
 
-`[attr]`, `[attr=value]`
+Inside the Elements view, you can also right click on an element and choose `Copy as Selector` to generate a selector that will uniquely identify the element of interest.
+You'll need
 
-`p.special` selects all `<p>` elements with `class` "special".
-
-`strong, b` selects `<strong>` or `<b>`.
-
-Lots more at <https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Selectors>.
-
-Similar to regular expressions: mini language for describing patterns in a tree.
-Like regular expressions they can be pretty opaque.
-<https://kittygiraudel.github.io/selectors-explained/>.
-`section.main h2 > small`
-
-If you want to learn more CSS selectors I recommend starting with the fun [CSS dinner](https://flukeout.github.io/) tutorial and then referring to the [MDN web docs](https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Selectors).
-
-CSS selectors can be quite complex, but fortunately you only need the simplest for rvest, because you can write R code to handle more complicated situations.
-As in @sec-boolean-operations, don't forget that you're in R, and sometimes it might be easier to solve the problem using R code rather than with a more complex selector.
+If either SelectorGadget or Chrome DevTools have generated a CSS selector that you don't understand, try [Selectors Explained](https://kittygiraudel.github.io/selectors-explained/){.uri} which translates CSS selectors into plain English.
+If you find yourself doing this a lot, you might want to learn more about CSS selectors generally.
+We recommend starting with the fun [CSS dinner](https://flukeout.github.io/) tutorial and then referring to the [MDN web docs](https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Selectors).
 
 ### Determining the selector
 
-Figuring out the selector you need for your data is typically the hardest part of the problem and you'll often need to do some experimenting to get something is a both specific (i.e. it doesn't select things you don't care about) and sensitive (i.e. it does select everything you care about).
-
-You have two main tools at your disposal: your browser's devtools (which allow you to easily see the source code of the page) and [SelectorGadget](https://rvest.tidyverse.org/articles/selectorgadget.html), a javascript widget that will generate the selector you need by supplying positive and negative examples in the browser.
-
-It's much easier to show this process than describe it, so we recommend you watch Mine's video: <https://www.youtube.com/watch?v=PetWV5g1Xsc>
-
-## Case study
+## Putting it all together
 
 There's some risk that these examples may no longer work when you run them --- that's the fundamental challenge of web scraping, if the structure of the site changes, then you'll have to change your scraping code.
 
@@ -437,64 +443,15 @@ html |> html_elements("#main a") |> html_text()
 html |> html_elements("#main a") |> html_attr("href")
 ```
 
-### Element vs elements
-
-When using rvest, your eventual goal is usually to build up a data frame, and you want each row to correspond some repeated unit on the HTML page.
-In this case, you should generally start by using `html_elements()` to select the elements that contain each observation then use `html_element()` to extract the variables from each observation.
-This guarantees that you'll get the same number of values for each variable because `html_element()` always returns the same number of outputs as inputs.
-
-To illustrate this problem take a look at this simple example I constructed using a few entries from `dplyr::starwars`:
-
-```{r}
-html <- minimal_html("
-  <ul>
-    <li><b>C-3PO</b> is a <i>droid</i> that weighs <span class='weight'>167 kg</span></li>
-    <li><b>R2-D2</b> is a <i>droid</i> that weighs <span class='weight'>96 kg</span></li>
-    <li><b>Yoda</b> weighs <span class='weight'>66 kg</span></li>
-    <li><b>R4-P17</b> is a <i>droid</i></li>
-  </ul>
-  ")
-```
-
-If you try to extract name, species, and weight directly, you end up with one vector of length four and two vectors of length three, and no way to align them:
-
-```{r}
-html |> html_elements("b") |> html_text2()
-html |> html_elements("i") |> html_text2()
-html |> html_elements(".weight") |> html_text2()
-```
-
-Instead, use `html_elements()` to find a element that corresponds to each character, then use `html_element()` to extract each variable for all observations:
-
-```{r}
-characters <- html |> html_elements("li")
-
-characters |> html_element("b") |> html_text2()
-characters |> html_element("i") |> html_text2()
-characters |> html_element(".weight") |> html_text2()
-```
-
-As you can see, `html_element()` automatically fills in `NA` when no elements match, keeping all of the variables aligned and making it easy to create a tibble:
-
-```{r}
-tibble(
-  name = characters |> html_element("b") |> html_text2(),
-  species = characters |> html_element("i") |> html_text2(),
-  weight = characters |> html_element(".weight") |> html_text2()
-)
-```
-
 ## Dynamic sites
 
-rvest works directly with HTML files, bypassing the browser entirely.
-This makes it rather more efficient (since it never has to try laying out the page or running any javascript), but it also means that it can't access any dynamic page content.
-Some modern websites don't include the data in the html that you download, but dynamically generate it in javascript.
+From time-to-time, you'll hit a site where your `html_elements()` and friends don't see to return anything like what you see in the browser.
+In many cases, that's because you're trying to scrape a website that dynamically generates the content of the page with javascript.
+This doesn't currently work with rvest, because rvest downloads the raw HTML and doesn't run any javascript.
 
-In that case, rvest can still help you via the chromote package.
-The chromote package actually runs chrome in the background --- it uses the website in exactly the same way you would manually.
-Then the trick is just interacting with the website like a human.
-
-Still possible but you need to simulate a complete browser.
-This is relatively straightforward in rvest: you just change how you access the data: <https://github.com/tidyverse/rvest/issues/245>
+It's still possible to scrape these types of sites, but rvest needs to use more expensive process: fully simulating the web browser including running all javascript.
+This functionality is not available at the time of writing, but it's something we're actively working on and should be available by the time you read this.
+It use the [chromote package](https://rstudio.github.io/chromote/index.html) which actually runs chrome browser in the background, and gives you additional tools to interact with the site like a human, typing text and clicking buttons.
+Check out the rvest website for more details.
 
 ## Summary
