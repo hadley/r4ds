@@ -666,6 +666,157 @@ To see a complete list of stats, try the [ggplot2 cheatsheet](https://rstudio.co
       geom_bar(mapping = aes(x = cut, fill = color, y = after_stat(prop)))
     ```
 
+## Position adjustments
+
+There's one more piece of magic associated with bar charts.
+You can color a bar chart using either the `color` aesthetic, or, more usefully, `fill`:
+
+```{r}
+#| layout-ncol: 2
+#| fig-width: 4
+#| fig-height: 2
+#| fig-alt: >
+#|   Two bar charts of cut of diamonds. In the first plot, the bars have colored 
+#|   borders. In the second plot, they're filled with colors. Heights of the 
+#|   bars correspond to the number of diamonds in each cut category.
+
+ggplot(data = diamonds) + 
+  geom_bar(mapping = aes(x = cut, color = cut))
+ggplot(data = diamonds) + 
+  geom_bar(mapping = aes(x = cut, fill = cut))
+```
+
+Note what happens if you map the fill aesthetic to another variable, like `clarity`: the bars are automatically stacked.
+Each colored rectangle represents a combination of `cut` and `clarity`.
+
+```{r}
+#| fig-alt: >
+#|   Segmented bar chart of cut of diamonds, where each bar is filled with 
+#|   colors for the levels of clarity. Heights of the bars correspond to the 
+#|   number of diamonds in each cut category, and heights of the colored 
+#|   segments are proportional to the number of diamonds with a given clarity 
+#|   level within a given cut level.
+
+ggplot(data = diamonds) + 
+  geom_bar(mapping = aes(x = cut, fill = clarity))
+```
+
+The stacking is performed automatically using the **position adjustment** specified by the `position` argument.
+If you don't want a stacked bar chart, you can use one of three other options: `"identity"`, `"dodge"` or `"fill"`.
+
+-   `position = "identity"` will place each object exactly where it falls in the context of the graph.
+    This is not very useful for bars, because it overlaps them.
+    To see that overlapping we either need to make the bars slightly transparent by setting `alpha` to a small value, or completely transparent by setting `fill = NA`.
+
+    ```{r}
+    #| layout-ncol: 2
+    #| fig-width: 4
+    #| fig-height: 2
+    #| fig-alt: >
+    #|   Two segmented bar charts of cut of diamonds, where each bar is filled 
+    #|   with colors for the levels of clarity. Heights of the bars correspond 
+    #|   to the number of diamonds in each cut category, and heights of the 
+    #|   colored segments are proportional to the number of diamonds with a 
+    #|   given clarity level within a given cut level. However the segments 
+    #|   overlap. In the first plot the segments are filled with transparent 
+    #|   colors, in the second plot the segments are only outlined with colors.
+
+    ggplot(data = diamonds, mapping = aes(x = cut, fill = clarity)) + 
+      geom_bar(alpha = 1/5, position = "identity")
+    ggplot(data = diamonds, mapping = aes(x = cut, color = clarity)) + 
+      geom_bar(fill = NA, position = "identity")
+    ```
+
+    The identity position adjustment is more useful for 2d geoms, like points, where it is the default.
+
+-   `position = "fill"` works like stacking, but makes each set of stacked bars the same height.
+    This makes it easier to compare proportions across groups.
+
+    ```{r}
+    #| fig-alt: >
+    #|   Segmented bar chart of cut of diamonds, where each bar is filled with 
+    #|   colors for the levels of clarity. Height of each bar is 1 and heights 
+    #|   of the colored segments are proportional to the proportion of diamonds 
+    #|   with a given clarity level within a given cut level.
+
+    ggplot(data = diamonds) + 
+      geom_bar(mapping = aes(x = cut, fill = clarity), position = "fill")
+    ```
+
+-   `position = "dodge"` places overlapping objects directly *beside* one another.
+    This makes it easier to compare individual values.
+
+    ```{r}
+    #| fig-alt: >
+    #|   Dodged bar chart of cut of diamonds. Dodged bars are grouped by levels 
+    #|   of cut (fair, good, very good, premium, and ideal). In each group there 
+    #|   are eight bars, one for each level of clarity, and filled with a 
+    #|   different color for each level. Heights of these bars represent the 
+    #|   number of diamonds with a given level of cut and clarity.
+
+    ggplot(data = diamonds) + 
+      geom_bar(mapping = aes(x = cut, fill = clarity), position = "dodge")
+    ```
+
+There's one other type of adjustment that's not useful for bar charts, but can be very useful for scatterplots.
+Recall our first scatterplot.
+Did you notice that the plot displays only 126 points, even though there are 234 observations in the dataset?
+
+```{r}
+#| echo: false
+#| fig-alt: >
+#|   Scatterplot of highway fuel efficiency versus engine size of cars that 
+#|   shows a negative association.
+
+ggplot(data = mpg) + 
+  geom_point(mapping = aes(x = displ, y = hwy))
+```
+
+The underlying values of `hwy` and `displ` are rounded so the points appear on a grid and many points overlap each other.
+This problem is known as **overplotting**.
+This arrangement makes it difficult to see the distribution of the data.
+Are the data points spread equally throughout the graph, or is there one special combination of `hwy` and `displ` that contains 109 values?
+
+You can avoid this gridding by setting the position adjustment to "jitter".
+`position = "jitter"` adds a small amount of random noise to each point.
+This spreads the points out because no two points are likely to receive the same amount of random noise.
+
+```{r}
+#| fig-alt: >
+#|   Jittered scatterplot of highway fuel efficiency versus engine size of cars. 
+#|   The plot shows a negative association.
+
+ggplot(data = mpg) + 
+  geom_point(mapping = aes(x = displ, y = hwy), position = "jitter")
+```
+
+Adding randomness seems like a strange way to improve your plot, but while it makes your graph less accurate at small scales, it makes your graph *more* revealing at large scales.
+Because this is such a useful operation, ggplot2 comes with a shorthand for `geom_point(position = "jitter")`: `geom_jitter()`.
+
+To learn more about a position adjustment, look up the help page associated with each adjustment: `?position_dodge`, `?position_fill`, `?position_identity`, `?position_jitter`, and `?position_stack`.
+
+### Exercises
+
+1.  What is the problem with this plot?
+    How could you improve it?
+
+    ```{r}
+    #| fig-alt: >
+    #|   Scatterplot of highway fuel efficiency versus city fuel efficiency 
+    #|   of cars that shows a positive association. The number of points 
+    #|   visible in this plot is less than the number of points in the dataset.
+
+    ggplot(data = mpg, mapping = aes(x = cty, y = hwy)) + 
+      geom_point()
+    ```
+
+2.  What parameters to `geom_jitter()` control the amount of jittering?
+
+3.  Compare and contrast `geom_jitter()` with `geom_count()`.
+
+4.  What's the default position adjustment for `geom_boxplot()`?
+    Create a visualization of the `mpg` dataset that demonstrates it.
+
 ## Summary
 
 An important lesson you should take from this chapter is that when you feel the need for a geom that is not provided by ggplot2, it's always a good idea to look into whether someone else has already solved your problem by creating a ggplot2 extension package that offers that geom.
