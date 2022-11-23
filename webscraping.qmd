@@ -373,54 +373,12 @@ If either SelectorGadget or Chrome DevTools have generated a CSS selector that y
 If you find yourself doing this a lot, you might want to learn more about CSS selectors generally.
 We recommend starting with the fun [CSS dinner](https://flukeout.github.io/) tutorial and then referring to the [MDN web docs](https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Selectors).
 
-### Determining the selector
-
 ## Putting it all together
 
+Lets put this all together to scrape some websites.
 There's some risk that these examples may no longer work when you run them --- that's the fundamental challenge of web scraping, if the structure of the site changes, then you'll have to change your scraping code.
 
-```{r}
-url <- "https://www.imdb.com/chart/top"
-html <- read_html(url)
-
-html |> html_elements(".titleColumn") |> html_text2()
-html |> html_elements(".titleColumn a") |> html_text2()
-html |> html_elements(".secondaryInfo") |> html_text2()
-
-html |> html_elements("td strong") |> html_text2()
-html |> html_elements("td strong") |> html_attr("title")
-```
-
-```{r}
-df <- tibble(
-  rank_title_year = html |> html_elements(".titleColumn") |> html_text2(),
-  rating_n = html |> html_elements("td strong") |> html_attr("title")
-)
-df |> 
-  separate_wider_regex(
-    rank_title_year,
-    patterns = c(
-      rank = "\\d+", "\\. ",
-      title = ".+", " \\(",
-      year = "\\d+", "\\)"
-    )
-  ) |> 
-  separate_wider_regex(
-    rating_n,
-    patterns = c(
-      rating = "[0-9.]+", 
-      " based on ",
-      number = "[0-9,]+",
-      " user ratings"
-    )
-  ) |> 
-  mutate(
-    rank = parse_number(rank),
-    year = parse_integer(year),
-    rating = parse_double(rating),
-    number = parse_number(number)
-  )
-```
+### Starwars
 
 ```{r}
 url <- "https://rvest.tidyverse.org/articles/starwars.html"
@@ -435,12 +393,67 @@ tibble(
 )
 ```
 
-```{r}
-url <- "https://rvest.tidyverse.org/reference/index.html"
-html <- read_html(url)
+### IMDB top films
 
-html |> html_elements("#main a") |> html_text()
-html |> html_elements("#main a") |> html_attr("href")
+Add screenshot.
+
+```{r}
+url <- "https://www.imdb.com/chart/top"
+html <- read_html(url)
+```
+
+```{r}
+table <- html |> 
+  html_element("table") |> 
+  html_table()
+table
+```
+
+```{r}
+table |> 
+  select(
+    rank_title_year = `Rank & Title`,
+    rating = `IMDb Rating`
+  ) |> 
+  mutate(rank_title_year = str_squish(rank_title_year)) |> 
+  separate_wider_regex(
+    rank_title_year,
+    patterns = c(
+      rank = "\\d+", "\\. ",
+      title = ".+", " \\(",
+      year = "\\d+", "\\)"
+    )
+  )
+```
+
+In this case, we can add a little extra data by using one of the attributes.
+This is one of the reasons it's worth spending a little time spelunking the source of the page; you might find extra data, or might find a parsing route that's slightly easier.
+
+```{r}
+html |> 
+  html_elements("td strong") |> 
+  head() |> 
+  html_attr("title")
+```
+
+```{r}
+df <- tibble(
+  rating_n = html |> html_elements("td strong") |> html_attr("title")
+)
+df |> 
+  separate_wider_regex(
+    rating_n,
+    patterns = c(
+      rating = "[0-9.]+", 
+      " based on ",
+      number = "[0-9,]+",
+      " user ratings"
+    )
+  ) |> 
+  mutate(
+    rating = parse_double(rating),
+    number = parse_number(number)
+  )
 ```
 
 ## Dynamic sites
