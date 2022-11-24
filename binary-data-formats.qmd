@@ -60,6 +60,54 @@ glimpse(seattle_lib)
 The first line in the output tell you that `seattle_lib` is stored locally on-disk as a single csv file.
 The second line indicates that the data are stored as a tabular data set with 41 million rows and 12 columns.
 
+### Writing multi-file data
+
+When data sets become large it is often useful to split the data across many files rather than storing everything in a single large file.
+When this structuring is done intelligently, the multi-file strategy can lead to significant improvements in performance because only a subset of the files need to be read in order to analyze the data.
+We'll illustrate this using the Seattle library data and the arrow package.
+
+When deciding to pursue a multi-file strategy, the first task is to decide how to partition your data set.
+If you break the data set into too few files you won't gain the performance improvements you're hoping for, but if you break it into too many you won't gain much either.
+If you split the data in a meaningful way, you'll get some performance advantages, but if you split the data randomly you probably won't see a lot of gains.
+There are no hard and fast rules about how to partition a data set: the results will depend on your data, access patterns, and the systems that read the data.
+As a rough guide, the arrow package documentation suggests the following heuristics:
+
+-   Avoid files smaller than 20MB and larger than 2GB.
+-   Avoid partitioning layouts that produce more than 10,000 distinct files.
+
+According to these guidelines, the Seattle library data is a little too large to be stored as a single 4GB parquet file.
+We should consider splitting it up.
+
+As a general rule, a useful strategy for partitioning a large dataset is to create meaningful subsets based on one or more variables that you're likely to use to filter the data.
+For the library data it seems likely that we would often want to analyze the data separately by year, so the `CheckoutYear` column seems like a good candidate.
+
+Partitioning a data set can be done using the `write_dataset()` function from the arrow package, which respects the grouping created by the dplyr `group_by()` function.
+To create a multi-file data set with one parquet file per year of library data we would do the following:
+
+```{r write-dataset}
+#| eval: !expr "!file.exists('data/seattle-library-checkouts/CheckoutYear=2021/part-0.parquet')"
+seattle_lib |>
+  group_by(CheckoutYear) |>
+  write_dataset(
+    path = "data/seattle-library-checkouts",
+    format = "parquet"
+  )
+```
+
+Let's take a look at the files:
+
+```{r show-parquet-files}
+seattle_lib_files <- list.files(
+  path = "data/seattle-library-checkouts",
+  recursive = TRUE
+) 
+seattle_lib_files
+```
+
+These filenames follow a "self-describing" convention used by the Apache Hive project ([hive.apache.org](https://hive.apache.org/)).
+Hive-style partitions name folders using a "key=value" convention, and the data files in that folder contain the subset of the data for which the key has the relevant value.
+Following this convention makes it easier to locate files relevant to a particular query.
+
 ### Using dplyr with arrow
 
 Writing dplyr code for arrow data is conceptually similar to dbplyr, described in @sec-import-databases.
@@ -287,60 +335,7 @@ system.time({
 
 The analysis of the parquet data finishes in about one tenth the time it takes to perform the same analysis with the csv data.
 
-## Multi-file data sets
-
-When data sets become large it is often useful to split the data across many files rather than storing everything in a single large file.
-When this structuring is done intelligently, the multi-file strategy can lead to significant improvements in performance because only a subset of the files need to be read in order to analyze the data.
-We'll illustrate this using the Seattle library data and the arrow package.
-
-### Writing multi-file data
-
-When deciding to pursue a multi-file strategy, the first task is to decide how to partition your data set.
-If you break the data set into too few files you won't gain the performance improvements you're hoping for, but if you break it into too many you won't gain much either.
-If you split the data in a meaningful way, you'll get some performance advantages, but if you split the data randomly you probably won't see a lot of gains.
-There are no hard and fast rules about how to partition a data set: the results will depend on your data, access patterns, and the systems that read the data.
-As a rough guide, the arrow package documentation suggests the following heuristics:
-
--   Avoid files smaller than 20MB and larger than 2GB.
--   Avoid partitioning layouts that produce more than 10,000 distinct files.
-
-According to these guidelines, the Seattle library data is a little too large to be stored as a single 4GB parquet file.
-We should consider splitting it up.
-
-As a general rule, a useful strategy for partitioning a large dataset is to create meaningful subsets based on one or more variables that you're likely to use to filter the data.
-For the library data it seems likely that we would often want to analyze the data separately by year, so the `CheckoutYear` column seems like a good candidate.
-
-Partitioning a data set can be done using the `write_dataset()` function from the arrow package, which respects the grouping created by the dplyr `group_by()` function.
-To create a multi-file data set with one parquet file per year of library data we would do the following:
-
-```{r write-dataset}
-#| eval: !expr "!file.exists('data/seattle-library-checkouts/CheckoutYear=2021/part-0.parquet')"
-seattle_lib |>
-  group_by(CheckoutYear) |>
-  write_dataset(
-    path = "data/seattle-library-checkouts",
-    format = "parquet"
-  )
-```
-
-Let's take a look at the files:
-
-```{r show-parquet-files}
-seattle_lib_files <- list.files(
-  path = "data/seattle-library-checkouts",
-  recursive = TRUE
-) 
-seattle_lib_files
-```
-
-These filenames follow a "self-describing" convention used by the Apache Hive project ([hive.apache.org](https://hive.apache.org/)).
-Hive-style partitions name folders using a "key=value" convention, and the data files in that folder contain the subset of the data for which the key has the relevant value.
-Following this convention makes it easier to locate files relevant to a particular query.
-
-### Performance advantages
-
-Partitioning a large data set into many smaller, meaningful files can produce substantial improvements in performance.
-To illustrate, we'll repeat the analysis of the 2021 Seattle library book checkouts by month using the partitioned data:
+The speed-up is even more noticeable with the partitioned parquet data set:
 
 ```{r dataset-performance-multiple-parquet}
 #| cache: true
