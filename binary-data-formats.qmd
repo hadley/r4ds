@@ -80,6 +80,24 @@ Like dbplyr, arrow only understands some R expressions, so you may not be able t
 However, the list of operations and functions supported is fairly extensive and growing.
 A complete list is provided in the arrow package documentation at [arrow.apache.org/docs/r/reference/acero.html](https://arrow.apache.org/docs/r/reference/acero.html).
 
+### Using dbplyr with arrow
+
+There's also an even more direct connection between arrow and dbplyr -- it's very easy to turn an arrow dataset into a duckdb datasource.
+This doesn't involve any memory copying, and speaks to the goals of the arrow ecosystem: enable seamless transitions from one computing framework to another.
+This can be done using the `to_duckdb()` function supplied by the arrow package:
+
+```{r use-duckdb}
+open_dataset("data/seattle-library-checkouts/") |>
+  to_duckdb() |>
+  filter(CheckoutYear == 2021, MaterialType == "BOOK") |>
+  group_by(CheckoutMonth) |>
+  summarise(TotalCheckouts = sum(Checkouts)) |>
+  arrange(desc(CheckoutMonth)) |>
+  collect()
+```
+
+In this example, all the statements that appear after `to_duckdb()` are executed using the duckdb engine, and there is an analogous function `to_arrow()` you can use to pass control back from duckdb to arrow.
+
 ## The parquet file format
 
 When working with small data sets, csv files can be convenient: they're human readable plain text files, and most analysis tools can read data from a csv.
@@ -342,28 +360,6 @@ system.time({
 This is a 10-fold speed up compared to a single parquet file, and a 100-fold speed up compared to the original csv file.
 
 ## Other topics
-
-I haven't quite worked out the best way to integrate these sections.
-
-### Using duckdb with arrow
-
-One useful feature of arrow is that it is interoperable with duckdb and dbplyr.
-It is possible to open a multi-file data set using arrow and then pass it to duckdb using the `to_duckdb()` function.
-Doing so means that your dplyr code will now be interpreted by dbplyr (rather than arrow) and executed by duckdb.
-
-```{r use-duckdb}
-open_dataset("data/seattle-library-checkouts/") |>
-  to_duckdb() |>
-  filter(CheckoutYear == 2021, MaterialType == "BOOK") |>
-  group_by(CheckoutMonth) |>
-  summarise(TotalCheckouts = sum(Checkouts)) |>
-  arrange(desc(CheckoutMonth)) |>
-  collect()
-```
-
-There is an analogous function `to_arrow()` that passes control back to arrow, meaning that it is possible to swap back and forth between the duckdb and arrow back ends within a single analysis pipeline.
-This operation is extremely efficient because both libraries deal with the Arrow format, so data is passed between then without making a copy.
-This can occasionally be valuable when one tool implements functionality that the other does not.
 
 ### Data in the cloud
 
