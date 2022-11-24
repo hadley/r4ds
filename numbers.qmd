@@ -12,9 +12,9 @@ status("polishing")
 Numeric vectors are the backbone of data science, and you've already used them a bunch of times earlier in the book.
 Now it's time to systematically survey what you can do with them in R, ensuring that you're well situated to tackle any future problem involving numeric vectors.
 
-We'll start by going into a little more detail of `count()` before diving into various numeric transformations that pair well with `mutate()`.
-You'll then learn about more general transformations that can be applied to other types of vector, but are often used with numeric vectors.
-We'll finish off by covering the summary functions that pair well with `summarise()` and show you how they can also be used with `mutate()`.
+We'll start by giving you a couple of tools to make numbers if you have strings, and then going into a little more detail of `count()`.
+Then we'll dive into various numeric transformations that pair well with `mutate()`, including more general transformations that can be applied to other types of vector, but are often used with numeric vectors.
+We'll finish off by covering the summary functions that pair well with `summarize()` and show you how they can also be used with `mutate()`.
 
 ### Prerequisites
 
@@ -28,6 +28,27 @@ Like in the last chapter, we'll use real examples from nycflights13, as well as 
 
 library(tidyverse)
 library(nycflights13)
+```
+
+## Making numbers
+
+In most cases, you'll get numbers already recorded in one of R's numeric types: integer or double.
+In some cases, however, you'll encounter them as strings, possibly because you've created them by pivoting from column headers or something has gone wrong in your data import process.
+
+readr provides two useful functions for parsing strings into numbers: `parse_double()` and `parse_number()`.
+Use `parse_double()` when you have numbers that have been written as strings:
+
+```{r}
+x <- c("1.2", "5.6", "1e3")
+parse_double(x)
+```
+
+Use `parse_number()` when the string contains non-numeric text that you want to ignore.
+This is particularly useful for currency data and percentages:
+
+```{r}
+x <- c("$1,234", "USD 3,513", "59%")
+parse_number(x)
 ```
 
 ## Counts
@@ -49,13 +70,13 @@ flights |> count(dest, sort = TRUE)
 
 And remember that if you want to see all the values, you can use `|> View()` or `|> print(n = Inf)`.
 
-You can perform the same computation "by hand" with `group_by()`, `summarise()` and `n()`.
+You can perform the same computation "by hand" with `group_by()`, `summarize()` and `n()`.
 This is useful because it allows you to compute other summaries at the same time:
 
 ```{r}
 flights |> 
   group_by(dest) |> 
-  summarise(
+  summarize(
     n = n(),
     delay = mean(arr_delay, na.rm = TRUE)
   )
@@ -78,7 +99,7 @@ There are a couple of variants of `n()` that you might find useful:
     ```{r}
     flights |> 
       group_by(dest) |> 
-      summarise(
+      summarize(
         carriers = n_distinct(carrier)
       ) |> 
       arrange(desc(carriers))
@@ -90,7 +111,7 @@ There are a couple of variants of `n()` that you might find useful:
     ```{r}
     flights |> 
       group_by(tailnum) |> 
-      summarise(miles = sum(distance))
+      summarize(miles = sum(distance))
     ```
 
     Weighted counts are a common problem so `count()` has a `wt` argument that does the same thing:
@@ -105,13 +126,13 @@ There are a couple of variants of `n()` that you might find useful:
     ```{r}
     flights |> 
       group_by(dest) |> 
-      summarise(n_cancelled = sum(is.na(dep_time))) 
+      summarize(n_cancelled = sum(is.na(dep_time))) 
     ```
 
 ### Exercises
 
 1.  How can you use `count()` to count the number rows with a missing value for a given variable?
-2.  Expand the following calls to `count()` to instead use `group_by()`, `summarise()`, and `arrange()`:
+2.  Expand the following calls to `count()` to instead use `group_by()`, `summarize()`, and `arrange()`:
     1.  `flights |> count(dest, sort = TRUE)`
 
     2.  `flights |> count(tailnum, wt = distance)`
@@ -233,7 +254,7 @@ The results are shown in @fig-prop-cancelled.
 #|   getting down to around 1% by midnight.
 flights |> 
   group_by(hour = sched_dep_time %/% 100) |> 
-  summarise(prop_cancelled = mean(is.na(dep_time)), n = n()) |> 
+  summarize(prop_cancelled = mean(is.na(dep_time)), n = n()) |> 
   filter(hour > 1) |> 
   ggplot(aes(hour, prop_cancelled)) +
   geom_line(color = "grey50") + 
@@ -497,6 +518,61 @@ lead(x)
 
 You can lead or lag by more than one position by using the second argument, `n`.
 
+### Consecutive identifies
+
+Sometimes you want to start a new group every time some event occurs.
+For example, when you're looking at website data, it's common to want to break up events into sessions, where a session is defined as a gap of more than x minutes since the last activity.
+
+For example, imagine you have the times when someone visited a website:
+
+```{r}
+events <- tibble(
+  time = c(0, 1, 2, 3, 5, 10, 12, 15, 17, 19, 20, 27, 28, 30)
+)
+
+```
+
+And you've the time lag between the events, and figured out if there's a gap that's big enough to qualify:
+
+```{r}
+events <- events |> 
+  mutate(
+    diff = time - lag(time, default = first(time)),
+    gap = diff >= 5
+  )
+events
+```
+
+But how do we go from that logical vector to something that we can `group_by()`?
+`consecutive_id()` comes to the rescue:
+
+```{r}
+events |> mutate(
+  group = consecutive_id(gap)
+)
+```
+
+`consecutive_id()` starts a new group every time one of its arguments changes.
+That makes it useful both here, with logical vectors, and in many other place.
+For example, inspired by [this stackoverflow question](https://stackoverflow.com/questions/27482712), imagine you have a data frame with a bunch of repeated values:
+
+```{r}
+df <- tibble(
+  x = c("a", "a", "a", "b", "c", "c", "d", "e", "a", "a", "b", "b"),
+  y = c(1, 2, 3, 2, 4, 1, 3, 9, 4, 8, 10, 199)
+)
+df
+```
+
+You want to keep the first row from each repeated `x`.
+That's easier to express with a combination of `consecutive_id()` and `slice_head()`:
+
+```{r}
+df |> 
+  group_by(id = consecutive_id(x)) |> 
+  slice_head(n = 1)
+```
+
 ### Exercises
 
 1.  Find the 10 most delayed flights using a ranking function.
@@ -522,7 +598,7 @@ You can lead or lag by more than one position by using the second argument, `n`.
     flights |> 
       mutate(hour = dep_time %/% 100) |> 
       group_by(year, month, day, hour) |> 
-      summarise(
+      summarize(
         dep_delay = mean(dep_delay, na.rm = TRUE),
         n = n(),
         .groups = "drop"
@@ -568,7 +644,7 @@ The median delay is always smaller than the mean delay because because flights s
 #|   outlying points with mean ~60, median ~50, and mean ~85, median ~55.
 flights |>
   group_by(year, month, day) |>
-  summarise(
+  summarize(
     mean = mean(dep_delay, na.rm = TRUE),
     median = median(dep_delay, na.rm = TRUE),
     n = n(),
@@ -597,7 +673,7 @@ For the `flights` data, you might want to look at the 95% quantile of delays rat
 ```{r}
 flights |>
   group_by(year, month, day) |>
-  summarise(
+  summarize(
     max = max(dep_delay, na.rm = TRUE),
     q95 = quantile(dep_delay, 0.95, na.rm = TRUE),
     .groups = "drop"
@@ -617,7 +693,7 @@ But the code below makes it looks like one airport, [EGE](https://en.wikipedia.o
 ```{r}
 flights |> 
   group_by(origin, dest) |> 
-  summarise(
+  summarize(
     distance_sd = IQR(distance), 
     n = n(),
     .groups = "drop"
@@ -700,7 +776,7 @@ For example, we can find the first and last departure for each day:
 ```{r}
 flights |> 
   group_by(year, month, day) |> 
-  summarise(
+  summarize(
     first_dep = first(dep_time), 
     fifth_dep = nth(dep_time, 5),
     last_dep = last(dep_time)
@@ -726,7 +802,7 @@ flights |>
 
 ### With `mutate()`
 
-As the names suggest, the summary functions are typically paired with `summarise()`.
+As the names suggest, the summary functions are typically paired with `summarize()`.
 However, because of the recycling rules we discussed in @sec-recycling they can also be usefully paired with `mutate()`, particularly when you want do some sort of group standardization.
 For example:
 
@@ -753,9 +829,9 @@ For example:
 
 ## Summary
 
-You're likely already familiar with many tools for working with numbers, and in this chapter you'll have learned how they're realized in R.
-You also learned a handful of useful general transformations that are commonly, but not exclusively, applied to numeric vector like ranks and offsets.
-Finally, we worked through a number of numeric summaries, and discussed a few of the statistical challenges that you should consider.
+You're already familiar with many tools for working with numbers, and after reading this chapter you now know how to use them in R.
+You've also learned a handful of useful general transformations that are commonly, but not exclusively, applied to numeric vectors like ranks and offsets.
+Finally, you worked through a number of numeric summaries, and discussed a few of the statistical challenges that you should consider.
 
 Over the next two chapters, we'll dive into working with strings with the stringr package.
-Strings get two chapters because there really are two topics to cover: strings and regular expressions.
+Strings are a big topic so they get two chapters, one on the fundamentals of strings and one on regular expressions.

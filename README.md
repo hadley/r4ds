@@ -6,7 +6,7 @@
 
 <!-- badges: end -->
 
-This repository contains the source of [R for Data Science](http://r4ds.had.co.nz) book.
+This repository contains the source of [R for Data Science](http://r4ds.hadley.nz) book.
 The book is built using [Quarto](https://quarto.org/).
 
 The R packages used in this book can be installed via
@@ -46,6 +46,22 @@ devtools::install_github("hadley/r4ds")
     #| out.width: NULL
     knitr::include_graphics("screenshots/rstudio-wg.png")
     ```
+
+### O'Reilly
+
+To generate book for O'Reilly, build the book then:
+
+```{r}
+devtools::load_all("../minibook/"); process_book()
+
+html <- list.files("oreilly", pattern = "[.]html$", full.names = TRUE)
+file.copy(html, "../r-for-data-science-2e/", overwrite = TRUE)
+
+pngs <- list.files("oreilly", pattern = "[.]png$", full.names = TRUE, recursive = TRUE)
+dest <- gsub("oreilly", "../r-for-data-science-2e/", pngs)
+fs::dir_create(unique(dirname(dest)))
+file.copy(pngs, dest, overwrite = TRUE)
+```
 
 ## Code of Conduct
 
