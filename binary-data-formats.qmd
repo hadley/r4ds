@@ -106,7 +106,7 @@ seattle_lib_files <- list.files(
 seattle_lib_files
 ```
 
-These filenames follow a "self-describing" convention used by the Apache Hive project ([hive.apache.org](https://hive.apache.org/)).
+These file names follow a "self-describing" convention used by the Apache Hive project ([hive.apache.org](https://hive.apache.org/)).
 Hive-style partitions name folders using a "key=value" convention, and the data files in that folder contain the subset of the data for which the key has the relevant value.
 Following this convention makes it easier to locate files relevant to a particular query.
 
@@ -114,16 +114,37 @@ Following this convention makes it easier to locate files relevant to a particul
 
 Writing dplyr code for arrow data is conceptually similar to dbplyr, described in @sec-import-databases.
 The dplyr code that you write in R is internally transformed to a query that the Apache Arrow C++ library understands, which is then executed when you call `collect()`.
-Here's an example that counts the total number of books checked out in each year:
+Let's work through an example.
 
-```{r books-by-year}
-#| cache: true
-seattle_lib |> 
-  filter(MaterialType == "BOOK") |>
+We'll start by opening the partitioned parquet version of the dataset created in the last section.
+As we'll discuss in @sec-parquet-fast, our analysis runs much faster using this version of the dataset:
+
+```{r open-partitioned-parquet}
+seattle_lib2 <- open_dataset("data/seattle-library-checkouts/")
+```
+
+Next we'll write our dplyr pipeline.
+For our example we'll count the total number of books checked out in each year for the last five years:
+
+```{r books-by-year-query}
+query <- seattle_lib2 |> 
+  filter(CheckoutYear >= 2018, MaterialType == "BOOK") |>
   group_by(CheckoutYear) |>
   summarise(TotalCheckouts = sum(Checkouts)) |>
-  arrange(desc(CheckoutYear)) |>
-  collect()
+  arrange(desc(CheckoutYear))
+```
+
+Just like dbplyr, this pipeline defines instructions that arrow will execute when requested.
+If we print out the `query` object we can see a little information about what we expect Arrow to return when the execution takes place:
+
+```{r}
+query
+```
+
+This looks right, so we can now go ahead and call `collect()` to evaluate the query:
+
+```{r books-by-year}
+collect(query)
 ```
 
 Like dbplyr, arrow only understands some R expressions, so you may not be able to write exactly the same code you usually would.
@@ -132,21 +153,20 @@ A complete list is provided in the arrow package documentation at [arrow.apache.
 
 ### Using dbplyr with arrow
 
-There's also an even more direct connection between arrow and dbplyr -- it's very easy to turn an arrow dataset into a duckdb datasource.
-This doesn't involve any memory copying, and speaks to the goals of the arrow ecosystem: enable seamless transitions from one computing framework to another.
-This can be done using the `to_duckdb()` function supplied by the arrow package:
+There's also an even more direct connection between arrow and dbplyr -- it's very easy to turn an arrow dataset into a duckdb datasource using the arrow `to_duckdb()` function (and vice versa with `to_arrow()`).
+To illustrate this, let's run the analysis from the last section using duckdb to do the computing work:
 
 ```{r use-duckdb}
-open_dataset("data/seattle-library-checkouts/") |>
+seattle_lib2 |> 
   to_duckdb() |>
-  filter(CheckoutYear == 2021, MaterialType == "BOOK") |>
-  group_by(CheckoutMonth) |>
+  filter(CheckoutYear >= 2018, MaterialType == "BOOK") |>
+  group_by(CheckoutYear) |>
   summarise(TotalCheckouts = sum(Checkouts)) |>
-  arrange(desc(CheckoutMonth)) |>
+  arrange(desc(CheckoutYear)) |>
   collect()
 ```
 
-In this example, all the statements that appear after `to_duckdb()` are executed using the duckdb engine, and there is an analogous function `to_arrow()` you can use to pass control back from duckdb to arrow.
+The nice thing about `to_duckdb()` is that the transfer doesn't involve any memory copying, and speaks to the goals of the arrow ecosystem: enable seamless transitions from one computing framework to another.
 
 ## The parquet file format {#sec-parquet}
 
@@ -298,7 +318,7 @@ file.size("data/seattle-library-checkouts.parquet")
 
 The parquet file is about half the size of the csv file.
 
-### Parquet files are faster
+### Parquet files are faster {#sec-parquet-fast}
 
 The format of your data file can have a substantial impact on how long a data analysis pipeline takes to execute.
 To see this, let's time how long it takes to count the number of books checked out in each month of 2021 when the data are stored in csv format:
