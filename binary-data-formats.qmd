@@ -83,7 +83,7 @@ How should we split it up?
 It's reasonable to guess that our analyses might filter the data by `CheckoutYear`, so we'll use that as our partitioning variable.
 
 Partitioning a data set can be done using the `write_dataset()` function from the arrow package, which respects the grouping created by the dplyr `group_by()` function.
-To create a multi-file data set with one parquet file per year of library data we would do the following:
+To create a multi-file data set that contains a separate file for each year of library checkout data, we can do this:
 
 ```{r write-dataset}
 #| eval: !expr "!file.exists('data/seattle-library-checkouts/CheckoutYear=2021/part-0.parquet')"
@@ -95,6 +95,7 @@ seattle_lib |>
   )
 ```
 
+The `path` argument is used to specify the folder into which all the data files will be written, and the `format` argument is used to specify the file format for the data files.
 We'll talk more about the parquet format in @sec-parquet.
 For the moment, let's take a look at the files:
 
@@ -106,9 +107,11 @@ seattle_lib_files <- list.files(
 seattle_lib_files
 ```
 
-These file names follow a "self-describing" convention used by the Apache Hive project ([hive.apache.org](https://hive.apache.org/)).
-Hive-style partitions name folders using a "key=value" convention, and the data files in that folder contain the subset of the data for which the key has the relevant value.
-Following this convention makes it easier to locate files relevant to a particular query.
+Our single 9GB csv file has been rewritten as 18 parquet files that are typically between 150MB and 300MB in size.
+
+The file names shown in the output above follow a "self-describing" convention used by the Apache Hive project ([hive.apache.org](https://hive.apache.org/)).
+Hive-style partitions name folders using a "key=value" convention, and the data files in that folder contain the subset of the data for which the key (in this case "CheckoutYear") has the relevant value (e.g., 2009, 2010, etc).
+Following this naming convention makes it easier to locate files relevant to a particular query.
 
 ### Using dplyr with arrow
 
@@ -170,134 +173,27 @@ The nice thing about `to_duckdb()` is that the transfer doesn't involve any memo
 
 ## The parquet file format {#sec-parquet}
 
-When working with small data sets, csv files can be convenient: they're human readable plain text files, and most analysis tools can read data from a csv.
-However, there are some drawbacks:
+When working with small data sets csv files can be convenient, but they may not be the best choice for larger data sets.
+The Apache Parquet file format ([parquet.apache.org](https://parquet.apache.org/)) is a open standards-based format widely used by big data systems that is often more useful.
+Like a csv file, a parquet file stores a single rectangular data set, but differs in several important respects:
 
--   Ambiguity.
+-   Parquet files are usually smaller.
+    A csv file is a plain text format, and tends to be larger than file formats that use more economical coding and support compression.
+    Parquet relies on [efficient encodings](https://parquet.apache.org/docs/file-format/data-pages/encodings/) to keep file size down, and supports file compression.
+
+-   Parquet files have a rich type system.
     As we talked about in @sec-col-types, a csv file does not provide any information about column types.
     For example, a csv reader has to guess whether `"08-10-2022"` should be parsed as a string or a date.
-    If it is a date, it has to guess whether the date refers to October 8th or August 10th.
-    Here is a slightly contrived example.
-    Here is a small tibble that contains some integers and some strings that look suspiciously like dates:
+    In contrast, parquet files store data in a binary format (not plain text) that supports a rich type system allowing data to be read without the guesswork that csv reading requires.
 
-    ```{r csv-ambiguity-example}
-    original <- tibble(
-      integers = 1L:3L,
-      strings = c("2022-01-01", "1980-12-01", "1900-12-12")
-    )
-    original
-    ```
+-   Parquet files are structured.
+    Internally, parquet files break the data into distinct chunks, each with associated metadata.
+    The inclusion of this metadata makes it possible to write economical file readers that only read those parts of the file that contain relevant data.
 
-    Simple though it is, this data set poses problems for a csv file.
-    The csv version of this data does not explicitly specify that the first column contains integers and the second column contains strings.
-    This produces ambiguity because the csv reader guesses that the data types are double and character respectively:
+In addition to the `open_dataset()` and `write_dataset()` functions that understand datasets in csv and parquet format, the arrow package supplies the `read_parquet()` and `write_parquet()` functions that can read and write data in from a single parquet.
+We'll use these functions to examine parquet files in more detail.
 
-    ```{r csv-ambiguity-failure}
-    csv_file <- tempfile(fileext = ".csv")
-    write_csv(original, csv_file)
-    read_csv(csv_file, show_col_types = FALSE)
-    ```
-
-    The `read_csv()` and `write_csv()` functions are designed to avoid this issue to an extent, but it is impossible to avoid it completely because the csv format is inherently ambiguous.
-
--   Large size.
-    A csv file is not compressed by default, and tends to be much larger than file formats that use more economical coding and compression tools.
-
--   Poor performance.
-    Compared to other formats, csv files can be slow to read and write.
-    This is partly due to the larger file taking longer to read from disk, but also in part due to the differences between how data are represented on-disk and in-memory.
-
--   Inaccuracy.
-    Plain text files store binary numeric data inaccurately due to precision limits.
-    We can verify this by writing 1000 random numbers to a csv file and then reloading the data from the file
-
-    ```{r csv-precision-failure}
-    #| message: false
-    csv_file <- tempfile(fileext = ".csv")
-    original <- tibble(old_x = rnorm(1000))
-    write_csv(original, csv_file)
-    reloaded <- read_csv(csv_file) |>
-      rename(new_x = old_x)
-    ```
-
-    Now let's compare the two, counting the number of times the original value is strictly identical to the reloaded one:
-
-    ```{r csv-precision-failure-2}
-    bind_cols(original, reloaded) |> 
-      mutate(same_value = old_x == new_x) |>
-      count(same_value)
-    ```
-
-    A substantial proportion of the reloaded values differ from the original ones.
-    These differences are very small in magnitude, and occur because the csv represents numeric values with limited precision.
-    Even so this can still be a source of problems in your analysis code.
-
-The Apache Parquet file format ([parquet.apache.org](https://parquet.apache.org/)) is designed to address these limitations.
-Like a csv file, a parquet file stores a single rectangular data set.
-Features of the parquet format that make it appealing for data scientists include:
-
--   Parquet is an open standards-based format widely used by big data systems, so there is little to no risk of vendor lock-in as sometimes occurs with proprietary data formats.
--   Parquet files store data in a binary format (not plain text) that supports a rich type system, avoiding inaccuracy and ambiguity in data storage.
--   The Parquet format supports compression, and parquet files commonly use compression to reduce file size. It also relies on [efficient encodings](https://parquet.apache.org/docs/file-format/data-pages/encodings/) to keep file size down.
--   Parquet files internally break the data into distinct chunks, each with associated metadata. This makes it possible to write intelligent file readers that can jump straight to a specific part of the data when the full data set is not needed.
-
-All these factors together make the parquet format appealing when working with larger data sets.
-
-The arrow package supplies `read_parquet()` and `write_parquet()` functions that can read and write data in the parquet format.
-We'll use these functions to explore the advantages to parquet files.
-
-### Parquet files are unambiguous
-
-Recall this example from earlier:
-
-```{r ambiguous-data-frame}
-original <- tibble(
-  integers = 1L:3L,
-  strings = c("2022-01-01", "1980-12-01", "1900-12-12")
-)
-original
-```
-
-As we saw, writing this data to a csv file and reading it back in leads to a mistake in identifying the data types for each column.
-The parquet format avoids this ambiguity.
-When we write the data set to a parquet file using `write_parquet()` and then read it back in with `read_parquet()`, the data types are preserved:
-
-```{r read-parquet-unambigiously}
-parquet_file <- tempfile(fileext = ".parquet")
-write_parquet(original, parquet_file)
-read_parquet(parquet_file)
-```
-
-### Parquet files are binary
-
-Earlier in this section we saw an example in which csv files store numeric data inaccurately because they use plain text rather than binary format.
-Let's repeat the exercise using the binary parquet format.
-We first write some random numbers to a parquet file:
-
-```{r parquet-precision-write}
-#| message: false
-parquet_file <- tempfile(fileext = ".parquet")
-original <- tibble(old_x = rnorm(1000))
-write_parquet(original, parquet_file)
-```
-
-Next we load the file and give the reloaded variable a new name:
-
-```{r parquet-precision-read}
-reloaded <- read_parquet(parquet_file) |>
-  rename(new_x = old_x)
-```
-
-Finally we bind the old and new data sets together and compare them:
-
-```{r parquet-precision-success}
-bind_cols(original, reloaded) |> 
-  mutate(same_value = old_x == new_x) |>
-  count(same_value)
-```
-
-As you can see, numeric values stored in parquet files are stored faithfully.
-Loading the data from file produces the same values in the original data set.
+NEEDS TIDYING FROM HERE
 
 ### Parquet files are smaller
 
@@ -375,6 +271,93 @@ system.time({
 ```
 
 This is a 10-fold speed up compared to a single parquet file, and a 100-fold speed up compared to the original csv file.
+
+### Parquet files are unambiguous
+
+Here is a slightly contrived example.
+Here is a small tibble that contains some integers and some strings that look suspiciously like dates:
+
+```{r csv-ambiguity-example}
+original <- tibble(
+  integers = 1L:3L,
+  strings = c("2022-01-01", "1980-12-01", "1900-12-12")
+)
+original
+```
+
+Simple though it is, this data set poses problems.
+The csv version of this data does not explicitly specify that the first column contains integers and the second column contains strings.
+This produces ambiguity because `read_csv()` guesses that the data types are double and date respectively:
+
+```{r csv-ambiguity-failure}
+csv_file <- tempfile(fileext = ".csv")
+write_csv(original, csv_file)
+read_csv(csv_file, show_col_types = FALSE)
+```
+
+The parquet format avoids this ambiguity.
+When we write the data set to a parquet file using `write_parquet()` and then read it back in with `read_parquet()`, the data types are preserved:
+
+```{r read-parquet-unambigiously}
+parquet_file <- tempfile(fileext = ".parquet")
+write_parquet(original, parquet_file)
+read_parquet(parquet_file)
+```
+
+### Parquet files are binary
+
+Earlier in this section we saw an example in which csv files store numeric data inaccurately because they use plain text rather than binary format.
+
+We can verify this by writing 1000 random numbers to a csv file and then reloading the data from the file
+
+```{r csv-precision-failure}
+#| message: false
+csv_file <- tempfile(fileext = ".csv")
+original <- tibble(old_x = rnorm(1000))
+write_csv(original, csv_file)
+reloaded <- read_csv(csv_file) |>
+  rename(new_x = old_x)
+```
+
+Now let's compare the two, counting the number of times the original value is strictly identical to the reloaded one:
+
+```{r csv-precision-failure-2}
+bind_cols(original, reloaded) |> 
+  mutate(same_value = old_x == new_x) |>
+  count(same_value)
+```
+
+A substantial proportion of the reloaded values differ from the original ones.
+These differences are very small in magnitude, and occur because the csv represents numeric values with limited precision.
+Even so this can still be a source of problems in your analysis code.
+
+Let's repeat the exercise using the binary parquet format.
+We first write some random numbers to a parquet file:
+
+```{r parquet-precision-write}
+#| message: false
+parquet_file <- tempfile(fileext = ".parquet")
+original <- tibble(old_x = rnorm(1000))
+write_parquet(original, parquet_file)
+```
+
+Next we load the file and give the reloaded variable a new name:
+
+```{r parquet-precision-read}
+reloaded <- read_parquet(parquet_file) |>
+  rename(new_x = old_x)
+```
+
+Finally we bind the old and new data sets together and compare them:
+
+```{r parquet-precision-success}
+bind_cols(original, reloaded) |> 
+  mutate(same_value = old_x == new_x) |>
+  count(same_value)
+```
+
+As you can see, numeric values stored in parquet files are stored faithfully.
+Loading the data from file produces the same values in the original data set.
 
 <!-- ### Data in the cloud -->
 
