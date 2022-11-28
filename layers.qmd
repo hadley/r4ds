@@ -402,8 +402,49 @@ ggplot(mpg, aes(x = displ, y = hwy)) +
 (You'll learn how `filter()` works in the chapter on data transformations: for now, just know that this command selects only the subcompact cars.)
 
 Geoms are the fundamental building blocks of ggplot2.
-ggplot2 provides more than 40 geoms, and extension packages provide even more (see <https://exts.ggplot2.tidyverse.org/gallery/> for a sampling).
-The best way to get a comprehensive overview is the ggplot2 cheatsheet, which you can find at <https://rstudio.com/resources/cheatsheets>.
+You can completely transform the look of your plot by changing its geom, and different geoms can reveal different features of your data.
+For example, the histogram and density plot below reveal that the distribution of highway mileage is bimodal and right skewed while the boxplot reveals two potential outliers.
+
+```{r}
+#| fig-asp: 0.33
+#| fig-alt: >
+#|   Three plots: histogram, density plot, and box plot of highway
+#|   mileage.
+ 
+# Left
+ggplot(mpg, aes(x = hwy)) +
+  geom_histogram(binwidth = 2)
+
+# Middle
+ggplot(mpg, aes(x = hwy)) +
+  geom_density()
+
+# Right
+ggplot(mpg, aes(x = hwy)) +
+  geom_boxplot()
+```
+
+ggplot2 provides more than 40 geoms but these don't cover all possible plots one could make.
+If you need a different geom, we recommend looking into extension packages first to see if someone else has already implemented it (see <https://exts.ggplot2.tidyverse.org/gallery/> for a sampling).
+For example, the **ggridges** package <https://wilkelab.org/ggridges/> is useful for making ridgeline plots, which can be useful for visualizing the density of a numerical variable for different levels of a categorical variable.
+In the following plot not only did we use a new geom (`geom_density_ridges()`), but we have also mapped the same variable to multiple aesthetics (`drv` to `y`, `fill`, and `color`) as well as set an aesthetic (`alpha = 0.5`) to make the density curves transparent.
+
+```{r}
+#| fig-asp: 0.33
+#| fig-alt: 
+#|   Density curves for highway mileage for cars with rear wheel, 
+#|   front wheel, and 4-wheel drives plotted separately. The 
+#|   distribution is bimodal and roughly symmetric for real and 
+#|   4 wheel drive cars and unimodal and right skewed for front 
+#|   wheel drive cars.
+
+library(ggridges)
+
+ggplot(mpg, aes(x = hwy, y = drv, fill = drv, color = drv)) +
+  geom_density_ridges(alpha = 0.5, show.legend = FALSE)
+```
+
+The best way to get a comprehensive overview is the ggplot2 cheatsheet, which you can find at <https://posit.co/resources/cheatsheets/>.
 To learn more about any single geom, use the help (e.g. `?geom_smooth`).
 
 ### Exercises
@@ -470,6 +511,138 @@ To learn more about any single geom, use the help (e.g. `?geom_smooth`).
     ggplot(mpg, aes(x = displ, y = hwy)) + 
       geom_point(size = 4, color = "white") + 
       geom_point(aes(color = drv))
+    ```
+
+## Facets
+
+In @sec-data-visualisation you learned about faceting with `facet_wrap()`, which splits a plot into subplots that each display one subset of the data based on a categorical variable.
+
+```{r}
+#| fig-alt: >
+#|   Scatterplot of highway fuel efficiency versus engine size of cars, 
+#|   faceted by class, with facets spanning two rows.
+
+ggplot(mpg, aes(x = displ, y = hwy)) + 
+  geom_point() + 
+  facet_wrap(~cyl)
+```
+
+To facet your plot with the combination of two variables, switch from `facet_wrap()` to `facet_grid()`.
+The first argument of `facet_grid()` is also a formula, but now it's a double sided formula: `rows ~ cols`.
+
+```{r}
+#| fig-alt: >
+#|   Scatterplot of highway fuel efficiency versus engine size of cars, faceted 
+#|   by number of cylinders across rows and by type of drive train across 
+#|   columns. This results in a 4x3 grid of 12 facets. Some of these facets have 
+#|   no observations: 5 cylinders and 4 wheel drive, 4 or 5 cylinders and front 
+#|   wheel drive.
+
+ggplot(mpg, aes(x = displ, y = hwy)) + 
+  geom_point() + 
+  facet_grid(drv ~ cyl)
+```
+
+By default each of the facets share the same scale for x and y axes.
+This is useful when you want to compare data across facets but it can be limiting when you want to visualize the relationship within each facet better.
+Setting the `scales` argument in a faceting function to `"free"` will allow for different axis scales across both rows and columns.
+Other options for this argument are `"free_x"` (different scales across rows) and `"free_y"` (different scales across columns).
+
+```{r}
+#| fig-alt: >
+#|   Scatterplot of highway fuel efficiency versus engine size of cars, 
+#|   faceted by number of cylinders across rows and by type of drive train 
+#|   across columns. This results in a 4x3 grid of 12 facets. Some of these 
+#|   facets have no observations: 5 cylinders and 4 wheel drive, 4 or 5 
+#|   cylinders and front wheel drive. Facets within a row share the same 
+#|   y-scale and facets within a column share the same x-scale.
+
+ggplot(mpg, aes(x = displ, y = hwy)) + 
+  geom_point() + 
+  facet_grid(drv ~ cyl, scales = "free")
+```
+
+### Exercises
+
+1.  What happens if you facet on a continuous variable?
+
+2.  What do the empty cells in plot with `facet_grid(drv ~ cyl)` mean?
+    How do they relate to this plot?
+
+    ```{r}
+    #| fig-alt: >
+    #|   Scatterplot of number of cycles versus type of drive train of cars. 
+    #|   The plot shows that there are no cars with 5 cylinders that are 4 
+    #|   wheel drive or with 4 or 5 cylinders that are front wheel drive.
+
+    ggplot(mpg) + 
+      geom_point(aes(x = drv, y = cyl))
+    ```
+
+3.  What plots does the following code make?
+    What does `.` do?
+
+    ```{r}
+    #| eval: false
+
+    ggplot(mpg) + 
+      geom_point(aes(x = displ, y = hwy)) +
+      facet_grid(drv ~ .)
+
+    ggplot(mpg) + 
+      geom_point(aes(x = displ, y = hwy)) +
+      facet_grid(. ~ cyl)
+    ```
+
+4.  Take the first faceted plot in this section:
+
+    ```{r}
+    #| eval: false
+
+    ggplot(mpg) + 
+      geom_point(aes(x = displ, y = hwy)) + 
+      facet_wrap(~ class, nrow = 2)
+    ```
+
+    What are the advantages to using faceting instead of the color aesthetic?
+    What are the disadvantages?
+    How might the balance change if you had a larger dataset?
+
+5.  Read `?facet_wrap`.
+    What does `nrow` do?
+    What does `ncol` do?
+    What other options control the layout of the individual panels?
+    Why doesn't `facet_grid()` have `nrow` and `ncol` arguments?
+
+6.  Which of the following two plots makes it easier to compare engine size (`displ`) across cars with different drive trains?
+    What does this say about when to place a faceting variable across rows or columns?
+
+    ```{r}
+    #| fig-alt: >
+    #|   Two faceted plots, both visualizing highway fuel efficiency versus 
+    #|   engine size of cars, faceted by drive train. In the top plot, facet 
+    #|   are organized across rows and in the second, across columns.
+
+    ggplot(mpg) + 
+      geom_point(aes(x = displ, y = hwy)) + 
+      facet_grid(drv ~ .)
+
+    ggplot(mpg) + 
+      geom_point(aes(x = displ, y = hwy)) + 
+      facet_grid(. ~ drv)
+    ```
+
+7.  Recreate this plot using `facet_wrap()` instead of `facet_grid()`.
+    How do the positions of the facet labels change?
+
+    ```{r}
+    #| fig-alt: >
+    #|   Scatterplot of highway fuel efficiency versus engine size of cars, 
+    #|   faceted by type of drive train across rows.
+
+    ggplot(mpg) + 
+      geom_point(aes(x = displ, y = hwy)) +
+      facet_grid(drv ~ .)
     ```
 
 ## Statistical transformations
@@ -791,138 +964,6 @@ To learn more about a position adjustment, look up the help page associated with
 
 4.  What's the default position adjustment for `geom_boxplot()`?
     Create a visualization of the `mpg` dataset that demonstrates it.
-
-## Facets
-
-In @sec-data-visualisation you learned about faceting with `facet_wrap()`, which splits a plot into subplots that each display one subset of the data based on a categorical variable.
-
-```{r}
-#| fig-alt: >
-#|   Scatterplot of highway fuel efficiency versus engine size of cars, 
-#|   faceted by class, with facets spanning two rows.
-
-ggplot(mpg, aes(x = displ, y = hwy)) + 
-  geom_point() + 
-  facet_wrap(~cyl)
-```
-
-To facet your plot with the combination of two variables, switch from `facet_wrap()` to `facet_grid()`.
-The first argument of `facet_grid()` is also a formula, but now it's a double sided formula: `rows ~ cols`.
-
-```{r}
-#| fig-alt: >
-#|   Scatterplot of highway fuel efficiency versus engine size of cars, faceted 
-#|   by number of cylinders across rows and by type of drive train across 
-#|   columns. This results in a 4x3 grid of 12 facets. Some of these facets have 
-#|   no observations: 5 cylinders and 4 wheel drive, 4 or 5 cylinders and front 
-#|   wheel drive.
-
-ggplot(mpg, aes(x = displ, y = hwy)) + 
-  geom_point() + 
-  facet_grid(drv ~ cyl)
-```
-
-By default each of the facets share the same scale for x and y axes.
-This is useful when you want to compare data across facets but it can be limiting when you want to visualize the relationship within each facet better.
-Setting the `scales` argument in a faceting function to `"free"` will allow for different axis scales across both rows and columns.
-Other options for this argument are `"free_x"` (different scales across rows) and `"free_y"` (different scales across columns).
-
-```{r}
-#| fig-alt: >
-#|   Scatterplot of highway fuel efficiency versus engine size of cars, 
-#|   faceted by number of cylinders across rows and by type of drive train 
-#|   across columns. This results in a 4x3 grid of 12 facets. Some of these 
-#|   facets have no observations: 5 cylinders and 4 wheel drive, 4 or 5 
-#|   cylinders and front wheel drive. Facets within a row share the same 
-#|   y-scale and facets within a column share the same x-scale.
-
-ggplot(mpg, aes(x = displ, y = hwy)) + 
-  geom_point() + 
-  facet_grid(drv ~ cyl, scales = "free")
-```
-
-### Exercises
-
-1.  What happens if you facet on a continuous variable?
-
-2.  What do the empty cells in plot with `facet_grid(drv ~ cyl)` mean?
-    How do they relate to this plot?
-
-    ```{r}
-    #| fig-alt: >
-    #|   Scatterplot of number of cycles versus type of drive train of cars. 
-    #|   The plot shows that there are no cars with 5 cylinders that are 4 
-    #|   wheel drive or with 4 or 5 cylinders that are front wheel drive.
-
-    ggplot(mpg) + 
-      geom_point(aes(x = drv, y = cyl))
-    ```
-
-3.  What plots does the following code make?
-    What does `.` do?
-
-    ```{r}
-    #| eval: false
-
-    ggplot(mpg) + 
-      geom_point(aes(x = displ, y = hwy)) +
-      facet_grid(drv ~ .)
-
-    ggplot(mpg) + 
-      geom_point(aes(x = displ, y = hwy)) +
-      facet_grid(. ~ cyl)
-    ```
-
-4.  Take the first faceted plot in this section:
-
-    ```{r}
-    #| eval: false
-
-    ggplot(mpg) + 
-      geom_point(aes(x = displ, y = hwy)) + 
-      facet_wrap(~ class, nrow = 2)
-    ```
-
-    What are the advantages to using faceting instead of the color aesthetic?
-    What are the disadvantages?
-    How might the balance change if you had a larger dataset?
-
-5.  Read `?facet_wrap`.
-    What does `nrow` do?
-    What does `ncol` do?
-    What other options control the layout of the individual panels?
-    Why doesn't `facet_grid()` have `nrow` and `ncol` arguments?
-
-6.  Which of the following two plots makes it easier to compare engine size (`displ`) across cars with different drive trains?
-    What does this say about when to place a faceting variable across rows or columns?
-
-    ```{r}
-    #| fig-alt: >
-    #|   Two faceted plots, both visualizing highway fuel efficiency versus 
-    #|   engine size of cars, faceted by drive train. In the top plot, facet 
-    #|   are organized across rows and in the second, across columns.
-
-    ggplot(mpg) + 
-      geom_point(aes(x = displ, y = hwy)) + 
-      facet_grid(drv ~ .)
-
-    ggplot(mpg) + 
-      geom_point(aes(x = displ, y = hwy)) + 
-      facet_grid(. ~ drv)
-    ```
-
-7.  Recreate this plot using `facet_wrap()` instead of `facet_grid()`.
-    How do the positions of the facet labels change?
-
-    ```{r}
-    #| fig-alt: >
-    #|   Scatterplot of highway fuel efficiency versus engine size of cars, 
-    #|   faceted by type of drive train across rows.
-
-    ggplot(mpg) + 
-      geom_point(aes(x = displ, y = hwy)) +
-      facet_grid(drv ~ .)
-    ```
 
 ## The layered grammar of graphics
 
