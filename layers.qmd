@@ -12,8 +12,13 @@ status("drafting")
 In the @sec-data-visualisation, you learned much more than just how to make scatterplots, bar charts, and boxplots.
 You learned a foundation that you can use to make *any* type of plot with ggplot2.
 
-In this chapter, you'll expand on that foundation as you learn about the layered grammar of graphics, starting with data, then aesthetics and geometries, and then facets, statistics, coordinates, and themes.
-We will not cover every single function and option for each of these layers, but we will walk you through the most important and commonly used functionality provided by ggplot2.
+In this chapter, you'll expand on that foundation as you learn about the layered grammar of graphics.
+We'll start with a deeper dive into aesthetic mappings, geometric objects, and facets.
+Then, you will learn about statistical transformations ggplot2 makes under the hood when creating a plot.
+These transformations are used to calculate new values to plot, such as the heights of bars in a bar plot or medians in a box plot.
+You will also learn about position adjustments, which modify how geoms are displayed in your plots.
+Finally, we'll briefly introduce coordinate systems.
+We will not cover every single function and option for each of these layers, but we will walk you through the most important and commonly used functionality provided by ggplot2 as well as introduce you to packages that extend ggplot2.
 
 ### Prerequisites
 
@@ -26,10 +31,11 @@ To access the datasets, help pages, and functions used in this chapter, load the
 library(tidyverse)
 ```
 
-### The `mpg` data frame
+## Aesthetic mappings
 
-In this chapter, we will mostly use the `mpg` data frame that is bundled with the ggplot2 package.
-`mpg` contains `r nrow(mpg)` observations collected by the US Environmental Protection Agency on `r mpg |> distinct(model) |> nrow()` car models.
+> "The greatest value of a picture is when it forces us to notice what we never expected to see." --- John Tukey
+
+The `mpg` data frame that is bundled with the ggplot2 package contains `r nrow(mpg)` observations collected by the US Environmental Protection Agency on `r mpg |> distinct(model) |> nrow()` car models.
 
 ```{r}
 mpg
@@ -42,11 +48,7 @@ Among the variables in `mpg` are:
 2.  `hwy`: a car's fuel efficiency on the highway, in miles per gallon (mpg).
     A car with a low fuel efficiency consumes more fuel than a car with a high fuel efficiency when they travel the same distance.
 
-To learn more about `mpg`, open its help page by running `?mpg`.
-
-## Aesthetic mappings
-
-> "The greatest value of a picture is when it forces us to notice what we never expected to see." --- John Tukey
+You can learn about `mpg` on its help page by running `?mpg`.
 
 Let's start with a simple scatterplot of `hwy` versus `displ` of cars in `mpg`.
 
@@ -965,6 +967,120 @@ To learn more about a position adjustment, look up the help page associated with
 4.  What's the default position adjustment for `geom_boxplot()`?
     Create a visualization of the `mpg` dataset that demonstrates it.
 
+## Coordinate systems
+
+Coordinate systems are probably the most complicated part of ggplot2.
+The default coordinate system is the Cartesian coordinate system where the x and y positions act independently to determine the location of each point.
+There are three other coordinate systems that are occasionally helpful.
+
+-   `coord_flip()` switches the x and y axes.
+    This is useful (for example), if you want horizontal boxplots.
+    It's also useful for long labels: it's hard to get them to fit without overlapping on the x-axis.
+
+    ```{r}
+    #| fig-width: 4
+    #| fig-height: 2
+    #| layout-ncol: 2
+    #| fig-alt: >
+    #|   Two side-by-side box plots of highway fuel efficiency of cars. A 
+    #|   separate box plot is created for cars in each level of class (2seater, 
+    #|   compact, midsize, minivan, pickup, subcompact, and suv). In the first 
+    #|   plot class is on the x-axis, in the second plot class is on the y-axis. 
+    #|   The second plot makes it easier to read the names of the levels of class 
+    #|   since they are listed down the y-axis, avoiding overlap.
+
+    ggplot(data = mpg, mapping = aes(x = class, y = hwy)) + 
+      geom_boxplot()
+    ggplot(data = mpg, mapping = aes(x = class, y = hwy)) + 
+      geom_boxplot() +
+      coord_flip()
+    ```
+
+    However, note that you can achieve the same result by flipping the aesthetic mappings of the two variables.
+
+    ```{r}
+    #| fig-alt: >
+    #|   Side-by-side box plots of highway fuel efficiency of cars. A separate 
+    #|   box plot is drawn along the y-axis for cars in each level of class 
+    #|   (2seater, compact, midsize, minivan, pickup, subcompact, and suv).
+
+    ggplot(data = mpg, mapping = aes(y = class, x = hwy)) + 
+      geom_boxplot()
+    ```
+
+-   `coord_quickmap()` sets the aspect ratio correctly for maps.
+    This is very important if you're plotting spatial data with ggplot2.
+    We don't have the space to discuss maps in this book, but you can learn more in the [Maps chapter](https://ggplot2-book.org/maps.html) of *ggplot2: Elegant graphics for data analysis*.
+
+    ```{r}
+    #| layout-ncol: 2
+    #| fig-width: 4
+    #| fig-height: 2
+    #| message: false
+    #| fig-alt: >
+    #|   Two maps of the boundaries of New Zealand. In the first plot the aspect 
+    #|   ratio is incorrect, in the second plot it is correct.
+
+    nz <- map_data("nz")
+
+    ggplot(nz, aes(long, lat, group = group)) +
+      geom_polygon(fill = "white", color = "black")
+
+    ggplot(nz, aes(long, lat, group = group)) +
+      geom_polygon(fill = "white", color = "black") +
+      coord_quickmap()
+    ```
+
+-   `coord_polar()` uses polar coordinates.
+    Polar coordinates reveal an interesting connection between a bar chart and a Coxcomb chart.
+
+    ```{r}
+    #| layout-ncol: 2
+    #| fig-width: 4
+    #| fig-asp: 1
+    #| fig-alt: >
+    #|   There are two plots. On the left is a bar chart of cut of diamonds, 
+    #|   on the right is a Coxcomb chart of the same data.
+
+    bar <- ggplot(data = diamonds) + 
+      geom_bar(
+        mapping = aes(x = cut, fill = cut), 
+        show.legend = FALSE,
+        width = 1
+      ) + 
+      theme(aspect.ratio = 1) +
+      labs(x = NULL, y = NULL)
+
+    bar + coord_flip()
+    bar + coord_polar()
+    ```
+
+### Exercises
+
+1.  Turn a stacked bar chart into a pie chart using `coord_polar()`.
+
+2.  What does `labs()` do?
+    Read the documentation.
+
+3.  What's the difference between `coord_quickmap()` and `coord_map()`?
+
+4.  What does the plot below tell you about the relationship between city and highway mpg?
+    Why is `coord_fixed()` important?
+    What does `geom_abline()` do?
+
+    ```{r}
+    #| fig-alt: >
+    #|   Scatterplot of highway fuel efficiency versus engine size of cars that 
+    #|   shows a negative association. The plot also has a straight line that 
+    #|   follows the trend of the relationship between the variables but does not 
+    #|   go through the cloud of points, it is beneath it.
+
+    ggplot(data = mpg, mapping = aes(x = cty, y = hwy)) +
+      geom_point() + 
+      geom_abline() +
+      coord_fixed()
+    ```
+
 ## The layered grammar of graphics
 
 We can expand on the graphing template you learned in @sec-graphing-template by adding position adjustments, stats, coordinate systems, and faceting:
@@ -985,49 +1101,23 @@ The seven parameters in the template compose the grammar of graphics, a formal s
 The grammar of graphics is based on the insight that you can uniquely describe *any* plot as a combination of a dataset, a geom, a set of mappings, a stat, a position adjustment, a coordinate system, and a faceting scheme.
 
 To see how this works, consider how you could build a basic plot from scratch: you could start with a dataset and then transform it into the information that you want to display (with a stat).
+Next, you could choose a geometric object to represent each observation in the transformed data.
+You could then use the aesthetic properties of the geoms to represent variables in the data.
+You would map the values of each variable to the levels of an aesthetic.
+You'd then select a coordinate system to place the geoms into, using the location of the objects (which is itself an aesthetic property) to display the values of the x and y variables.
 
 ```{r}
 #| echo: false
 #| fig-alt: >
 #|   A figure demonstrating the steps for going from raw data to table of counts 
 #|   where each row represents one level of cut and a count column shows how many 
-#|   diamonds are in that cut level. Steps 1 and 2 are annotated. Step 1. Begin 
-#|   with the diamonds dataset. Step 2. Compute counts for each cut value 
-#|   with stat_count().
+#|   diamonds are in that cut level. 
 
-knitr::include_graphics("images/visualization-grammar-1.png")
+knitr::include_graphics("images/visualization-grammar.png")
 ```
 
-Next, you could choose a geometric object to represent each observation in the transformed data.
-You could then use the aesthetic properties of the geoms to represent variables in the data.
-You would map the values of each variable to the levels of an aesthetic.
-
-```{r}
-#| echo: false
-#| fig-alt: >
-#|   A figure demonstrating the steps for going from raw data to table of counts 
-#|   where each row represents one level of cut and a count column shows how 
-#|   many diamonds are in that cut level. Each level is also mapped to a color. 
-#|   Steps 3 and 4 are annotated. Step 3. Represent each observation with a bar. 
-#|   Step 4. Map the fill of each bar to the ..count.. variable.
-
-knitr::include_graphics("images/visualization-grammar-2.png")
-```
-
-You'd then select a coordinate system to place the geoms into, using the location of the objects (which is itself an aesthetic property) to display the values of the x and y variables.
-At that point, you would have a complete graph, but you could further adjust the positions of the geoms within the coordinate system (a position adjustment) or split the graph into subplots (faceting).
+At this point, you would have a complete graph, but you could further adjust the positions of the geoms within the coordinate system (a position adjustment) or split the graph into subplots (faceting).
 You could also extend the plot by adding one or more additional layers, where each additional layer uses a dataset, a geom, a set of mappings, a stat, and a position adjustment.
-
-```{r}
-#| echo: false
-#| fig-alt: >
-#|   A figure demonstrating the steps for going from raw data to bar chart where 
-#|   each bar represents one level of cut and filled in with a different color. 
-#|   Steps 5 and 6 are annotated. Step 5. Place geoms in a Cartesian coordinate 
-#|   system. Step 6. Map the y values to ..count.. and the x values to cut.
-
-knitr::include_graphics("images/visualization-grammar-3.png")
-```
 
 You could use this method to build *any* plot that you imagine.
 In other words, you can use the code template that you've learned in this chapter to build hundreds of thousands of unique plots.
@@ -1036,14 +1126,7 @@ If you'd like to learn more about the theoretical underpinnings of ggplot2, you 
 
 ## Summary
 
-<!--# TO DO: Add summary -->
-
-You then learned about facets, which allow you to create small multiples, where each panel contains a subgroup from your data.
-
-Position adjustment control the fine details of position when geoms might otherwise overlap, and coordinate systems allow you fundamentally change what `x` and `y` mean.
-
-...
+In this chapter you learned about the layered grammar of graphics starting with aesthetics and geometries to build a simple plot, facets for splitting the plot into subsets, statistics for understanding how geoms are calculated, position adjustments for controlling the fine details of position when geoms might otherwise overlap, and coordinate systems allow you fundamentally change what `x` and `y` mean.
+One layer we have not yet touched on is themes, which will introduce in @sec-themes.
 
 An important lesson you should take from this chapter is that when you feel the need for a geom that is not provided by ggplot2, it's always a good idea to look into whether someone else has already solved your problem by creating a ggplot2 extension package that offers that geom.
-
-We then gave you a whirlwind tour of the geoms and stats which control the "type" of graph you get, whether it's a scatterplot, line plot, histogram, or something else.
