@@ -9,12 +9,26 @@ status("drafting")
 
 ## Introduction
 
-<!-- TO DO: Add intro -->
+In @sec-exploratory-data-analysis, you learned how to use plots as tools for *exploration*.
+When you make exploratory plots, you know---even before looking---which variables the plot will display.
+You made each plot for a purpose, could quickly look at it, and then move on to the next plot.
+In the course of most analyses, you'll produce tens or hundreds of plots, most of which are immediately thrown away.
+
+Now that you understand your data, you need to *communicate* your understanding to others.
+Your audience will likely not share your background knowledge and will not be deeply invested in the data.
+To help others quickly build up a good mental model of the data, you will need to invest considerable effort in making your plots as self-explanatory as possible.
+In this chapter, you'll learn some of the tools that ggplot2 provides to do so.
+
+This chapter focuses on the tools you need to create good graphics.
+We assume that you know what you want, and just need to know how to do it.
+For that reason, we highly recommend pairing this chapter with a good general visualization book.
+We particularly like [The Truthful Art](https://www.amazon.com/gp/product/0321934075/), by Albert Cairo.
+It doesn't teach the mechanics of creating visualizations, but instead focuses on what you need to think about in order to create effective graphics.
 
 ### Prerequisites
 
 In this chapter, we'll focus once again on ggplot2.
-We'll also use a little dplyr for data manipulation, and a few ggplot2 extension packages, including **ggrepel** and **patchwork**.
+We'll also use a little dplyr for data manipulation, **scales** to override the default breaks, labels, transformations and palettes, and a few ggplot2 extension packages, including **ggrepel** and **patchwork**.
 Rather than loading those extensions here, we'll refer to their functions explicitly, using the `::` notation.
 This will help make it clear which functions are built into ggplot2, and which come from other packages.
 Don't forget you'll need to install those packages with `install.packages()` if you don't already have them.
@@ -25,6 +39,130 @@ Don't forget you'll need to install those packages with `install.packages()` if 
 library(tidyverse)
 ```
 
+## Labels
+
+The easiest place to start when turning an exploratory graphic into an expository graphic is with good labels.
+You add labels with the `labs()` function.
+This example adds a plot title:
+
+```{r}
+#| message: false
+#| fig-alt: >
+#|   Scatterplot of highway fuel efficiency versus engine size of cars, where 
+#|   points are colored according to the car class. A smooth curve following 
+#|   the trajectory of the relationship between highway fuel efficiency versus 
+#|   engine size of cars is overlaid. The plot is titled "Fuel efficiency 
+#|   generally decreases with engine size". 
+
+ggplot(mpg, aes(x = displ, y = hwy)) +
+  geom_point(aes(color = class)) +
+  geom_smooth(se = FALSE) +
+  labs(title = "Fuel efficiency generally decreases with engine size")
+```
+
+The purpose of a plot title is to summarize the main finding.
+Avoid titles that just describe what the plot is, e.g. "A scatterplot of engine displacement vs. fuel economy".
+
+If you need to add more text, there are two other useful labels that you can use in ggplot2 2.2.0 and above:
+
+-   `subtitle` adds additional detail in a smaller font beneath the title.
+
+-   `caption` adds text at the bottom right of the plot, often used to describe the source of the data.
+
+```{r}
+#| message: false
+#| fig-alt: >
+#|   Scatterplot of highway fuel efficiency versus engine size of cars, where 
+#|   points are colored according to the car class. A smooth curve following 
+#|   the trajectory of the relationship between highway fuel efficiency versus 
+#|   engine size of cars is overlaid. The plot is titled "Fuel efficiency 
+#|   generally decreases with engine size". The subtitle is "Two seaters 
+#|   (sports cars) are an exception because of their light weight" and the 
+#|   caption is "Data from fueleconomy.gov".
+
+ggplot(mpg, aes(displ, hwy)) +
+  geom_point(aes(color = class)) +
+  geom_smooth(se = FALSE) +
+  labs(
+    title = "Fuel efficiency generally decreases with engine size",
+    subtitle = "Two seaters (sports cars) are an exception because of their light weight",
+    caption = "Data from fueleconomy.gov"
+  )
+```
+
+You can also use `labs()` to replace the axis and legend titles.
+It's usually a good idea to replace short variable names with more detailed descriptions, and to include the units.
+
+```{r}
+#| message: false
+#| fig-alt: >
+#|   Scatterplot of highway fuel efficiency versus engine size of cars, where 
+#|   points are colored according to the car class. A smooth curve following 
+#|   the trajectory of the relationship between highway fuel efficiency versus 
+#|   engine size of cars is overlaid. The x-axis is labelled "Engine 
+#|   displacement (L)" and the y-axis is labelled "Highway fuel economy (mpg)". 
+#|   The legend is labelled "Car type".
+
+ggplot(mpg, aes(displ, hwy)) +
+  geom_point(aes(color = class)) +
+  geom_smooth(se = FALSE) +
+  labs(
+    x = "Engine displacement (L)",
+    y = "Highway fuel economy (mpg)",
+    color = "Car type"
+  )
+```
+
+It's possible to use mathematical equations instead of text strings.
+Just switch `""` out for `quote()` and read about the available options in `?plotmath`:
+
+```{r}
+#| fig-asp: 1
+#| out-width: "50%"
+#| fig-width: 3
+#| fig-alt: >
+#|   Scatterplot with math text on the x and y axis labels. X-axis label 
+#|   says sum of x_i  squared, for i from 1 to n. Y-axis label says alpha + 
+#|   beta + delta over theta.
+
+df <- tibble(
+  x = 1:10,
+  y = x ^ 2
+)
+
+ggplot(df, aes(x, y)) +
+  geom_point() +
+  labs(
+    x = quote(sum(x[i] ^ 2, i == 1, n)),
+    y = quote(alpha + beta + frac(delta, theta))
+  )
+```
+
+### Exercises
+
+1.  Create one plot on the fuel economy data with customized `title`, `subtitle`, `caption`, `x`, `y`, and `color` labels.
+
+2.  Recreate the following plot using the fuel economy data.
+    Note that both the colors and shapes of points vary by type of drive train.
+
+    ```{r}
+    #| echo: false
+    #| fig-alt: >
+    #|   Scatterplot of highway versus city fuel efficiency. Shapes and 
+    #|   colors of points are determined by type of drive train.
+
+    ggplot(mpg, aes(x = cty, y = hwy, color = drv, shape = drv)) +
+      geom_point() +
+      labs(
+        x = "City MPG",
+        y = "Highway MPG",
+        shape = "Type of\ndrive train",
+        color = "Type of\ndrive train"
+      )
+    ```
+
+3.  Take an exploratory graphic that you've created in the last month, and add informative titles to make it easier for others to understand.
+
 ## Annotations
 
 In addition to labelling major components of your plot, it's often useful to label individual observations or groups of observations.
@@ -34,104 +172,47 @@ This makes it possible to add textual labels to your plots.
 
 There are two possible sources of labels.
 First, you might have a tibble that provides labels.
-The plot below isn't terribly useful, but it illustrates a useful approach: pull out the most efficient car in each class with dplyr, and then label it on the plot:
-
-```{r}
-best_in_class <- mpg |>
-  group_by(class) |>
-  filter(row_number(desc(hwy)) == 1)
-
-ggplot(mpg, aes(displ, hwy)) +
-  geom_point(aes(colour = class)) +
-  geom_text(aes(label = model), data = best_in_class)
-```
-
-This is hard to read because the labels overlap with each other, and with the points.
-We can make things a little better by switching to `geom_label()` which draws a rectangle behind the text.
-We also use the `nudge_y` parameter to move the labels slightly above the corresponding points:
-
-```{r}
-ggplot(mpg, aes(displ, hwy)) +
-  geom_point(aes(colour = class)) +
-  geom_label(aes(label = model), data = best_in_class, nudge_y = 2, alpha = 0.5)
-```
-
-That helps a bit, but if you look closely in the top-left hand corner, you'll notice that there are two labels practically on top of each other.
-This happens because the highway mileage and displacement for the best cars in the compact and subcompact categories are exactly the same.
-There's no way that we can fix these by applying the same transformation for every label.
-Instead, we can use the **ggrepel** package by Kamil Slowikowski.
-This useful package will automatically adjust labels so that they don't overlap:
-
-```{r}
-ggplot(mpg, aes(displ, hwy)) +
-  geom_point(aes(colour = class)) +
-  geom_point(size = 3, shape = 1, data = best_in_class) +
-  ggrepel::geom_label_repel(aes(label = model), data = best_in_class)
-```
-
-Note another handy technique used here: we added a second layer of large, hollow points to highlight the labelled points.
-
-You can sometimes use the same idea to replace the legend with labels placed directly on the plot.
-It's not wonderful for this plot, but it isn't too bad.
-(`theme(legend.position = "none"`) turns the legend off --- we'll talk about it more shortly.)
-
-```{r}
-class_avg <- mpg |>
-  group_by(class) |>
-  summarise(
-    displ = median(displ),
-    hwy = median(hwy)
-  )
-
-ggplot(mpg, aes(displ, hwy, colour = class)) +
-  ggrepel::geom_label_repel(aes(label = class),
-    data = class_avg,
-    size = 6,
-    label.size = 0,
-    segment.color = NA
-  ) +
-  geom_point() +
-  theme(legend.position = "none")
-```
-
-Alternatively, you might just want to add a single label to the plot, but you'll still need to create a data frame.
-Often, you want the label in the corner of the plot, so it's convenient to create a new data frame using `summarize()` to compute the maximum values of x and y.
+In the following plot we pull out the cars with the highest engine size in each drive type and save their information as a new data frame called `label_info`.
+In order to create the `label_info` data frame we used a number of new dplyr functions.
+You'll learn more about each of these soon!
 
 ```{r}
 label_info <- mpg |>
-  summarise(
-    displ = max(displ),
-    hwy = max(hwy),
-    label = "Increasing engine size is \nrelated to decreasing fuel economy."
-  )
+  group_by(drv) |>
+  arrange(desc(displ)) |>
+  slice_head(n = 1) |>
+  mutate(
+    drive_type = case_when(
+      drv == "f" ~ "front-wheel drive",
+      drv == "r" ~ "rear-wheel drive",
+      drv == "4" ~ "4-wheel drive"
+    )
+  ) |>
+  select(displ, hwy, drv, drive_type)
 
-ggplot(mpg, aes(displ, hwy)) +
-  geom_point() +
-  geom_text(data = label_info, aes(label = label), vjust = "top", hjust = "right")
+label_info
 ```
 
-If you want to place the text exactly on the borders of the plot, you can use `+Inf` and `-Inf`.
-Since we're no longer computing the positions from `mpg`, we can use `tibble()` to create the data frame:
+Then, we use this new data frame to directly label the three groups to replace the legend with labels placed directly on the plot.
+Using the `fontface` and `size` arguments we can customize the look of the text labels.
+They're larger than the rest of the text on the plot and bolded.
+(`theme(legend.position = "none"`) turns the legend off --- we'll talk about it more shortly.)
 
 ```{r}
-label_info <- tibble(
-  displ = Inf,
-  hwy = Inf,
-  label = "Increasing engine size is \nrelated to decreasing fuel economy."
-)
+#| fig-alt: >
+#|   Scatterplot of highway mileage versus engine size where points are colored 
+#|   by drive drive type. Smooth curves for each drive type are overlaid. 
+#|   Text labels identify the curves as front-wheel, rear-wheel, and 4-wheel.
 
-ggplot(mpg, aes(displ, hwy)) +
-  geom_point() +
-  geom_text(data = label_info, aes(label = label), vjust = "top", hjust = "right")
-```
-
-In these examples, we manually broke the label up into lines using `"\n"`.
-Another approach is to use `stringr::str_wrap()` to automatically add line breaks, given the number of characters you want per line:
-
-```{r}
-"Increasing engine size is related to decreasing fuel economy." |>
-  str_wrap(width = 40) |>
-  writeLines()
+ggplot(mpg, aes(x = displ, y = hwy, color = drv)) +
+  geom_point(alpha = 0.3) +
+  geom_smooth(se = FALSE) +
+  geom_text(
+    data = label_info, 
+    aes(x = displ, y = hwy, label = drive_type),
+    fontface = "bold", size = 5, hjust = "right", vjust = "bottom"
+  ) +
+  theme(legend.position = "none")
 ```
 
 Note the use of `hjust` and `vjust` to control the alignment of the label.
@@ -157,17 +238,146 @@ df <- crossing(hj = names(hjust), vj = names(vjust)) |>
   )
 
 ggplot(df, aes(x, y)) +
-  geom_point(colour = "grey70", size = 5) +
-  geom_point(size = 0.5, colour = "red") +
+  geom_point(color = "grey70", size = 5) +
+  geom_point(size = 0.5, color = "red") +
   geom_text(aes(label = label, hjust = hj, vjust = vj), size = 4) +
   labs(x = NULL, y = NULL)
 ```
 
+However the annotated plot we made above is hard to read because the labels overlap with each other, and with the points.
+We can make things a little better by switching to `geom_label()` which draws a rectangle behind the text.
+We also use the `nudge_y` parameter to move the labels slightly above the corresponding points:
+
+```{r}
+#| fig-alt: >
+#|   Scatterplot of highway fuel efficiency versus engine size of cars, where 
+#|   points are colored according to the car class. Some points are labelled 
+#|   with the car's name. The labels have a rectangle around them with a white, 
+#|   transparent background.
+
+ggplot(mpg, aes(x = displ, y = hwy, color = drv)) +
+  geom_point(alpha = 0.3) +
+  geom_smooth(se = FALSE) +
+  geom_label(
+    data = label_info, 
+    aes(x = displ, y = hwy, label = drive_type),
+    fontface = "bold", size = 5, hjust = "right", alpha = 0.5, nudge_y = 2,
+  ) +
+  theme(legend.position = "none")
+```
+
+That helps a bit, but two of the labels still overlap with each other.
+This is difficult to fix by applying the same transformation for every label.
+Instead, we can use the **ggrepel** package by Kamil Slowikowski.
+This useful package will automatically adjust labels so that they don't overlap:
+
+```{r}
+ggplot(mpg, aes(x = displ, y = hwy, color = drv)) +
+  geom_point(alpha = 0.3) +
+  geom_smooth(se = FALSE) +
+  ggrepel::geom_label_repel(
+    data = label_info, 
+    aes(x = displ, y = hwy, label = drive_type),
+    fontface = "bold", size = 5, nudge_y = 2,
+  ) +
+  theme(legend.position = "none")
+```
+
+You can also use the same idea highlight certain points on a plot.
+Note another handy technique used here: we added a second layer of large, hollow points to further highlight the labelled points.
+
+```{r}
+potential_outliers <- mpg |>
+  filter(hwy > 40 | (hwy > 20 & displ > 5))
+  
+ggplot(mpg, aes(x = displ, y = hwy)) +
+  geom_point() +
+  ggrepel::geom_text_repel(data = potential_outliers, aes(label = model)) +
+  geom_point(data = potential_outliers, color = "red") +
+  geom_point(data = potential_outliers, color = "red", size = 3, shape = "circle open")
+```
+
+Alternatively, you might just want to add a single label to the plot, but you'll still need to create a data frame.
+Often, you want the label in the corner of the plot, so it's convenient to create a new data frame using `summarize()` to compute the maximum values of x and y.
+
+```{r}
+label_info <- mpg |>
+  summarise(
+    displ = max(displ),
+    hwy = max(hwy),
+    label = "Increasing engine size is \nrelated to decreasing fuel economy."
+  )
+
+ggplot(mpg, aes(displ, hwy)) +
+  geom_point() +
+  geom_text(
+    data = label_info, aes(label = label), 
+    vjust = "top", hjust = "right"
+  )
+```
+
+If you want to place the text exactly on the borders of the plot, you can use `+Inf` and `-Inf`.
+Since we're no longer computing the positions from `mpg`, we can use `tibble()` to create the data frame:
+
+```{r}
+label_info <- tibble(
+  displ = Inf,
+  hwy = Inf,
+  label = "Increasing engine size is \nrelated to decreasing fuel economy."
+)
+
+ggplot(mpg, aes(displ, hwy)) +
+  geom_point() +
+  geom_text(data = label_info, aes(label = label), vjust = "top", hjust = "right")
+```
+
+Alternatively, we can add the annotation without creating a new data frame, using `annotate()`.
+This function adds a geom to a plot, but it doesn't map variables of a data frame to an aesthetic.
+The first argument of this function, `geom`, is the geometric object you want to use for annotation.
+
+```{r}
+ggplot(mpg, aes(x = displ, y = hwy)) +
+  geom_point() +
+  annotate(
+    geom = "text", x = Inf, y = Inf,
+    label = "Increasing engine size is \nrelated to decreasing fuel economy.",
+    vjust = "top", hjust = "right"
+  )
+```
+
+You can also use a label geom instead of a text geom like we did earlier, set aesthetics like color.
+Another approach for drawing attention to a plot feature is using a segment geom with the `arrow` argument.
+The `x` and `y` aesthetics define the starting location of the segment and `xend` and `yend` to define the end location.
+
+```{r}
+ggplot(mpg, aes(x = displ, y = hwy)) +
+  geom_point() +
+  annotate(
+    geom = "label", x = 3.5, y = 38,
+    label = "Increasing engine size is \nrelated to decreasing fuel economy.",
+    hjust = "left", color = "red"
+  ) +
+  annotate(
+    geom = "segment",
+    x = 3, y = 35, xend = 5, yend = 25, color = "red",
+    arrow = arrow(type = "closed")
+  )
+```
+
+In these examples, we manually broke the label up into lines using `"\n"`.
+Another approach is to use `stringr::str_wrap()` to automatically add line breaks, given the number of characters you want per line:
+
+```{r}
+"Increasing engine size is related to decreasing fuel economy." |>
+  str_wrap(width = 40) |>
+  writeLines()
+```
+
 Remember, in addition to `geom_text()`, you have many other geoms in ggplot2 available to help annotate your plot.
-A few ideas:
+A couple ideas:
 
 -   Use `geom_hline()` and `geom_vline()` to add reference lines.
-    We often make them thick (`size = 2`) and white (`colour = white`), and draw them underneath the primary data layer.
+    We often make them thick (`size = 2`) and white (`color = white`), and draw them underneath the primary data layer.
     That makes them easy to see, without drawing attention away from the data.
 
 -   Use `geom_rect()` to draw a rectangle around points of interest.
@@ -182,8 +392,8 @@ The only limit is your imagination (and your patience with positioning annotatio
 
 1.  Use `geom_text()` with infinite positions to place text at the four corners of the plot.
 
-2.  Read the documentation for `annotate()`.
-    How can you use it to add a text label to a plot without having to create a tibble?
+2.  Use `annotate()` to add a point geom in the middle of your last plot without having to create a tibble.
+    Customize the shape, size, or color of the point.
 
 3.  How do labels with `geom_text()` interact with faceting?
     How can you add a label to a single facet?
@@ -228,7 +438,7 @@ mpg |>
 You can also set the `limits` on individual scales.
 Reducing the limits is basically equivalent to subsetting the data.
 It is generally more useful if you want *expand* the limits, for example, to match scales across different plots.
-For example, if we extract two classes of cars and plot them separately, it's difficult to compare the plots because all three scales (the x-axis, the y-axis, and the colour aesthetic) have different ranges.
+For example, if we extract two classes of cars and plot them separately, it's difficult to compare the plots because all three scales (the x-axis, the y-axis, and the color aesthetic) have different ranges.
 
 ```{r}
 #| layout-ncol: 2
@@ -238,10 +448,10 @@ For example, if we extract two classes of cars and plot them separately, it's di
 suv <- mpg |> filter(class == "suv")
 compact <- mpg |> filter(class == "compact")
 
-ggplot(suv, aes(displ, hwy, colour = drv)) +
+ggplot(suv, aes(displ, hwy, color = drv)) +
   geom_point()
 
-ggplot(compact, aes(displ, hwy, colour = drv)) +
+ggplot(compact, aes(displ, hwy, color = drv)) +
   geom_point()
 ```
 
@@ -254,15 +464,15 @@ One way to overcome this problem is to share scales across multiple plots, train
 
 x_scale <- scale_x_continuous(limits = range(mpg$displ))
 y_scale <- scale_y_continuous(limits = range(mpg$hwy))
-col_scale <- scale_colour_discrete(limits = unique(mpg$drv))
+col_scale <- scale_color_discrete(limits = unique(mpg$drv))
 
-ggplot(suv, aes(displ, hwy, colour = drv)) +
+ggplot(suv, aes(displ, hwy, color = drv)) +
   geom_point() +
   x_scale +
   y_scale +
   col_scale
 
-ggplot(compact, aes(displ, hwy, colour = drv)) +
+ggplot(compact, aes(displ, hwy, color = drv)) +
   geom_point() +
   x_scale +
   y_scale +
@@ -313,10 +523,10 @@ knitr::include_graphics("images/visualization-themes.png")
 Many people wonder why the default theme has a gray background.
 This was a deliberate choice because it puts the data forward while still making the grid lines visible.
 The white grid lines are visible (which is important because they significantly aid position judgments), but they have little visual impact and we can easily tune them out.
-The grey background gives the plot a similar typographic colour to the text, ensuring that the graphics fit in with the flow of a document without jumping out with a bright white background.
-Finally, the grey background creates a continuous field of colour which ensures that the plot is perceived as a single visual entity.
+The grey background gives the plot a similar typographic color to the text, ensuring that the graphics fit in with the flow of a document without jumping out with a bright white background.
+Finally, the grey background creates a continuous field of color which ensures that the plot is perceived as a single visual entity.
 
-It's also possible to control individual components of each theme, like the size and colour of the font used for the y axis.
+It's also possible to control individual components of each theme, like the size and color of the font used for the y axis.
 Unfortunately, this level of detail is outside the scope of this book, so you'll need to read the [ggplot2 book](https://ggplot2-book.org/) for the full details.
 You can also create your own themes, if you are trying to match a particular corporate or journal style.
 
