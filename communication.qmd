@@ -28,15 +28,15 @@ It doesn't teach the mechanics of creating visualizations, but instead focuses o
 ### Prerequisites
 
 In this chapter, we'll focus once again on ggplot2.
-We'll also use a little dplyr for data manipulation, **scales** to override the default breaks, labels, transformations and palettes, and a few ggplot2 extension packages, including **ggrepel** ([https://ggrepel.slowkow.com](https://ggrepel.slowkow.com/)) and **patchwork** ([https://patchwork.data-imaginist.com](https://patchwork.data-imaginist.com/)).
-Rather than loading those extensions here, we'll refer to their functions explicitly, using the `::` notation.
-This will help make it clear which functions are built into ggplot2, and which come from other packages.
+We'll also use a little dplyr for data manipulation, **scales** to override the default breaks, labels, transformations and palettes, and a few ggplot2 extension packages, including **ggrepel** ([https://ggrepel.slowkow.com](https://ggrepel.slowkow.com/)) by Kamil Slowikowski and **patchwork** ([https://patchwork.data-imaginist.com](https://patchwork.data-imaginist.com/)) by Thomas Lin Pedersen.
 Don't forget you'll need to install those packages with `install.packages()` if you don't already have them.
 
 ```{r}
 #| label: setup
 
 library(tidyverse)
+library(ggrepel)
+library(patchwork)
 ```
 
 ## Labels
@@ -275,7 +275,7 @@ ggplot(mpg, aes(x = displ, y = hwy, color = drv)) +
 
 That helps a bit, but two of the labels still overlap with each other.
 This is difficult to fix by applying the same transformation for every label.
-Instead, we can use the **ggrepel** package by Kamil Slowikowski.
+Instead, we can use the `geom_label_repel()` function from the ggrepel package.
 This useful package will automatically adjust labels so that they don't overlap:
 
 ```{r}
@@ -288,7 +288,7 @@ This useful package will automatically adjust labels so that they don't overlap:
 ggplot(mpg, aes(x = displ, y = hwy, color = drv)) +
   geom_point(alpha = 0.3) +
   geom_smooth(se = FALSE) +
-  ggrepel::geom_label_repel(
+  geom_label_repel(
     data = label_info, 
     aes(x = displ, y = hwy, label = drive_type),
     fontface = "bold", size = 5, nudge_y = 2,
@@ -296,7 +296,7 @@ ggplot(mpg, aes(x = displ, y = hwy, color = drv)) +
   theme(legend.position = "none")
 ```
 
-You can also use the same idea highlight certain points on a plot.
+You can also use the same idea to highlight certain points on a plot with `geom_text_repel()` from the ggrepel package.
 Note another handy technique used here: we added a second layer of large, hollow points to further highlight the labelled points.
 
 ```{r}
@@ -311,7 +311,7 @@ potential_outliers <- mpg |>
   
 ggplot(mpg, aes(x = displ, y = hwy)) +
   geom_point() +
-  ggrepel::geom_text_repel(data = potential_outliers, aes(label = model)) +
+  geom_text_repel(data = potential_outliers, aes(label = model)) +
   geom_point(data = potential_outliers, color = "red") +
   geom_point(data = potential_outliers, color = "red", size = 3, shape = "circle open")
 ```
@@ -1003,11 +1003,146 @@ The [ggplot2 book](https://ggplot2-book.org/) is also a great place to go for th
 
 ## Layout
 
-<!-- TO DO: Add patchwork things -->
+So far we talked about how to create and modify a single plot.
+What if you have multiple plots you want to lay out in a certain way?
+The patchwork package allows you to combine separate plots into the same graphic.
+We loaded this package earlier in the chapter.
+
+To place two plots next to each other, you can simply add them to each other.
+Note that you first need to create the plots and save them as objects (in the following example they're called `p1` and `p2`).
+Then, you place them next to each other with `+`.
+
+```{r}
+#| fig-alt: >
+#|   Two plots (a scatterplot of highway mileage versus engine size and a 
+#|   side-by-side boxplots of highway mileage versus drive train) placed next 
+#|   to each other.
+
+p1 <- ggplot(mpg, aes(x = displ, y = hwy)) + 
+  geom_point() + 
+  labs(title = "Plot 1")
+p2 <- ggplot(mpg, aes(x = drv, y = hwy)) + 
+  geom_boxplot() + 
+  labs(title = "Plot 2")
+p1 + p2
+```
+
+It's important to note that in the above code chunk we did not use a new function from the patchwork package.
+Instead, the package added a new functionality to the `+` operator.
+
+You can also create arbitrary plot layouts with patchwork.
+In the following, `|` places the `p1` and `p3` next to each other and `/` moves `p2` to the next line.
+
+```{r}
+#| fig-alt: >
+#|   Three plots laid out such that first and third plot are next to each other 
+#|   and the second plot streatched beneath them. The first plot is a 
+#|   scatterplot of highway mileage versus engine size, third plot is a 
+#|   scatterplot of highway mileage versus city mileage, and the third plot is 
+#|   side-by-side boxplots of highway mileage versus drive train) placed next 
+#|   to each other.
+
+p3 <- ggplot(mpg, aes(x = cty, y = hwy)) + 
+  geom_point() + 
+  labs(title = "Plot 3")
+(p1 | p3) / p2
+```
+
+Additionally, patchwork allows you to collect legends from multiple plots into one common legend, customize the placement of the legend as well as dimensions of the plots, and add a common title, subtitle, caption, etc. to your plots.
+In the following, we have 5 plots.
+We have turned off the legends on the box plots and the scatterplot and collected the legends for the density plots at the top of the plot with `& theme(legend.position = "top")`.
+Note the use of the `&` operator here instead of the usual `+`.
+This is because we're modifying the theme for the patchwork plot as opposed to the individual ggplots.
+The legend is placed on top, inside the `guide_area()`.
+Finally, we have also customized the heights of the various components of our patchwork -- the guide has a height of 1, the box plots 3, density plots 2, and the faceted scatter plot 4.
+Patchwork divides up the area you have allotted for your plot using this scale and places the components accordingly.
+
+```{r}
+#| fig-alt: >
+#|   Five plots laid out such that first two plots are next to each other. Plots 
+#|   three and four are underneath them. And the fifth plot stretches under them. 
+#|   The patchworked plot is titled "City and highway mileage for cars with 
+#|   different drive trains" and captioned "Source: Source: https://fueleconomy.gov". 
+#|   The first two plots are side-by-side box plots. Plots 3 and 4 are density 
+#|   plots. And the fifth plot is a faceted scatterplot. Each of these plots show 
+#|   geoms colored by drive train, but the patchworked plot has only one legend 
+#|   that applies to all of them, above the plots and beneath the title.
+
+p1 <- ggplot(mpg, aes(x = drv, y = cty, color = drv)) + 
+  geom_boxplot(show.legend = FALSE) + 
+  labs(title = "Plot 1")
+
+p2 <- ggplot(mpg, aes(x = drv, y = hwy, color = drv)) + 
+  geom_boxplot(show.legend = FALSE) + 
+  labs(title = "Plot 2")
+
+p3 <- ggplot(mpg, aes(x = cty, color = drv, fill = drv)) + 
+  geom_density(alpha = 0.5) + 
+  labs(title = "Plot 3")
+
+p4 <- ggplot(mpg, aes(x = hwy, color = drv, fill = drv)) + 
+  geom_density(alpha = 0.5) + 
+  labs(title = "Plot 4")
+
+p5 <- ggplot(mpg, aes(x = cty, y = hwy, color = drv)) + 
+  geom_point(show.legend = FALSE) + 
+  facet_wrap(~drv) +
+  labs(title = "Plot 5")
+
+(guide_area() / (p1 + p2) / (p3 + p4) / p5) +
+  plot_annotation(
+    title = "City and highway mileage for cars with different drive trains",
+    caption = "Source: Source: https://fueleconomy.gov."
+  ) +
+  plot_layout(
+    guides = "collect",
+    heights = c(1, 3, 2, 4)
+    ) &
+  theme(legend.position = "bottom")
+```
+
+If you'd like to learn more about combining and layout out multiple plots with patchwork, we recommend looking through the guides on the package website: <https://patchwork.data-imaginist.com>.
 
 ### Exercises
 
-<!-- TO DO: Add exercises -->
+1.  What happens if you omit the parentheses in the following plot layout.
+    Can you explain why this happens?
+
+    ```{r}
+    #| results: hide
+
+    p1 <- ggplot(mpg, aes(x = displ, y = hwy)) + 
+      geom_point() + 
+      labs(title = "Plot 1")
+    p2 <- ggplot(mpg, aes(x = drv, y = hwy)) + 
+      geom_boxplot() + 
+      labs(title = "Plot 2")
+    p3 <- ggplot(mpg, aes(x = cty, y = hwy)) + 
+      geom_point() + 
+      labs(title = "Plot 3")
+
+    (p1 | p2) / p3
+    ```
+
+2.  Using the three plots from the previous exercise, recreate the following patchwork.
+
+    ```{r}
+    #| echo: false
+    #| fig-alt: >
+    #|   Three plots: Plot 1 is a scatterplot of highway mileage versus engine size. 
+    #|   Plot 2 is side-by-side box plots of highway mileage versus drive train. 
+    #|   Plot 3 is side-by-side box plots of city mileage versus drive train. 
+    #|   Plots 1 is on the first row. Plots 2 and 3 are on the next row, each span 
+    #|   half the width of Plot 1. Plot 1 is labelled "Fig. A", Plot 2 is labelled 
+    #|   "Fig. B", and Plot 3 is labelled "Fig. C".
+
+    p1 / (p2 + p3) +
+      plot_annotation(
+        tag_levels = c("A"), 
+        tag_prefix = "Fig. ",
+        tag_suffix = ":"
+      )
+    ```
 
 ## Summary
 
