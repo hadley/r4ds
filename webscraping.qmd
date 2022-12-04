@@ -4,7 +4,7 @@
 #| results: "asis"
 #| echo: false
 source("_common.R")
-status("drafting")
+status("polishing")
 ```
 
 This vignette introduces you to the basics of web scraping with [rvest](https://rvest.tidyverse.org).
@@ -380,42 +380,108 @@ There's some risk that these examples may no longer work when you run them --- t
 
 ### Starwars
 
+rvest includes a very simple example in `vignette("starwars")`.
+This is simple page with minimal HTML so it's a good place to start.
+I'd encourage you to navigate to that page now and use "Inspect Element" to inspect one of the headings that's the title of a Star Wars movie.
+Use the keyboard or mouse to explore the hierarchy of the HTML and see if you can get a sense of the shared structure used by each movie.
+
+You should be able to see that each movie has a shared structure that looks like this:
+
+``` html
+<section>
+  <h2 data-id="1">The Phantom Menace</h2>
+  <p>Released: 1999-05-19</p>
+  <p>Director: <span class="director">George Lucas</span></p>
+  
+  <div class="crawl">
+    <p>...</p>
+    <p>...</p>
+    <p>...</p>
+  </div>
+</section>
+```
+
+Our goal is to turn this data into a 7 row data frame with variables `title`, `year`, `director`, and `intro`.
+We'll start by reading the HTML and extracting all the `<section>` elements:
+
 ```{r}
 url <- "https://rvest.tidyverse.org/articles/starwars.html"
 html <- read_html(url)
 
 section <- html |> html_elements("section")
+section
+```
 
+The retrieves seven nodes matching the seven movies found on that page, suggesting that using `section` as a selector is good.
+Extracting the individual elements is straightforward since the data is always found in the text.
+It's just a matter of finding the right selector:
+
+```{r}
+section |> html_element("h2") |> html_text2()
+
+section |> html_element(".director") |> html_text2()
+```
+
+Once we've done that for each component, we can wrap all the results up into a tibble:
+
+```{r}
 tibble(
   title = section |> html_element("h2") |> html_text2(),
-  released = section |> html_element("p") |> html_text2() |> str_remove("Released: ") |> parse_date(),
+  released = section |> 
+    html_element("p") |> 
+    html_text2() |> 
+    str_remove("Released: ") |> 
+    parse_date(),
+  director = section |> html_element(".director") |> html_text2(),
   intro = section |> html_element(".crawl") |> html_text2()
 )
 ```
 
+We did a little more processing of `released` to get a variable that will be easy to use later in our analysis.
+
 ### IMDB top films
 
-Add screenshot.
+For our next task we'll tackle something a little trickier, extracting the top 250 movies from the internet movie database (IMDb).
+At the time we wrote this chapter, the page looked like @fig-scraping-imdb.
+
+```{r}
+#| label: fig-scraping-imdb
+#| fig-cap: > 
+#|   Screenshot of the IMDb top movies web page taken on 2022-12-05.
+#| fig-alt: >
+#|   The screenshot shows a table with columns "Rank and Title",
+#|   "IMDb Rating", and "Your Rating". 9 movies out of the top 250
+#|   are shown. The top 5 are the Shawshank Redemption, The Godfather,
+#|   The Dark Knight, The Godfather: Part II, and 12 Angry Men.
+#|    
+knitr::include_graphics("screenshots/scraping-imdb.png", dpi = 300)
+```
+
+This data has a clear tabular structure so it's worth starting with `html_table()`:
 
 ```{r}
 url <- "https://www.imdb.com/chart/top"
 html <- read_html(url)
-```
 
-```{r}
 table <- html |> 
   html_element("table") |> 
   html_table()
 table
 ```
 
+This includes a few empty columns, but overall does a good job of capturing the information from the table, but we need to do some more processing to make it easier to use.
+First we'll rename the columns to be easier work with, and remove the extraneous whitespace in the rank and title.
+Then we can apply `separate_wider_regex()` (from @sec-extract-variables) to pull out the title, year, and rank into their own variables.
+
 ```{r}
-table |> 
+ratings <- table |> 
   select(
     rank_title_year = `Rank & Title`,
     rating = `IMDb Rating`
   ) |> 
-  mutate(rank_title_year = str_squish(rank_title_year)) |> 
+  mutate(
+    rank_title_year = str_squish(rank_title_year)
+  ) |> 
   separate_wider_regex(
     rank_title_year,
     patterns = c(
@@ -424,9 +490,11 @@ table |>
       year = "\\d+", "\\)"
     )
   )
+ratings
 ```
 
-In this case, we can add a little extra data by using one of the attributes.
+Even in this case where most of the data comes from table cells, it's still worth look at the raw HTML.
+If you do some, you'll discover that we can add a little extra data by using one of the attributes.
 This is one of the reasons it's worth spending a little time spelunking the source of the page; you might find extra data, or might find a parsing route that's slightly easier.
 
 ```{r}
@@ -436,22 +504,22 @@ html |>
   html_attr("title")
 ```
 
+We can combine this with the tabular data and again apply `separate_wider_regex()` to extract out the bit of data we care about:
+
 ```{r}
-df <- tibble(
-  rating_n = html |> html_elements("td strong") |> html_attr("title")
-)
-df |> 
+ratings |>
+  mutate(
+    rating_n = html |> html_elements("td strong") |> html_attr("title")
+  ) |> 
   separate_wider_regex(
     rating_n,
     patterns = c(
-      rating = "[0-9.]+", 
-      " based on ",
+      "[0-9.]+ based on ",
       number = "[0-9,]+",
       " user ratings"
     )
   ) |> 
   mutate(
-    rating = parse_double(rating),
     number = parse_number(number)
   )
 ```
