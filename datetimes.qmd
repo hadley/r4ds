@@ -46,7 +46,7 @@ library(lubridate)
 library(nycflights13)
 ```
 
-## Creating date/times
+## Creating date/times {#sec-creating-datetimes}
 
 There are three types of date/time data that refer to an instant in time:
 
@@ -74,20 +74,84 @@ today()
 now()
 ```
 
-Otherwise, there are three ways you're likely to create a date/time:
+Otherwise, the following sections describe the four ways you're likely to create a date/time:
 
+-   While reading a file with readr.
 -   From a string.
 -   From individual date-time components.
 -   From an existing date/time object.
 
-They work as follows.
+### During import
+
+If your CSV contains an ISO8601 date or date-time, you don't need to do anything; readr will automatically recognize it:
+
+```{r}
+#| message: false
+csv <- "
+  date,datetime
+  2022-01-02,2022-01-02 05:12
+"
+read_csv(csv)
+```
+
+If you haven't heard of **ISO8601** before, it's an international standard[^datetimes-2] for writing dates where the components of a date are organised from biggest to smallest separated by `-`. For example, in ISO8601 March 5 2022 is `2022-05-03`. ISO8601 dates can also include times, where hour, minute, and second are separated by `:`, and the date and time components are separated by either a `T` or a space.
+For example, you could write 4:26pm on March 5 2022 as either `2022-05-03 16:26` or `2022-05-03T16:26`.
+
+[^datetimes-2]: <https://xkcd.com/1179/>
+
+For other date-time formats, you'll need to use `col_types` plus `col_date()` or `col_datetime()` along with a date-time format.
+The date-time format used by readr is a standard used across many programming languages, describing a date component with a `%` followed by a single character.
+For example, `%Y-%m-%d` specifies a date that's a year, `-`, month (as number) `-`, day.
+Table @tbl-date-formats lists all the options.
+
+| Type  | Code  | Meaning                        | Example         |
+|-------|-------|--------------------------------|-----------------|
+| Year  | `%Y`  | 4 digit year                   | 2021            |
+|       | `%y`  | 2 digit year                   | 21              |
+| Month | `%m`  | Number                         | 2               |
+|       | `%b`  | Abbreviated name               | Feb             |
+|       | `%B`  | Full name                      | Februrary       |
+| Day   | `%d`  | Two digits                     | 02              |
+|       | `%e`  | One or two digits              | 2               |
+| Time  | `%H`  | 24-hour hour                   | 13              |
+|       | `%I`  | 12-hour hour                   | 1               |
+|       | `%p`  | AM/PM                          | pm              |
+|       | `%M`  | Minutes                        | 35              |
+|       | `%S`  | Seconds                        | 45              |
+|       | `%OS` | Seconds with decimal component | 45.35           |
+|       | `%Z`  | Time zone name                 | America/Chicago |
+|       | `%z`  | Offset from UTC                | +0800           |
+| Other | `%.`  | Skip one non-digit             | :               |
+|       | `%*`  | Skip any number of non-digits  |                 |
+
+: All date formats understood by readr {#tbl-date-formats}
+
+And this code shows some a few options applied to a very ambiguous date:
+
+```{r}
+#| messages: false
+
+csv <- "
+  date
+  01/02/15
+"
+
+read_csv(csv, col_types = cols(date = col_date("%m/%d/%y")))
+
+read_csv(csv, col_types = cols(date = col_date("%d/%m/%y")))
+
+read_csv(csv, col_types = cols(date = col_date("%y/%m/%d")))
+```
+
+Note that no matter how you specify the date format, it's always displayed the same way once you get it into R.
+
+If you're using `%b` or `%B` and working with non-English dates, you'll also need to provide a `locale()`.
+See the list of built-in languages in `date_names_langs()`, or create your own with `date_names()`,
 
 ### From strings
 
-Date/time data often comes as strings.
-You've seen one approach to parsing strings into date-times in [date-times](#readr-datetimes).
-Another approach is to use the helpers provided by lubridate.
-They automatically work out the format once you specify the order of the component.
+The date-time specification language is powerful, but requires careful analysis of the date format.
+An alternative approach is to use lubridate's helpers which attempt to automatically determine the format once you specify the order of the component.
 To use them, identify the order in which year, month, and day appear in your dates, then arrange "y", "m", and "d" in the same order.
 That gives you the name of the lubridate function that will parse your date.
 For example:
@@ -217,7 +281,7 @@ as_date(365 * 10 + 2)
 2.  What does the `tzone` argument to `today()` do?
     Why is it important?
 
-3.  Use the appropriate lubridate function to parse each of the following dates:
+3.  For each of the following date-times show how you'd parse it using a readr column-specification and a lubridate function.
 
     ```{r}
     d1 <- "January 1, 2010"
@@ -225,6 +289,8 @@ as_date(365 * 10 + 2)
     d3 <- "06-Jun-2017"
     d4 <- c("August 19 (2015)", "July 1 (2015)")
     d5 <- "12/30/14" # Dec 30, 2014
+    t1 <- "1705"
+    t2 <- "11:15:10.12 PM"
     ```
 
 ## Date-time components
@@ -268,7 +334,7 @@ We can use `wday()` to see that more flights depart during the week than on the 
 flights_dt |> 
   mutate(wday = wday(dep_time, label = TRUE)) |> 
   ggplot(aes(x = wday)) +
-    geom_bar()
+  geom_bar()
 ```
 
 There's an interesting pattern if we look at the average departure delay by minute within the hour.
@@ -285,11 +351,12 @@ It looks like flights leaving in minutes 20-30 and 50-60 have much lower delays 
 flights_dt |> 
   mutate(minute = minute(dep_time)) |> 
   group_by(minute) |> 
-  summarise(
+  summarize(
     avg_delay = mean(dep_delay, na.rm = TRUE),
-    n = n()) |> 
+    n = n()
+  ) |> 
   ggplot(aes(minute, avg_delay)) +
-    geom_line()
+  geom_line()
 ```
 
 Interestingly, if we look at the *scheduled* departure time we don't see such a strong pattern:
@@ -303,25 +370,32 @@ Interestingly, if we look at the *scheduled* departure time we don't see such a 
 sched_dep <- flights_dt |> 
   mutate(minute = minute(sched_dep_time)) |> 
   group_by(minute) |> 
-  summarise(
+  summarize(
     avg_delay = mean(arr_delay, na.rm = TRUE),
-    n = n())
+    n = n()
+  )
 
 ggplot(sched_dep, aes(minute, avg_delay)) +
   geom_line()
 ```
 
 So why do we see that pattern with the actual departure times?
-Well, like much data collected by humans, there's a strong bias towards flights leaving at "nice" departure times.
+Well, like much data collected by humans, there's a strong bias towards flights leaving at "nice" departure times, as @fig-human-rounding shows.
 Always be alert for this sort of pattern whenever you work with data that involves human judgement!
 
 ```{r}
+#| label: fig-human-rounding
+#| fig-cap: >
+#|   A frequency polygon showing the number of flights scheduled to 
+#|   depart each hour. You can see a strong preference for round numbers
+#|   like 0 and 30 and generally for numbers that are a multiple of five.
 #| fig-alt: >
 #|   A line plot with departure minute (0-60) on the x-axis and number of
 #|   flights (0-60000) on the y-axis. Most flights are scheduled to depart
 #|   on either the hour (~60,000) or the half hour (~35,000). Otherwise,
 #|   all most all flights are scheduled to depart on multiples of five, 
 #|   with a few extra at 15, 45, and 55 minutes.
+#| echo: false
 ggplot(sched_dep, aes(minute, n)) +
   geom_line()
 ```
@@ -355,7 +429,7 @@ You can use rounding to show the distribution of flights across the course of a 
 flights_dt |> 
   mutate(dep_hour = dep_time - floor_date(dep_time, "day")) |> 
   ggplot(aes(dep_hour)) +
-    geom_freqpoly(binwidth = 60 * 30)
+  geom_freqpoly(binwidth = 60 * 30)
 ```
 
 Computing the difference between a pair of date-times yields a difftime (more on that in @sec-intervals).
@@ -372,12 +446,13 @@ We can convert that to an `hms` object to get a more useful x-axis:
 flights_dt |> 
   mutate(dep_hour = hms::as_hms(dep_time - floor_date(dep_time, "day"))) |> 
   ggplot(aes(dep_hour)) +
-    geom_freqpoly(binwidth = 60 * 30)
+  geom_freqpoly(binwidth = 60 * 30)
 ```
 
 ### Modifying components
 
-You can also use each accessor function to modify the components of a date/time:
+You can also use each accessor function to modify the components of a date/time.
+This doesn't come up much in data analysis, but can be useful when cleaning data that has clearly incorrect dates.
 
 ```{r}
 (datetime <- ymd_hms("2026-07-08 12:34:56"))
@@ -390,7 +465,7 @@ hour(datetime) <- hour(datetime) + 1
 datetime
 ```
 
-Alternatively, rather than modifying an existing variabke, you can create a new date-time with `update()`.
+Alternatively, rather than modifying an existing variable, you can create a new date-time with `update()`.
 This also allows you to set multiple values in one step:
 
 ```{r}
@@ -424,7 +499,7 @@ update(ymd("2023-02-01"), hour = 400)
 
 6.  What makes the distribution of `diamonds$carat` and `flights$sched_dep_time` similar?
 
-7.  Confirm my hypothesis that the early departures of flights in minutes 20-30 and 50-60 are caused by scheduled flights that leave early.
+7.  Confirm our hypothesis that the early departures of flights in minutes 20-30 and 50-60 are caused by scheduled flights that leave early.
     Hint: create a binary variable that tells you whether or not a flight was delayed.
 
 ## Time spans
