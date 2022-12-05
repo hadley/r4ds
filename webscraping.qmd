@@ -9,7 +9,7 @@ status("polishing")
 
 This vignette introduces you to the basics of web scraping with [rvest](https://rvest.tidyverse.org).
 Web scraping is a very useful tool for extracting data from web pages.
-Fortunately many web pages are often generated with code, so there's often some underlying structure that you can use to extract data.
+Fortunately, many web pages are often generated with code, so there's often some underlying structure that you can use to extract data.
 
 In this chapter, you'll first learn the basics of HTML and how to use CSS selectors to refer to specific elements, then you'll learn how to use rvest functions to get data out of HTML and into R.
 We'll finish up with a couple of case studies, and then briefly discuss the challenge of dynamic websites.
@@ -30,6 +30,8 @@ library(rvest)
 
 ## Scraping legalities
 
+<!--# MCR: I suggest calling this section "Scraping ethics and legalities" -->
+
 Before we get started discussing the code you'll need to perform web scraping, we need to talk about whether or not legal for you to do so.
 Overall, the situation is complicated and it depends a lot on where you live.
 However, as general principle, if the data is public, non-personal, and factual, you're likely to be ok[^webscraping-1].
@@ -41,7 +43,7 @@ These three factors are important because they're connected to the site's terms 
 If the data isn't public, non-personal, or factual or you're scraping the data specifically to make money with it, you'll need to talk to a lawyer.
 In any case, you should be respectful of the resources of the server hosting the pages you are scraping.
 Most importantly, this means that if you're scraping many pages, you should make sure to wait a little between each request.
-One easy way to do so is to use the [polite](https://dmi3kno.github.io/polite/) package by Dmytro Perepolkin.
+One easy way to do so is to use the [**polite**](https://dmi3kno.github.io/polite/) package by Dmytro Perepolkin ([https://dmi3kno.github.io/polite](https://dmi3kno.github.io/polite/)).
 It will automatically pause between requests and cache the results so you never ask for the same page twice.
 
 ### Terms of service
@@ -53,7 +55,7 @@ It's polite to respect these terms of service where possible, but take any claim
 Additionally, US courts[^webscraping-2] have generally found that simply putting the terms of service in the footer of the website isn't sufficient for you be bound by them.
 Generally, to be bound to the terms of service, you must have taken some explicit action like creating an account or checking a box.
 This is why whether or not the data is **public** is important; if you don't need an account to access them, it is unlikely that you are bound to the terms of service.
-Note, however, the situation is rather different in Europe where counts have found that terms of service are enforceable even if you don't explicitly agree to them.
+Note, however, the situation is rather different in Europe where courts have found that terms of service are enforceable even if you don't explicitly agree to them.
 
 [^webscraping-2]: e.g. <https://en.wikipedia.org/wiki/HiQ_Labs_v._LinkedIn>
 
@@ -61,13 +63,16 @@ Note, however, the situation is rather different in Europe where counts have fou
 
 Even if the data is public, you should be extremely careful about scraping personally identifiable information like name, email address, phone numbers, date of birth etc.
 Europe has particularly strict laws about the collection of storage of such data (GDPR), and regardless of where you live you're likely to be entering an ethical quagmire.
-For example, in 2016, a researcher scraped a bunch of public profile information about 70,000 people on the dating site OkCupid.
-This work was widely condemned, and lead to some good articles about [why it is unethical](https://www.wired.com/2016/05/okcupid-study-reveals-perils-big-data-science/).
+For example, in 2016, a group of researchers scraped public profile information (e.g., usernames, age, gender, location, etc.) about 70,000 people on the dating site OkCupid and they publicly released these data without any attempts for anonymization.
+While the researchers felt that there was nothing wrong with this since the data were already public, this work was widely condemned due to ethics concerns around identifiability of users whose information was released in the dataset.
+If your work involves scraping personally identifiable information, we strongly recommend reading about the OkCupid study as well as similar studies with questionable research ethics involving the acquisition and release of personally identifiable information.[^webscraping-3]
+
+[^webscraping-3]: One example of an article on the OkCupid study was published by the [https://www.wired.com/2016/05/okcupid-study-reveals-perils-big-data-science](https://www.wired.com/2016/05/okcupid-study-reveals-perils-big-data-science/).
 
 ### Copyright
 
 Finally, you also need to worry about copyright law.
-Copyright law is also complicated, but it's worth taking a look at the [US law](https://www.law.cornell.edu/uscode/text/17/102) which describes exactly what's protected: "original works of authorship fixed in any tangible medium of expression".
+Copyright law is complicated, but it's worth taking a look at the [US law](https://www.law.cornell.edu/uscode/text/17/102) which describes exactly what's protected: "original works of authorship fixed in any tangible medium of expression".
 It then goes on to describe specific categories that it applies like literary woks, musical works, motions pictures and more.
 Notably absent from copyright protection are data.
 This means that as long as you limit your scraping to facts, copyright protection does not apply.
@@ -75,11 +80,13 @@ This means that as long as you limit your scraping to facts, copyright protectio
 
 As a brief example, in the US lists of ingredient and instructions are copyrightable, so copyright can not be used to protect a recipe.
 But if that list of recipes is accompanied by substantial novel literary content, that is is copyrightable.
-This is why when you're looking for a recipe on the internet there's always so much content before hand.
+This is why when you're looking for a recipe on the internet there's always so much content beforehand.
 
 If you do need to scrape original content (like text or images), you may still be protected under the [doctrine of fair use](https://en.wikipedia.org/wiki/Fair_use).
 Fair use is not a hard and fast rule, but weighs up a number of factors.
-It's more likely to apply if you are collecting the data for research or non-commercial purposes, and if you limit what you scrape to just what you need.
+It's more likely to apply if you are collecting the data for research or non-commercial purposes and if you limit what you scrape to just what you need.
+
+<!--# MCR: Should the hyperlinks in this section go in footnotes too for the print version? -->
 
 ## HTML basics
 
@@ -98,9 +105,11 @@ HTML stands for **H**yper**T**ext **M**arkup **L**anguage and looks something li
 </body>
 ```
 
-HTML has a hierarchical structure formed by **elements** which consist of a start tag (e.g. `<tag>`), optional **attributes** (`id='first'`), an end tag[^webscraping-3] (like `</tag>`), and **contents** (everything in between the start and end tag).
+<!--# MCR: Is there a reason why you're using single quotes for HTML stuff? Any objection to changing those to double quotes? -->
 
-[^webscraping-3]: A number of tags (including `<p>` and `<li>)` don't require end tags, but I think it's best to include them because it makes seeing the structure of the HTML a little easier.
+HTML has a hierarchical structure formed by **elements** which consist of a start tag (e.g. `<tag>`), optional **attributes** (`id='first'`), an end tag[^webscraping-4] (like `</tag>`), and **contents** (everything in between the start and end tag).
+
+[^webscraping-4]: A number of tags (including `<p>` and `<li>)` don't require end tags, but we think it's best to include them because it makes seeing the structure of the HTML a little easier.
 
 Since `<` and `>` are used for start and end tags, you can't write them directly.
 Instead you have to use the HTML **escapes** `&gt;` (greater than) and `&lt;` (less than).
@@ -146,9 +155,9 @@ Attributes are also used to record the destination of links (the `href` attribut
 
 To get started scraping, you'll need the URL of the page you want to scrape, which you can usually copy from your web browser.
 You'll then need to read the HTML for that page into R with `read_html()`.
-This returns a `xml_document`[^webscraping-4] object which you'll then manipulate using rvest functions:
+This returns a `xml_document`[^webscraping-5] object which you'll then manipulate using rvest functions:
 
-[^webscraping-4]: This class comes from the [xml2](https://xml2.r-lib.org) package.
+[^webscraping-5]: This class comes from the [xml2](https://xml2.r-lib.org) package.
     xml2 is a low-level package that rvest builds on top of.
 
 ```{r}
@@ -170,7 +179,7 @@ html
 ```
 
 Now that you have the HTML in R, it's time to extract the data of interest.
-You'll first learn about the CSS selectors that allow you to identify the elements of interest, and the rvest functions that you can use to extract data from them.
+You'll first learn about the CSS selectors that allow you to identify the elements of interest and the rvest functions that you can use to extract data from them.
 Then we'll briefly cover HTML tables, which have some special tools.
 
 ### Find elements
@@ -224,9 +233,9 @@ html |> html_element("b")
 
 ### Nesting selections
 
-In most cases, you'll use `html_elements()` and `html_element()` together, typically using `html_elements()` to identity elements that will become observations then using `html_element()` to find elements that will become variables.
-Lets see this in action using a simple example.
-Here we have an unordered list (`<ul>)` where each list item (`<li>`) contains some information about four characters from starwars:
+In most cases, you'll use `html_elements()` and `html_element()` together, typically using `html_elements()` to identify elements that will become observations then using `html_element()` to find elements that will become variables.
+Let's see this in action using a simple example.
+Here we have an unordered list (`<ul>)` where each list item (`<li>`) contains some information about four characters from StarWars:
 
 ```{r}
 html <- minimal_html("
@@ -269,9 +278,9 @@ Now that you've selected the elements of interest, you'll need to extract the da
 
 ### Text and attributes
 
-`html_text2()`[^webscraping-5] extracts the plain text contents of an HTML element:
+`html_text2()`[^webscraping-6] extracts the plain text contents of an HTML element:
 
-[^webscraping-5]: rvest also provides `html_text()` but you should almost always use `html_text2()` since it does a better job of converting nested HTML to text.
+[^webscraping-6]: rvest also provides `html_text()` but you should almost always use `html_text2()` since it does a better job of converting nested HTML to text.
 
 ```{r}
 html <- minimal_html("
@@ -307,7 +316,7 @@ html |>
 
 ### Tables
 
-If you're lucky you data will be already stored in an HTML table, and it'll be a matter of just reading it from that table.
+If you're lucky, your data will be already stored in an HTML table, and it'll be a matter of just reading it from that table.
 It's usually straightforward to recognize a table in your browser: it'll have a rectangular structure of rows and columns, and you can copy and paste it into a tool like Excel.
 
 HTML tables are built up from four main elements: `<table>`, `<tr>` (table row), `<th>` (table heading), and `<td>` (table data).
@@ -352,17 +361,17 @@ This automatic conversion doesn't always work, so in more complex scenarios you 
 ## CSS selectors {#sec-css-selectors}
 
 Figuring out the selector you need for your data is typically the hardest part of the problem.
-You'll often need to do some experimenting to a selector that is both specific (i.e. it doesn't select things you don't care about) and sensitive (i.e. it does select everything you care about).
+You'll often need to do some experimenting to find a selector that is both specific (i.e. it doesn't select things you don't care about) and sensitive (i.e. it does select everything you care about).
 Lots of trial and error is a normal part of the process!
 There are two main tools that are available to help you with this process: SelectorGagdget and your browser's developer tools.
 
-[SelectorGadget](https://rvest.tidyverse.org/articles/selectorgadget.html) is a javascript bookmarklet that automatically generates css selectors based on the positive and negative examples that you provide.
-It doesn't always work, but when it it's magic!
+[SelectorGadget](https://rvest.tidyverse.org/articles/selectorgadget.html) is a javascript bookmarklet that automatically generates CSS selectors based on the positive and negative examples that you provide.
+It doesn't always work, but when it does, it's magic!
 You can learn how to install and use SelectorGadget either by reading <https://rvest.tidyverse.org/articles/selectorgadget.html> or watching Mine's video at <https://www.youtube.com/watch?v=PetWV5g1Xsc>.
 
-Every modern browser comes with some toolkit for developer, but we recommend Chrome, even if it isn't your regular browser: its web developer tools are some of the best, and they're immediately available.
+Every modern browser comes with some toolkit for developers, but we recommend Chrome, even if it isn't your regular browser: its web developer tools are some of the best and they're immediately available.
 Right click on an element on the page and click `Inspect`.
-This will open a expandable view of the complete HTML page, centered on the element that you just clicked.
+This will open an expandable view of the complete HTML page, centered on the element that you just clicked.
 You can use this to explore the page and get a sense of what selectors might work.
 Pay particular attention to the class and id attributes, since these are often used to form the visual structure of the page, and hence make for good tools to extract the data that you're looking for.
 
@@ -376,9 +385,9 @@ We recommend starting with the fun [CSS dinner](https://flukeout.github.io/) tut
 ## Putting it all together
 
 Lets put this all together to scrape some websites.
-There's some risk that these examples may no longer work when you run them --- that's the fundamental challenge of web scraping, if the structure of the site changes, then you'll have to change your scraping code.
+There's some risk that these examples may no longer work when you run them --- that's the fundamental challenge of web scraping; if the structure of the site changes, then you'll have to change your scraping code.
 
-### Starwars
+### StarWars
 
 rvest includes a very simple example in `vignette("starwars")`.
 This is simple page with minimal HTML so it's a good place to start.
@@ -453,7 +462,7 @@ At the time we wrote this chapter, the page looked like @fig-scraping-imdb.
 #|   "IMDb Rating", and "Your Rating". 9 movies out of the top 250
 #|   are shown. The top 5 are the Shawshank Redemption, The Godfather,
 #|   The Dark Knight, The Godfather: Part II, and 12 Angry Men.
-#|    
+
 knitr::include_graphics("screenshots/scraping-imdb.png", dpi = 300)
 ```
 
@@ -469,9 +478,13 @@ table <- html |>
 table
 ```
 
-This includes a few empty columns, but overall does a good job of capturing the information from the table, but we need to do some more processing to make it easier to use.
-First we'll rename the columns to be easier work with, and remove the extraneous whitespace in the rank and title.
-Then we can apply `separate_wider_regex()` (from @sec-extract-variables) to pull out the title, year, and rank into their own variables.
+<!--# MCR: Do you want to cache this chunk so it doesn't keep getting rerun? And do we want to recommend doing so in the text? -->
+
+This includes a few empty columns, but overall does a good job of capturing the information from the table.
+However, we need to do some more processing to make it easier to use.
+First, we'll rename the columns to be easier work with, and remove the extraneous whitespace in rank and title.
+We will do this with `select()` (instead of `rename()`) to do the renaming and selecting of just these two columns in one step.
+Then, we'll apply `separate_wider_regex()` (from @sec-extract-variables) to pull out the title, year, and rank into their own variables.
 
 ```{r}
 ratings <- table |> 
@@ -493,8 +506,8 @@ ratings <- table |>
 ratings
 ```
 
-Even in this case where most of the data comes from table cells, it's still worth look at the raw HTML.
-If you do some, you'll discover that we can add a little extra data by using one of the attributes.
+Even in this case where most of the data comes from table cells, it's still worth looking at the raw HTML.
+If you do so, you'll discover that we can add a little extra data by using one of the attributes.
 This is one of the reasons it's worth spending a little time spelunking the source of the page; you might find extra data, or might find a parsing route that's slightly easier.
 
 ```{r}
@@ -526,13 +539,13 @@ ratings |>
 
 ## Dynamic sites
 
-From time-to-time, you'll hit a site where your `html_elements()` and friends don't see to return anything like what you see in the browser.
+From time-to-time, you'll hit a site where `html_elements()` and friends don't return anything like what you see in the browser.
 In many cases, that's because you're trying to scrape a website that dynamically generates the content of the page with javascript.
 This doesn't currently work with rvest, because rvest downloads the raw HTML and doesn't run any javascript.
 
-It's still possible to scrape these types of sites, but rvest needs to use more expensive process: fully simulating the web browser including running all javascript.
+It's still possible to scrape these types of sites, but rvest needs to use a more expensive process: fully simulating the web browser including running all javascript.
 This functionality is not available at the time of writing, but it's something we're actively working on and should be available by the time you read this.
-It use the [chromote package](https://rstudio.github.io/chromote/index.html) which actually runs chrome browser in the background, and gives you additional tools to interact with the site like a human, typing text and clicking buttons.
+It uses the [chromote package](https://rstudio.github.io/chromote/index.html) which actually runs chrome browser in the background, and gives you additional tools to interact with the site, like a human typing text and clicking buttons.
 Check out the rvest website for more details.
 
 ## Summary
