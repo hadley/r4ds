@@ -16,7 +16,8 @@ options(
   stringr.view_n = 10,
   # Activate crayon output - temporarily disabled for quarto
   # crayon.enabled = TRUE,
-  pillar.bold = TRUE
+  pillar.bold = TRUE,
+  width = 77 # 80 - 3 for #> comment
 )
 
 ggplot2::theme_set(ggplot2::theme_gray(12))
@@ -38,10 +39,13 @@ status <- function(type) {
   )
 
   cat(paste0(
-    "::: callout-", class, "\n",
+    "\n",
+    ":::: status\n",
+    "::: callout-", class, " \n",
     "You are reading the work-in-progress second edition of R for Data Science. ",
     "This chapter ", status, ". ",
     "You can find the complete first edition at <https://r4ds.had.co.nz>.\n",
-    ":::\n"
+    ":::\n",
+    "::::\n"
   ))
 }

@@ -1,19 +1,24 @@
-# Data visualization {#sec-data-visualisation}
+# Data visualization {#sec-data-visualization}
 
 ```{r}
 #| results: "asis"
 #| echo: false
 source("_common.R")
+status("complete")
 ```
 
 ## Introduction
 
 > "The simple graph has brought more information to the data analyst's mind than any other device." --- John Tukey
 
-This chapter will teach you how to visualize your data using ggplot2.
 R has several systems for making graphs, but ggplot2 is one of the most elegant and most versatile.
 ggplot2 implements the **grammar of graphics**, a coherent system for describing and building graphs.
 With ggplot2, you can do more and faster by learning one system and applying it in many places.
+
+This chapter will teach you how to visualize your data using ggplot2.
+We will start by creating a simple scatterplot and use that to introduce aesthetic mappings and geometric objects -- the fundamental building blocks of ggplot2.
+We will then walk you through visualizing distributions of single variables as well as visualizing relationships between two or more variables.
+We'll finish off with saving your plots and troubleshooting tips.
 
 ### Prerequisites
 
@@ -29,7 +34,7 @@ library(tidyverse)
 That one line of code loads the core tidyverse; packages which you will use in almost every data analysis.
 It also tells you which functions from the tidyverse conflict with functions in base R (or from other packages you might have loaded).
 
-If you run this code and get the error message "there is no package called 'tidyverse'", you'll need to first install it, then run `library()` once again.
+If you run this code and get the error message `there is no package called 'tidyverse'`, you'll need to first install it, then run `library()` once again.
 
 ```{r}
 #| eval: false
@@ -40,324 +45,769 @@ library(tidyverse)
 
 You only need to install a package once, but you need to reload it every time you start a new session.
 
+In addition to tidyverse, we will also use the **palmerpenguins** package, which includes the `penguins` dataset containing body measurements for penguins in three islands in the Palmer Archipelago.
+
+```{r}
+library(palmerpenguins)
+```
+
 ## First steps
 
-Let's use our first graph to answer a question: Do cars with big engines use more fuel than cars with small engines?
+Let's use our first graph to answer a question: Do penguins with longer flippers weigh more or less than penguins with shorter flippers?
 You probably already have an answer, but try to make your answer precise.
-What does the relationship between engine size and fuel efficiency look like?
+What does the relationship between flipper length and body mass look like?
 Is it positive?
 Negative?
 Linear?
 Nonlinear?
+Does the relationship vary by the species of the penguin?
+And how about by the island where the penguin lives.
 
-### The `mpg` data frame
+### The `penguins` data frame
 
-You can test your answer with the `mpg` **data frame** found in ggplot2 (a.k.a. `ggplot2::mpg`).
+You can test your answer with the `penguins` **data frame** found in palmerpenguins (a.k.a. `palmerpenguins::penguins`).
 A data frame is a rectangular collection of variables (in the columns) and observations (in the rows).
-`mpg` contains observations collected by the US Environmental Protection Agency on 38 car models.
+`penguins` contains `r nrow(penguins)` observations collected and made available by Dr. Kristen Gorman and the Palmer Station, Antarctica LTER[^data-visualize-1].
+
+[^data-visualize-1]: Horst AM, Hill AP, Gorman KB (2020).
+    palmerpenguins: Palmer Archipelago (Antarctica) penguin data.
+    R package version 0.1.0.
+    <https://allisonhorst.github.io/palmerpenguins/>.
+    doi: 10.5281/zenodo.3960218.
 
 ```{r}
-mpg
+penguins
 ```
 
-Among the variables in `mpg` are:
+This data frame contains `r ncol(penguins)` columns.
+For an alternative view, where you can see all variables and the first few observations of each variable, use `glimpse()`.
+Or, if you're in RStudio, run `View(penguins)` to open an interactive data viewer.
 
-1.  `displ`, a car's engine size, in liters.
+```{r}
+glimpse(penguins)
+```
 
-2.  `hwy`, a car's fuel efficiency on the highway, in miles per gallon (mpg).
-    A car with a low fuel efficiency consumes more fuel than a car with a high fuel efficiency when they travel the same distance.
+Among the variables in `penguins` are:
 
-To learn more about `mpg`, open its help page by running `?mpg`.
+1.  `species`: a penguin's species (Adelie, Chinstrap, or Gentoo).
+
+2.  `flipper_length_mm`: length of a penguin's flipper, in millimeters.
+
+3.  `body_mass_g`: body mass of a penguin, in grams.
+
+To learn more about `penguins`, open its help page by running `?penguins`.
+
+### Ultimate goal {#sec-ultimate-goal}
+
+Our ultimate goal in this chapter is to recreate the following visualization displaying the relationship between flipper lengths and body masses of these penguins, taking into consideration the species of the penguin.
+
+```{r}
+#| echo: false
+#| warning: false
+#| fig-alt: >
+#|   A scatterplot of body mass vs. flipper length of penguins, with a 
+#|   smooth curve displaying the relationship between these two variables 
+#|   overlaid. The plot displays a positive, fairly linear, relatively 
+#|   strong relationship between these two variables. Species (Adelie, 
+#|   Chinstrap, and Gentoo) are represented with different colors and 
+#|   shapes. The relationship between body mass and flipper length is 
+#|   roughly the same for these three species, and Gentoo penguins are 
+#|   larger than penguins from the other two species.
+
+ggplot(penguins, aes(x = flipper_length_mm, y = body_mass_g)) +
+  geom_point(aes(color = species, shape = species)) +
+  geom_smooth() +
+  labs(
+    title = "Body mass and flipper length",
+    subtitle = "Dimensions for Adelie, Chinstrap, and Gentoo Penguins",
+    x = "Flipper length (mm)",
+    y = "Body mass (mm)",
+    color = "Species",
+    shape = "Species"
+  )
+```
 
 ### Creating a ggplot
 
-To plot `mpg`, run this code to put `displ` on the x-axis and `hwy` on the y-axis:
+Let's recreate this plot layer-by-layer.
+
+With ggplot2, you begin a plot with the function `ggplot()`, defining a plot object that you then add layers to.
+The first argument of `ggplot()` is the dataset to use in the graph and So `ggplot(data = penguins)` creates an empty graph.
+This is not a very exciting plot, but you can think of it like an empty canvas you'll paint the remaining layers of your plot onto.
 
 ```{r}
 #| fig-alt: >
-#|   Scatterplot of highway fuel efficiency versus engine size of cars that 
-#|   shows a negative association.
+#|   A blank, gray plot area.
 
-ggplot(data = mpg) + 
-  geom_point(mapping = aes(x = displ, y = hwy))
+ggplot(data = penguins)
 ```
 
-The plot shows a negative relationship between engine size (`displ`) and fuel efficiency (`hwy`).
-In other words, cars with smaller engine sizes have higher fuel efficiency and, in general, as engine size increases, fuel efficiency decreases.
-Does this confirm or refute your hypothesis about fuel efficiency and engine size?
+Next, we need to tell `ggplot()` the variables from this data frame that we want to map to visual properties (**aesthetics**) of the plot.
+The `mapping` argument of the `ggplot()` function defines how variables in your dataset are mapped to visual properties of your plot.
+The `mapping` argument is always paired with the `aes()` function, and the `x` and `y` arguments of `aes()` specify which variables to map to the x and y axes.
+For now, we will only map flipper length to the `x` aesthetic and body mass to the `y` aesthetic.
+ggplot2 looks for the mapped variables in the `data` argument, in this case, `penguins`.
 
-With ggplot2, you begin a plot with the function `ggplot()`.
-`ggplot()` creates a coordinate system that you can add layers to.
-The first argument of `ggplot()` is the dataset to use in the graph.
-So `ggplot(data = mpg)` creates an empty graph, but it's not very interesting so we won't show it here.
+The following plots show the result of adding these mappings, one at a time.
 
-You complete your graph by adding one or more layers to `ggplot()`.
+```{r}
+#| layout-ncol: 2
+#| fig-alt: >
+#|   There are two plots. The plot on the left is shows flipper length on 
+#|   the x-axis. The values range from 170 to 230 The plot on the right 
+#|   also shows body mass on the y-axis. The values range from 3000 to 
+#|   6000.
+
+ggplot(data = penguins,
+       mapping = aes(x = flipper_length_mm))
+ggplot(data = penguins,
+       mapping = aes(x = flipper_length_mm, y = body_mass_g))
+```
+
+Our empty canvas now has more structure -- it's clear where flipper lengths will be displayed (on the x-axis) and where body masses will be displayed (on the y-axis).
+But the penguins themselves are not yet on the plot.
+This is because we have not yet articulated, in our code, how to represent the observations from our data frame on our plot.
+
+To do so, we need to define a **geom**: the geometrical object that a plot uses to represent data.
+These geometric objects are made available in ggplot2 with functions that start with `geom_`.
+People often describe plots by the type of geom that the plot uses.
+For example, bar charts use bar geoms (`geom_bar()`), line charts use line geoms (`geom_line()`), boxplots use boxplot geoms (`geom_boxplot()`), and so on.
+Scatterplots break the trend; they use the point geom: `geom_point()`.
+
 The function `geom_point()` adds a layer of points to your plot, which creates a scatterplot.
 ggplot2 comes with many geom functions that each adds a different type of layer to a plot.
-You'll learn a whole bunch of them throughout this chapter.
+You'll learn a whole bunch of geoms throughout the book, particularly in @sec-layers.
 
-Each geom function in ggplot2 takes a `mapping` argument.
-This defines how variables in your dataset are mapped to visual properties of your plot.
-The `mapping` argument is always paired with `aes()`, and the `x` and `y` arguments of `aes()` specify which variables to map to the x and y axes.
-ggplot2 looks for the mapped variables in the `data` argument, in this case, `mpg`.
+```{r}
+#| fig-alt: >
+#|   A scatterplot of body mass vs. flipper length of penguins. The plot 
+#|   displays a positive, linear, relatively strong relationship between 
+#|   these two variables.
 
-### A graphing template
+ggplot(data = penguins,
+       mapping = aes(x = flipper_length_mm, y = body_mass_g)) +
+  geom_point()
+```
 
-Let's turn this code into a reusable template for making graphs with ggplot2.
-To make a graph, replace the bracketed sections in the code below with a dataset, a geom function, or a collection of mappings.
+Now we have something that looks like what we might think of as a "scatter plot".
+It doesn't yet match our "ultimate goal" plot, but using this plot we can start answering the question that motivated our exploration: "What does the relationship between flipper length and body mass look like?" The relationship appears to be positive, fairly linear, and moderately strong.
+Penguins with longer flippers are generally larger in terms of their body mass.
+
+Before we add more layers to this plot, let's pause for a moment and review the warning message we got:
+
+> Removed 2 rows containing missing values (`geom_point()`).
+
+We're seeing this message because there are two penguins in our dataset with missing body mass and flipper length values and ggplot2 has no way of representing them on the plot.
+You don't need to worry about understanding the following code yet (you will learn about it in @sec-data-transform), but it's one way of identifying the observations with `NA`s for either body mass or flipper length.
+
+```{r}
+penguins |>
+  select(species, flipper_length_mm, body_mass_g) |>
+  filter(is.na(body_mass_g) | is.na(flipper_length_mm))
+```
+
+Like R, ggplot2 subscribes to the philosophy that missing values should never silently go missing.
+This type of warning is probably one of the most common types of warnings you will see when working with real data -- missing values are a very common issue and you'll learn more about them throughout the book, particularly in @sec-missing-values.
+For the remaining plots in this chapter we will suppress this warning so it's not printed alongside every single plot we make.
+
+### Adding aesthetics and layers
+
+Scatterplots are useful for displaying the relationship between two variables, but it's always a good idea to be skeptical of any apparent relationship between two variables and ask if there may be other variables that explain or change the nature of this apparent relationship.
+Let's incorporate species into our plot and see if this reveals any additional insights into the apparent relationship between flipper length and body mass.
+We will do this by representing species with different colored points.
+
+To achieve this, where should `species` go in the ggplot call from earlier?
+If you guessed "in the aesthetic mapping, inside of `aes()`", you're already getting the hang of creating data visualizations with ggplot2!
+And if not, don't worry.
+Throughout the book you will make many more ggplots and have many more opportunities to check your intuition as you make them.
+
+```{r}
+#| warning: false
+#| fig-alt: >
+#|   A scatterplot of body mass vs. flipper length of penguins. The plot 
+#|   displays a positive, fairly linear, relatively strong relationship 
+#|   between these two variables. Species (Adelie, Chinstrap, and Gentoo) 
+#|   are represented with different colors.
+
+ggplot(data = penguins,
+       mapping = aes(x = flipper_length_mm, y = body_mass_g,
+                     color = species)) +
+  geom_point()
+```
+
+When a variable is mapped to an aesthetic, ggplot2 will automatically assign a unique value of the aesthetic (here a unique color) to each unique level of the variable (each of the three species), a process known as **scaling**.
+ggplot2 will also add a legend that explains which values correspond to which levels.
+
+Now let's add one more layer: a smooth curve displaying the relationship between body mass and flipper length.
+Before you proceed, refer back to the code above, and think about how we can add this to our existing plot.
+
+Since this is a new geometric object representing our data, we will add a new geom: `geom_smooth()`.
+
+```{r}
+#| warning: false
+#| fig-alt: >
+#|   A scatterplot of body mass vs. flipper length of penguins. Overlaid 
+#|   on the scatterplot are three smooth curves displaying the 
+#|   relationship between these variables for each species (Adelie, 
+#|   Chinstrap, and Gentoo). Different penguin species are plotted in 
+#|   different colors for the points and the smooth curves.
+
+ggplot(data = penguins,
+       mapping = aes(x = flipper_length_mm, y = body_mass_g,
+                     color = species)) +
+  geom_point() +
+  geom_smooth()
+```
+
+We have successfully added a smooth curves, but this plot doesn't look like the plot from @sec-ultimate-goal, which only has one curve for the entire dataset as opposed to separate curves for each of the penguin species.
+
+When aesthetic mappings are defined in `ggplot()`, at the *global* level, they're inherited by each of the subsequent geom layers of the plot.
+However, each geom function in ggplot2 can also take a `mapping` argument, which allows for aesthetic mappings at the *local* level.
+Since we want points to be colored based on species but don't want the smooth curves to be separated out for them, we should specify `color = species` for `geom_point()` only.
+
+```{r}
+#| warning: false
+#| fig-alt: >
+#|   A scatterplot of body mass vs. flipper length of penguins. Overlaid 
+#|   on the scatterplot are is a single smooth curve displaying the 
+#|   relationship between these variables for each species (Adelie, 
+#|   Chinstrap, and Gentoo). Different penguin species are plotted in 
+#|   different colors for the points only.
+
+ggplot(data = penguins,
+       mapping = aes(x = flipper_length_mm, y = body_mass_g)) +
+  geom_point(mapping = aes(color = species)) +
+  geom_smooth()
+```
+
+Voila!
+We have something that looks very much like our ultimate goal, though it's not yet perfect.
+We still need to use different shapes for each species of penguins and improve labels.
+
+It's generally not a good idea to represent information using only colors on a plot, as people perceive colors differently due to color blindness or other color vision differences.
+Therefore, in addition to color, we can also map `species` to the `shape` aesthetic.
+
+```{r}
+#| warning: false
+#| fig-alt: >
+#|   A scatterplot of body mass vs. flipper length of penguins. Overlaid 
+#|   on the scatterplot are is a single smooth curve displaying the 
+#|   relationship between these variables for each species (Adelie, 
+#|   Chinstrap, and Gentoo). Different penguin species are plotted in 
+#|   different colors and shapes for the points only.
+
+ggplot(data = penguins,
+       mapping = aes(x = flipper_length_mm, y = body_mass_g)) +
+  geom_point(mapping = aes(color = species, shape = species)) +
+  geom_smooth()
+```
+
+Note that the legend is automatically updated to reflect the different shapes of the points as well.
+
+And finally, we can improve the labels of our plot using the `labs()` function in a new layer.
+
+```{r}
+#| warning: false
+#| fig-alt: >
+#|   A scatterplot of body mass vs. flipper length of penguins, with a 
+#|   smooth curve displaying the relationship between these two variables 
+#|   overlaid. The plot displays a positive, fairly linear, relatively 
+#|   strong relationship between these two variables. Species (Adelie, 
+#|   Chinstrap, and Gentoo) are represented with different colors and 
+#|   shapes. The relationship between body mass and flipper length is 
+#|   roughly the same for these three species, and Gentoo penguins are 
+#|   larger than penguins from the other two species.
+
+ggplot(penguins, 
+       aes(x = flipper_length_mm, y = body_mass_g)) +
+  geom_point(aes(color = species, shape = species)) +
+  geom_smooth() +
+  labs(
+    title = "Body mass and flipper length",
+    subtitle = "Dimensions for Adelie, Chinstrap, and Gentoo Penguins",
+    x = "Flipper length (mm)", 
+    y = "Body mass (mm)",
+    color = "Species", 
+    shape = "Species"
+  )
+```
+
+We finally have a plot that perfectly matches our "ultimate goal"!
+
+### Exercises
+
+1.  How many rows are in `penguins`?
+    How many columns?
+
+2.  What does the `bill_depth_mm` variable in the `penguins` data frame describe?
+    Read the help for `?penguins` to find out.
+
+3.  Make a scatterplot of `bill_depth_mm` vs `bill_length_mm`.
+    Describe the relationship between these two variables.
+
+4.  What happens if you make a scatterplot of `species` vs `bill_depth_mm`?
+    Why is the plot not useful?
+
+5.  Why does the following give an error and how would you fix it?
+
+    ```{r}
+    #| eval: false
+
+    ggplot(data = penguins) + 
+      geom_point()
+    ```
+
+6.  What does the `na.rm` argument do in `geom_point()`?
+    What is the default value of the argument?
+    Create a scatterplot where you successfully use this argument set to `TRUE`.
+
+7.  Add the following caption to the plot you made in the previous exercise: "Data come from the palmerpenguins package." Hint: Take a look at the documentation for `labs()`.
+
+8.  Recreate the following visualization.
+    What aesthetic should `bill_depth_mm` be mapped to?
+    And should it be mapped at the global level or at the geom level?
+
+    ```{r}
+    #| echo: false
+    #| fig-alt: >
+    #|   A scatterplot of body mass vs. flipper length of penguins, colored 
+    #|   by bill depth. A smooth curve of the relationship between body mass 
+    #|   and flipper length is overlaid. The relationship is positive, 
+    #|   fairly linear, and moderately strong.
+
+    ggplot(data = penguins,
+           mapping = aes(x = flipper_length_mm, y = body_mass_g)) +
+      geom_point(aes(color = bill_depth_mm)) +
+      geom_smooth()
+    ```
+
+9 .
+Run this code in your head and predict what the output will look like.
+Then, run the code in R and check your predictions.
+
+    ```{r}
+    #| eval: false
+
+    ggplot(data = mpg, mapping = aes(x = displ, y = hwy, color = drv)) + 
+      geom_point() + 
+      geom_smooth(se = FALSE)
+    ```
+
+10. Will these two graphs look different?
+    Why/why not?
+
+    ```{r}
+    #| eval: false
+
+    ggplot(data = mpg, mapping = aes(x = displ, y = hwy)) + 
+      geom_point() + 
+      geom_smooth()
+
+    ggplot() + 
+      geom_point(data = mpg, mapping = aes(x = displ, y = hwy)) + 
+      geom_smooth(data = mpg, mapping = aes(x = displ, y = hwy))
+    ```
+
+## ggplot2 calls
+
+As we move on from these introductory sections, we'll transition to a more concise expression of ggplot2 code.
+So far we've been very explicit, which is helpful when you are learning:
 
 ```{r}
 #| eval: false
 
-ggplot(data = <DATA>) + 
-  <GEOM_FUNCTION>(mapping = aes(<MAPPINGS>))
+ggplot(data = penguins, 
+       mapping = aes(x = flipper_length_mm, y = body_mass_g)) + 
+  geom_point()
 ```
 
-The rest of this chapter will show you how to complete and extend this template to make different types of graphs.
-We will begin with the `<MAPPINGS>` component.
+Typically, the first one or two arguments to a function are so important that you should know them by heart.
+The first two arguments to `ggplot()` are `data` and `mapping`, in the remainder of the book, we won't supply those names.
+That saves typing, and, by reducing the amount of boilerplate, makes it easier to see what's different between plots.
+That's a really important programming concern that we'll come back to in @sec-functions.
 
-### Exercises
-
-1.  Run `ggplot(data = mpg)`.
-    What do you see?
-
-2.  How many rows are in `mpg`?
-    How many columns?
-
-3.  What does the `drv` variable describe?
-    Read the help for `?mpg` to find out.
-
-4.  Make a scatterplot of `hwy` vs `cyl`.
-
-5.  What happens if you make a scatterplot of `class` vs `drv`?
-    Why is the plot not useful?
-
-## Aesthetic mappings
-
-> "The greatest value of a picture is when it forces us to notice what we never expected to see." --- John Tukey
-
-In the plot below, one group of points (highlighted in red) seems to fall outside of the linear trend.
-These cars have a higher fuel efficiency than you might expect.
-That is, they have a higher miles per gallon than other cars with similar engine sizes.
-How can you explain these cars?
+Rewriting the previous plot more concisely yields:
 
 ```{r}
-#| echo: false
-#| fig-alt: >
-#|   Scatterplot of highway fuel efficiency versus engine size of cars that 
-#|   shows a negative association. Cars with engine size greater than 5 litres 
-#|   and highway fuel efficiency greater than 20 miles per gallon stand out from 
-#|   the rest of the data and are highlighted in red.
+#| eval: false
 
-ggplot(data = mpg, mapping = aes(x = displ, y = hwy)) +
-  geom_point() + 
-  geom_point(data = dplyr::filter(mpg, displ > 5, hwy > 20), color = "red", size = 2.2)
+ggplot(penguins, aes(x = flipper_length_mm, y = body_mass_g)) + 
+  geom_point()
 ```
 
-Let's hypothesize that the cars are hybrids.
-One way to test this hypothesis is to look at the `class` value for each car.
-The `class` variable of the `mpg` dataset classifies cars into groups such as compact, midsize, and SUV.
-If the outlying points are hybrids, they should be classified as compact cars or, perhaps, subcompact cars (keep in mind that this data was collected before hybrid trucks and SUVs became popular).
-
-You can add a third variable, like `class`, to a two dimensional scatterplot by mapping it to an **aesthetic**.
-An aesthetic is a visual property of the objects in your plot.
-Aesthetics include things like the size, the shape, or the color of your points.
-You can display a point (like the one below) in different ways by changing the values of its aesthetic properties.
-Since we already use the word "value" to describe data, let's use the word "level" to describe aesthetic properties.
-Here we change the levels of a point's size, shape, and color to make the point small, triangular, or blue:
+In the future, you'll also learn about the pipe which will allow you to create that plot with:
 
 ```{r}
-#| echo: false
-#| fig.asp: 0.25
-#| fig-width: 8
-#| fig-alt: >
-#|   Diagram that shows four plotting characters next to each other. The first 
-#|   is a large circle, the second is a small circle, the third is a triangle, 
-#|   and the fourth is a blue circle.
+#| eval: false
 
-ggplot() +
-  geom_point(aes(1, 1), size = 20) +
-  geom_point(aes(2, 1), size = 10) + 
-  geom_point(aes(3, 1), size = 20, shape = 17) + 
-  geom_point(aes(4, 1), size = 20, color = "blue") + 
-  scale_x_continuous(NULL, limits = c(0.5, 4.5), labels = NULL) + 
-  scale_y_continuous(NULL, limits = c(0.9, 1.1), labels = NULL) + 
-  theme(aspect.ratio = 1/3)
+penguins |> 
+  ggplot(aes(x = flipper_length_mm, y = body_mass_g)) + 
+  geom_point()
 ```
 
-You can convey information about your data by mapping the aesthetics in your plot to the variables in your dataset.
-For example, you can map the colors of your points to the `class` variable to reveal the class of each car.
+This is the most common syntax you'll see in the wild.
+
+## Visualizing distributions
+
+How you visualize the distribution of a variable depends on the type of variable: categorical or numerical.
+
+### A categorical variable
+
+A variable is **categorical** if it can only take one of a small set of values.
+To examine the distribution of a categorical variable, you can use a bar chart.
+The height of the bars displays how many observations occurred with each `x` value.
 
 ```{r}
 #| fig-alt: >
-#|   Scatterplot of highway fuel efficiency versus engine size of cars that 
-#|   shows a negative association. The points representing each car are colored 
-#|   according to the class of the car. The legend on the right of the plot 
-#|   shows the mapping between colors and levels of the class variable: 
-#|   2seater, compact, midsize, minivan, pickup, or suv.
+#|   A bar chart of frequencies of species of penguins: Adelie 
+#|   (approximately 150), Chinstrap (approximately 90), Gentoo 
+#|   (approximately 125).
 
-ggplot(data = mpg) + 
-  geom_point(mapping = aes(x = displ, y = hwy, color = class))
+ggplot(penguins, aes(x = species)) +
+  geom_bar()
 ```
 
-(If you prefer British English, like Hadley, you can use `colour` instead of `color`.)
-
-To map an aesthetic to a variable, associate the name of the aesthetic with the name of the variable inside `aes()`.
-ggplot2 will automatically assign a unique level of the aesthetic (here a unique color) to each unique value of the variable, a process known as **scaling**.
-ggplot2 will also add a legend that explains which levels correspond to which values.
-
-The colors reveal that many of the unusual points (with engine size greater than 5 liters and highway fuel efficiency greater than 20 miles per gallon) are two-seater cars.
-These cars don't seem like hybrids, and are, in fact, sports cars!
-Sports cars have large engines like SUVs and pickup trucks, but small bodies like midsize and compact cars, which improves their gas mileage.
-In hindsight, these cars were unlikely to be hybrids since they have large engines.
-
-In the above example, we mapped `class` to the color aesthetic, but we could have mapped `class` to the size aesthetic in the same way.
-In this case, the exact size of each point would reveal its class affiliation.
-We get a *warning* here: mapping an unordered variable (`class`) to an ordered aesthetic (`size`) is generally not a good idea because it implies a ranking that does not in fact exist.
+In bar plots of categorical variables with non-ordered levels, like the penguin `species` above, it's often preferable to reorder the bars based on their frequencies.
+Doing so requires transforming the variable to a factor (how R handles categorical data) and then reordering the levels of that factor.
 
 ```{r}
 #| fig-alt: >
-#|   Scatterplot of highway fuel efficiency versus engine size of cars that 
-#|   shows a negative association. The points representing each car are sized 
-#|   according to the class of the car. The legend on the right of the plot 
-#|   shows the mapping between sizes and levels of the class variable -- going 
-#|   from small to large: 2seater, compact, midsize, minivan, pickup, or suv.
+#|   A bar chart of frequencies of species of penguins, where the bars are 
+#|   ordered in decreasing order of their heights (frequencies): Adelie 
+#|   (approximately 150), Gentoo (approximately 125), Chinstrap 
+#|   (approximately 90).
 
-ggplot(data = mpg) + 
-  geom_point(mapping = aes(x = displ, y = hwy, size = class))
+ggplot(penguins, aes(x = fct_infreq(species))) +
+  geom_bar()
 ```
 
-Similarly, we could have mapped `class` to the *alpha* aesthetic, which controls the transparency of the points, or to the *shape* aesthetic, which controls the shape of the points.
+You will learn more about factors and functions for dealing with factors (like `fct_infreq()` shown above) in @sec-factors.
+
+### A numerical variable
+
+A variable is **numerical** if it can take any of an infinite set of ordered values.
+Numbers and date-times are two examples of continuous variables.
+To visualize the distribution of a continuous variable, you can use a histogram or a density plot.
 
 ```{r}
+#| warning: false
 #| layout-ncol: 2
-#| fig-width: 4
-#| fig-height: 2
-#| warning: false
 #| fig-alt: >
-#|   Two scatterplots next to each other, both visualizing highway fuel 
-#|   efficiency versus engine size of cars and showing a negative association. 
-#|   In the plot on the left class is mapped to the alpha aesthetic, resulting 
-#|   in different transparency levels for each level of class. In the plot on 
-#|   the right class is mapped the shape aesthetic, resulting in different 
-#|   plotting character shapes for each level of class. Each plot comes with a 
-#|   legend that shows the mapping between alpha level or shape and levels of 
-#|   the class variable.
+#|   A histogram (on the left) and density plot (on the right) of body masses 
+#|   of penguins. The distribution is unimodal and right skewed, ranging 
+#|   between approximately 2500 to 6500 grams.
 
-# Left
-ggplot(data = mpg) + 
-  geom_point(mapping = aes(x = displ, y = hwy, alpha = class))
-
-# Right
-ggplot(data = mpg) + 
-  geom_point(mapping = aes(x = displ, y = hwy, shape = class))
+ggplot(penguins, aes(x = body_mass_g)) +
+  geom_histogram(binwidth = 200)
+ggplot(penguins, aes(x = body_mass_g)) +
+  geom_density()
 ```
 
-What happened to the SUVs?
-ggplot2 will only use six shapes at a time.
-By default, additional groups will go unplotted when you use the shape aesthetic.
-
-For each aesthetic, you use `aes()` to associate the name of the aesthetic with a variable to display.
-The `aes()` function gathers together each of the aesthetic mappings used by a layer and passes them to the layer's mapping argument.
-The syntax highlights a useful insight about `x` and `y`: the x and y locations of a point are themselves aesthetics, visual properties that you can map to variables to display information about the data.
-
-Once you map an aesthetic, ggplot2 takes care of the rest.
-It selects a reasonable scale to use with the aesthetic, and it constructs a legend that explains the mapping between levels and values.
-For x and y aesthetics, ggplot2 does not create a legend, but it creates an axis line with tick marks and a label.
-The axis line acts as a legend; it explains the mapping between locations and values.
-
-You can also *set* the aesthetic properties of your geom manually.
-For example, we can make all of the points in our plot blue:
+A histogram divides the x-axis into equally spaced bins and then uses the height of a bar to display the number of observations that fall in each bin.
+In the graph above, the tallest bar shows that 39 observations have a `body_mass_g` value between 3,500 and 3,700 grams, which are the left and right edges of the bar.
 
 ```{r}
-#| fig-alt: >
-#|   Scatterplot of highway fuel efficiency versus engine size of cars that 
-#|   shows a negative association. All points are blue.
-
-ggplot(data = mpg) + 
-  geom_point(mapping = aes(x = displ, y = hwy), color = "blue")
+penguins |>
+  count(cut_width(body_mass_g, 200))
 ```
 
-Here, the color doesn't convey information about a variable, but only changes the appearance of the plot.
-To set an aesthetic manually, set the aesthetic by name as an argument of your geom function.
-In other words, it goes *outside* of `aes()`.
-You'll need to pick a value that makes sense for that aesthetic:
-
--   The name of a color as a character string.
--   The size of a point in mm.
--   The shape of a point as a number, as shown in @fig-shapes.
+You can set the width of the intervals in a histogram with the binwidth argument, which is measured in the units of the `x` variable.
+You should always explore a variety of binwidths when working with histograms, as different binwidths can reveal different patterns.
+In the plots below a binwidth of 20 is too narrow, resulting in too many bars, making it difficult to determine the shape of the distribution.
+Similarly, a binwidth of 2,000 is too high, resulting in all data being binned into only three bars, and also making it difficult to determine the shape of the distribution.
 
 ```{r}
-#| label: fig-shapes
-#| echo: false
 #| warning: false
-#| fig.asp: 0.364
-#| fig-align: "center"
-#| fig-cap: >
-#|   R has 25 built in shapes that are identified by numbers. There are some 
-#|   seeming duplicates: for example, 0, 15, and 22 are all squares. The 
-#|   difference comes from the interaction of the `color` and `fill` 
-#|   aesthetics. The hollow shapes (0--14) have a border determined by `color`; 
-#|   the solid shapes (15--20) are filled with `color`; the filled shapes 
-#|   (21--24) have a border of `color` and are filled with `fill`.
+#| layout-ncol: 3
 #| fig-alt: >
-#|   Mapping between shapes and the numbers that represent them: 0 - square, 
-#|   1 - circle, 2 - triangle point up, 3 - plus, 4 - cross, 5 - diamond, 
-#|   6 - triangle point down, 7 - square cross, 8 - star, 9 - diamond plus, 
-#|   10 - circle plus, 11 - triangles up and down, 12 - square plus, 
-#|   13 - circle cross, 14 - square and triangle down, 15 - filled square, 
-#|   16 - filled circle, 17 - filled triangle point-up, 18 - filled diamond, 
-#|   19 - solid circle, 20 - bullet (smaller circle), 21 - filled circle blue, 
-#|   22 - filled square blue, 23 - filled diamond blue, 24 - filled triangle 
-#|   point-up blue, 25 - filled triangle point down blue.
+#|   Three histograms of body masses of penguins, one with binwidth of 20 
+#|   (right), one with binwidth of 200 (center), and one with binwidth of 
+#|   2000 (left). The histogram with binwidth of 20 shows lots of ups and 
+#|   downs in the heights of the bins, creating a jagged outline. The histogram 
+#|   with binwidth of 2000 shows only three bins.
 
-shapes <- tibble(
-  shape = c(0, 1, 2, 5, 3, 4, 6:19, 22, 21, 24, 23, 20),
-  x = (0:24 %/% 5) / 2,
-  y = (-(0:24 %% 5)) / 4
-)
-ggplot(shapes, aes(x, y)) + 
-  geom_point(aes(shape = shape), size = 5, fill = "red") +
-  geom_text(aes(label = shape), hjust = 0, nudge_x = 0.15) +
-  scale_shape_identity() +
-  expand_limits(x = 4.1) +
-  scale_x_continuous(NULL, breaks = NULL) + 
-  scale_y_continuous(NULL, breaks = NULL, limits = c(-1.2, 0.2)) + 
-  theme_minimal() +
-  theme(aspect.ratio = 1/2.75)
+ggplot(penguins, aes(x = body_mass_g)) +
+  geom_histogram(binwidth = 20)
+ggplot(penguins, aes(x = body_mass_g)) +
+  geom_histogram(binwidth = 200)
+ggplot(penguins, aes(x = body_mass_g)) +
+  geom_histogram(binwidth = 2000)
 ```
 
 ### Exercises
 
-1.  What's gone wrong with this code?
-    Why are the points not blue?
+1.  Make a bar plot of `species` of `penguins`, where you assign `species` to the `y` aesthetic.
+    How is this plot different?
+
+2.  How are the following two plots different?
+    Which aesthetic, `color` or `fill`, is more useful for changing the color of bars?
 
     ```{r}
-    #| fig-alt: >
-    #|   Scatterplot of highway fuel efficiency versus engine size of cars  
-    #|   that shows a negative association. All points are red and 
-    #|   the legend shows a red point that is mapped to the word blue.
+    #| eval: false
 
-    ggplot(data = mpg) + 
-      geom_point(mapping = aes(x = displ, y = hwy, color = "blue"))
+    ggplot(penguins, aes(x = species)) +
+      geom_bar(color = "red")
+
+    ggplot(penguins, aes(x = species)) +
+      geom_bar(fill = "red")
     ```
 
-2.  Which variables in `mpg` are categorical?
+3.  What does the `bins` argument in `geom_histogram()` do?
+
+4.  Make a histogram of the `carat` variable in the `diamonds` dataset.
+    Experiment with different binwidths.
+    What binwidth reveals the most interesting patterns?
+
+## Visualizing relationships
+
+To visualize a relationship we need to have at least two variables mapped to aesthetics of a plot.
+In the following sections you will learn about commonly used plots for visualizing relationships between two or more variables and the geoms used for creating them.
+
+### A numerical and a categorical variable
+
+To visualize the relationship between a numerical and a categorical variable we can use side-by-side box plots.
+A **boxplot** is a type of visual shorthand for a distribution of values that is popular among statisticians.
+Each boxplot consists of:
+
+-   A box that stretches from the 25th percentile of the distribution to the 75th percentile, a distance known as the interquartile range (IQR).
+    In the middle of the box is a line that displays the median, i.e. 50th percentile, of the distribution.
+    These three lines give you a sense of the spread of the distribution and whether or not the distribution is symmetric about the median or skewed to one side.
+
+-   Visual points that display observations that fall more than 1.5 times the IQR from either edge of the box.
+    These outlying points are unusual so are plotted individually.
+
+-   A line (or whisker) that extends from each end of the box and goes to the farthest non-outlier point in the distribution.
+
+```{r}
+#| echo: false
+#| fig-alt: >
+#|   A diagram depicting how a boxplot is created following the steps outlined 
+#|   above.
+
+knitr::include_graphics("images/EDA-boxplot.png")
+```
+
+Let's take a look at the distribution of price by cut using `geom_boxplot()`:
+
+```{r}
+#| warning: false
+#| fig-alt: >
+#|   Side-by-side box plots of distributions of body masses of Adelie, 
+#|   Chinstrap, and Gentoo penguins. The distribution of Adelie and 
+#|   Chinstrap penguins' body masses appear to be symmetric with 
+#|   medians around 3750 grams. The median body mass of Gentoo penguins 
+#|   is much higher, around 5000 grams, and the distribution of the 
+#|   body masses of these penguins appears to be somewhat right skewed.
+
+ggplot(penguins, aes(x = species, y = body_mass_g)) +
+  geom_boxplot()
+```
+
+Alternatively, we can make frequency polygons with `geom_freqpoly()`.
+`geom_freqpoly()` performs the same calculation as `geom_histogram()`, but instead of displaying the counts with bars, it uses lines instead.
+It's much easier to understand overlapping lines than bars of `geom_histogram()`.
+There are a few challenges with this type of plot, which we will come back to in @sec-cat-num on exploring the covariation between a categorical and a numerical variable.
+
+```{r}
+#| warning: false
+#| fig-alt: >
+#|   A frequency polygon of body masses of penguins by species of 
+#|   penguins. Each species (Adelie, Chinstrap, and Gentoo) is 
+#|   represented with different colored outlines for the polygons.
+
+ggplot(penguins, aes(x = body_mass_g, color = species)) +
+  geom_freqpoly(binwidth = 200, linewidth = 0.75)
+```
+
+We've also customized the thickness of the lines using the `linewidth` argument in order to make them stand out a bit more against the background.
+
+We can also use overlaid density plots, with `species` mapped to both `color` and `fill` aesthetics and using the `alpha` aesthetic to add transparency to the filled density curves.
+This aesthetic takes values between 0 (completely transparent) and 1 (completely opaque).
+In the following plot it's *set* to 0.5.
+
+```{r}
+#| warning: false
+#| fig-alt: >
+#|   A frequency polygon of body masses of penguins (on the left) and density 
+#|   plot (on the right). Each species of penguins (Adelie, Chinstrap, and 
+#|   Gentoo) are represented in different colored outlines for the frequency 
+#|   polygons and the density curves. The density curves are also filled with 
+#|   the same colors, with some transparency added.
+
+ggplot(penguins, aes(x = body_mass_g, color = species, fill = species)) +
+  geom_density(alpha = 0.5)
+```
+
+Note the terminology we have used here:
+
+-   We *map* variables to aesthetics if we want the visual attribute represented by that aesthetic to vary based on the values of that variable.
+-   Otherwise, we *set* the value of an aesthetic.
+
+### Two categorical variables
+
+We can use segmented bar plots to visualize the distribution between two categorical variables.
+In creating this bar chart, we map the variable we want to divide the data into first to the `x` aesthetic and the variable we then further want to divide each group into to the `fill` aesthetic.
+
+Below are two segmented bar plots, both displaying the relationship between `island` and `species`, or specifically, visualizing the distribution of `species` within each island.
+The plot on the left shows the frequencies of each species of penguins on each island and the plot on the right shows the relative frequencies (proportions) of each species within each island (despite the incorrectly labeled y-axis that says "count").
+The relative frequency plot, created by setting `position = "fill"` in the geom is more useful for comparing species distributions across islands since it's not affected by the unequal numbers of penguins across the islands.
+Based on the plot on the left, we can see that Gentoo penguins all live on Biscoe island and make up roughly 75% of the penguins on that island, Chinstrap all live on Dream island and make up roughly 50% of the penguins on that island, and Adelie live on all three islands and make up all of the penguins on Torgersen.
+
+```{r}
+#| fig-alt: >
+#|   Bar plots of penguin species by island (Biscoe, Dream, and Torgersen).
+#|   On the right, frequencies of species are shown. On the left, relative 
+#|   frequencies of species are shown.
+
+ggplot(penguins, aes(x = island, fill = species)) +
+  geom_bar()
+ggplot(penguins, aes(x = island, fill = species)) +
+  geom_bar(position = "fill")
+```
+
+### Two numerical variables
+
+So far you've learned about scatterplots (created with `geom_point()`) and smooth curves (created with `geom_smooth()`) for visualizing the relationship between two numerical variables.
+A scatterplot is probably the most commonly used plot for visualizing the relationship between two variables.
+
+```{r}
+#| warning: false
+#| fig-alt: >
+#|   A scatterplot of body mass vs. flipper length of penguins. The plot 
+#|   displays a positive, linear, relatively strong relationship between 
+#|   these two variables.
+
+ggplot(penguins, aes(x = flipper_length_mm, y = body_mass_g)) +
+  geom_point()
+```
+
+### Three or more variables
+
+One way to add additional variables to a plot is by mapping them to an aesthetic.
+For example, in the following scatterplot the colors of points represent species and the shapes of points represent islands.
+
+```{r}
+#| warning: false
+#| fig-alt: >
+#|   A scatterplot of body mass vs. flipper length of penguins. The plot 
+#|   displays a positive, linear, relatively strong relationship between 
+#|   these two variables. The points are colored based on the species of the 
+#|   penguins and the shapes of the points represent islands (round points are 
+#|   Biscoe island, triangles are Dream island, and squared are Torgersen 
+#|   island). The plot is very busy and it's difficult to distinguish the shapes
+#|   of the points.
+
+ggplot(penguins, aes(x = flipper_length_mm, y = body_mass_g)) +
+  geom_point(aes(color = species, shape = island))
+```
+
+However adding too many aesthetic mappings to a plot makes it cluttered and difficult to make sense of.
+Another way, which is particularly useful for categorical variables, is to split your plot into **facets**, subplots that each display one subset of the data.
+
+To facet your plot by a single variable, use `facet_wrap()`.
+The first argument of `facet_wrap()` is a formula[^data-visualize-2], which you create with `~` followed by a variable name.
+The variable that you pass to `facet_wrap()` should be categorical.
+
+[^data-visualize-2]: Here "formula" is the name of the type of thing created by `~`, not a synonym for "equation".
+
+```{r}
+#| warning: false
+#| fig-width: 8
+#| fig-asp: 0.33
+#| fig-alt: >
+#|   A scatterplot of body mass vs. flipper length of penguins. The shapes and 
+#|   colors of points represent species. Penguins from each island are on a 
+#|   separate facet. Within each facet, the relationship between body mass and 
+#|   flipper length is positive, linear, relatively strong. 
+
+ggplot(penguins, aes(x = flipper_length_mm, y = body_mass_g)) +
+  geom_point(aes(color = species, shape = species)) +
+  facet_wrap(~island)
+```
+
+You will learn about many other geoms for visualizing distributions of variables and relationships between them in @sec-layers.
+
+### Exercises
+
+1.  Which variables in `mpg` are categorical?
     Which variables are continuous?
     (Hint: type `?mpg` to read the documentation for the dataset).
     How can you see this information when you run `mpg`?
 
-3.  Map a continuous variable to `color`, `size`, and `shape`.
-    How do these aesthetics behave differently for categorical vs. continuous variables?
+2.  Make a scatterplot of `hwy` vs. `displ` using the `mpg` data frame.
+    Then, map a third, numerical variable to `color`, `size`, and `shape`.
+    How do these aesthetics behave differently for categorical vs. numerical variables?
+
+3.  In the scatterplot of `hwy` vs. `displ`, what happens if you map a third variable to `linewidth`?
 
 4.  What happens if you map the same variable to multiple aesthetics?
 
-5.  What does the `stroke` aesthetic do?
-    What shapes does it work with?
-    (Hint: use `?geom_point`)
+5.  Make a scatterplot of `bill_depth_mm` vs. `bill_length_mm` and color the points by `species`.
+    What does adding coloring by species reveal about the relationship between these two variables?
 
-6.  What happens if you map an aesthetic to something other than a variable name, like `aes(color = displ < 5)`?
-    Note, you'll also need to specify x and y.
+6.  Why does the following yield two separate legends.
+    How would you fix it to combine the two legends?
+
+    ```{r}
+    #| warning: false
+    #| fig-alt: >
+    #|   Scatterplot of bill depth vs. bill length where different color and 
+    #|   shape pairings represent each species. The plot has two legends, 
+    #|   one labelled "species" which shows the shape scale and the other
+    #|   that shows the color scale.
+
+    ggplot(data = penguins, 
+           mapping = aes(x = bill_length_mm, y = bill_depth_mm,
+                         color = species, shape = species)) +
+      geom_point() +
+      labs(color = "Species")
+    ```
+
+## Saving your plots {#sec-ggsave}
+
+Once you've made a plot, you might want to get it out of R by saving it as an image that you can use elsewhere.
+That's the job of `ggsave()`, which will save the most recent plot to disk:
+
+```{r}
+#| fig-show: hide
+
+ggplot(penguins, aes(x = flipper_length_mm, y = body_mass_g)) +
+  geom_point()
+ggsave(filename = "my-plot.png")
+```
+
+```{r}
+#| include: false
+
+file.remove("my-plot.png")
+```
+
+This will save your plot to your working directory, a concept you'll learn more about in @sec-workflow-scripts.
+
+If you don't specify the `width` and `height` they will be taken from the dimensions of the current plotting device.
+For reproducible code, you'll want to specify them.
+You can learn more about `ggsave()` in the documentation.
+
+Generally, however, we recommend that you assemble your final reports using Quarto, a reproducible authoring system that allows you to interleave your code and your prose and automatically include your plots in your write-ups.
+You will learn more about Quarto in @sec-quarto.
+
+### Exercises
+
+1.  Run the following lines of code.
+    Which of the two plots is saved as `mpg-plot.png`?
+    Why?
+
+    ```{r}
+    #| eval: false
+
+    ggplot(mpg, aes(x = class)) +
+      geom_bar()
+    ggplot(mpg, aes(x = cty, y = hwy)) +
+      geom_point()
+    ggsave("mpg-plot.png")
+    ```
+
+2.  What do you need to change in the code above to save the plot as a PDF instead of a PNG?
 
 ## Common problems
 
@@ -375,7 +825,9 @@ In this case, it's usually easy to start from scratch again by pressing ESCAPE t
 One common problem when creating ggplot2 graphics is to put the `+` in the wrong place: it has to come at the end of the line, not the start.
 In other words, make sure you haven't accidentally written code like this:
 
-``` r
+```{r}
+#| eval: false
+
 ggplot(data = mpg) 
 + geom_point(mapping = aes(x = displ, y = hwy))
 ```
@@ -386,936 +838,17 @@ Don't worry if the help doesn't seem that helpful - instead skip down to the exa
 
 If that doesn't help, carefully read the error message.
 Sometimes the answer will be buried there!
-But when you're new to R, the answer might be in the error message but you don't yet know how to understand it.
+But when you're new to R, even if the answer is in the error message, you might not yet know how to understand it.
 Another great tool is Google: try googling the error message, as it's likely someone else has had the same problem, and has gotten help online.
-
-## Facets
-
-One way to add additional variables to a plot is by mapping them to an aesthetic.
-Another way, which is particularly useful for categorical variables, is to split your plot into **facets**, subplots that each display one subset of the data.
-
-To facet your plot by a single variable, use `facet_wrap()`.
-The first argument of `facet_wrap()` is a formula[^data-visualize-1], which you create with `~` followed by a variable name.
-The variable that you pass to `facet_wrap()` should be discrete.
-
-[^data-visualize-1]: Here "formula" is the name of the type of thing created by `~`, not a synonym for "equation".
-
-```{r}
-#| fig-alt: >
-#|   Scatterplot of highway fuel efficiency versus engine size of cars, 
-#|   faceted by class, with facets spanning two rows.
-
-ggplot(data = mpg) + 
-  geom_point(mapping = aes(x = displ, y = hwy)) + 
-  facet_wrap(~cyl)
-```
-
-To facet your plot with the combination of two variables, switch from `facet_wrap()` to `facet_grid()`.
-The first argument of `facet_grid()` is also a formula, but now it's a double sided formula: `rows ~ cols`.
-
-```{r}
-#| fig-alt: >
-#|   Scatterplot of highway fuel efficiency versus engine size of cars, faceted 
-#|   by number of cylinders across rows and by type of drive train across 
-#|   columns. This results in a 4x3 grid of 12 facets. Some of these facets have 
-#|   no observations: 5 cylinders and 4 wheel drive, 4 or 5 cylinders and front 
-#|   wheel drive.
-
-ggplot(data = mpg) + 
-  geom_point(mapping = aes(x = displ, y = hwy)) + 
-  facet_grid(drv ~ cyl)
-```
-
-### Exercises
-
-1.  What happens if you facet on a continuous variable?
-
-2.  What do the empty cells in plot with `facet_grid(drv ~ cyl)` mean?
-    How do they relate to this plot?
-
-    ```{r}
-    #| fig-alt: >
-    #|   Scatterplot of number of cycles versus type of drive train of cars. 
-    #|   The plot shows that there are no cars with 5 cylinders that are 4 
-    #|   wheel drive or with 4 or 5 cylinders that are front wheel drive.
-
-    ggplot(data = mpg) + 
-      geom_point(mapping = aes(x = drv, y = cyl))
-    ```
-
-3.  What plots does the following code make?
-    What does `.` do?
-
-    ```{r}
-    #| eval: false
-
-    ggplot(data = mpg) + 
-      geom_point(mapping = aes(x = displ, y = hwy)) +
-      facet_grid(drv ~ .)
-
-    ggplot(data = mpg) + 
-      geom_point(mapping = aes(x = displ, y = hwy)) +
-      facet_grid(. ~ cyl)
-    ```
-
-4.  Take the first faceted plot in this section:
-
-    ```{r}
-    #| eval: false
-
-    ggplot(data = mpg) + 
-      geom_point(mapping = aes(x = displ, y = hwy)) + 
-      facet_wrap(~ class, nrow = 2)
-    ```
-
-    What are the advantages to using faceting instead of the color aesthetic?
-    What are the disadvantages?
-    How might the balance change if you had a larger dataset?
-
-5.  Read `?facet_wrap`.
-    What does `nrow` do?
-    What does `ncol` do?
-    What other options control the layout of the individual panels?
-    Why doesn't `facet_grid()` have `nrow` and `ncol` arguments?
-
-6.  Which of the following two plots makes it easier to compare engine size (`displ`) across cars with different drive trains?
-    What does this say about when to place a faceting variable across rows or columns?
-
-    ```{r}
-    #| fig-alt: >
-    #|   Two faceted plots, both visualizing highway fuel efficiency versus 
-    #|   engine size of cars, faceted by drive train. In the top plot, facet 
-    #|   are organized across rows and in the second, across columns.
-
-    ggplot(data = mpg) + 
-      geom_point(mapping = aes(x = displ, y = hwy)) + 
-      facet_grid(drv ~ .)
-
-    ggplot(data = mpg) + 
-      geom_point(mapping = aes(x = displ, y = hwy)) + 
-      facet_grid(. ~ drv)
-    ```
-
-7.  Recreate this plot using `facet_wrap()` instead of `facet_grid()`.
-    How do the positions of the facet labels change?
-
-    ```{r}
-    #| fig-alt: >
-    #|   Scatterplot of highway fuel efficiency versus engine size of cars, 
-    #|   faceted by type of drive train across rows.
-
-    ggplot(data = mpg) + 
-      geom_point(mapping = aes(x = displ, y = hwy)) +
-      facet_grid(drv ~ .)
-    ```
-
-## Geometric objects
-
-How are these two plots similar?
-
-```{r}
-#| echo: false
-#| message: false
-#| layout-ncol: 2
-#| fig-width: 4
-#| fig-height: 2
-#| fig-alt: >
-#|   There are two plots. The plot on the left is a scatterplot of highway fuel 
-#|   efficiency versus engine size of cars and the plot on the right shows a 
-#|   smooth curve that follows the trajectory of the relationship between these 
-#|   variables. A confidence interval around the smooth curve is also displayed.
-
-ggplot(data = mpg) + 
-  geom_point(mapping = aes(x = displ, y = hwy))
-
-ggplot(data = mpg) + 
-  geom_smooth(mapping = aes(x = displ, y = hwy))
-```
-
-Both plots contain the same x variable, the same y variable, and both describe the same data.
-But the plots are not identical.
-Each plot uses a different visual object to represent the data.
-In ggplot2 syntax, we say that they use different **geoms**.
-
-A **geom** is the geometrical object that a plot uses to represent data.
-People often describe plots by the type of geom that the plot uses.
-For example, bar charts use bar geoms, line charts use line geoms, boxplots use boxplot geoms, and so on.
-Scatterplots break the trend; they use the point geom.
-As we see above, you can use different geoms to plot the same data.
-The plot on the left uses the point geom, and the plot on the right uses the smooth geom, a smooth line fitted to the data.
-
-To change the geom in your plot, change the geom function that you add to `ggplot()`.
-For instance, to make the plots above, you can use this code:
-
-```{r}
-#| eval: false
-
-# Left
-ggplot(data = mpg) + 
-  geom_point(mapping = aes(x = displ, y = hwy))
-
-# Right
-ggplot(data = mpg) + 
-  geom_smooth(mapping = aes(x = displ, y = hwy))
-```
-
-Every geom function in ggplot2 takes a `mapping` argument.
-However, not every aesthetic works with every geom.
-You could set the shape of a point, but you couldn't set the "shape" of a line.
-On the other hand, you *could* set the linetype of a line.
-`geom_smooth()` will draw a different line, with a different linetype, for each unique value of the variable that you map to linetype.
-
-```{r}
-#| message: false
-#| fig-alt: >
-#|   A plot of highway fuel efficiency versus engine size of cars. The data are 
-#|   represented with smooth curves, which use a different line type (solid, 
-#|   dashed, or long dashed) for each type of drive train. Confidence intervals 
-#|   around the smooth curves are also displayed.
-
-ggplot(data = mpg) + 
-  geom_smooth(mapping = aes(x = displ, y = hwy, linetype = drv))
-```
-
-Here, `geom_smooth()` separates the cars into three lines based on their `drv` value, which describes a car's drive train.
-One line describes all of the points that have a `4` value, one line describes all of the points that have an `f` value, and one line describes all of the points that have an `r` value.
-Here, `4` stands for four-wheel drive, `f` for front-wheel drive, and `r` for rear-wheel drive.
-
-If this sounds strange, we can make it more clear by overlaying the lines on top of the raw data and then coloring everything according to `drv`.
-
-```{r}
-#| echo: false
-#| message: false
-#| fig-alt: >
-#|   A plot of highway fuel efficiency versus engine size of cars. The data 
-#|   are represented with points (colored by drive train) as well as smooth 
-#|   curves (where line type is determined based on drive train as well). 
-#|   Confidence intervals around the smooth curves are also displayed.
-
-ggplot(data = mpg, mapping = aes(x = displ, y = hwy, color = drv)) + 
-  geom_point() +
-  geom_smooth(mapping = aes(linetype = drv))
-```
-
-Notice that this plot contains two geoms in the same graph!
-If this makes you excited, buckle up.
-You will learn how to place multiple geoms in the same plot very soon.
-
-ggplot2 provides more than 40 geoms, and extension packages provide even more (see <https://exts.ggplot2.tidyverse.org/gallery/> for a sampling).
-The best way to get a comprehensive overview is the ggplot2 cheatsheet, which you can find at <https://rstudio.com/resources/cheatsheets>.
-To learn more about any single geom, use the help (e.g. `?geom_smooth`).
-
-Many geoms, like `geom_smooth()`, use a single geometric object to display multiple rows of data.
-For these geoms, you can set the `group` aesthetic to a categorical variable to draw multiple objects.
-ggplot2 will draw a separate object for each unique value of the grouping variable.
-In practice, ggplot2 will automatically group the data for these geoms whenever you map an aesthetic to a discrete variable (as in the `linetype` example).
-It is convenient to rely on this feature because the `group` aesthetic by itself does not add a legend or distinguishing features to the geoms.
-
-```{r}
-#| layout-ncol: 3
-#| fig-width: 3
-#| fig-height: 3
-#| message: false
-#| fig-alt: >
-#|   Three plots, each with highway fuel efficiency on the y-axis and engine 
-#|   size of cars, where data are represented by a smooth curve. The first plot 
-#|   only has these two variables, the center plot has three separate smooth 
-#|   curves for each level of drive train, and the right plot not only has the 
-#|   same three separate smooth curves for each level of drive train but these 
-#|   curves are plotted in different colors, without a legend explaining which 
-#|   color maps to which level. Confidence intervals around the smooth curves 
-#|   are also displayed.
-
-ggplot(data = mpg) +
-  geom_smooth(mapping = aes(x = displ, y = hwy))
-              
-ggplot(data = mpg) +
-  geom_smooth(mapping = aes(x = displ, y = hwy, group = drv))
-    
-ggplot(data = mpg) +
-  geom_smooth(
-    mapping = aes(x = displ, y = hwy, color = drv),
-    show.legend = FALSE
-  )
-```
-
-To display multiple geoms in the same plot, add multiple geom functions to `ggplot()`:
-
-```{r}
-#| message: false
-#| fig-alt: >
-#|   Scatterplot of highway fuel efficiency versus engine size of cars with a 
-#|   smooth curve overlaid. A confidence interval around the smooth curves is 
-#|   also displayed.
-
-ggplot(data = mpg) + 
-  geom_point(mapping = aes(x = displ, y = hwy)) +
-  geom_smooth(mapping = aes(x = displ, y = hwy))
-```
-
-This, however, introduces some duplication in our code.
-Imagine if you wanted to change the y-axis to display `cty` instead of `hwy`.
-You'd need to change the variable in two places, and you might forget to update one.
-You can avoid this type of repetition by passing a set of mappings to `ggplot()`.
-ggplot2 will treat these mappings as global mappings that apply to each geom in the graph.
-In other words, this code will produce the same plot as the previous code:
-
-```{r}
-#| eval: false
-
-ggplot(data = mpg, mapping = aes(x = displ, y = hwy)) + 
-  geom_point() + 
-  geom_smooth()
-```
-
-If you place mappings in a geom function, ggplot2 will treat them as local mappings for the layer.
-It will use these mappings to extend or overwrite the global mappings *for that layer only*.
-This makes it possible to display different aesthetics in different layers.
-
-```{r}
-#| message: false
-#| fig-alt: >
-#|   Scatterplot of highway fuel efficiency versus engine size of cars, where 
-#|   points are colored according to the car class. A smooth curve following 
-#|   the trajectory of the relationship between highway fuel efficiency versus 
-#|   engine size of cars is overlaid along with a confidence interval around it.
-
-ggplot(data = mpg, mapping = aes(x = displ, y = hwy)) + 
-  geom_point(mapping = aes(color = class)) + 
-  geom_smooth()
-```
-
-You can use the same idea to specify different `data` for each layer.
-Here, our smooth line displays just a subset of the `mpg` dataset, the subcompact cars.
-The local data argument in `geom_smooth()` overrides the global data argument in `ggplot()` for that layer only.
-
-```{r}
-#| message: false
-#| fig-alt: >
-#|   Scatterplot of highway fuel efficiency versus engine size of cars, where 
-#|   points are colored according to the car class. A smooth curve following 
-#|   the trajectory of the relationship between highway fuel efficiency versus 
-#|   engine size of subcompact cars is overlaid along with a confidence interval 
-#|   around it.
-
-ggplot(data = mpg, mapping = aes(x = displ, y = hwy)) + 
-  geom_point(mapping = aes(color = class)) + 
-  geom_smooth(data = filter(mpg, class == "subcompact"), se = FALSE)
-```
-
-(You'll learn how `filter()` works in the chapter on data transformations: for now, just know that this command selects only the subcompact cars.)
-
-### Exercises
-
-1.  What geom would you use to draw a line chart?
-    A boxplot?
-    A histogram?
-    An area chart?
-
-2.  Run this code in your head and predict what the output will look like.
-    Then, run the code in R and check your predictions.
-
-    ```{r}
-    #| eval: false
-
-    ggplot(data = mpg, mapping = aes(x = displ, y = hwy, color = drv)) + 
-      geom_point() + 
-      geom_smooth(se = FALSE)
-    ```
-
-3.  Earlier in this chapter we used `show.legend` without explaining it:
-
-    ```{r}
-    #| eval: false
-    ggplot(data = mpg) +
-      geom_smooth(
-        mapping = aes(x = displ, y = hwy, color = drv),
-        show.legend = FALSE
-      )
-    ```
-
-    What does `show.legend = FALSE` do here?
-    What happens if you remove it?
-    Why do you think we used it earlier?
-
-4.  What does the `se` argument to `geom_smooth()` do?
-
-5.  Will these two graphs look different?
-    Why/why not?
-
-    ```{r}
-    #| eval: false
-
-    ggplot(data = mpg, mapping = aes(x = displ, y = hwy)) + 
-      geom_point() + 
-      geom_smooth()
-
-    ggplot() + 
-      geom_point(data = mpg, mapping = aes(x = displ, y = hwy)) + 
-      geom_smooth(data = mpg, mapping = aes(x = displ, y = hwy))
-    ```
-
-6.  Recreate the R code necessary to generate the following graphs.
-    Note that wherever a categorical variable is used in the plot, it's `drv`.
-
-    ```{r}
-    #| echo: false
-    #| message: false
-    #| layout-ncol: 2
-    #| fig-width: 4
-    #| fig-height: 2
-    #| fig-alt: >
-    #|   There are six scatterplots in this figure, arranged in a 3x2 grid. 
-    #|   In all plots highway fuel efficiency of cars are on the y-axis and 
-    #|   engine size is on the x-axis. The first plot shows all points in black 
-    #|   with a smooth curve overlaid on them. In the second plot points are 
-    #|   also all black, with separate smooth curves overlaid for each level of 
-    #|   drive train. On the third plot, points and the smooth curves are 
-    #|   represented in different colors for each level of drive train. In the 
-    #|   fourth plot the points are represented in different colors for each 
-    #|   level of drive train but there is only a single smooth line fitted to 
-    #|   the whole data. In the fifth plot, points are represented in different 
-    #|   colors for each level of drive train, and a separate smooth curve with 
-    #|   different line types are fitted to each level of drive train. And 
-    #|   finally in the sixth plot points are represented in different colors 
-    #|   for each level of drive train and they have a thick white border.
-
-    ggplot(data = mpg, mapping = aes(x = displ, y = hwy)) + 
-      geom_point() + 
-      geom_smooth(se = FALSE)
-    ggplot(data = mpg, mapping = aes(x = displ, y = hwy)) + 
-      geom_smooth(aes(group = drv), se = FALSE) +
-      geom_point()
-    ggplot(data = mpg, mapping = aes(x = displ, y = hwy, color = drv)) + 
-      geom_point() + 
-      geom_smooth(se = FALSE)
-    ggplot(data = mpg, mapping = aes(x = displ, y = hwy)) + 
-      geom_point(aes(color = drv)) + 
-      geom_smooth(se = FALSE)
-    ggplot(data = mpg, mapping = aes(x = displ, y = hwy)) + 
-      geom_point(aes(color = drv)) +
-      geom_smooth(aes(linetype = drv), se = FALSE)
-    ggplot(data = mpg, mapping = aes(x = displ, y = hwy)) + 
-      geom_point(size = 4, color = "white") + 
-      geom_point(aes(color = drv))
-    ```
-
-## Statistical transformations
-
-Next, let's take a look at a bar chart.
-Bar charts seem simple, but they are interesting because they reveal something subtle about plots.
-Consider a basic bar chart, as drawn with `geom_bar()` or `geom_col()`.
-The following chart displays the total number of diamonds in the `diamonds` dataset, grouped by `cut`.
-The `diamonds` dataset is in the ggplot2 package and contains information on \~54,000 diamonds, including the `price`, `carat`, `color`, `clarity`, and `cut` of each diamond.
-The chart shows that more diamonds are available with high quality cuts than with low quality cuts.
-
-```{r}
-#| fig-alt: >
-#|   Bar chart of number of each cut of diamond. There are roughly 1500 
-#|   Fair, 5000 Good, 12000 Very Good, 14000 Premium, and 22000 Ideal cut 
-#|   diamonds.
-
-ggplot(data = diamonds) + 
-  geom_bar(mapping = aes(x = cut))
-```
-
-On the x-axis, the chart displays `cut`, a variable from `diamonds`.
-On the y-axis, it displays count, but count is not a variable in `diamonds`!
-Where does count come from?
-Many graphs, like scatterplots, plot the raw values of your dataset.
-Other graphs, like bar charts, calculate new values to plot:
-
--   bar charts, histograms, and frequency polygons bin your data and then plot bin counts, the number of points that fall in each bin.
-
--   smoothers fit a model to your data and then plot predictions from the model.
-
--   boxplots compute a robust summary of the distribution and then display that summary as a specially formatted box.
-
-The algorithm used to calculate new values for a graph is called a **stat**, short for statistical transformation.
-@fig-vis-stat-bar shows how this process works with `geom_bar()`.
-
-```{r}
-#| label: fig-vis-stat-bar
-#| echo: false
-#| out-width: "100%"
-#| fig-cap: >
-#|   When create a bar chart we first start with the raw data, then
-#|   aggregate it to count the number of observations in each bar,
-#|   and finally map those computed variables to plot aesthetics.
-#| fig-alt: >
-#|   A figure demonstrating three steps of creating a bar chart. 
-#|   Step 1. geom_bar() begins with the diamonds data set. Step 2. geom_bar() 
-#|   transforms the data with the count stat, which returns a data set of 
-#|   cut values and counts. Step 3. geom_bar() uses the transformed data to 
-#|   build the plot. cut is mapped to the x-axis, count is mapped to the y-axis.
-
-knitr::include_graphics("images/visualization-stat-bar.png")
-```
-
-You can learn which stat a geom uses by inspecting the default value for the `stat` argument.
-For example, `?geom_bar` shows that the default value for `stat` is "count", which means that `geom_bar()` uses `stat_count()`.
-`stat_count()` is documented on the same page as `geom_bar()`.
-If you scroll down, the section called "Computed variables" explains that it computes two new variables: `count` and `prop`.
-
-You can generally use geoms and stats interchangeably.
-For example, you can recreate the previous plot using `stat_count()` instead of `geom_bar()`:
-
-```{r}
-#| fig-alt: >
-#|   Bar chart of number of each cut of diamond. There are roughly 1500 
-#|   Fair, 5000 Good, 12000 Very Good, 14000 Premium, and 22000 Ideal cut 
-#|   diamonds.
-
-ggplot(data = diamonds) + 
-  stat_count(mapping = aes(x = cut))
-```
-
-This works because every geom has a default stat; and every stat has a default geom.
-This means that you can typically use geoms without worrying about the underlying statistical transformation.
-However, there are three reasons why you might need to use a stat explicitly:
-
-1.  You might want to override the default stat.
-    In the code below, we change the stat of `geom_bar()` from count (the default) to identity.
-    This lets me map the height of the bars to the raw values of a $y$ variable.
-    Unfortunately when people talk about bar charts casually, they might be referring to this type of bar chart, where the height of the bar is already present in the data, or the previous bar chart where the height of the bar is generated by counting rows.
-
-    ```{r}
-    #| warning: false
-    #| fig-alt: >
-    #|   Bar chart of number of each cut of diamond. There are roughly 1500 
-    #|   Fair, 5000 Good, 12000 Very Good, 14000 Premium, and 22000 Ideal cut 
-    #|   diamonds.
-
-    demo <- tribble(
-      ~cut,         ~freq,
-      "Fair",       1610,
-      "Good",       4906,
-      "Very Good",  12082,
-      "Premium",    13791,
-      "Ideal",      21551
-    )
-
-    ggplot(data = demo) +
-      geom_bar(mapping = aes(x = cut, y = freq), stat = "identity")
-    ```
-
-    (Don't worry that you haven't seen `<-` or `tribble()` before.
-    You might be able to guess their meaning from the context, and you'll learn exactly what they do soon!)
-
-2.  You might want to override the default mapping from transformed variables to aesthetics.
-    For example, you might want to display a bar chart of proportions, rather than counts:
-
-    ```{r}
-    #| fig-alt: >
-    #|   Bar chart of proportion of each cut of diamond. Roughly, Fair 
-    #|   diamonds make up 0.03, Good 0.09, Very Good 0.22, Premium 26, and 
-    #|   Ideal 0.40.
-
-    ggplot(data = diamonds) + 
-      geom_bar(mapping = aes(x = cut, y = after_stat(prop), group = 1))
-    ```
-
-    To find the variables computed by the stat, look for the section titled "computed variables" in the help for `geom_bar()`.
-
-3.  You might want to draw greater attention to the statistical transformation in your code.
-    For example, you might use `stat_summary()`, which summarizes the y values for each unique x value, to draw attention to the summary that you're computing:
-
-    ```{r}
-    #| fig-alt: >
-    #|   A plot with depth on the y-axis and cut on the x-axis (with levels 
-    #|   fair, good, very good, premium, and ideal) of diamonds. For each level 
-    #|   of cut, vertical lines extend from minimum to maximum depth for diamonds 
-    #|   in that cut category, and the median depth is indicated on the line 
-    #|   with a point.
-
-    ggplot(data = diamonds) + 
-      stat_summary(
-        mapping = aes(x = cut, y = depth),
-        fun.min = min,
-        fun.max = max,
-        fun = median
-      )
-    ```
-
-ggplot2 provides more than 20 stats for you to use.
-Each stat is a function, so you can get help in the usual way, e.g. `?stat_bin`.
-To see a complete list of stats, try the [ggplot2 cheatsheet](https://rstudio.com/resources/cheatsheets).
-
-### Exercises
-
-1.  What is the default geom associated with `stat_summary()`?
-    How could you rewrite the previous plot to use that geom function instead of the stat function?
-
-2.  What does `geom_col()` do?
-    How is it different from `geom_bar()`?
-
-3.  Most geoms and stats come in pairs that are almost always used in concert.
-    Read through the documentation and make a list of all the pairs.
-    What do they have in common?
-
-4.  What variables does `stat_smooth()` compute?
-    What parameters control its behaviour?
-
-5.  In our proportion bar chart, we need to set `group = 1`.
-    Why?
-    In other words, what is the problem with these two graphs?
-
-    ```{r}
-    #| eval: false
-
-    ggplot(data = diamonds) + 
-      geom_bar(mapping = aes(x = cut, y = after_stat(prop)))
-    ggplot(data = diamonds) + 
-      geom_bar(mapping = aes(x = cut, fill = color, y = after_stat(prop)))
-    ```
-
-## Position adjustments
-
-There's one more piece of magic associated with bar charts.
-You can color a bar chart using either the `color` aesthetic, or, more usefully, `fill`:
-
-```{r}
-#| layout-ncol: 2
-#| fig-width: 4
-#| fig-height: 2
-#| fig-alt: >
-#|   Two bar charts of cut of diamonds. In the first plot, the bars have colored 
-#|   borders. In the second plot, they're filled with colors. Heights of the 
-#|   bars correspond to the number of diamonds in each cut category.
-
-ggplot(data = diamonds) + 
-  geom_bar(mapping = aes(x = cut, color = cut))
-ggplot(data = diamonds) + 
-  geom_bar(mapping = aes(x = cut, fill = cut))
-```
-
-Note what happens if you map the fill aesthetic to another variable, like `clarity`: the bars are automatically stacked.
-Each colored rectangle represents a combination of `cut` and `clarity`.
-
-```{r}
-#| fig-alt: >
-#|   Segmented bar chart of cut of diamonds, where each bar is filled with 
-#|   colors for the levels of clarity. Heights of the bars correspond to the 
-#|   number of diamonds in each cut category, and heights of the colored 
-#|   segments are proportional to the number of diamonds with a given clarity 
-#|   level within a given cut level.
-
-ggplot(data = diamonds) + 
-  geom_bar(mapping = aes(x = cut, fill = clarity))
-```
-
-The stacking is performed automatically using the **position adjustment** specified by the `position` argument.
-If you don't want a stacked bar chart, you can use one of three other options: `"identity"`, `"dodge"` or `"fill"`.
-
--   `position = "identity"` will place each object exactly where it falls in the context of the graph.
-    This is not very useful for bars, because it overlaps them.
-    To see that overlapping we either need to make the bars slightly transparent by setting `alpha` to a small value, or completely transparent by setting `fill = NA`.
-
-    ```{r}
-    #| layout-ncol: 2
-    #| fig-width: 4
-    #| fig-height: 2
-    #| fig-alt: >
-    #|   Two segmented bar charts of cut of diamonds, where each bar is filled 
-    #|   with colors for the levels of clarity. Heights of the bars correspond 
-    #|   to the number of diamonds in each cut category, and heights of the 
-    #|   colored segments are proportional to the number of diamonds with a 
-    #|   given clarity level within a given cut level. However the segments 
-    #|   overlap. In the first plot the segments are filled with transparent 
-    #|   colors, in the second plot the segments are only outlined with colors.
-
-    ggplot(data = diamonds, mapping = aes(x = cut, fill = clarity)) + 
-      geom_bar(alpha = 1/5, position = "identity")
-    ggplot(data = diamonds, mapping = aes(x = cut, color = clarity)) + 
-      geom_bar(fill = NA, position = "identity")
-    ```
-
-    The identity position adjustment is more useful for 2d geoms, like points, where it is the default.
-
--   `position = "fill"` works like stacking, but makes each set of stacked bars the same height.
-    This makes it easier to compare proportions across groups.
-
-    ```{r}
-    #| fig-alt: >
-    #|   Segmented bar chart of cut of diamonds, where each bar is filled with 
-    #|   colors for the levels of clarity. Height of each bar is 1 and heights 
-    #|   of the colored segments are proportional to the proportion of diamonds 
-    #|   with a given clarity level within a given cut level.
-
-    ggplot(data = diamonds) + 
-      geom_bar(mapping = aes(x = cut, fill = clarity), position = "fill")
-    ```
-
--   `position = "dodge"` places overlapping objects directly *beside* one another.
-    This makes it easier to compare individual values.
-
-    ```{r}
-    #| fig-alt: >
-    #|   Dodged bar chart of cut of diamonds. Dodged bars are grouped by levels 
-    #|   of cut (fair, good, very good, premium, and ideal). In each group there 
-    #|   are eight bars, one for each level of clarity, and filled with a 
-    #|   different color for each level. Heights of these bars represent the 
-    #|   number of diamonds with a given level of cut and clarity.
-
-    ggplot(data = diamonds) + 
-      geom_bar(mapping = aes(x = cut, fill = clarity), position = "dodge")
-    ```
-
-There's one other type of adjustment that's not useful for bar charts, but can be very useful for scatterplots.
-Recall our first scatterplot.
-Did you notice that the plot displays only 126 points, even though there are 234 observations in the dataset?
-
-```{r}
-#| echo: false
-#| fig-alt: >
-#|   Scatterplot of highway fuel efficiency versus engine size of cars that 
-#|   shows a negative association.
-
-ggplot(data = mpg) + 
-  geom_point(mapping = aes(x = displ, y = hwy))
-```
-
-The underlying values of `hwy` and `displ` are rounded so the points appear on a grid and many points overlap each other.
-This problem is known as **overplotting**.
-This arrangement makes it difficult to see the distribution of the data.
-Are the data points spread equally throughout the graph, or is there one special combination of `hwy` and `displ` that contains 109 values?
-
-You can avoid this gridding by setting the position adjustment to "jitter".
-`position = "jitter"` adds a small amount of random noise to each point.
-This spreads the points out because no two points are likely to receive the same amount of random noise.
-
-```{r}
-#| fig-alt: >
-#|   Jittered scatterplot of highway fuel efficiency versus engine size of cars. 
-#|   The plot shows a negative association.
-
-ggplot(data = mpg) + 
-  geom_point(mapping = aes(x = displ, y = hwy), position = "jitter")
-```
-
-Adding randomness seems like a strange way to improve your plot, but while it makes your graph less accurate at small scales, it makes your graph *more* revealing at large scales.
-Because this is such a useful operation, ggplot2 comes with a shorthand for `geom_point(position = "jitter")`: `geom_jitter()`.
-
-To learn more about a position adjustment, look up the help page associated with each adjustment: `?position_dodge`, `?position_fill`, `?position_identity`, `?position_jitter`, and `?position_stack`.
-
-### Exercises
-
-1.  What is the problem with this plot?
-    How could you improve it?
-
-    ```{r}
-    #| fig-alt: >
-    #|   Scatterplot of highway fuel efficiency versus city fuel efficiency 
-    #|   of cars that shows a positive association. The number of points 
-    #|   visible in this plot is less than the number of points in the dataset.
-
-    ggplot(data = mpg, mapping = aes(x = cty, y = hwy)) + 
-      geom_point()
-    ```
-
-2.  What parameters to `geom_jitter()` control the amount of jittering?
-
-3.  Compare and contrast `geom_jitter()` with `geom_count()`.
-
-4.  What's the default position adjustment for `geom_boxplot()`?
-    Create a visualization of the `mpg` dataset that demonstrates it.
-
-## Coordinate systems
-
-Coordinate systems are probably the most complicated part of ggplot2.
-The default coordinate system is the Cartesian coordinate system where the x and y positions act independently to determine the location of each point.
-There are three other coordinate systems that are occasionally helpful.
-
--   `coord_flip()` switches the x and y axes.
-    This is useful (for example), if you want horizontal boxplots.
-    It's also useful for long labels: it's hard to get them to fit without overlapping on the x-axis.
-
-    ```{r}
-    #| fig-width: 4
-    #| fig-height: 2
-    #| layout-ncol: 2
-    #| fig-alt: >
-    #|   Two side-by-side box plots of highway fuel efficiency of cars. A 
-    #|   separate box plot is created for cars in each level of class (2seater, 
-    #|   compact, midsize, minivan, pickup, subcompact, and suv). In the first 
-    #|   plot class is on the x-axis, in the second plot class is on the y-axis. 
-    #|   The second plot makes it easier to read the names of the levels of class 
-    #|   since they are listed down the y-axis, avoiding overlap.
-
-    ggplot(data = mpg, mapping = aes(x = class, y = hwy)) + 
-      geom_boxplot()
-    ggplot(data = mpg, mapping = aes(x = class, y = hwy)) + 
-      geom_boxplot() +
-      coord_flip()
-    ```
-
-    However, note that you can achieve the same result by flipping the aesthetic mappings of the two variables.
-
-    ```{r}
-    #| fig-alt: >
-    #|   Side-by-side box plots of highway fuel efficiency of cars. A separate 
-    #|   box plot is drawn along the y-axis for cars in each level of class 
-    #|   (2seater, compact, midsize, minivan, pickup, subcompact, and suv).
-
-    ggplot(data = mpg, mapping = aes(y = class, x = hwy)) + 
-      geom_boxplot()
-    ```
-
--   `coord_quickmap()` sets the aspect ratio correctly for maps.
-    This is very important if you're plotting spatial data with ggplot2.
-    We don't have the space to discuss maps in this book, but you can learn more in the [Maps chapter](https://ggplot2-book.org/maps.html) of *ggplot2: Elegant graphics for data analysis*.
-
-    ```{r}
-    #| layout-ncol: 2
-    #| fig-width: 4
-    #| fig-height: 2
-    #| message: false
-    #| fig-alt: >
-    #|   Two maps of the boundaries of New Zealand. In the first plot the aspect 
-    #|   ratio is incorrect, in the second plot it is correct.
-
-    nz <- map_data("nz")
-
-    ggplot(nz, aes(long, lat, group = group)) +
-      geom_polygon(fill = "white", color = "black")
-
-    ggplot(nz, aes(long, lat, group = group)) +
-      geom_polygon(fill = "white", color = "black") +
-      coord_quickmap()
-    ```
-
--   `coord_polar()` uses polar coordinates.
-    Polar coordinates reveal an interesting connection between a bar chart and a Coxcomb chart.
-
-    ```{r}
-    #| layout-ncol: 2
-    #| fig-width: 4
-    #| fig-asp: 1
-    #| fig-alt: >
-    #|   There are two plots. On the left is a bar chart of cut of diamonds, 
-    #|   on the right is a Coxcomb chart of the same data.
-
-    bar <- ggplot(data = diamonds) + 
-      geom_bar(
-        mapping = aes(x = cut, fill = cut), 
-        show.legend = FALSE,
-        width = 1
-      ) + 
-      theme(aspect.ratio = 1) +
-      labs(x = NULL, y = NULL)
-
-    bar + coord_flip()
-    bar + coord_polar()
-    ```
-
-### Exercises
-
-1.  Turn a stacked bar chart into a pie chart using `coord_polar()`.
-
-2.  What does `labs()` do?
-    Read the documentation.
-
-3.  What's the difference between `coord_quickmap()` and `coord_map()`?
-
-4.  What does the plot below tell you about the relationship between city and highway mpg?
-    Why is `coord_fixed()` important?
-    What does `geom_abline()` do?
-
-    ```{r}
-    #| fig-alt: >
-    #|   Scatterplot of highway fuel efficiency versus engine size of cars that 
-    #|   shows a negative association. The plot also has a straight line that 
-    #|   follows the trend of the relationship between the variables but does not 
-    #|   go through the cloud of points, it is beneath it.
-
-    ggplot(data = mpg, mapping = aes(x = cty, y = hwy)) +
-      geom_point() + 
-      geom_abline() +
-      coord_fixed()
-    ```
-
-## The layered grammar of graphics
-
-In the previous sections, you learned much more than just how to make scatterplots, bar charts, and boxplots.
-You learned a foundation that you can use to make *any* type of plot with ggplot2.
-To see this, let's add position adjustments, stats, coordinate systems, and faceting to our code template:
-
-    ggplot(data = <DATA>) + 
-      <GEOM_FUNCTION>(
-         mapping = aes(<MAPPINGS>),
-         stat = <STAT>, 
-         position = <POSITION>
-      ) +
-      <COORDINATE_FUNCTION> +
-      <FACET_FUNCTION>
-
-Our new template takes seven parameters, the bracketed words that appear in the template.
-In practice, you rarely need to supply all seven parameters to make a graph because ggplot2 will provide useful defaults for everything except the data, the mappings, and the geom function.
-
-The seven parameters in the template compose the grammar of graphics, a formal system for building plots.
-The grammar of graphics is based on the insight that you can uniquely describe *any* plot as a combination of a dataset, a geom, a set of mappings, a stat, a position adjustment, a coordinate system, and a faceting scheme.
-
-To see how this works, consider how you could build a basic plot from scratch: you could start with a dataset and then transform it into the information that you want to display (with a stat).
-
-```{r}
-#| echo: false
-#| fig-alt: >
-#|   A figure demonstrating the steps for going from raw data to table of counts 
-#|   where each row represents one level of cut and a count column shows how many 
-#|   diamonds are in that cut level. Steps 1 and 2 are annotated. Step 1. Begin 
-#|   with the diamonds dataset. Step 2. Compute counts for each cut value 
-#|   with stat_count().
-
-knitr::include_graphics("images/visualization-grammar-1.png")
-```
-
-Next, you could choose a geometric object to represent each observation in the transformed data.
-You could then use the aesthetic properties of the geoms to represent variables in the data.
-You would map the values of each variable to the levels of an aesthetic.
-
-```{r}
-#| echo: false
-#| fig-alt: >
-#|   A figure demonstrating the steps for going from raw data to table of counts 
-#|   where each row represents one level of cut and a count column shows how 
-#|   many diamonds are in that cut level. Each level is also mapped to a color. 
-#|   Steps 3 and 4 are annotated. Step 3. Represent each observation with a bar. 
-#|   Step 4. Map the fill of each bar to the ..count.. variable.
-
-knitr::include_graphics("images/visualization-grammar-2.png")
-```
-
-You'd then select a coordinate system to place the geoms into, using the location of the objects (which is itself an aesthetic property) to display the values of the x and y variables.
-At that point, you would have a complete graph, but you could further adjust the positions of the geoms within the coordinate system (a position adjustment) or split the graph into subplots (faceting).
-You could also extend the plot by adding one or more additional layers, where each additional layer uses a dataset, a geom, a set of mappings, a stat, and a position adjustment.
-
-```{r}
-#| echo: false
-#| fig-alt: >
-#|   A figure demonstrating the steps for going from raw data to bar chart where 
-#|   each bar represents one level of cut and filled in with a different color. 
-#|   Steps 5 and 6 are annotated. Step 5. Place geoms in a Cartesian coordinate 
-#|   system. Step 6. Map the y values to ..count.. and the x values to cut.
-
-knitr::include_graphics("images/visualization-grammar-3.png")
-```
-
-You could use this method to build *any* plot that you imagine.
-In other words, you can use the code template that you've learned in this chapter to build hundreds of thousands of unique plots.
-
-If you'd like to learn more about this theoretical underpinnings of ggplot2, you might enjoy reading "[The Layered Grammar of Graphics](https://vita.had.co.nz/papers/layered-grammar.pdf)", the scientific paper that describes the theory of ggplot2 in detail.
 
 ## Summary
 
-In this chapter, you've learn the basics of data visualization with ggplot2.
-We started with the basic idea that underpins ggplot2: a visualization is a mapping from variables in your data to aesthetic properties like position, colour, size and shape.
-You then learned about facets, which allow you to create small multiples, where each panel contains a subgroup from your data.
-We then gave you a whirlwind tour of the geoms and stats which control the "type" of graph you get, whether it's a scatterplot, line plot, histogram, or something else.
-Position adjustment control the fine details of position when geoms might otherwise overlap, and coordinate systems allow you fundamentally change what `x` and `y` mean.
+In this chapter, you've learned the basics of data visualization with ggplot2.
+We started with the basic idea that underpins ggplot2: a visualization is a mapping from variables in your data to aesthetic properties like position, color, size and shape.
+You then learned about increasing the complexity and improving the presentation of your plots layer-by-layer.
+You also learned about commonly used plots for visualizing the distribution of a single variable as well as for visualizing relationships between two or more variables, by levering additional aesthetic mappings and/or splitting your plot into small multiples using faceting.
 
-We'll use visualizations again and again through out this book, introducing new techniques as we need them.
-If you want to get a comprehensive understand of ggplot2, we recommend reading the book, [*ggplot2: Elegant Graphics for Data Analysis*](https://ggplot2-book.org).
-Other useful resources are the [*R Graphics Cookbook*](https://r-graphics.org) by Winston Chang and [*Fundamentals of Data Visualization*](https://clauswilke.com/dataviz/) by Claus Wilke.
+We'll use visualizations again and again through out this book, introducing new techniques as we need them as well as do a deeper dive into creating visualizations with ggplot2 in @sec-layers through @sec-eda.
 
 With the basics of visualization under your belt, in the next chapter we're going to switch gears a little and give you some practical workflow advice.
 We intersperse workflow advice with data science tools throughout this part of the book because it'll help you stay organize as you write increasing amounts of R code.

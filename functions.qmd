@@ -384,14 +384,14 @@ With this theory under your belt, we'll then show you a bunch of examples to ill
 ### Indirection and tidy evaluation
 
 When you start writing functions that use dplyr verbs you rapidly hit the problem of indirection.
-Let's illustrate the problem with a very simple function: `pull_unique()`.
-The goal of this function is to `pull()` the unique (distinct) values of a variable:
+Let's illustrate the problem with a very simple function: `grouped_mean()`.
+The goal of this function is compute the mean of `mean_var` grouped by `group_var`:
 
 ```{r}
-pull_unique <- function(df, var) {
+grouped_mean <- function(df, group_var, mean_var) {
   df |> 
-    distinct(var) |> 
-    pull(var)
+    group_by(group_var) |> 
+    summarize(mean(mean_var))
 }
 ```
 
@@ -399,38 +399,45 @@ If we try and use it, we get an error:
 
 ```{r}
 #| error: true
-diamonds |> pull_unique(clarity)
+diamonds |> grouped_mean(cut, carat)
 ```
 
 To make the problem a bit more clear we can use a made up data frame:
 
 ```{r}
-df <- tibble(var = "var", x = "x", y = "y")
-df |> pull_unique(x)
-df |> pull_unique(y)
+df <- tibble(
+  mean_var = 1,
+  group_var = "g",
+  group = 1,
+  x = 10,
+  y = 100
+)
+df |> grouped_mean(group, x)
+df |> grouped_mean(group, y)
 ```
 
-Regardless of how we call `pull_unique()` it always does `df |> distinct(var) |> pull(var)`, instead of `df |> distinct(x) |> pull(x)` or `df |> distinct(y) |> pull(y)`.
+Regardless of how we call `grouped_mean()` it always does `df |> group_by(group_var) |> summarise(mean(mean_var))`, instead of `df |> group_by(group) |> summarise(mean(x))` or `df |> group_by(group) |> summarise(mean(y))`.
 This is a problem of indirection, and it arises because dplyr uses **tidy evaluation** to allow you to refer to the names of variables inside your data frame without any special treatment.
 
 Tidy evaluation is great 95% of the time because it makes your data analyses very concise as you never have to say which data frame a variable comes from; it's obvious from the context.
 The downside of tidy evaluation comes when we want to wrap up repeated tidyverse code into a function.
-Here we need some way to tell `distinct()` and `pull()` not to treat `var` as the name of a variable, but instead look inside `var` for the variable we actually want to use.
+Here we need some way to tell `group_mean()` and `summarize()` not to treat `group_var` and `mean_var` as the name of the variables, but instead look inside them for the variable we actually want to use.
 
 Tidy evaluation includes a solution to this problem called **embracing** 🤗.
 Embracing a variable means to wrap it in braces so (e.g.) `var` becomes `{{ var }}`.
 Embracing a variable tells dplyr to use the value stored inside the argument, not the argument as the literal variable name.
 One way to remember what's happening is to think of `{{ }}` as looking down a tunnel --- `{{ var }}` will make a dplyr function look inside of `var` rather than looking for a variable called `var`.
 
-So to make `pull_unique()` work we need to replace `var` with `{{ var }}`:
+So to make grouped_mean`()` work we need to replace surround `group_var` and `mean_var()` with `{{ }}`:
 
 ```{r}
-pull_unique <- function(df, var) {
+grouped_mean <- function(df, group_var, mean_var) {
   df |> 
-    distinct({{ var }}) |> 
-    pull({{ var }})
+    group_by({{ group_var }}) |> 
+    summarize(mean({{ mean_var }}))
 }
-diamonds |> pull_unique(clarity)
+
+diamonds |> grouped_mean(cut, carat)
 ```
 
 Success!
@@ -441,7 +448,7 @@ So the key challenge in writing data frame functions is figuring out which argum
 Fortunately this is easy because you can look it up from the documentation 😄.
 There are two terms to look for in the docs which corresponding to the two most common sub-types of tidy evaluation:
 
--   **Data-masking**: this is used in functions like `arrange()`, `filter()`, and `summarise()` that compute with variables.
+-   **Data-masking**: this is used in functions like `arrange()`, `filter()`, and `summarize()` that compute with variables.
 
 -   **Tidy-selection**: this is used for for functions like `select()`, `relocate()`, and `rename()` that select variables.
 
@@ -455,7 +462,7 @@ If you commonly perform the same set of summaries when doing initial data explor
 
 ```{r}
 summary6 <- function(data, var) {
-  data |> summarise(
+  data |> summarize(
     min = min({{ var }}, na.rm = TRUE),
     mean = mean({{ var }}, na.rm = TRUE),
     median = median({{ var }}, na.rm = TRUE),
@@ -468,9 +475,9 @@ summary6 <- function(data, var) {
 diamonds |> summary6(carat)
 ```
 
-(Whenever you wrap `summarise()` in a helper, we think it's good practice to set `.groups = "drop"` to both avoid the message and leave the data in an ungrouped state.)
+(Whenever you wrap `summarize()` in a helper, we think it's good practice to set `.groups = "drop"` to both avoid the message and leave the data in an ungrouped state.)
 
-The nice thing about this function is because it wraps `summarise()` you can used it on grouped data:
+The nice thing about this function is because it wraps `summarize()` you can used it on grouped data:
 
 ```{r}
 diamonds |> 
@@ -489,7 +496,7 @@ diamonds |>
 
 To summarize multiple variables you'll need to wait until @sec-across, where you'll learn how to use `across()`.
 
-Another popular `summarise()` helper function is a version of `count()` that also computes proportions:
+Another popular `summarize()` helper function is a version of `count()` that also computes proportions:
 
 ```{r}
 # https://twitter.com/Diabb6/status/1571635146658402309
@@ -511,8 +518,7 @@ unique_where <- function(df, condition, var) {
   df |> 
     filter({{ condition }}) |> 
     distinct({{ var }}) |> 
-    arrange({{ var }}) |> 
-    pull({{ var }})
+    arrange({{ var }})
 }
 
 # Find all the destinations in December
@@ -521,7 +527,7 @@ flights |> unique_where(month == 12, dest)
 flights |> unique_where(tailnum == "N14228", month)
 ```
 
-Here we embrace `condition` because it's passed to `filter()` and `var` because its passed to `distinct()`, `arrange()`, and `pull()`.
+Here we embrace `condition` because it's passed to `filter()` and `var` because its passed to `distinct()` and `arrange()`.
 
 We've made all these examples take a data frame as the first argument, but if you're working repeatedly with the same data, it can make sense to hardcode it.
 For example, the following function always works with the flights dataset and always selects `time_hour`, `carrier`, and `flight` since they form the compound primary key that allows you to identify a row.
@@ -547,7 +553,7 @@ You might try writing something like:
 count_missing <- function(df, group_vars, x_var) {
   df |> 
     group_by({{ group_vars }}) |> 
-    summarise(n_miss = sum(is.na({{ x_var }})))
+    summarize(n_miss = sum(is.na({{ x_var }})))
 }
 flights |> 
   count_missing(c(year, month, day), dep_time)
@@ -560,7 +566,7 @@ We can work around that problem by using the handy `pick()` which allows you to 
 count_missing <- function(df, group_vars, x_var) {
   df |> 
     group_by(pick({{ group_vars }})) |> 
-    summarise(n_miss = sum(is.na({{ x_var }})))
+    summarize(n_miss = sum(is.na({{ x_var }})))
 }
 flights |> 
   count_missing(c(year, month, day), dep_time)
@@ -589,7 +595,7 @@ While our examples have mostly focused on dplyr, tidy evaluation also underpins 
 
 ### Exercises
 
-1.  Using the datasets from nyclights13, write functions that:
+1.  Using the datasets from nycflights13, write functions that:
 
     1.  Find all flights that were cancelled (i.e. `is.na(arr_time)`) or delayed by more than an hour.
 
@@ -602,7 +608,7 @@ While our examples have mostly focused on dplyr, tidy evaluation also underpins 
 
         ```{r}
         #| eval: false
-        flights |> group_by(dest) |> summarise_severe()
+        flights |> group_by(dest) |> summarize_severe()
         ```
 
     3.  Finds all flights that were cancelled or delayed by more than a user supplied number of hours:
@@ -612,14 +618,14 @@ While our examples have mostly focused on dplyr, tidy evaluation also underpins 
         flights |> filter_severe(hours = 2)
         ```
 
-    4.  Summarizes the weather to compute the minum, mean, and maximum, of a user supplied variable:
+    4.  Summarizes the weather to compute the minimum, mean, and maximum, of a user supplied variable:
 
         ```{r}
         #| eval: false
-        weather |> summarise_weather(temp)
+        weather |> summarize_weather(temp)
         ```
 
-    5.  Converts the user supplied variable that uses clock time (e.g. `dep_time`, `arr_time`, etc) into a decimal time (i.e. hours + minutes / 60).
+    5.  Converts the user supplied variable that uses clock time (e.g. `dep_time`, `arr_time`, etc.) into a decimal time (i.e. hours + (minutes / 60)).
 
         ```{r}
         #| eval: false
@@ -706,7 +712,7 @@ hex_plot <- function(df, x, y, z, bins = 20, fun = "mean") {
   df |> 
     ggplot(aes({{ x }}, {{ y }}, z = {{ z }})) + 
     stat_summary_hex(
-      aes(colour = after_scale(fill)), # make border same colour as fill
+      aes(color = after_scale(fill)), # make border same color as fill
       bins = bins, 
       fun = fun,
     )
@@ -798,13 +804,13 @@ foo(cyl)
 ```
 
 As with data frame functions, it can be useful to make your plotting functions tightly coupled to a specific dataset, or even a specific variable.
-For example, the following function makes it particularly easy to interactively explore the conditional distribution `bill_length_mm` from palmerpenguins dataset.
+For example, the following function makes it particularly easy to interactively explore the conditional distribution of `carat` from the diamonds dataset.
 
 ```{r}
 # https://twitter.com/yutannihilat_en/status/1574387230025875457
-density <- function(colour, facets, binwidth = 0.1) {
+density <- function(color, facets, binwidth = 0.1) {
   diamonds |> 
-    ggplot(aes(carat, after_stat(density), colour = {{ colour }})) +
+    ggplot(aes(carat, after_stat(density), color = {{ color }})) +
     geom_freqpoly(binwidth = binwidth) +
     facet_wrap(vars({{ facets }}))
 }
@@ -890,21 +896,20 @@ This makes it easier to see the hierarchy in your code by skimming the left-hand
 
 ```{r}
 # missing extra two spaces
-pull_unique <- function(df, var) {
-df |> 
-  distinct({{ var }}) |> 
-  pull({{ var }})
+density <- function(color, facets, binwidth = 0.1) {
+diamonds |> 
+  ggplot(aes(carat, after_stat(density), color = {{ color }})) +
+  geom_freqpoly(binwidth = binwidth) +
+  facet_wrap(vars({{ facets }}))
 }
 
 # Pipe indented incorrectly
-pull_unique <- function(df, var) {
-  df |> 
-  distinct({{ var }}) |> 
-  pull({{ var }})
+density <- function(color, facets, binwidth = 0.1) {
+  diamonds |> 
+  ggplot(aes(carat, after_stat(density), color = {{ color }})) +
+  geom_freqpoly(binwidth = binwidth) +
+  facet_wrap(vars({{ facets }}))
 }
-
-# Missing {} and all one line
-pull_unique <- function(df, var) df |> distinct({{ var }}) |> pull({{ var }})
 ```
 
 As you can see we recommend putting extra spaces inside of `{{ }}`.
@@ -925,7 +930,7 @@ This makes it very obvious that something unusual is happening.
 
 2.  Take a function that you've written recently and spend 5 minutes brainstorming a better name for it and its arguments.
 
-3.  Make a case for why `norm_r()`, `norm_d()` etc would be better than `rnorm()`, `dnorm()`.
+3.  Make a case for why `norm_r()`, `norm_d()` etc. would be better than `rnorm()`, `dnorm()`.
     Make a case for the opposite.
 
 ## Summary
