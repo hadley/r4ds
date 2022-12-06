@@ -2,7 +2,7 @@
 freeze: true
 ---
 
-# Binary data formats {#sec-binary-data}
+# Arrow {#sec-arrow}
 
 ```{r}
 #| results: "asis"
@@ -45,9 +45,10 @@ library(duckdb)
 
 We'll also need a dataset worthy of these tools.
 We're going to use a data set of item checkouts from Seattle public libraries, available online at [data.seattle.gov/Community/Checkouts-by-Title/tmmm-ytt6](https://data.seattle.gov/Community/Checkouts-by-Title/tmmm-ytt6).
-The data is distributed as a single 9GB csv file, so it may take some time to download: this is one of the challenges of working with bigger datasets!
+This dataset contains 41,389,465 rows of describing for each book, for each type (e.g. book, ebook, CD), how many times it was checked out each month.
 
-I've made the data available on Amazon's S3 service to ensure that we're all working with the same data.
+The data is distributed as a single 9GB csv file, so it may take some time to download: this is one of the challenges of working with bigger datasets!
+You can download a cached copy of the data (to ensure you get the same version as this chapter) with the following code.
 
 ```{r}
 #| eval: false
@@ -59,10 +60,6 @@ options(timeout = 60 * 60)
 download.file(url, "data/seattle-library-checkouts.csv")
 ```
 
-TODO: describe the data.
-Number of rows.
-What the columns are.
-
 ## Opening a dataset
 
 Let's start by taking a look at the Seattle library checkout data.
@@ -70,26 +67,17 @@ At 9GB in size, the csv file is large enough that we probably don't want to load
 So instead of using `read_csv()` we'll use the `open_dataset()` function from the arrow package:
 
 ```{r open-dataset}
+# partial schema for ISBN column only
+opts <- CsvConvertOptions$create(col_types = schema(ISBN = string()))
+
 seattle_csv <- open_dataset(
   sources = "data/seattle-library-checkouts.csv", 
   format = "csv",
-  schema = schema(
-    field("UsageClass", string()),
-    field("CheckoutType", string()),
-    field("MaterialType", string()),
-    field("CheckoutYear", int64()),
-    field("CheckoutMonth", int64()),
-    field("Checkouts", int64()),
-    field("Title", string()),
-    field("ISBN", string()),
-    field("Creator", string()),
-    field("Subjects", string()),
-    field("Publisher", string()),
-    field("PublicationYear", string())
-  ),
-  skip_rows = 1
+  convert_options = opts
 )
 ```
+
+(Here we've had to use some relatively advanced code to parse the ISBN variable correctly: this is because the first \~83,000 rows don't contain an ISBN so arrow doesn't figure out the correct type. The arrow team is aware of this problem and there will hopefully be a better approach by the time you read this chapter.)
 
 When this code is run, `open_dataset()` scans the first part of the file: it reads enough rows to work out the structure of the data set structure and creates the `seattle_csv` object that stores that metadata.
 The data remain on-disk, and are not loaded into memory, unless you force a computation with `collect()` or `glimpse()`:
@@ -102,12 +90,14 @@ seattle_csv |> glimpse()
 The first line in the output tell you that `seattle_csv` is stored locally on-disk as a single csv file.
 The second line indicates that the data are stored as a tabular data set with 41 million rows and 12 columns.
 
-We can start to immediately use this dataset with dplyr verbs, using `collect()` to force arrow to perform the computation and return some data:
+We can start to immediately use this dataset with dplyr verbs, using `collect()` to force arrow to perform the computation and return some data.
+For example, this code tells us the total number of check outs per year:
 
 ```{r}
 #| cache: true
 seattle_csv |> 
-  count(CheckoutYear) |> 
+  count(CheckoutYear, wt = Checkouts) |> 
+  arrange(CheckoutYear) |> 
   collect()
 ```
 
@@ -160,7 +150,8 @@ Let's apply these ideas to the Seattle library data to see how they play out in 
 We need to first decide how we're going to partition the data.
 We're going to use `CheckoutYear`, since it's likely some analyses will only want to look at recent data, and it yields 18 chunks of a reasonable size.
 
-With that in hand we can partition the data and save it as a parquet file:
+There are two steps need to rewrite the data: we define our partitioning using `dplyr::group_by()` and then save the partitions to a directory using `arrow::write_dataset()`.
+`write_dataset()` has two important arguments: a directory where we'll create the files and the format we'll use.
 
 ```{r}
 pq_path <- "data/seattle-library-checkouts"
@@ -174,9 +165,7 @@ seattle_csv |>
   write_dataset(path = pq_path, format = "parquet")
 ```
 
-There are two steps: we first define our partitioning using `dplyr::group_by()` and then save the partitions to a directory using `arrow::write_dataset()`.
-`write_dataset()` has two important arguments: a directory where we'll create the files and the format we'll use.
-This takes about a minute on my computer: this is an initial investment that's going to pay off by making all future operations much much faster.
+This took about a minute to run on Hadley's computer; as we'll see shortly this investment will pays off by making all future operations much much faster.
 
 Let's take a look at what we just made:
 
@@ -270,7 +259,7 @@ This massive difference is performance is why that whenever you're working with 
 
 ### Using dbplyr with arrow
 
-There's one last advantage of parquet and arrow that we wanted point you --- it's very easy to turn an arrow dataset into a duckdb datasource by calling `arrow::to_duckdb()`:
+There's one last advantage of parquet and arrow that we wanted to point out --- it's very easy to turn an arrow dataset into a duckdb datasource by calling `arrow::to_duckdb()`:
 
 ```{r use-duckdb}
 seattle_pq |> 
@@ -285,3 +274,8 @@ seattle_pq |>
 The nice thing about `to_duckdb()` is that the transfer doesn't involve any memory copying, and speaks to the goals of the arrow ecosystem: enable seamless transitions from one computing framework to another.
 
 ## Summary
+
+In this chapter, you've been given a taste of the arrow package, which provides a dplyr backend for working with large on-disk datasets.
+It can work with CSV files, its much much faster if you convert your data to parquet.
+Parquet is a binary data format that's designed specifically for data analysis on modern computers.
+Far fewer tools can work with parquet files compared to CSV, but it's partitioned, compressed, and columnar structure makes it much more efficient to analyze.
