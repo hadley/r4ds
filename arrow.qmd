@@ -41,17 +41,17 @@ library(arrow)
 Later in the chapter, we'll also see some connections between arrow and duckdb, so we'll also need dbplyr and duckdb.
 
 ```{r}
-library(dbplyr)
+library(dbplyr, warn.conflicts = FALSE)
 library(duckdb)
 ```
 
 ## Getting the data
 
 We begin by getting a dataset worthy of these tools: a data set of item checkouts from Seattle public libraries, available online at [data.seattle.gov/Community/Checkouts-by-Title/tmmm-ytt6](https://data.seattle.gov/Community/Checkouts-by-Title/tmmm-ytt6).
-This dataset contains 41,389,465 rows of describing for each book, for each type (e.g. book, ebook, CD), how many times it was checked out each month.
+This dataset contains 41,389,465 rows that tell you how many times each book was checked out each month from April 2015 to October 2022.
 
-The data is distributed as a single 9GB CSV file, so it may take some time to download: this is one of the challenges of working with bigger datasets!
-The following code will get you a cached copy of the data:
+The following code will get you a cached copy of the data.
+The data is a 9GB CSV file, so it will take some time to download: simply getting the data is often the first challenge!
 
 ```{r}
 #| eval: false
@@ -65,10 +65,10 @@ download.file(url, "data/seattle-library-checkouts.csv")
 
 ## Opening a dataset
 
-Let's start by taking a look at the Seattle library checkout data.
+Let's start by taking a look at the data.
 At 9GB, this file is large enough that we probably don't want to load the whole thing into memory.
 A good rule of thumb is that you usually want at least twice as much memory as the size of the data, and many laptops top out at 16 Gb.
-So we want to avoid `read_csv()`, and instead use the `open_dataset()` function from the arrow package:
+This means we want to avoid `read_csv()` and instead use the `arrow::open_dataset()`:
 
 ```{r open-dataset}
 # partial schema for ISBN column only
@@ -92,11 +92,11 @@ This metadata is what we see if we print `seattle_csv`:
 seattle_csv
 ```
 
-The first line in the output tells you that `seattle_csv` is stored locally on-disk as a single CSV file; it will only be loaded into memory when necessary.
+The first line in the output tells you that `seattle_csv` is stored locally on-disk as a single CSV file; it will only be loaded into memory as needed.
 The remainder of the output tells you the column type that arrow has imputed for each column.
 
-We can see what's actually in the data by making arrow do some work with `glimpse()`.
-This tells us that we have \~41 million rows and 12 columns, and shows some of the early values.
+We can see what's actually in with `glimpse()`.
+This reveals that there are \~41 million rows and 12 columns, and shows us a few values.
 
 ```{r glimpse-data}
 #| cache: true
@@ -104,7 +104,7 @@ seattle_csv |> glimpse()
 ```
 
 We can start to use this dataset with dplyr verbs, using `collect()` to force arrow to perform the computation and return some data.
-For example, this code tells us the total number of check outs per year:
+For example, this code tells us the total number of checkouts per year:
 
 ```{r}
 #| cache: true
@@ -114,21 +114,21 @@ seattle_csv |>
   collect()
 ```
 
-This highlights a useful feature of arrow: this code will work regardless of how large the underlying dataset is.
-But it is currently rather slow: on Hadley's computer, the code took about 10s.
+Thanks to arrow, this code will work regardless of how large the underlying dataset is.
+But it's currently rather slow: on Hadley's computer, it took \~10s to run.
 That's not terrible given how much data we have, but we can make it much faster by switching to a better format.
 
 ## The parquet format
 
-To make this data easier to work with, we're going to do two things: we're going to switch to the parquet file format and we're going to split it up into multiple files.
-Once we've introduced you to parquet and partitioning, we'll apply what we've learned to the Seattle library data.
+To make this data easier to work with, lets switch to the parquet file format and split it up into multiple files.
+The following sections will first introduce you to parquet and partitioning, and then apply what we learned to the Seattle library data.
 
 ### Advantages of parquet
 
-Like CSV, parquet stores a rectangular data set, but it's designed specifically for the needs of big data.
+Like CSV, parquet is used for rectangular data, but instead of being a text format that you can read with any file editor, it's a custom binary format designed specifically for the needs of big data.
 This means that:
 
--   Parquet files are usually smaller.
+-   Parquet files are usually smaller the equivalent CSV file.
     Parquet relies on [efficient encodings](https://parquet.apache.org/docs/file-format/data-pages/encodings/) to keep file size down, and supports file compression.
     This helps make parquet files fast because there's less data to move from disk to memory.
 
@@ -141,8 +141,7 @@ This means that:
     This means that they're organised column-by-column, much like R's data frame.
     This typically leads to better performance for data analysis tasks compared to CSV files, which are organised row-by-row.
 
--   Each parquet file is made up of chunks of rows.
-    This makes it possible to work on different parts of the file in parallel, and, if you're lucky, to skip some chunks all together.
+-   Parquet files are "chunked", which makes it possible to work on different parts of the file at the same time, and, if you're lucky, to skip some chunks all together.
 
 ### Partitioning
 
@@ -263,7 +262,7 @@ The \~100x speedup in performance is attributable to two factors: the multi-file
 -   Partitioning improves performance because this query uses `CheckoutYear == 2021` to filter the data, and arrow is smart enough to recognize that it only needs to read 1 of the 18 parquet files.
 -   The parquet format improves performance by storing data in a binary format that can be read more directly into memory. The column-wise format and rich metadata means that arrow only needs to read the four columns actually used in the query (`CheckoutYear`, `MaterialType`, `CheckoutMonth`, and `Checkouts`).
 
-This massive difference in performance is why whenever you're working with large CSVs, you should always convert to parquet first!
+This massive difference in performance is why it pays off to convert large CSVs to parquet!
 
 ### Using dbplyr with arrow
 
