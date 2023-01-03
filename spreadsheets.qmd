@@ -3,26 +3,27 @@
 ```{r}
 #| results: "asis"
 #| echo: false
+
 source("_common.R")
 status("polishing")
 ```
 
 ## Introduction
 
-So far you have learned about importing data from plain text files, e.g. `.csv` and `.tsv` files.
+So far, you have learned about importing data from plain text files, e.g., `.csv` and `.tsv` files.
 Sometimes you need to analyze data that lives in a spreadsheet.
-In this chapter we will introduce you to tools for working with data in Excel spreadsheets and Google Sheets.
-This will build on much of what you've learned in @sec-data-import but we will also discuss additional considerations and complexities when working with data from spreadsheets.
+This chapter will introduce you to tools for working with data in Excel spreadsheets and Google Sheets.
+This will build on much of what you've learned in @sec-data-import, but we will also discuss additional considerations and complexities when working with data from spreadsheets.
 
 If you or your collaborators are using spreadsheets for organizing data, we strongly recommend reading the paper "Data Organization in Spreadsheets" by Karl Broman and Kara Woo: <https://doi.org/10.1080/00031305.2017.1375989>.
-The best practices presented in this paper will save you much headache down the line when you import the data from a spreadsheet into R to analyse and visualize.
+The best practices presented in this paper will save you much headache when you import data from a spreadsheet into R to analyze and visualize.
 
 ## Excel
 
 ### Prerequisites
 
 In this section, you'll learn how to load data from Excel spreadsheets in R with the **readxl** package.
-This package is non-core tidyverse, so you need to load it explicitly but it is installed automatically when you install the tidyverse package.
+This package is non-core tidyverse, so you need to load it explicitly, but it is installed automatically when you install the tidyverse package.
 
 ```{r}
 #| message: false
@@ -31,8 +32,9 @@ library(readxl)
 library(tidyverse)
 ```
 
-**xlsx** and **XLConnect** can also be used for reading data from and writing data to Excel spreadsheets.
-However, these two packages require Java installed on your machine and the rJava package.
+**openxlsx**, **xlsx**, and **XLConnect** can also be used for reading data from and writing data to Excel spreadsheets.
+We will discuss openxlsx in @sec-writing-to-excel.
+The latter two packages require Java installed on your machine and the rJava package.
 Due to potential challenges with installation, we recommend using alternative packages we're introducing in this chapter.
 
 ### Getting started
@@ -120,7 +122,7 @@ However there are a few things we might want to address in this dataset:
 
 2.  In the `favourite_food` column, one of the observations is `N/A`, which stands for "not available" but it's currently not recognized as an `NA` (note the contrast between this `N/A` and the age of the fourth student in the list).
     You can specify which character strings should be recognized as `NA`s with the `na` argument.
-    By default, only `""` (empty string, or, in the case of reading from a spreadsheet, an empty cell) is recognized as an `NA`.
+    By default, only `""` (empty string, or, in the case of reading from a spreadsheet, an empty cell or a cell with the formula `=NA()`) is recognized as an `NA`.
 
     ```{r}
     read_excel(
@@ -169,38 +171,35 @@ However there are a few things we might want to address in this dataset:
     ```
 
 It took us multiple steps and trial-and-error to load the data in exactly the format we want, and this is not unexpected.
-Data science is an iterative process.
+Data science is an iterative process, and the process of iteration can be even more tedious when reading data in from spreadsheets compared to other plain text, rectangular data files because humans tend to input data into spreadsheets and use them not just for data storage but also for sharing and communication.
+
 There is no way to know exactly what the data will look like until you load it and take a look at it.
 Well, there is one way, actually.
 You can open the file in Excel and take a peek.
-That might be tempting, but it's strongly not recommended as Excel can modify certain types of data upon launch with no way to track this change.[^spreadsheets-1]
-Instead, you should not be afraid of doing what we did here: load the data, take a peek, make adjustments to your code, load it again, and repeat until you're happy with the result.
+If you're going to do so, we recommend making a copy of the Excel file to open and browse interactively while leaving the original data file untouched and reading into R from the untouched file.
+This will ensure you don't accidentally overwrite anything in the spreadsheet while inspecting it.
+You should also not be afraid of doing what we did here: load the data, take a peek, make adjustments to your code, load it again, and repeat until you're happy with the result.
 
-[^spreadsheets-1]: Most notoriously, Excel can convert alphanumeric symbols for genes into dates.
-    For example, SEPT4 (which stands for septin 4) gets converted to 4-Sep in Excel.
-    This has negatively affected researchers' work so much that scientists have decided to rename human genes to stop Excel from misreading them as dates.
-    You can read more about this at <https://www.nature.com/articles/d41586-021-02211-4>.
+### Reading worksheets
 
-### Reading individual sheets
-
-An important feature that distinguishes spreadsheets from flat files is the notion of multiple sheets.
-@fig-penguins-islands shows an Excel spreadsheet with multiple sheets.
+An important feature that distinguishes spreadsheets from flat files is the notion of multiple sheets, called worksheets.
+@fig-penguins-islands shows an Excel spreadsheet with multiple worksheets.
 The data come from the **palmerpenguins** package.
-Each sheet contains information on penguins from a different island where data were collected.
+Each worksheet contains information on penguins from a different island where data were collected.
 
 ```{r}
 #| label: fig-penguins-islands
 #| echo: false
 #| fig-cap: >
-#|   Spreadsheet called penguins.xlsx in Excel.
+#|   Spreadsheet called penguins.xlsx in Excel containing three worksheets.
 #| fig-alt: >
 #|   A look at the penguins spreadsheet in Excel. The spreadsheet contains has 
-#|   three sheets: Torgersen Island, Biscoe Island, and Dream Island.
+#|   three worksheets: Torgersen Island, Biscoe Island, and Dream Island.
 
 knitr::include_graphics("screenshots/import-spreadsheets-penguins-islands.png")
 ```
 
-You can read a single sheet from a spreadsheet with the `sheet` argument in `read_excel()`.
+You can read a single worksheet from a spreadsheet with the `sheet` argument in `read_excel()`.
 
 ```{r}
 read_excel("data/penguins.xlsx", sheet = "Torgersen Island")
@@ -214,23 +213,21 @@ penguins_torgersen <- read_excel("data/penguins.xlsx", sheet = "Torgersen Island
 penguins_torgersen
 ```
 
-However, we cheated here a bit.
-We looked inside the Excel spreadsheet, which is not a recommended workflow.
-Instead, you can use `excel_sheets()` to get information on all sheets in an Excel spreadsheet, and then read the one(s) you're interested in.
+Alternatively, you can use `excel_sheets()` to get information on all worksheets in an Excel spreadsheet, and then read the one(s) you're interested in.
 
 ```{r}
 excel_sheets("data/penguins.xlsx")
 ```
 
-Once you know the names of the sheets, you can read them in individually with `read_excel()`.
+Once you know the names of the worksheets, you can read them in individually with `read_excel()`.
 
 ```{r}
 penguins_biscoe <- read_excel("data/penguins.xlsx", sheet = "Biscoe Island", na = "NA")
 penguins_dream  <- read_excel("data/penguins.xlsx", sheet = "Dream Island", na = "NA")
 ```
 
-In this case the full penguins dataset is spread across three sheets in the spreadsheet.
-Each sheet has the same number of columns but different numbers of rows.
+In this case the full penguins dataset is spread across three worksheets in the spreadsheet.
+Each worksheet has the same number of columns but different numbers of rows.
 
 ```{r}
 dim(penguins_torgersen)
@@ -322,14 +319,6 @@ In spreadsheet notation, this is `A5:F15`.
     read_excel(deaths_path, range = cell_rows(c(5, 15)))
     ```
 
--   Specify cells that mark the top-left and bottom-right corners of the data -- the top-left corner, `A5`, translates to `c(5, 1)` (5th row down, 1st column) and the bottom-right corner, `F15`, translates to `c(15, 6)`:
-
-    ```{r}
-    #| results: "hide"
-
-    read_excel(deaths_path, range = cell_limits(c(5, 1), c(15, 6)))
-    ```
-
 ### Data types
 
 In CSV files, all values are strings.
@@ -338,15 +327,13 @@ This is not particularly true to the data, but it is simple: everything is a str
 The underlying data in Excel spreadsheets is more complex.
 A cell can be one of five things:
 
--   A logical, like TRUE / FALSE
+-   A boolean, like TRUE, FALSE, or NA
 
 -   A number, like "10" or "10.5"
 
--   A date, which can also include time like "11/1/21" or "11/1/21 3:00 PM"
+-   A datetime, which can also include time like "11/1/21" or "11/1/21 3:00 PM"
 
--   A string, like "ten"
-
--   A currency, which allows numeric values in a limited range and four decimal digits of fixed precision
+-   A text string, like "ten"
 
 When working with spreadsheet data, it's important to keep in mind that how the underlying data is stored can be very different than what you see in the cell.
 For example, Excel has no notion of an integer.
@@ -369,7 +356,7 @@ In these cases you can set the type for this column to `"list"`, which will load
 For example, tidyxl doesn't coerce a pivot table into a data frame.
 See <https://nacnudus.github.io/spreadsheet-munging-strategies/> for more on strategies for working with non-tabular data from Excel.
 
-### Writing to Excel
+### Writing to Excel {#sec-writing-to-excel}
 
 Let's create a small data frame that we can then write out.
 Note that `item` is a factor and `quantity` is an integer.
@@ -497,7 +484,12 @@ See <https://ycphs.github.io/openxlsx/articles/Formatting.html> for an extensive
     ```{r}
     #| echo: false
     #| fig-alt: >
-    #|   A spreadsheet with 3 columns (group, subgroup, and id) and 12 rows. The group column has two values: 1 (spanning 7 merged rows) and 2 (spanning 5 merged rows). The subgroup column has four values: A (spanning 3 merged rows), B (spanning 4 merged rows), A (spanning 2 merged rows), and B (spanning 3 merged rows). The id column has twelve values, number 1 through 12.
+    #|   A spreadsheet with 3 columns (group, subgroup, and id) and 12 rows. 
+    #|   The group column has two values: 1 (spanning 7 merged rows) and 2 
+    #|   (spanning 5 merged rows). The subgroup column has four values: A 
+    #|   (spanning 3 merged rows), B (spanning 4 merged rows), A (spanning 2 
+    #|   merged rows), and B (spanning 3 merged rows). The id column has twelve 
+    #|   values, numbers 1 through 12.
 
     knitr::include_graphics("screenshots/import-spreadsheets-survey.png")
     ```
@@ -525,7 +517,12 @@ See <https://ycphs.github.io/openxlsx/articles/Formatting.html> for an extensive
     ```{r}
     #| echo: false
     #| fig-alt: >
-    #|   A spreadsheet with 3 columns (group, subgroup, and id) and 12 rows. The group column has two values: 1 (spanning 7 merged rows) and 2 (spanning 5 merged rows). The subgroup column has four values: A (spanning 3 merged rows), B (spanning 4 merged rows), A (spanning 2 merged rows), and B (spanning 3 merged rows). The id column has twelve values, number 1 through 12.
+    #|   A spreadsheet with 3 columns (group, subgroup, and id) and 12 rows. The 
+    #|   group column has two values: 1 (spanning 7 merged rows) and 2 (spanning 
+    #|   5 merged rows). The subgroup column has four values: A (spanning 3 merged 
+    #|   rows), B (spanning 4 merged rows), A (spanning 2 merged rows), and B 
+    #|   (spanning 3 merged rows). The id column has twelve values, numbers 1 
+    #|   through 12.
 
     knitr::include_graphics("screenshots/import-spreadsheets-roster.png")
     ```
@@ -548,7 +545,11 @@ See <https://ycphs.github.io/openxlsx/articles/Formatting.html> for an extensive
     ```{r}
     #| echo: false
     #| fig-alt: >
-    #|   A spreadsheet with 2 columns and 13 rows. The first two rows have text containing information about the sheet. Row 1 says "This file contains information on sales". Row 2 says "Data are organized by brand name, and for each brand, we have the ID number for the item sold, and how many are sold.". Then there are two empty rows, and then 9 rows of data.
+    #|   A spreadsheet with 2 columns and 13 rows. The first two rows have text 
+    #|   containing information about the sheet. Row 1 says "This file contains
+    #|   information on sales". Row 2 says "Data are organized by brand name, and 
+    #|   for each brand, we have the ID number for the item sold, and how many are 
+    #|   sold.". Then there are two empty rows, and then 9 rows of data.
 
     knitr::include_graphics("screenshots/import-spreadsheets-sales.png")
     ```
@@ -587,7 +588,10 @@ See <https://ycphs.github.io/openxlsx/articles/Formatting.html> for an extensive
 
 4.  Recreate the `bake_sale` data frame, write it out to an Excel file using the `write.xlsx()` function from the openxlsx package.
 
-5.  What happens if you try to read in a file with `.xlsx` extension with `read_xls()`?
+5.  In @sec-data-import you learned about the `janitor::clean_names()` function to turn columns names into snake case.
+    Read the `students.xlsx` file that we introduced earlier in this section and use this function to "clean" the column names.
+
+6.  What happens if you try to read in a file with `.xlsx` extension with `read_xls()`?
 
 ## Google Sheets
 
@@ -611,7 +615,8 @@ This function also goes by the name `range_read()`.
 You can also create a brand new sheet with `gs4_create()` or write to an existing sheet with `sheet_write()` and friends.
 
 In this section we'll work with the same datasets as the ones in the Excel section to highlight similarities and differences between workflows for reading data from Excel and Google Sheets.
-readxl and googlesheets4 packages are both designed to mimic the functionality of the readr package, which provides the `read_csv()` function you've seen in @sec-data-import. Therefore, many of the tasks can be accomplished with simply swapping out `read_excel()` for `read_sheet()`.
+readxl and googlesheets4 packages are both designed to mimic the functionality of the readr package, which provides the `read_csv()` function you've seen in @sec-data-import.
+Therefore, many of the tasks can be accomplished with simply swapping out `read_excel()` for `read_sheet()`.
 However you'll also see that Excel and Google Sheets don't behave in exactly the same way, therefore other tasks may require further updates to the function calls.
 
 ### Read sheets
@@ -716,16 +721,20 @@ write_sheet(bake_sale, ss = "bake-sale", sheet = "Sales")
 
 While you can read from a public Google Sheet without authenticating with your Google account, reading a private sheet or writing to a sheet requires authentication so that googlesheets4 can view and manage *your* Google Sheets.
 
-You can do this with `gs4_auth()`, which will open a browser for authentication and authorization, or by specifying an email address in `gs4_auth()`, e.g. `gs4_auth("mine@example.com")`, which will force the use of a token associated with a specific email.
+When you attempt to read in a sheet that requires authentication, googlesheets4 will direct you to a web browser with a prompt to sign in to your Google account and grant permission to operate on your behalf with Google Sheets.
+However, if you want to specify a specific Google account, authentication scope, etc. you can do so with `gs4_auth()`, e.g. `gs4_auth(email = "mine@example.com")`, which will force the use of a token associated with a specific email.
 For further authentication details, we recommend reading the documentation googlesheets4 auth vignette: <https://googlesheets4.tidyverse.org/articles/auth.html>.
 
 ### Exercises
 
-1.  Read the `students` dataset from earlier in the chapter from Excel and also from Google Sheets, with no additional arguments supplied to the `read_excel()` and `read_sheet()` functions. Are the resulting data frames in R exactly the same? If not, how are they different?
+1.  Read the `students` dataset from earlier in the chapter from Excel and also from Google Sheets, with no additional arguments supplied to the `read_excel()` and `read_sheet()` functions.
+    Are the resulting data frames in R exactly the same?
+    If not, how are they different?
 
 2.  Read the Google Sheet titled survey from <https://pos.it/r4ds-survey>, with `survey_id` as a character variable and `n_pets` as a numerical variable.
 
-3.  Read the Google Sheet titled roster from <https://pos.it/r4ds-roster>. The resulting data frame should be called `roster` and should look like the following.
+3.  Read the Google Sheet titled roster from <https://pos.it/r4ds-roster>.
+    The resulting data frame should be called `roster` and should look like the following.
 
     ```{r}
     #| echo: false
