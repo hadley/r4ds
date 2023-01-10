@@ -2,7 +2,7 @@
 
 <!-- badges: start -->
 
-[![Render and deploy Book to Netlify](https://github.com/hadley/r4ds/actions/workflows/quarto-book-netlify.yaml/badge.svg)](https://github.com/hadley/r4ds/actions/workflows/quarto-book-netlify.yaml)
+[![Render and deploy Book to Netlify](https://github.com/hadley/r4ds/actions/workflows/build_book.yaml/badge.svg)](https://github.com/hadley/r4ds/actions/workflows/build_book.yaml)
 
 <!-- badges: end -->
 
