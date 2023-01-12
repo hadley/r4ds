@@ -1,0 +1,283 @@
+<section data-type="chapter" id="chp-arrow">
+<h1><span id="sec-arrow" class="quarto-section-identifier d-none d-lg-block"><span class="chapter-title">Arrow</span></span></h1>
+<section id="introduction" data-type="sect1">
+<h1>
+Introduction</h1>
+<p>CSV files are designed to be easily read by humans. They’re a good interchange format because they’re very simple and they can be read by every tool under the sun. But CSV files aren’t very efficient: you have to do quite a lot of work to read the data into R. In this chapter, you’ll learn about a powerful alternative: the <a href="https://parquet.apache.org/">parquet format</a>, an open standards-based format widely used by big data systems.</p>
+<p>We’ll pair parquet files with <a href="https://arrow.apache.org">Apache Arrow</a>, a multi-language toolbox designed for efficient analysis and transport of large data sets. We’ll use Apache Arrow via the the <a href="https://arrow.apache.org/docs/r/">arrow package</a>, which provides a dplyr backend allowing you to analyze larger-than-memory datasets using familiar dplyr syntax. As an additional benefit, arrow is extremely fast: you’ll see some examples later in the chapter.</p>
+<p>Both arrow and dbplyr provide dplyr backends, so you might wonder when to use each. In many cases, the choice is made for you, as in the data is already in a database or in parquet files, and you’ll want to work with it as is. But if you’re starting with your own data (perhaps CSV files), you can either load it into a database or convert it to parquet. In general, it’s hard to know what will work best, so in the early stages of your analysis we’d encourage you to try both and pick the one that works the best for you.</p>
+
+<section id="prerequisites" data-type="sect2">
+<h2>
+Prerequisites</h2>
+<p>In this chapter, we’ll continue to use the tidyverse, particularly dplyr, but we’ll pair it with the arrow package which is designed specifically for working with large data.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="r">library(tidyverse)
+library(arrow)</pre>
+</div>
+<p>Later in the chapter, we’ll also see some connections between arrow and duckdb, so we’ll also need dbplyr and duckdb.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="r">library(dbplyr, warn.conflicts = FALSE)
+library(duckdb)
+#&gt; Loading required package: DBI</pre>
+</div>
+</section>
+</section>
+
+<section id="getting-the-data" data-type="sect1">
+<h1>
+Getting the data</h1>
+<p>We begin by getting a dataset worthy of these tools: a data set of item checkouts from Seattle public libraries, available online at <a href="https://data.seattle.gov/Community/Checkouts-by-Title/tmmm-ytt6">data.seattle.gov/Community/Checkouts-by-Title/tmmm-ytt6</a>. This dataset contains 41,389,465 rows that tell you how many times each book was checked out each month from April 2015 to October 2022.</p>
+<p>The following code will get you a cached copy of the data. The data is a 9GB CSV file, so it will take some time to download: simply getting the data is often the first challenge!</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="r">dir.create("data", showWarnings = FALSE)
+url &lt;- "https://r4ds.s3.us-west-2.amazonaws.com/seattle-library-checkouts.csv"
+
+# Default timeout is 60s; bump it up to an hour
+options(timeout = 60 * 60)
+download.file(url, "data/seattle-library-checkouts.csv")</pre>
+</div>
+</section>
+
+<section id="opening-a-dataset" data-type="sect1">
+<h1>
+Opening a dataset</h1>
+<p>Let’s start by taking a look at the data. At 9GB, this file is large enough that we probably don’t want to load the whole thing into memory. A good rule of thumb is that you usually want at least twice as much memory as the size of the data, and many laptops top out at 16 Gb. This means we want to avoid <code><a href="https://readr.tidyverse.org/reference/read_delim.html">read_csv()</a></code> and instead use the <code><a href="https://arrow.apache.org/docs/r/reference/open_dataset.html">arrow::open_dataset()</a></code>:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="r"># partial schema for ISBN column only
+opts &lt;- CsvConvertOptions$create(col_types = schema(ISBN = string()))
+
+seattle_csv &lt;- open_dataset(
+  sources = "data/seattle-library-checkouts.csv", 
+  format = "csv",
+  convert_options = opts
+)</pre>
+</div>
+<p>(Here we’ve had to use some relatively advanced code to parse the ISBN variable correctly: this is because the first ~83,000 rows don’t contain any data so arrow guesses the wrong types. The arrow team is aware of this problem and there will hopefully be a better approach by the time you read this chapter.)</p>
+<p>What happens when this code is run? <code><a href="https://arrow.apache.org/docs/r/reference/open_dataset.html">open_dataset()</a></code> will scan a few thousand rows to figure out the structure of the data set. Then it records what it’s found and stops; it will only read further rows as you specifically request them. This metadata is what we see if we print <code>seattle_csv</code>:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="r">seattle_csv
+#&gt; FileSystemDataset with 1 csv file
+#&gt; UsageClass: string
+#&gt; CheckoutType: string
+#&gt; MaterialType: string
+#&gt; CheckoutYear: int64
+#&gt; CheckoutMonth: int64
+#&gt; Checkouts: int64
+#&gt; Title: string
+#&gt; ISBN: string
+#&gt; Creator: string
+#&gt; Subjects: string
+#&gt; Publisher: string
+#&gt; PublicationYear: string</pre>
+</div>
+<p>The first line in the output tells you that <code>seattle_csv</code> is stored locally on-disk as a single CSV file; it will only be loaded into memory as needed. The remainder of the output tells you the column type that arrow has imputed for each column.</p>
+<p>We can see what’s actually in with <code><a href="https://pillar.r-lib.org/reference/glimpse.html">glimpse()</a></code>. This reveals that there are ~41 million rows and 12 columns, and shows us a few values.</p>
+<div class="cell" data-hash="arrow_cache/html/glimpse-data_07c924738790eb185ebdd8973443e90d">
+<pre data-type="programlisting" data-code-language="r">seattle_csv |&gt; glimpse()
+#&gt; FileSystemDataset with 1 csv file
+#&gt; 41,389,465 rows x 12 columns
+#&gt; $ UsageClass      &lt;string&gt; "Physical", "Physical", "Digital", "Physical", "Ph…
+#&gt; $ CheckoutType    &lt;string&gt; "Horizon", "Horizon", "OverDrive", "Horizon", "Hor…
+#&gt; $ MaterialType    &lt;string&gt; "BOOK", "BOOK", "EBOOK", "BOOK", "SOUNDDISC", "BOO…
+#&gt; $ CheckoutYear     &lt;int64&gt; 2016, 2016, 2016, 2016, 2016, 2016, 2016, 2016, 20…
+#&gt; $ CheckoutMonth    &lt;int64&gt; 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6,…
+#&gt; $ Checkouts        &lt;int64&gt; 1, 1, 1, 1, 1, 1, 1, 1, 4, 1, 1, 2, 3, 2, 1, 3, 2,…
+#&gt; $ Title           &lt;string&gt; "Super rich : a guide to having it all / Russell S…
+#&gt; $ ISBN            &lt;string&gt; "", "", "", "", "", "", "", "", "", "", "", "", ""…
+#&gt; $ Creator         &lt;string&gt; "Simmons, Russell", "Barclay, James, 1965-", "Tim …
+#&gt; $ Subjects        &lt;string&gt; "Self realization, Conduct of life, Attitude Psych…
+#&gt; $ Publisher       &lt;string&gt; "Gotham Books,", "Pyr,", "Random House, Inc.", "Di…
+#&gt; $ PublicationYear &lt;string&gt; "c2011.", "2010.", "2015", "2005.", "c2004.", "c20…</pre>
+</div>
+<p>We can start to use this dataset with dplyr verbs, using <code><a href="https://dplyr.tidyverse.org/reference/compute.html">collect()</a></code> to force arrow to perform the computation and return some data. For example, this code tells us the total number of checkouts per year:</p>
+<div class="cell" data-hash="arrow_cache/html/unnamed-chunk-5_7a5e1ce0bed4d69e849dff75d0c0d8d3">
+<pre data-type="programlisting" data-code-language="r">seattle_csv |&gt; 
+  count(CheckoutYear, wt = Checkouts) |&gt; 
+  arrange(CheckoutYear) |&gt; 
+  collect()
+#&gt; # A tibble: 18 × 2
+#&gt;   CheckoutYear       n
+#&gt;          &lt;int&gt;   &lt;int&gt;
+#&gt; 1         2005 3798685
+#&gt; 2         2006 6599318
+#&gt; 3         2007 7126627
+#&gt; 4         2008 8438486
+#&gt; 5         2009 9135167
+#&gt; 6         2010 8608966
+#&gt; # … with 12 more rows</pre>
+</div>
+<p>Thanks to arrow, this code will work regardless of how large the underlying dataset is. But it’s currently rather slow: on Hadley’s computer, it took ~10s to run. That’s not terrible given how much data we have, but we can make it much faster by switching to a better format.</p>
+</section>
+
+<section id="the-parquet-format" data-type="sect1">
+<h1>
+The parquet format</h1>
+<p>To make this data easier to work with, lets switch to the parquet file format and split it up into multiple files. The following sections will first introduce you to parquet and partitioning, and then apply what we learned to the Seattle library data.</p>
+
+<section id="advantages-of-parquet" data-type="sect2">
+<h2>
+Advantages of parquet</h2>
+<p>Like CSV, parquet is used for rectangular data, but instead of being a text format that you can read with any file editor, it’s a custom binary format designed specifically for the needs of big data. This means that:</p>
+<ul><li><p>Parquet files are usually smaller the equivalent CSV file. Parquet relies on <a href="https://parquet.apache.org/docs/file-format/data-pages/encodings/">efficient encodings</a> to keep file size down, and supports file compression. This helps make parquet files fast because there’s less data to move from disk to memory.</p></li>
+<li><p>Parquet files have a rich type system. As we talked about in <a href="#sec-col-types" data-type="xref">#sec-col-types</a>, a CSV file does not provide any information about column types. For example, a CSV reader has to guess whether <code>"08-10-2022"</code> should be parsed as a string or a date. In contrast, parquet files store data in a way that records the type along with the data.</p></li>
+<li><p>Parquet files are “column-oriented”. This means that they’re organised column-by-column, much like R’s data frame. This typically leads to better performance for data analysis tasks compared to CSV files, which are organised row-by-row.</p></li>
+<li><p>Parquet files are “chunked”, which makes it possible to work on different parts of the file at the same time, and, if you’re lucky, to skip some chunks all together.</p></li>
+</ul></section>
+
+<section id="partitioning" data-type="sect2">
+<h2>
+Partitioning</h2>
+<p>As datasets get larger and larger, storing all the data in a single file gets increasingly painful and it’s often useful to split large datasets across many files. When this structuring is done intelligently, this strategy can lead to significant improvements in performance because many analyses will only require a subset of the files.</p>
+<p>There are no hard and fast rules about how to partition your data set: the results will depend on your data, access patterns, and the systems that read the data. You’re likely to need to do some experimentation before you find the ideal partitioning for your situation. As a rough guide, arrow suggests that you avoid files smaller than 20MB and larger than 2GB and avoid partitions that produce more than 10,000 files. You should also try to partition by variables that you filter by; as you’ll see shortly, that allows arrow to skip a lot of work by reading only the relevant files.</p>
+</section>
+
+<section id="rewriting-the-seattle-library-data" data-type="sect2">
+<h2>
+Rewriting the Seattle library data</h2>
+<p>Let’s apply these ideas to the Seattle library data to see how they play out in practice. We’re going to partition by <code>CheckoutYear</code>, since it’s likely some analyses will only want to look at recent data and partitioning by year yields 18 chunks of a reasonable size.</p>
+<p>To rewrite the data we define the partition using <code><a href="https://dplyr.tidyverse.org/reference/group_by.html">dplyr::group_by()</a></code> and then save the partitions to a directory with <code><a href="https://arrow.apache.org/docs/r/reference/write_dataset.html">arrow::write_dataset()</a></code>. <code><a href="https://arrow.apache.org/docs/r/reference/write_dataset.html">write_dataset()</a></code> has two important arguments: a directory where we’ll create the files and the format we’ll use.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="r">pq_path &lt;- "data/seattle-library-checkouts"</pre>
+</div>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="r">seattle_csv |&gt;
+  group_by(CheckoutYear) |&gt;
+  write_dataset(path = pq_path, format = "parquet")</pre>
+</div>
+<p>This takes about a minute to run; as we’ll see shortly this is an initial investment that pays off by making future operations much much faster.</p>
+<p>Let’s take a look at what we just produced:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="r">tibble(
+  files = list.files(pq_path, recursive = TRUE),
+  size_MB = file.size(file.path(pq_path, files)) / 1024^2
+)
+#&gt; # A tibble: 18 × 2
+#&gt;   files                            size_MB
+#&gt;   &lt;chr&gt;                              &lt;dbl&gt;
+#&gt; 1 CheckoutYear=2005/part-0.parquet    109.
+#&gt; 2 CheckoutYear=2006/part-0.parquet    164.
+#&gt; 3 CheckoutYear=2007/part-0.parquet    178.
+#&gt; 4 CheckoutYear=2008/part-0.parquet    195.
+#&gt; 5 CheckoutYear=2009/part-0.parquet    214.
+#&gt; 6 CheckoutYear=2010/part-0.parquet    222.
+#&gt; # … with 12 more rows</pre>
+</div>
+<p>Our single 9GB CSV file has been rewritten into 18 parquet files. The file names use a “self-describing” convention used by the <a href="https://hive.apache.org">Apache Hive</a> project. Hive-style partitions name folders with a “key=value” convention, so as you might guess, the <code>CheckoutYear=2005</code> directory contains all the data where <code>CheckoutYear</code> is 2005. Each file is between 100 and 300 MB and the total size is now around 4 GB, a little over half the size of the original CSV file. This is as we expect since parquet is a much more efficient format.</p>
+</section>
+</section>
+
+<section id="using-dplyr-with-arrow" data-type="sect1">
+<h1>
+Using dplyr with arrow</h1>
+<p>Now we’ve created these parquet files, we’ll need to read them in again. We use <code><a href="https://arrow.apache.org/docs/r/reference/open_dataset.html">open_dataset()</a></code> again, but this time we give it a directory:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="r">seattle_pq &lt;- open_dataset(pq_path)</pre>
+</div>
+<p>Now we can write our dplyr pipeline. For example, we could count the total number of books checked out in each month for the last five years:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="r">query &lt;- seattle_pq |&gt; 
+  filter(CheckoutYear &gt;= 2018, MaterialType == "BOOK") |&gt;
+  group_by(CheckoutYear, CheckoutMonth) |&gt;
+  summarise(TotalCheckouts = sum(Checkouts)) |&gt;
+  arrange(CheckoutYear, CheckoutMonth)</pre>
+</div>
+<p>Writing dplyr code for arrow data is conceptually similar to dbplyr, <a href="#chp-databases" data-type="xref">#chp-databases</a>: you write dplyr code, which is automatically transformed into a query that the Apache Arrow C++ library understands, which is then executed when you call <code><a href="https://dplyr.tidyverse.org/reference/compute.html">collect()</a></code>. If we print out the <code>query</code> object we can see a little information about what we expect Arrow to return when the execution takes place:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="r">query
+#&gt; FileSystemDataset (query)
+#&gt; CheckoutYear: int32
+#&gt; CheckoutMonth: int64
+#&gt; TotalCheckouts: int64
+#&gt; 
+#&gt; * Grouped by CheckoutYear
+#&gt; * Sorted by CheckoutYear [asc], CheckoutMonth [asc]
+#&gt; See $.data for the source Arrow object</pre>
+</div>
+<p>And we can get the results by calling <code><a href="https://dplyr.tidyverse.org/reference/compute.html">collect()</a></code>:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="r">query |&gt; collect()
+#&gt; # A tibble: 58 × 3
+#&gt; # Groups:   CheckoutYear [5]
+#&gt;   CheckoutYear CheckoutMonth TotalCheckouts
+#&gt;          &lt;int&gt;         &lt;int&gt;          &lt;int&gt;
+#&gt; 1         2018             1         355101
+#&gt; 2         2018             2         309813
+#&gt; 3         2018             3         344487
+#&gt; 4         2018             4         330988
+#&gt; 5         2018             5         318049
+#&gt; 6         2018             6         341825
+#&gt; # … with 52 more rows</pre>
+</div>
+<p>Like dbplyr, arrow only understands some R expressions, so you may not be able to write exactly the same code you usually would. However, the list of operations and functions supported is fairly extensive and continues to grow; find a complete list of currently supported functions in <code><a href="https://arrow.apache.org/docs/r/reference/acero.html">?acero</a></code>.</p>
+
+<section id="sec-parquet-fast" data-type="sect2">
+<h2>
+Performance</h2>
+<p>Let’s take a quick look at the performance impact of switching from CSV to parquet. First, let’s time how long it takes to calculate the number of books checked out in each month of 2021, when the data is stored as a single large csv:</p>
+<div class="cell" data-hash="arrow_cache/html/dataset-performance-csv_4d24d09e336fc39a348b5ad94f60f527">
+<pre data-type="programlisting" data-code-language="r">seattle_csv |&gt; 
+  filter(CheckoutYear == 2021, MaterialType == "BOOK") |&gt;
+  group_by(CheckoutMonth) |&gt;
+  summarise(TotalCheckouts = sum(Checkouts)) |&gt;
+  arrange(desc(CheckoutMonth)) |&gt;
+  collect() |&gt; 
+  system.time()
+#&gt;    user  system elapsed 
+#&gt;  11.980   0.924  11.350</pre>
+</div>
+<p>Now let’s use our new version of the data set in which the Seattle library checkout data has been partitioned into 18 smaller parquet files:</p>
+<div class="cell" data-hash="arrow_cache/html/dataset-performance-multiple-parquet_ad546f5d817df3ad4bdb238240b808d3">
+<pre data-type="programlisting" data-code-language="r">seattle_pq |&gt; 
+  filter(CheckoutYear == 2021, MaterialType == "BOOK") |&gt;
+  group_by(CheckoutMonth) |&gt;
+  summarise(TotalCheckouts = sum(Checkouts)) |&gt;
+  arrange(desc(CheckoutMonth)) |&gt;
+  collect() |&gt; 
+  system.time()
+#&gt;    user  system elapsed 
+#&gt;   0.273   0.045   0.055</pre>
+</div>
+<p>The ~100x speedup in performance is attributable to two factors: the multi-file partitioning, and the format of individual files:</p>
+<ul><li>Partitioning improves performance because this query uses <code>CheckoutYear == 2021</code> to filter the data, and arrow is smart enough to recognize that it only needs to read 1 of the 18 parquet files.</li>
+<li>The parquet format improves performance by storing data in a binary format that can be read more directly into memory. The column-wise format and rich metadata means that arrow only needs to read the four columns actually used in the query (<code>CheckoutYear</code>, <code>MaterialType</code>, <code>CheckoutMonth</code>, and <code>Checkouts</code>).</li>
+</ul><p>This massive difference in performance is why it pays off to convert large CSVs to parquet!</p>
+</section>
+
+<section id="using-dbplyr-with-arrow" data-type="sect2">
+<h2>
+Using dbplyr with arrow</h2>
+<p>There’s one last advantage of parquet and arrow — it’s very easy to turn an arrow dataset into a duckdb datasource by calling <code><a href="https://arrow.apache.org/docs/r/reference/to_duckdb.html">arrow::to_duckdb()</a></code>:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="r">seattle_pq |&gt; 
+  to_duckdb() |&gt;
+  filter(CheckoutYear &gt;= 2018, MaterialType == "BOOK") |&gt;
+  group_by(CheckoutYear) |&gt;
+  summarise(TotalCheckouts = sum(Checkouts)) |&gt;
+  arrange(desc(CheckoutYear)) |&gt;
+  collect()
+#&gt; Warning: Missing values are always removed in SQL aggregation functions.
+#&gt; Use `na.rm = TRUE` to silence this warning
+#&gt; This warning is displayed once every 8 hours.
+#&gt; # A tibble: 5 × 2
+#&gt;   CheckoutYear TotalCheckouts
+#&gt;          &lt;int&gt;          &lt;dbl&gt;
+#&gt; 1         2022        2431502
+#&gt; 2         2021        2266438
+#&gt; 3         2020        1241999
+#&gt; 4         2019        3931688
+#&gt; 5         2018        3987569</pre>
+</div>
+<p>The neat thing about <code><a href="https://arrow.apache.org/docs/r/reference/to_duckdb.html">to_duckdb()</a></code> is that the transfer doesn’t involve any memory copying, and speaks to the goals of the arrow ecosystem: enabling seamless transitions from one computing environment to another.</p>
+</section>
+</section>
+
+<section id="summary" data-type="sect1">
+<h1>
+Summary</h1>
+<p>In this chapter, you’ve been given a taste of the arrow package, which provides a dplyr backend for working with large on-disk datasets. It can work with CSV files, its much much faster if you convert your data to parquet. Parquet is a binary data format that’s designed specifically for data analysis on modern computers. Far fewer tools can work with parquet files compared to CSV, but it’s partitioned, compressed, and columnar structure makes it much more efficient to analyze.</p>
+<p>Next up you’ll learn about your first non-rectangular data source, which you’ll handle using tools provided by the tidyr package. We’ll focus on data that comes from JSON files, but the general principles apply to tree-like data regardless of its source.</p>
+
+
+</section>
+</section>

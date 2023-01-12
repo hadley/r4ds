@@ -1,2 +1,495 @@
 <section data-type="chapter" id="chp-webscraping">
-<h1><span id="sec-scraping" class="quarto-section-identifier d-none d-lg-block"><span class="chapter-title">Web scraping</span></span></h1></section>
+<h1><span id="sec-scraping" class="quarto-section-identifier d-none d-lg-block"><span class="chapter-title">Web scraping</span></span></h1><p>This vignette introduces you to the basics of web scraping with <a href="https://rvest.tidyverse.org">rvest</a>. Web scraping is a very useful tool for extracting data from web pages. Some websites will offer an API, a set of structured HTTP requests that return data as JSON, which you handle using the techniques from <a href="#chp-rectangling" data-type="xref">#chp-rectangling</a>. Where possible, you should use the API, because typically it will give you more reliable data. Unfortunately, however, programming with web APIs is out of scope for this book. Instead, we are teaching scraping, a technique that works whether or not a site provides an API.</p><p>In this chapter, we’ll first discuss the ethics and legalities of scraping before we dive into the basics of HTML. You’ll then learn the basics of CSS selectors to locate specific elements on the page, and how to use rvest functions to get data from text and attributes out of HTML and into R. We’ll then discuss some techniques to figure out what CSS selector you need for the page you’re scraping, before finishing up with a couple of case studies, and a brief discussion of dynamic websites.</p>
+<section id="prerequisites" data-type="sect2">
+<h2>
+Prerequisites</h2>
+<p>In this chapter, we’ll focus on tools provided by rvest. rvest is a member of the tidyverse, but is not a core member so you’ll need to load it explicitly. We’ll also load the full tidyverse since we’ll find it generally useful working with the data we’ve scraped.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="r">library(tidyverse)
+library(rvest)</pre>
+</div>
+</section>
+
+<section id="scraping-ethics-and-legalities" data-type="sect1">
+<h1>
+Scraping ethics and legalities</h1>
+<p>Before we get started discussing the code you’ll need to perform web scraping, we need to talk about whether it’s legal and ethical for you to do so. Overall, the situation is complicated with regards to both of these.</p>
+<p>Legalities depend a lot on where you live. However, as a general principle, if the data is public, non-personal, and factual, you’re likely to be ok<span data-type="footnote">Obviously we’re not lawyers, and this is not legal advice. But this is the best summary we can give having read a bunch about this topic.</span>. These three factors are important because they’re connected to the site’s terms and conditions, personally identifiable information, and copyright, as we’ll discuss below.</p>
+<p>If the data isn’t public, non-personal, or factual or you’re scraping the data specifically to make money with it, you’ll need to talk to a lawyer. In any case, you should be respectful of the resources of the server hosting the pages you are scraping. Most importantly, this means that if you’re scraping many pages, you should make sure to wait a little between each request. One easy way to do so is to use the <a href="https://dmi3kno.github.io/polite/"><strong>polite</strong></a> package by Dmytro Perepolkin. It will automatically pause between requests and cache the results so you never ask for the same page twice.</p>
+
+<section id="terms-of-service" data-type="sect2">
+<h2>
+Terms of service</h2>
+<p>If you look closely, you’ll find many websites include a “terms and conditions” or “terms of service” link somewhere on the page, and if you read that page closely you’ll often discover that the site specifically prohibits web scraping. These pages tend to be a legal land grab where companies make very broad claims. It’s polite to respect these terms of service where possible, but take any claims with a grain of salt.</p>
+<p>US courts<span data-type="footnote">e.g. <a href="https://en.wikipedia.org/wiki/HiQ_Labs_v._LinkedIn" class="uri">https://en.wikipedia.org/wiki/HiQ_Labs_v._LinkedIn</a></span> have generally found that simply putting the terms of service in the footer of the website isn’t sufficient for you to be bound by them. Generally, to be bound to the terms of service, you must have taken some explicit action like creating an account or checking a box. This is why whether or not the data is <strong>public</strong> is important; if you don’t need an account to access them, it is unlikely that you are bound to the terms of service. Note, however, the situation is rather different in Europe where courts have found that terms of service are enforceable even if you don’t explicitly agree to them.</p>
+</section>
+
+<section id="personally-identifiable-information" data-type="sect2">
+<h2>
+Personally identifiable information</h2>
+<p>Even if the data is public, you should be extremely careful about scraping personally identifiable information like names, email addresses, phone numbers, dates of birth, etc. Europe has particularly strict laws about the collection of storage of such data (GDPR), and regardless of where you live you’re likely to be entering an ethical quagmire. For example, in 2016, a group of researchers scraped public profile information (e.g., usernames, age, gender, location, etc.) about 70,000 people on the dating site OkCupid and they publicly released these data without any attempts for anonymization. While the researchers felt that there was nothing wrong with this since the data were already public, this work was widely condemned due to ethics concerns around identifiability of users whose information was released in the dataset. If your work involves scraping personally identifiable information, we strongly recommend reading about the OkCupid study as well as similar studies with questionable research ethics involving the acquisition and release of personally identifiable information.<span data-type="footnote">One example of an article on the OkCupid study was published by the <a href="https://www.wired.com/2016/05/okcupid-study-reveals-perils-big-data-science/">https://www.wired.com/2016/05/okcupid-study-reveals-perils-big-data-science</a>.</span></p>
+</section>
+
+<section id="copyright" data-type="sect2">
+<h2>
+Copyright</h2>
+<p>Finally, you also need to worry about copyright law. Copyright law is complicated, but it’s worth taking a look at the <a href="https://www.law.cornell.edu/uscode/text/17/102">US law</a> which describes exactly what’s protected: “[…] original works of authorship fixed in any tangible medium of expression, […]”. It then goes on to describe specific categories that it applies like literary works, musical works, motions pictures and more. Notably absent from copyright protection are data. This means that as long as you limit your scraping to facts, copyright protection does not apply. (But note that Europe has a separate “<a href="https://en.wikipedia.org/wiki/Database_right">sui generis</a>” right that protects databases.)</p>
+<p>As a brief example, in the US, lists of ingredients and instructions are not copyrightable, so copyright can not be used to protect a recipe. But if that list of recipes is accompanied by substantial novel literary content, that is copyrightable. This is why when you’re looking for a recipe on the internet there’s always so much content beforehand.</p>
+<p>If you do need to scrape original content (like text or images), you may still be protected under the <a href="https://en.wikipedia.org/wiki/Fair_use">doctrine of fair use</a>. Fair use is not a hard and fast rule, but weighs up a number of factors. It’s more likely to apply if you are collecting the data for research or non-commercial purposes and if you limit what you scrape to just what you need.</p>
+</section>
+</section>
+
+<section id="html-basics" data-type="sect1">
+<h1>
+HTML basics</h1>
+<p>To scrape webpages, you need to first understand a little bit about <strong>HTML</strong>, the language that describes web pages. HTML stands for <strong>H</strong>yper<strong>T</strong>ext <strong>M</strong>arkup <strong>L</strong>anguage and looks something like this:</p>
+<pre data-type="programlisting" data-code-language="html">&lt;html&gt;
+&lt;head&gt;
+  &lt;title&gt;Page title&lt;/title&gt;
+&lt;/head&gt;
+&lt;body&gt;
+  &lt;h1 id='first'&gt;A heading&lt;/h1&gt;
+  &lt;p&gt;Some text &amp;amp; &lt;b&gt;some bold text.&lt;/b&gt;&lt;/p&gt;
+  &lt;img src='myimg.png' width='100' height='100'&gt;
+&lt;/body&gt;</pre>
+<!--# MCR: Is there a reason why you're using single quotes for HTML stuff? Any objection to changing those to double quotes? -->
+<p>HTML has a hierarchical structure formed by <strong>elements</strong> which consist of a start tag (e.g. <code>&lt;tag&gt;</code>), optional <strong>attributes</strong> (<code>id='first'</code>), an end tag<span data-type="footnote">A number of tags (including <code>&lt;p&gt;</code> and <code>&lt;li&gt;)</code> don’t require end tags, but we think it’s best to include them because it makes seeing the structure of the HTML a little easier.</span> (like <code>&lt;/tag&gt;</code>), and <strong>contents</strong> (everything in between the start and end tag).</p>
+<p>Since <code>&lt;</code> and <code>&gt;</code> are used for start and end tags, you can’t write them directly. Instead you have to use the HTML <strong>escapes</strong> <code>&amp;gt;</code> (greater than) and <code>&amp;lt;</code> (less than). And since those escapes use <code>&amp;</code>, if you want a literal ampersand you have to escape it as <code>&amp;amp;</code>. There are a wide range of possible HTML escapes but you don’t need to worry about them too much because rvest automatically handles them for you.</p>
+<p>Web scraping is possible because most pages that contain data that you want to scrape generally have a consistent structure.</p>
+
+<section id="elements" data-type="sect2">
+<h2>
+Elements</h2>
+<p>All up, there are over 100 HTML elements. Some of the most important are:</p>
+<ul><li><p>Every HTML page must be in an <code>&lt;html&gt;</code> element, and it must have two children: <code>&lt;head&gt;</code>, which contains document metadata like the page title, and <code>&lt;body&gt;</code>, which contains the content you see in the browser.</p></li>
+<li><p>Block tags like <code>&lt;h1&gt;</code> (heading 1), <code>&lt;section&gt;</code> (section), <code>&lt;p&gt;</code> (paragraph), and <code>&lt;ol&gt;</code> (ordered list) form the overall structure of the page.</p></li>
+<li><p>Inline tags like <code>&lt;b&gt;</code> (bold), <code>&lt;i&gt;</code> (italics), and <code>&lt;a&gt;</code> (link) format text inside block tags.</p></li>
+</ul><p>If you encounter a tag that you’ve never seen before, you can find out what it does with a little googling. Another good place to start are the <a href="https://developer.mozilla.org/en-US/docs/Web/HTML">MDN Web Docs</a> which describe just about every aspect of web programming.</p>
+<p>Most elements can have content in between their start and end tags. This content can either be text or more elements. For example, the following HTML contains paragraph of text, with one word in bold.</p>
+<pre><code>&lt;p&gt;
+  Hi! My &lt;b&gt;name&lt;/b&gt; is Hadley.
+&lt;/p&gt;</code></pre>
+<p>The <strong>children</strong> of a node refers only to elements, so the <code>&lt;p&gt;</code> element above has one child, the <code>&lt;b&gt;</code> element. The <code>&lt;b&gt;</code> element has no children, but it does have contents (the text “name”).</p>
+</section>
+
+<section id="attributes" data-type="sect2">
+<h2>
+Attributes</h2>
+<p>Tags can have named <strong>attributes</strong> which look like <code>name1='value1' name2='value2'</code>. Two of the most important attributes are <code>id</code> and <code>class</code>, which are used in conjunction with CSS (Cascading Style Sheets) to control the visual appearance of the page. These are often useful when scraping data off a page. Attributes are also used to record the destination of links (the <code>href</code> attribute of <code>&lt;a&gt;</code> elements) and the source of images (the <code>src</code> attribute of the <code>&lt;img&gt;</code> element).</p>
+</section>
+</section>
+
+<section id="extracting-data" data-type="sect1">
+<h1>
+Extracting data</h1>
+<p>To get started scraping, you’ll need the URL of the page you want to scrape, which you can usually copy from your web browser. You’ll then need to read the HTML for that page into R with <code><a href="http://xml2.r-lib.org/reference/read_xml.html">read_html()</a></code>. This returns a <code>xml_document</code><span data-type="footnote">This class comes from the <a href="https://xml2.r-lib.org">xml2</a> package. xml2 is a low-level package that rvest builds on top of.</span> object which you’ll then manipulate using rvest functions:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="r">html &lt;- read_html("http://rvest.tidyverse.org/")
+html
+#&gt; {html_document}
+#&gt; &lt;html lang="en"&gt;
+#&gt; [1] &lt;head&gt;\n&lt;meta http-equiv="Content-Type" content="text/html; charset=UT ...
+#&gt; [2] &lt;body&gt;\n    &lt;a href="#container" class="visually-hidden-focusable"&gt;Ski ...</pre>
+</div>
+<p>rvest also includes a function that lets you write HTML inline. We’ll use this a bunch in this chapter as we teach how the various rvest functions work with simple examples.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="r">html &lt;- minimal_html("
+  &lt;p&gt;This is a paragraph&lt;p&gt;
+  &lt;ul&gt;
+    &lt;li&gt;This is a bulleted list&lt;/li&gt;
+  &lt;/ul&gt;
+")
+html
+#&gt; {html_document}
+#&gt; &lt;html&gt;
+#&gt; [1] &lt;head&gt;\n&lt;meta http-equiv="Content-Type" content="text/html; charset=UT ...
+#&gt; [2] &lt;body&gt;\n&lt;p&gt;This is a paragraph&lt;/p&gt;\n&lt;p&gt;\n  &lt;/p&gt;\n&lt;ul&gt;\n&lt;li&gt;This is a b ...</pre>
+</div>
+<p>Now that you have the HTML in R, it’s time to extract the data of interest. You’ll first learn about the CSS selectors that allow you to identify the elements of interest and the rvest functions that you can use to extract data from them. Then we’ll briefly cover HTML tables, which have some special tools.</p>
+
+<section id="find-elements" data-type="sect2">
+<h2>
+Find elements</h2>
+<p>CSS is short for cascading style sheets, and is a tool for defining the visual styling of HTML documents. CSS includes a miniature language for selecting elements on a page called <strong>CSS selectors</strong>. CSS selectors define patterns for locating HTML elements, and are useful for scraping because they provide a concise way of describing which elements you want to extract.</p>
+<p>We’ll come back to CSS selectors in more detail in <a href="#sec-css-selectors" data-type="xref">#sec-css-selectors</a>, but luckily you can get a long way with just three:</p>
+<ul><li><p><code>p</code> selects all <code>&lt;p&gt;</code> elements.</p></li>
+<li><p><code>.title</code> selects all elements with <code>class</code> “title”.</p></li>
+<li><p><code>#title</code> selects the element with the <code>id</code> attribute that equals “title”. Id attributes must be unique within a document, so this will only ever select a single element.</p></li>
+</ul><p>Lets try out these selectors with a simple example:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="r">html &lt;- minimal_html("
+  &lt;h1&gt;This is a heading&lt;/h1&gt;
+  &lt;p id='first'&gt;This is a paragraph&lt;/p&gt;
+  &lt;p class='important'&gt;This is an important paragraph&lt;/p&gt;
+")</pre>
+</div>
+<p>Use <code><a href="https://rvest.tidyverse.org/reference/html_element.html">html_elements()</a></code> to find all elements that match the selector:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="r">html |&gt; html_elements("p")
+#&gt; {xml_nodeset (2)}
+#&gt; [1] &lt;p id="first"&gt;This is a paragraph&lt;/p&gt;
+#&gt; [2] &lt;p class="important"&gt;This is an important paragraph&lt;/p&gt;
+html |&gt; html_elements(".important")
+#&gt; {xml_nodeset (1)}
+#&gt; [1] &lt;p class="important"&gt;This is an important paragraph&lt;/p&gt;
+html |&gt; html_elements("#first")
+#&gt; {xml_nodeset (1)}
+#&gt; [1] &lt;p id="first"&gt;This is a paragraph&lt;/p&gt;</pre>
+</div>
+<p>Another important function is <code><a href="https://rvest.tidyverse.org/reference/html_element.html">html_element()</a></code> which always the number of outputs as inputs. If you apply it to a whole document it’ll give you the first match:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="r">html |&gt; html_element("p")
+#&gt; {html_node}
+#&gt; &lt;p id="first"&gt;</pre>
+</div>
+<p>There’s an important difference between <code><a href="https://rvest.tidyverse.org/reference/html_element.html">html_element()</a></code> and <code><a href="https://rvest.tidyverse.org/reference/html_element.html">html_elements()</a></code> when you use a selector that doesn’t match any elements. <code><a href="https://rvest.tidyverse.org/reference/html_element.html">html_elements()</a></code> returns a vector of length 0, where <code><a href="https://rvest.tidyverse.org/reference/html_element.html">html_element()</a></code> returns a missing value. This will be important shortly.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="r">html |&gt; html_elements("b")
+#&gt; {xml_nodeset (0)}
+html |&gt; html_element("b")
+#&gt; {xml_missing}
+#&gt; &lt;NA&gt;</pre>
+</div>
+</section>
+
+<section id="nesting-selections" data-type="sect2">
+<h2>
+Nesting selections</h2>
+<p>In most cases, you’ll use <code><a href="https://rvest.tidyverse.org/reference/html_element.html">html_elements()</a></code> and <code><a href="https://rvest.tidyverse.org/reference/html_element.html">html_element()</a></code> together, typically using <code><a href="https://rvest.tidyverse.org/reference/html_element.html">html_elements()</a></code> to identify elements that will become observations then using <code><a href="https://rvest.tidyverse.org/reference/html_element.html">html_element()</a></code> to find elements that will become variables. Let’s see this in action using a simple example. Here we have an unordered list (<code>&lt;ul&gt;)</code> where each list item (<code>&lt;li&gt;</code>) contains some information about four characters from StarWars:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="r">html &lt;- minimal_html("
+  &lt;ul&gt;
+    &lt;li&gt;&lt;b&gt;C-3PO&lt;/b&gt; is a &lt;i&gt;droid&lt;/i&gt; that weighs &lt;span class='weight'&gt;167 kg&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;b&gt;R2-D2&lt;/b&gt; is a &lt;i&gt;droid&lt;/i&gt; that weighs &lt;span class='weight'&gt;96 kg&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;b&gt;Yoda&lt;/b&gt; weighs &lt;span class='weight'&gt;66 kg&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;b&gt;R4-P17&lt;/b&gt; is a &lt;i&gt;droid&lt;/i&gt;&lt;/li&gt;
+  &lt;/ul&gt;
+  ")</pre>
+</div>
+<p>We can use <code><a href="https://rvest.tidyverse.org/reference/html_element.html">html_elements()</a></code> to make a vector where each element corresponds to a different character:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="r">characters &lt;- html |&gt; html_elements("li")
+characters
+#&gt; {xml_nodeset (4)}
+#&gt; [1] &lt;li&gt;\n&lt;b&gt;C-3PO&lt;/b&gt; is a &lt;i&gt;droid&lt;/i&gt; that weighs &lt;span class="weight"&gt; ...
+#&gt; [2] &lt;li&gt;\n&lt;b&gt;R2-D2&lt;/b&gt; is a &lt;i&gt;droid&lt;/i&gt; that weighs &lt;span class="weight"&gt; ...
+#&gt; [3] &lt;li&gt;\n&lt;b&gt;Yoda&lt;/b&gt; weighs &lt;span class="weight"&gt;66 kg&lt;/span&gt;\n&lt;/li&gt;
+#&gt; [4] &lt;li&gt;\n&lt;b&gt;R4-P17&lt;/b&gt; is a &lt;i&gt;droid&lt;/i&gt;\n&lt;/li&gt;</pre>
+</div>
+<p>To extract the name of each character, we use <code><a href="https://rvest.tidyverse.org/reference/html_element.html">html_element()</a></code>, because when applied to the output of <code><a href="https://rvest.tidyverse.org/reference/html_element.html">html_elements()</a></code> its guaranteed to return one response per element:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="r">characters |&gt; html_element("b")
+#&gt; {xml_nodeset (4)}
+#&gt; [1] &lt;b&gt;C-3PO&lt;/b&gt;
+#&gt; [2] &lt;b&gt;R2-D2&lt;/b&gt;
+#&gt; [3] &lt;b&gt;Yoda&lt;/b&gt;
+#&gt; [4] &lt;b&gt;R4-P17&lt;/b&gt;</pre>
+</div>
+<p>The distinction between <code><a href="https://rvest.tidyverse.org/reference/html_element.html">html_element()</a></code> and <code><a href="https://rvest.tidyverse.org/reference/html_element.html">html_elements()</a></code> isn’t important for name, but it is important for weight. We want to try and get the weight for each character</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="r">characters |&gt; html_element(".weight")
+#&gt; {xml_nodeset (4)}
+#&gt; [1] &lt;span class="weight"&gt;167 kg&lt;/span&gt;
+#&gt; [2] &lt;span class="weight"&gt;96 kg&lt;/span&gt;
+#&gt; [3] &lt;span class="weight"&gt;66 kg&lt;/span&gt;
+#&gt; [4] &lt;NA&gt;</pre>
+</div>
+<p>If we instead used <code><a href="https://rvest.tidyverse.org/reference/html_element.html">html_elements()</a></code>, we lose the connection between names and weights:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="r">characters |&gt; html_elements(".weight")
+#&gt; {xml_nodeset (3)}
+#&gt; [1] &lt;span class="weight"&gt;167 kg&lt;/span&gt;
+#&gt; [2] &lt;span class="weight"&gt;96 kg&lt;/span&gt;
+#&gt; [3] &lt;span class="weight"&gt;66 kg&lt;/span&gt;</pre>
+</div>
+<p>Now that you’ve selected the elements of interest, you’ll need to extract the data, either from the text contents or some attributes.</p>
+</section>
+
+<section id="text-and-attributes" data-type="sect2">
+<h2>
+Text and attributes</h2>
+<p><code><a href="https://rvest.tidyverse.org/reference/html_text.html">html_text2()</a></code><span data-type="footnote">rvest also provides <code><a href="https://rvest.tidyverse.org/reference/html_text.html">html_text()</a></code> but you should almost always use <code><a href="https://rvest.tidyverse.org/reference/html_text.html">html_text2()</a></code> since it does a better job of converting nested HTML to text.</span> extracts the plain text contents of an HTML element:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="r">html &lt;- minimal_html("
+  &lt;ol&gt;
+    &lt;li&gt;apple &amp;amp; pear&lt;/li&gt;
+    &lt;li&gt;banana&lt;/li&gt;
+    &lt;li&gt;pineapple&lt;/li&gt;
+  &lt;/ol&gt;
+")
+html |&gt; 
+  html_element("ol") |&gt; 
+  html_elements("li") |&gt; 
+  html_text2()
+#&gt; [1] "apple &amp; pear" "banana"       "pineapple"</pre>
+</div>
+<p>Note that the escaped ampersand is automatically converted to <code>&amp;</code>; you’ll only ever see HTML escapes in the source HTML, not in the data returned by rvest.</p>
+<p><code><a href="https://rvest.tidyverse.org/reference/html_attr.html">html_attr()</a></code> extracts data from attributes:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="r">html &lt;- minimal_html("
+  &lt;p&gt;&lt;a href='https://en.wikipedia.org/wiki/Cat'&gt;cats&lt;/a&gt;&lt;/p&gt;
+  &lt;p&gt;&lt;a href='https://en.wikipedia.org/wiki/Dog'&gt;dogs&lt;/a&gt;&lt;/p&gt;
+")
+
+html |&gt; 
+  html_elements("p") |&gt; 
+  html_element("a") |&gt; 
+  html_attr("href")
+#&gt; [1] "https://en.wikipedia.org/wiki/Cat" "https://en.wikipedia.org/wiki/Dog"</pre>
+</div>
+<p><code><a href="https://rvest.tidyverse.org/reference/html_attr.html">html_attr()</a></code> always returns a string, so if you’re extracting numbers or dates, you’ll need to do some post-processing.</p>
+</section>
+
+<section id="tables" data-type="sect2">
+<h2>
+Tables</h2>
+<p>If you’re lucky, your data will be already stored in an HTML table, and it’ll be a matter of just reading it from that table. It’s usually straightforward to recognize a table in your browser: it’ll have a rectangular structure of rows and columns, and you can copy and paste it into a tool like Excel.</p>
+<p>HTML tables are built up from four main elements: <code>&lt;table&gt;</code>, <code>&lt;tr&gt;</code> (table row), <code>&lt;th&gt;</code> (table heading), and <code>&lt;td&gt;</code> (table data). Here’s a simple HTML table with two columns and three rows:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="r">html &lt;- minimal_html("
+  &lt;table class='mytable'&gt;
+    &lt;tr&gt;
+      &lt;th&gt;x&lt;/th&gt;
+      &lt;th&gt;y&lt;/th&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;1.5&lt;/td&gt;
+      &lt;td&gt;2.7&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;4.9&lt;/td&gt;
+      &lt;td&gt;1.3&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;7.2&lt;/td&gt;
+      &lt;td&gt;8.1&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/table&gt;
+  ")</pre>
+</div>
+<p>rvest provides a function that knows how to read this sort of data: <code><a href="https://rvest.tidyverse.org/reference/html_table.html">html_table()</a></code>. It returns a list containing one tibble for each table found on the page. Use <code><a href="https://rvest.tidyverse.org/reference/html_element.html">html_element()</a></code> to identify the table you want to extract:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="r">html |&gt; 
+  html_element(".mytable") |&gt; 
+  html_table()
+#&gt; # A tibble: 3 × 2
+#&gt;       x     y
+#&gt;   &lt;dbl&gt; &lt;dbl&gt;
+#&gt; 1   1.5   2.7
+#&gt; 2   4.9   1.3
+#&gt; 3   7.2   8.1</pre>
+</div>
+<p>Note that <code>x</code> and <code>y</code> have automatically been converted to numbers. This automatic conversion doesn’t always work, so in more complex scenarios you may want to turn it off with <code>convert = FALSE</code> and then do your own conversion.</p>
+</section>
+</section>
+
+<section id="sec-css-selectors" data-type="sect1">
+<h1>
+Finding the right selectors</h1>
+<p>Figuring out the selector you need for your data is typically the hardest part of the problem. You’ll often need to do some experimenting to find a selector that is both specific (i.e. it doesn’t select things you don’t care about) and sensitive (i.e. it does select everything you care about). Lots of trial and error is a normal part of the process! There are two main tools that are available to help you with this process: SelectorGadget and your browser’s developer tools.</p>
+<p><a href="https://rvest.tidyverse.org/articles/selectorgadget.html">SelectorGadget</a> is a javascript bookmarklet that automatically generates CSS selectors based on the positive and negative examples that you provide. It doesn’t always work, but when it does, it’s magic! You can learn how to install and use SelectorGadget either by reading <a href="https://rvest.tidyverse.org/articles/selectorgadget.html" class="uri">https://rvest.tidyverse.org/articles/selectorgadget.html</a> or watching Mine’s video at <a href="https://www.youtube.com/watch?v=PetWV5g1Xsc" class="uri">https://www.youtube.com/watch?v=PetWV5g1Xsc</a>.</p>
+<p>Every modern browser comes with some toolkit for developers, but we recommend Chrome, even if it isn’t your regular browser: its web developer tools are some of the best and they’re immediately available. Right click on an element on the page and click <code>Inspect</code>. This will open an expandable view of the complete HTML page, centered on the element that you just clicked. You can use this to explore the page and get a sense of what selectors might work. Pay particular attention to the class and id attributes, since these are often used to form the visual structure of the page, and hence make for good tools to extract the data that you’re looking for.</p>
+<p>Inside the Elements view, you can also right click on an element and choose <code>Copy as Selector</code> to generate a selector that will uniquely identify the element of interest.</p>
+<p>If either SelectorGadget or Chrome DevTools have generated a CSS selector that you don’t understand, try <a href="https://kittygiraudel.github.io/selectors-explained/" class="uri">Selectors Explained</a> which translates CSS selectors into plain English. If you find yourself doing this a lot, you might want to learn more about CSS selectors generally. We recommend starting with the fun <a href="https://flukeout.github.io/">CSS dinner</a> tutorial and then referring to the <a href="https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Selectors">MDN web docs</a>.</p>
+</section>
+
+<section id="putting-it-all-together" data-type="sect1">
+<h1>
+Putting it all together</h1>
+<p>Lets put this all together to scrape some websites. There’s some risk that these examples may no longer work when you run them — that’s the fundamental challenge of web scraping; if the structure of the site changes, then you’ll have to change your scraping code.</p>
+
+<section id="starwars" data-type="sect2">
+<h2>
+StarWars</h2>
+<p>rvest includes a very simple example in <code><a href="https://rvest.tidyverse.org/articles/starwars.html">vignette("starwars")</a></code>. This is simple page with minimal HTML so it’s a good place to start. I’d encourage you to navigate to that page now and use “Inspect Element” to inspect one of the headings that’s the title of a Star Wars movie. Use the keyboard or mouse to explore the hierarchy of the HTML and see if you can get a sense of the shared structure used by each movie.</p>
+<p>You should be able to see that each movie has a shared structure that looks like this:</p>
+<pre data-type="programlisting" data-code-language="html">&lt;section&gt;
+  &lt;h2 data-id="1"&gt;The Phantom Menace&lt;/h2&gt;
+  &lt;p&gt;Released: 1999-05-19&lt;/p&gt;
+  &lt;p&gt;Director: &lt;span class="director"&gt;George Lucas&lt;/span&gt;&lt;/p&gt;
+  
+  &lt;div class="crawl"&gt;
+    &lt;p&gt;...&lt;/p&gt;
+    &lt;p&gt;...&lt;/p&gt;
+    &lt;p&gt;...&lt;/p&gt;
+  &lt;/div&gt;
+&lt;/section&gt;</pre>
+<p>Our goal is to turn this data into a 7 row data frame with variables <code>title</code>, <code>year</code>, <code>director</code>, and <code>intro</code>. We’ll start by reading the HTML and extracting all the <code>&lt;section&gt;</code> elements:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="r">url &lt;- "https://rvest.tidyverse.org/articles/starwars.html"
+html &lt;- read_html(url)
+
+section &lt;- html |&gt; html_elements("section")
+section
+#&gt; {xml_nodeset (7)}
+#&gt; [1] &lt;section&gt;&lt;h2 data-id="1"&gt;\nThe Phantom Menace\n&lt;/h2&gt;\n&lt;p&gt;\nReleased: 1 ...
+#&gt; [2] &lt;section&gt;&lt;h2 data-id="2"&gt;\nAttack of the Clones\n&lt;/h2&gt;\n&lt;p&gt;\nReleased: ...
+#&gt; [3] &lt;section&gt;&lt;h2 data-id="3"&gt;\nRevenge of the Sith\n&lt;/h2&gt;\n&lt;p&gt;\nReleased:  ...
+#&gt; [4] &lt;section&gt;&lt;h2 data-id="4"&gt;\nA New Hope\n&lt;/h2&gt;\n&lt;p&gt;\nReleased: 1977-05-2 ...
+#&gt; [5] &lt;section&gt;&lt;h2 data-id="5"&gt;\nThe Empire Strikes Back\n&lt;/h2&gt;\n&lt;p&gt;\nReleas ...
+#&gt; [6] &lt;section&gt;&lt;h2 data-id="6"&gt;\nReturn of the Jedi\n&lt;/h2&gt;\n&lt;p&gt;\nReleased: 1 ...
+#&gt; [7] &lt;section&gt;&lt;h2 data-id="7"&gt;\nThe Force Awakens\n&lt;/h2&gt;\n&lt;p&gt;\nReleased: 20 ...</pre>
+</div>
+<p>The retrieves seven nodes matching the seven movies found on that page, suggesting that using <code>section</code> as a selector is good. Extracting the individual elements is straightforward since the data is always found in the text. It’s just a matter of finding the right selector:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="r">section |&gt; html_element("h2") |&gt; html_text2()
+#&gt; [1] "The Phantom Menace"      "Attack of the Clones"   
+#&gt; [3] "Revenge of the Sith"     "A New Hope"             
+#&gt; [5] "The Empire Strikes Back" "Return of the Jedi"     
+#&gt; [7] "The Force Awakens"
+
+section |&gt; html_element(".director") |&gt; html_text2()
+#&gt; [1] "George Lucas"     "George Lucas"     "George Lucas"    
+#&gt; [4] "George Lucas"     "Irvin Kershner"   "Richard Marquand"
+#&gt; [7] "J. J. Abrams"</pre>
+</div>
+<p>Once we’ve done that for each component, we can wrap all the results up into a tibble:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="r">tibble(
+  title = section |&gt; html_element("h2") |&gt; html_text2(),
+  released = section |&gt; 
+    html_element("p") |&gt; 
+    html_text2() |&gt; 
+    str_remove("Released: ") |&gt; 
+    parse_date(),
+  director = section |&gt; html_element(".director") |&gt; html_text2(),
+  intro = section |&gt; html_element(".crawl") |&gt; html_text2()
+)
+#&gt; # A tibble: 7 × 4
+#&gt;   title                   released   director         intro                  
+#&gt;   &lt;chr&gt;                   &lt;date&gt;     &lt;chr&gt;            &lt;chr&gt;                  
+#&gt; 1 The Phantom Menace      1999-05-19 George Lucas     "Turmoil has engulfed …
+#&gt; 2 Attack of the Clones    2002-05-16 George Lucas     "There is unrest in th…
+#&gt; 3 Revenge of the Sith     2005-05-19 George Lucas     "War! The Republic is …
+#&gt; 4 A New Hope              1977-05-25 George Lucas     "It is a period of civ…
+#&gt; 5 The Empire Strikes Back 1980-05-17 Irvin Kershner   "It is a dark time for…
+#&gt; 6 Return of the Jedi      1983-05-25 Richard Marquand "Luke Skywalker has re…
+#&gt; # … with 1 more row</pre>
+</div>
+<p>We did a little more processing of <code>released</code> to get a variable that will be easy to use later in our analysis.</p>
+</section>
+
+<section id="imdb-top-films" data-type="sect2">
+<h2>
+IMDB top films</h2>
+<p>For our next task we’ll tackle something a little trickier, extracting the top 250 movies from the internet movie database (IMDb). At the time we wrote this chapter, the page looked like <a href="#fig-scraping-imdb" data-type="xref">#fig-scraping-imdb</a>.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="r">knitr::include_graphics("screenshots/scraping-imdb.png", dpi = 300)</pre>
+<div class="cell-output-display">
+
+<figure id="fig-scraping-imdb"><p><img src="screenshots/scraping-imdb.png" alt="The screenshot shows a table with columns &quot;Rank and Title&quot;, &quot;IMDb Rating&quot;, and &quot;Your Rating&quot;. 9 movies out of the top 250 are shown. The top 5 are the Shawshank Redemption, The Godfather, The Dark Knight, The Godfather: Part II, and 12 Angry Men." width="418"/></p>
+<figcaption>Screenshot of the IMDb top movies web page taken on 2022-12-05.</figcaption>
+</figure>
+</div>
+</div>
+<p>This data has a clear tabular structure so it’s worth starting with <code><a href="https://rvest.tidyverse.org/reference/html_table.html">html_table()</a></code>:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="r">url &lt;- "https://www.imdb.com/chart/top"
+html &lt;- read_html(url)
+
+table &lt;- html |&gt; 
+  html_element("table") |&gt; 
+  html_table()
+table
+#&gt; # A tibble: 250 × 5
+#&gt;   ``    `Rank &amp; Title`                      `IMDb Rating` `Your Rating` ``   
+#&gt;   &lt;lgl&gt; &lt;chr&gt;                                       &lt;dbl&gt; &lt;chr&gt;         &lt;lgl&gt;
+#&gt; 1 NA    "1.\n      The Shawshank Redemptio…           9.2 "12345678910… NA   
+#&gt; 2 NA    "2.\n      The Godfather\n        …           9.2 "12345678910… NA   
+#&gt; 3 NA    "3.\n      The Dark Knight\n      …           9   "12345678910… NA   
+#&gt; 4 NA    "4.\n      The Godfather: Part II\…           9   "12345678910… NA   
+#&gt; 5 NA    "5.\n      12 Angry Men\n        (…           9   "12345678910… NA   
+#&gt; 6 NA    "6.\n      Schindler's List\n     …           8.9 "12345678910… NA   
+#&gt; # … with 244 more rows</pre>
+</div>
+<p>This includes a few empty columns, but overall does a good job of capturing the information from the table. However, we need to do some more processing to make it easier to use. First, we’ll rename the columns to be easier to work with, and remove the extraneous whitespace in rank and title. We will do this with <code><a href="https://dplyr.tidyverse.org/reference/select.html">select()</a></code> (instead of <code><a href="https://dplyr.tidyverse.org/reference/rename.html">rename()</a></code>) to do the renaming and selecting of just these two columns in one step. Then, we’ll apply <code><a href="https://tidyr.tidyverse.org/reference/separate_wider_delim.html">separate_wider_regex()</a></code> (from <a href="#sec-extract-variables" data-type="xref">#sec-extract-variables</a>) to pull out the title, year, and rank into their own variables.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="r">ratings &lt;- table |&gt; 
+  select(
+    rank_title_year = `Rank &amp; Title`,
+    rating = `IMDb Rating`
+  ) |&gt; 
+  mutate(
+    rank_title_year = str_squish(rank_title_year)
+  ) |&gt; 
+  separate_wider_regex(
+    rank_title_year,
+    patterns = c(
+      rank = "\\d+", "\\. ",
+      title = ".+", " \\(",
+      year = "\\d+", "\\)"
+    )
+  )
+ratings
+#&gt; # A tibble: 250 × 4
+#&gt;   rank  title                    year  rating
+#&gt;   &lt;chr&gt; &lt;chr&gt;                    &lt;chr&gt;  &lt;dbl&gt;
+#&gt; 1 1     The Shawshank Redemption 1994     9.2
+#&gt; 2 2     The Godfather            1972     9.2
+#&gt; 3 3     The Dark Knight          2008     9  
+#&gt; 4 4     The Godfather: Part II   1974     9  
+#&gt; 5 5     12 Angry Men             1957     9  
+#&gt; 6 6     Schindler's List         1993     8.9
+#&gt; # … with 244 more rows</pre>
+</div>
+<p>Even in this case where most of the data comes from table cells, it’s still worth looking at the raw HTML. If you do so, you’ll discover that we can add a little extra data by using one of the attributes. This is one of the reasons it’s worth spending a little time spelunking the source of the page; you might find extra data, or might find a parsing route that’s slightly easier.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="r">html |&gt; 
+  html_elements("td strong") |&gt; 
+  head() |&gt; 
+  html_attr("title")
+#&gt; [1] "9.2 based on 2,684,096 user ratings"
+#&gt; [2] "9.2 based on 1,861,107 user ratings"
+#&gt; [3] "9.0 based on 2,657,484 user ratings"
+#&gt; [4] "9.0 based on 1,273,669 user ratings"
+#&gt; [5] "9.0 based on 792,941 user ratings"  
+#&gt; [6] "8.9 based on 1,357,901 user ratings"</pre>
+</div>
+<p>We can combine this with the tabular data and again apply <code><a href="https://tidyr.tidyverse.org/reference/separate_wider_delim.html">separate_wider_regex()</a></code> to extract out the bit of data we care about:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="r">ratings |&gt;
+  mutate(
+    rating_n = html |&gt; html_elements("td strong") |&gt; html_attr("title")
+  ) |&gt; 
+  separate_wider_regex(
+    rating_n,
+    patterns = c(
+      "[0-9.]+ based on ",
+      number = "[0-9,]+",
+      " user ratings"
+    )
+  ) |&gt; 
+  mutate(
+    number = parse_number(number)
+  )
+#&gt; # A tibble: 250 × 5
+#&gt;   rank  title                    year  rating  number
+#&gt;   &lt;chr&gt; &lt;chr&gt;                    &lt;chr&gt;  &lt;dbl&gt;   &lt;dbl&gt;
+#&gt; 1 1     The Shawshank Redemption 1994     9.2 2684096
+#&gt; 2 2     The Godfather            1972     9.2 1861107
+#&gt; 3 3     The Dark Knight          2008     9   2657484
+#&gt; 4 4     The Godfather: Part II   1974     9   1273669
+#&gt; 5 5     12 Angry Men             1957     9    792941
+#&gt; 6 6     Schindler's List         1993     8.9 1357901
+#&gt; # … with 244 more rows</pre>
+</div>
+</section>
+</section>
+
+<section id="dynamic-sites" data-type="sect1">
+<h1>
+Dynamic sites</h1>
+<p>From time-to-time, you’ll hit a site where <code><a href="https://rvest.tidyverse.org/reference/html_element.html">html_elements()</a></code> and friends don’t return anything like what you see in the browser. In many cases, that’s because you’re trying to scrape a website that dynamically generates the content of the page with javascript. This doesn’t currently work with rvest, because rvest downloads the raw HTML and doesn’t run any javascript.</p>
+<p>It’s still possible to scrape these types of sites, but rvest needs to use a more expensive process: fully simulating the web browser including running all javascript. This functionality is not available at the time of writing, but it’s something we’re actively working on and should be available by the time you read this. It uses the <a href="https://rstudio.github.io/chromote/index.html">chromote package</a> which actually runs the Chrome browser in the background, and gives you additional tools to interact with the site, like a human typing text and clicking buttons. Check out the rvest website for more details.</p>
+</section>
+
+<section id="summary" data-type="sect1">
+<h1>
+Summary</h1>
+<p>In this chapter, you’ve learned about the why, the why not, and the how of scraping data from web pages. First, you’ve learned about the basics of HTML and using CSS selectors to refer to specific elements, then you’ve learned about using the rvest package to get data out of HTML into R. We then demonstrated web scraping with two case studies: a simpler scenario on scraping data on StarWars films from the rvest package website and a more complex scenario on scraping the top 250 films from IMDB.</p>
+<p>Technical details of scraping data off the web can be complex, particularly when dealing with sites, however legal and ethical considerations can be even more complex. It’s important for you to educate yourself about both of these before setting out to scrape data.</p>
+<p>This brings us to the end of the wrangling part of the book where you’ve learned techniques to get data from where it lives (spreadsheets, databases, JSON files, and web sites) into a tidy form in R. Now it’s time to turn our sights to a new topic: making the most of R as a programming language.</p>
+
+
+</section>
+</section>

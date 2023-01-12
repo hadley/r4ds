@@ -4,7 +4,7 @@
 <h1>
 Introduction</h1>
 <p>Visualisation is an important tool for generating insight, but it’s rare that you get the data in exactly the right form you need for it. Often you’ll need to create some new variables or summaries to see the most important patterns, or maybe you just want to rename the variables or reorder the observations to make the data a little easier to work with. You’ll learn how to do all that (and more!) in this chapter, which will introduce you to data transformation using the <strong>dplyr</strong> package and a new dataset on flights that departed New York City in 2013.</p>
-<p>The goal of this chapter is to give you an overview of all the key tools for transforming a data frame. We’ll come back these functions in more detail in later chapters, as we start to dig into specific types of data (e.g. numbers, strings, dates).</p>
+<p>The goal of this chapter is to give you an overview of all the key tools for transforming a data frame. We’ll start with functions that operate on rows and then columns of a data frame. We will then introduce the ability to work with groups. We will end the chapter with a case study that showcases these functions in action and we’ll come back to the functions in more detail in later chapters, as we start to dig into specific types of data (e.g. numbers, strings, dates).</p>
 
 <section id="prerequisites" data-type="sect2">
 <h2>
@@ -13,14 +13,16 @@ Prerequisites</h2>
 <div class="cell">
 <pre data-type="programlisting" data-code-language="r">library(nycflights13)
 library(tidyverse)
-#&gt; ── Attaching packages ──────────────────────────────────── tidyverse 1.3.2 ──
-#&gt; ✔ ggplot2 3.4.0.9000        ✔ purrr   0.9000.0.9000
-#&gt; ✔ tibble  3.1.8             ✔ dplyr   1.0.99.9000  
-#&gt; ✔ tidyr   1.2.1.9001        ✔ stringr 1.4.1.9000   
-#&gt; ✔ readr   2.1.3             ✔ forcats 0.5.2        
+#&gt; ── Attaching core tidyverse packages ──────────────── tidyverse 1.3.2.9000 ──
+#&gt; ✔ dplyr     1.0.99.9000     ✔ readr     2.1.3      
+#&gt; ✔ forcats   0.5.2.9000      ✔ stringr   1.5.0.9000 
+#&gt; ✔ ggplot2   3.4.0.9000      ✔ tibble    3.1.8      
+#&gt; ✔ lubridate 1.9.0           ✔ tidyr     1.2.1.9001 
+#&gt; ✔ purrr     1.0.1           
 #&gt; ── Conflicts ─────────────────────────────────────── tidyverse_conflicts() ──
 #&gt; ✖ dplyr::filter() masks stats::filter()
-#&gt; ✖ dplyr::lag()    masks stats::lag()</pre>
+#&gt; ✖ dplyr::lag()    masks stats::lag()
+#&gt; ℹ Use the ]8;;http://conflicted.r-lib.org/conflicted package]8;; to force all conflicts to become errors</pre>
 </div>
 <p>Take careful note of the conflicts message that’s printed when you load the tidyverse. It tells you that dplyr overwrites some functions in base R. If you want to use the base version of these functions after loading dplyr, you’ll need to use their full names: <code><a href="https://rdrr.io/r/stats/filter.html">stats::filter()</a></code> and <code><a href="https://rdrr.io/r/stats/lag.html">stats::lag()</a></code>. So far we’ve mostly ignored which package a function comes from because most of the time it doesn’t matter. However, knowing the package can help you find help and find related functions, so when we need to be precise about which function a package comes from, we’ll use the same syntax as R: <code>packagename::functionname()</code>.</p>
 </section>
@@ -32,21 +34,45 @@ nycflights13</h2>
 <div class="cell">
 <pre data-type="programlisting" data-code-language="r">flights
 #&gt; # A tibble: 336,776 × 19
-#&gt;    year month   day dep_time sched_…¹ dep_d…² arr_t…³ sched…⁴ arr_d…⁵ carrier
-#&gt;   &lt;int&gt; &lt;int&gt; &lt;int&gt;    &lt;int&gt;    &lt;int&gt;   &lt;dbl&gt;   &lt;int&gt;   &lt;int&gt;   &lt;dbl&gt; &lt;chr&gt;  
-#&gt; 1  2013     1     1      517      515       2     830     819      11 UA     
-#&gt; 2  2013     1     1      533      529       4     850     830      20 UA     
-#&gt; 3  2013     1     1      542      540       2     923     850      33 AA     
-#&gt; 4  2013     1     1      544      545      -1    1004    1022     -18 B6     
-#&gt; 5  2013     1     1      554      600      -6     812     837     -25 DL     
-#&gt; 6  2013     1     1      554      558      -4     740     728      12 UA     
-#&gt; # … with 336,770 more rows, 9 more variables: flight &lt;int&gt;, tailnum &lt;chr&gt;,
-#&gt; #   origin &lt;chr&gt;, dest &lt;chr&gt;, air_time &lt;dbl&gt;, distance &lt;dbl&gt;, hour &lt;dbl&gt;,
-#&gt; #   minute &lt;dbl&gt;, time_hour &lt;dttm&gt;, and abbreviated variable names
-#&gt; #   ¹​sched_dep_time, ²​dep_delay, ³​arr_time, ⁴​sched_arr_time, ⁵​arr_delay</pre>
+#&gt;    year month   day dep_time sched_dep_time dep_delay arr_time sched_arr_time
+#&gt;   &lt;int&gt; &lt;int&gt; &lt;int&gt;    &lt;int&gt;          &lt;int&gt;     &lt;dbl&gt;    &lt;int&gt;          &lt;int&gt;
+#&gt; 1  2013     1     1      517            515         2      830            819
+#&gt; 2  2013     1     1      533            529         4      850            830
+#&gt; 3  2013     1     1      542            540         2      923            850
+#&gt; 4  2013     1     1      544            545        -1     1004           1022
+#&gt; 5  2013     1     1      554            600        -6      812            837
+#&gt; 6  2013     1     1      554            558        -4      740            728
+#&gt; # … with 336,770 more rows, and 11 more variables: arr_delay &lt;dbl&gt;,
+#&gt; #   carrier &lt;chr&gt;, flight &lt;int&gt;, tailnum &lt;chr&gt;, origin &lt;chr&gt;, dest &lt;chr&gt;,
+#&gt; #   air_time &lt;dbl&gt;, distance &lt;dbl&gt;, hour &lt;dbl&gt;, minute &lt;dbl&gt;,
+#&gt; #   time_hour &lt;dttm&gt;</pre>
 </div>
-<p>If you’ve used R before, you might notice that this data frame prints a little differently to other data frames you’ve seen. That’s because it’s a <strong>tibble</strong>, a special type of data frame used by the tidyverse to avoid some common gotchas. The most important difference is the way it prints: tibbles are designed for large datasets, so they only show the first few rows and only the columns that fit on one screen. To see everything you can use <code>print(flights, width = Inf)</code> to show everything in the console, but it’s generally more convenient to instead use <code>View(flights)</code> to open the dataset in the scrollable RStudio viewer.</p>
-<p>You might have noticed the short abbreviations that follow each column name. These tell you the type of each variable: <code>&lt;int&gt;</code> is short for integer, <code>&lt;dbl&gt;</code> is short for double (aka real numbers), <code>&lt;chr&gt;</code> for character (aka strings), and <code>&lt;dttm&gt;</code> for date-time. These are important because the operations you can perform on a column depend so much on its “type”, and these types are used to organize the chapters in the next section of the book.</p>
+<p>If you’ve used R before, you might notice that this data frame prints a little differently to other data frames you’ve seen. That’s because it’s a <strong>tibble</strong>, a special type of data frame used by the tidyverse to avoid some common gotchas. The most important difference is the way it prints: tibbles are designed for large datasets, so they only show the first few rows and only the columns that fit on one screen. There are a few options to see everything. If you’re using RStudio, the most convenient is probably <code>View(flights)</code>, which will open an interactive scrollable and filterable view. Otherwise you can use <code>print(flights, width = Inf)</code> to show all columns, or use call <code><a href="https://pillar.r-lib.org/reference/glimpse.html">glimpse()</a></code>:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="r">glimpse(flights)
+#&gt; Rows: 336,776
+#&gt; Columns: 19
+#&gt; $ year           &lt;int&gt; 2013, 2013, 2013, 2013, 2013, 2013, 2013, 2013, 2013…
+#&gt; $ month          &lt;int&gt; 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1…
+#&gt; $ day            &lt;int&gt; 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1…
+#&gt; $ dep_time       &lt;int&gt; 517, 533, 542, 544, 554, 554, 555, 557, 557, 558, 55…
+#&gt; $ sched_dep_time &lt;int&gt; 515, 529, 540, 545, 600, 558, 600, 600, 600, 600, 60…
+#&gt; $ dep_delay      &lt;dbl&gt; 2, 4, 2, -1, -6, -4, -5, -3, -3, -2, -2, -2, -2, -2,…
+#&gt; $ arr_time       &lt;int&gt; 830, 850, 923, 1004, 812, 740, 913, 709, 838, 753, 8…
+#&gt; $ sched_arr_time &lt;int&gt; 819, 830, 850, 1022, 837, 728, 854, 723, 846, 745, 8…
+#&gt; $ arr_delay      &lt;dbl&gt; 11, 20, 33, -18, -25, 12, 19, -14, -8, 8, -2, -3, 7,…
+#&gt; $ carrier        &lt;chr&gt; "UA", "UA", "AA", "B6", "DL", "UA", "B6", "EV", "B6"…
+#&gt; $ flight         &lt;int&gt; 1545, 1714, 1141, 725, 461, 1696, 507, 5708, 79, 301…
+#&gt; $ tailnum        &lt;chr&gt; "N14228", "N24211", "N619AA", "N804JB", "N668DN", "N…
+#&gt; $ origin         &lt;chr&gt; "EWR", "LGA", "JFK", "JFK", "LGA", "EWR", "EWR", "LG…
+#&gt; $ dest           &lt;chr&gt; "IAH", "IAH", "MIA", "BQN", "ATL", "ORD", "FLL", "IA…
+#&gt; $ air_time       &lt;dbl&gt; 227, 227, 160, 183, 116, 150, 158, 53, 140, 138, 149…
+#&gt; $ distance       &lt;dbl&gt; 1400, 1416, 1089, 1576, 762, 719, 1065, 229, 944, 73…
+#&gt; $ hour           &lt;dbl&gt; 5, 5, 5, 5, 6, 5, 6, 6, 6, 6, 6, 6, 6, 6, 6, 5, 6, 6…
+#&gt; $ minute         &lt;dbl&gt; 15, 29, 40, 45, 0, 58, 0, 0, 0, 0, 0, 0, 0, 0, 0, 59…
+#&gt; $ time_hour      &lt;dttm&gt; 2013-01-01 05:00:00, 2013-01-01 05:00:00, 2013-01-0…</pre>
+</div>
+<p>In both views, the variables names are followed by abbreviations that tell you the type of each variable: <code>&lt;int&gt;</code> is short for integer, <code>&lt;dbl&gt;</code> is short for double (aka real numbers), <code>&lt;chr&gt;</code> for character (aka strings), and <code>&lt;dttm&gt;</code> for date-time. These are important because the operations you can perform on a column depend so much on its “type”, and these types are used to organize the chapters in the next section of the book.</p>
 </section>
 
 <section id="dplyr-basics" data-type="sect2">
@@ -66,14 +92,14 @@ dplyr basics</h2>
   )</pre>
 </div>
 <p>The code starts with the <code>flights</code> dataset, then filters it, then groups it, then summarizes it. We’ll come back to the pipe and its alternatives in <a href="#sec-pipes" data-type="xref">#sec-pipes</a>.</p>
-<p>dplyr’s verbs are organised into four groups based on what they operate on: <strong>rows</strong>, <strong>columns</strong>, <strong>groups</strong>, or <strong>tables</strong>. In the following sections you’ll learn the most important verbs for rows, columns, and groups, then we’ll come back to verb that work on tables in <a href="#chp-joins" data-type="xref">#chp-joins</a>. Let’s dive in!</p>
+<p>dplyr’s verbs are organised into four groups based on what they operate on: <strong>rows</strong>, <strong>columns</strong>, <strong>groups</strong>, or <strong>tables</strong>. In the following sections you’ll learn the most important verbs for rows, columns, and groups, then we’ll come back to verbs that work on tables in <a href="#chp-joins" data-type="xref">#chp-joins</a>. Let’s dive in!</p>
 </section>
 </section>
 
 <section id="rows" data-type="sect1">
 <h1>
 Rows</h1>
-<p>The most important verbs that operate on rows are <code><a href="https://dplyr.tidyverse.org/reference/filter.html">filter()</a></code>, which changes which rows are present without changing their order, and <code><a href="https://dplyr.tidyverse.org/reference/arrange.html">arrange()</a></code>, which changes the order of the rows without changing which are present. Both functions only affect the rows, and the columns are left unchanged.</p>
+<p>The most important verbs that operate on rows are <code><a href="https://dplyr.tidyverse.org/reference/filter.html">filter()</a></code>, which changes which rows are present without changing their order, and <code><a href="https://dplyr.tidyverse.org/reference/arrange.html">arrange()</a></code>, which changes the order of the rows without changing which are present. Both functions only affect the rows, and the columns are left unchanged. We’ll also discuss <code><a href="https://dplyr.tidyverse.org/reference/distinct.html">distinct()</a></code> which finds rows with unique values but unlike <code><a href="https://dplyr.tidyverse.org/reference/arrange.html">arrange()</a></code> and <code><a href="https://dplyr.tidyverse.org/reference/filter.html">filter()</a></code> it can also optionally modify the columns.</p>
 
 <section id="filter" data-type="sect2">
 <h2>
@@ -84,18 +110,18 @@ Rows</h1>
 <pre data-type="programlisting" data-code-language="r">flights |&gt; 
   filter(arr_delay &gt; 120)
 #&gt; # A tibble: 10,034 × 19
-#&gt;    year month   day dep_time sched_…¹ dep_d…² arr_t…³ sched…⁴ arr_d…⁵ carrier
-#&gt;   &lt;int&gt; &lt;int&gt; &lt;int&gt;    &lt;int&gt;    &lt;int&gt;   &lt;dbl&gt;   &lt;int&gt;   &lt;int&gt;   &lt;dbl&gt; &lt;chr&gt;  
-#&gt; 1  2013     1     1      811      630     101    1047     830     137 MQ     
-#&gt; 2  2013     1     1      848     1835     853    1001    1950     851 MQ     
-#&gt; 3  2013     1     1      957      733     144    1056     853     123 UA     
-#&gt; 4  2013     1     1     1114      900     134    1447    1222     145 UA     
-#&gt; 5  2013     1     1     1505     1310     115    1638    1431     127 EV     
-#&gt; 6  2013     1     1     1525     1340     105    1831    1626     125 B6     
-#&gt; # … with 10,028 more rows, 9 more variables: flight &lt;int&gt;, tailnum &lt;chr&gt;,
-#&gt; #   origin &lt;chr&gt;, dest &lt;chr&gt;, air_time &lt;dbl&gt;, distance &lt;dbl&gt;, hour &lt;dbl&gt;,
-#&gt; #   minute &lt;dbl&gt;, time_hour &lt;dttm&gt;, and abbreviated variable names
-#&gt; #   ¹​sched_dep_time, ²​dep_delay, ³​arr_time, ⁴​sched_arr_time, ⁵​arr_delay</pre>
+#&gt;    year month   day dep_time sched_dep_time dep_delay arr_time sched_arr_time
+#&gt;   &lt;int&gt; &lt;int&gt; &lt;int&gt;    &lt;int&gt;          &lt;int&gt;     &lt;dbl&gt;    &lt;int&gt;          &lt;int&gt;
+#&gt; 1  2013     1     1      811            630       101     1047            830
+#&gt; 2  2013     1     1      848           1835       853     1001           1950
+#&gt; 3  2013     1     1      957            733       144     1056            853
+#&gt; 4  2013     1     1     1114            900       134     1447           1222
+#&gt; 5  2013     1     1     1505           1310       115     1638           1431
+#&gt; 6  2013     1     1     1525           1340       105     1831           1626
+#&gt; # … with 10,028 more rows, and 11 more variables: arr_delay &lt;dbl&gt;,
+#&gt; #   carrier &lt;chr&gt;, flight &lt;int&gt;, tailnum &lt;chr&gt;, origin &lt;chr&gt;, dest &lt;chr&gt;,
+#&gt; #   air_time &lt;dbl&gt;, distance &lt;dbl&gt;, hour &lt;dbl&gt;, minute &lt;dbl&gt;,
+#&gt; #   time_hour &lt;dttm&gt;</pre>
 </div>
 <p>As well as <code>&gt;</code> (greater than), you can use <code>&gt;=</code> (greater than or equal to), <code>&lt;</code> (less than), <code>&lt;=</code> (less than or equal to), <code>==</code> (equal to), and <code>!=</code> (not equal to). You can also use <code>&amp;</code> (and) or <code>|</code> (or) to combine multiple conditions:</p>
 <div class="cell">
@@ -103,35 +129,35 @@ Rows</h1>
 flights |&gt; 
   filter(month == 1 &amp; day == 1)
 #&gt; # A tibble: 842 × 19
-#&gt;    year month   day dep_time sched_…¹ dep_d…² arr_t…³ sched…⁴ arr_d…⁵ carrier
-#&gt;   &lt;int&gt; &lt;int&gt; &lt;int&gt;    &lt;int&gt;    &lt;int&gt;   &lt;dbl&gt;   &lt;int&gt;   &lt;int&gt;   &lt;dbl&gt; &lt;chr&gt;  
-#&gt; 1  2013     1     1      517      515       2     830     819      11 UA     
-#&gt; 2  2013     1     1      533      529       4     850     830      20 UA     
-#&gt; 3  2013     1     1      542      540       2     923     850      33 AA     
-#&gt; 4  2013     1     1      544      545      -1    1004    1022     -18 B6     
-#&gt; 5  2013     1     1      554      600      -6     812     837     -25 DL     
-#&gt; 6  2013     1     1      554      558      -4     740     728      12 UA     
-#&gt; # … with 836 more rows, 9 more variables: flight &lt;int&gt;, tailnum &lt;chr&gt;,
-#&gt; #   origin &lt;chr&gt;, dest &lt;chr&gt;, air_time &lt;dbl&gt;, distance &lt;dbl&gt;, hour &lt;dbl&gt;,
-#&gt; #   minute &lt;dbl&gt;, time_hour &lt;dttm&gt;, and abbreviated variable names
-#&gt; #   ¹​sched_dep_time, ²​dep_delay, ³​arr_time, ⁴​sched_arr_time, ⁵​arr_delay
+#&gt;    year month   day dep_time sched_dep_time dep_delay arr_time sched_arr_time
+#&gt;   &lt;int&gt; &lt;int&gt; &lt;int&gt;    &lt;int&gt;          &lt;int&gt;     &lt;dbl&gt;    &lt;int&gt;          &lt;int&gt;
+#&gt; 1  2013     1     1      517            515         2      830            819
+#&gt; 2  2013     1     1      533            529         4      850            830
+#&gt; 3  2013     1     1      542            540         2      923            850
+#&gt; 4  2013     1     1      544            545        -1     1004           1022
+#&gt; 5  2013     1     1      554            600        -6      812            837
+#&gt; 6  2013     1     1      554            558        -4      740            728
+#&gt; # … with 836 more rows, and 11 more variables: arr_delay &lt;dbl&gt;,
+#&gt; #   carrier &lt;chr&gt;, flight &lt;int&gt;, tailnum &lt;chr&gt;, origin &lt;chr&gt;, dest &lt;chr&gt;,
+#&gt; #   air_time &lt;dbl&gt;, distance &lt;dbl&gt;, hour &lt;dbl&gt;, minute &lt;dbl&gt;,
+#&gt; #   time_hour &lt;dttm&gt;
 
 # Flights that departed in January or February
 flights |&gt; 
   filter(month == 1 | month == 2)
 #&gt; # A tibble: 51,955 × 19
-#&gt;    year month   day dep_time sched_…¹ dep_d…² arr_t…³ sched…⁴ arr_d…⁵ carrier
-#&gt;   &lt;int&gt; &lt;int&gt; &lt;int&gt;    &lt;int&gt;    &lt;int&gt;   &lt;dbl&gt;   &lt;int&gt;   &lt;int&gt;   &lt;dbl&gt; &lt;chr&gt;  
-#&gt; 1  2013     1     1      517      515       2     830     819      11 UA     
-#&gt; 2  2013     1     1      533      529       4     850     830      20 UA     
-#&gt; 3  2013     1     1      542      540       2     923     850      33 AA     
-#&gt; 4  2013     1     1      544      545      -1    1004    1022     -18 B6     
-#&gt; 5  2013     1     1      554      600      -6     812     837     -25 DL     
-#&gt; 6  2013     1     1      554      558      -4     740     728      12 UA     
-#&gt; # … with 51,949 more rows, 9 more variables: flight &lt;int&gt;, tailnum &lt;chr&gt;,
-#&gt; #   origin &lt;chr&gt;, dest &lt;chr&gt;, air_time &lt;dbl&gt;, distance &lt;dbl&gt;, hour &lt;dbl&gt;,
-#&gt; #   minute &lt;dbl&gt;, time_hour &lt;dttm&gt;, and abbreviated variable names
-#&gt; #   ¹​sched_dep_time, ²​dep_delay, ³​arr_time, ⁴​sched_arr_time, ⁵​arr_delay</pre>
+#&gt;    year month   day dep_time sched_dep_time dep_delay arr_time sched_arr_time
+#&gt;   &lt;int&gt; &lt;int&gt; &lt;int&gt;    &lt;int&gt;          &lt;int&gt;     &lt;dbl&gt;    &lt;int&gt;          &lt;int&gt;
+#&gt; 1  2013     1     1      517            515         2      830            819
+#&gt; 2  2013     1     1      533            529         4      850            830
+#&gt; 3  2013     1     1      542            540         2      923            850
+#&gt; 4  2013     1     1      544            545        -1     1004           1022
+#&gt; 5  2013     1     1      554            600        -6      812            837
+#&gt; 6  2013     1     1      554            558        -4      740            728
+#&gt; # … with 51,949 more rows, and 11 more variables: arr_delay &lt;dbl&gt;,
+#&gt; #   carrier &lt;chr&gt;, flight &lt;int&gt;, tailnum &lt;chr&gt;, origin &lt;chr&gt;, dest &lt;chr&gt;,
+#&gt; #   air_time &lt;dbl&gt;, distance &lt;dbl&gt;, hour &lt;dbl&gt;, minute &lt;dbl&gt;,
+#&gt; #   time_hour &lt;dttm&gt;</pre>
 </div>
 <p>There’s a useful shortcut when you’re combining <code>|</code> and <code>==</code>: <code>%in%</code>. It keeps rows where the variable equals one of the values on the right:</p>
 <div class="cell">
@@ -139,18 +165,18 @@ flights |&gt;
 flights |&gt; 
   filter(month %in% c(1, 2))
 #&gt; # A tibble: 51,955 × 19
-#&gt;    year month   day dep_time sched_…¹ dep_d…² arr_t…³ sched…⁴ arr_d…⁵ carrier
-#&gt;   &lt;int&gt; &lt;int&gt; &lt;int&gt;    &lt;int&gt;    &lt;int&gt;   &lt;dbl&gt;   &lt;int&gt;   &lt;int&gt;   &lt;dbl&gt; &lt;chr&gt;  
-#&gt; 1  2013     1     1      517      515       2     830     819      11 UA     
-#&gt; 2  2013     1     1      533      529       4     850     830      20 UA     
-#&gt; 3  2013     1     1      542      540       2     923     850      33 AA     
-#&gt; 4  2013     1     1      544      545      -1    1004    1022     -18 B6     
-#&gt; 5  2013     1     1      554      600      -6     812     837     -25 DL     
-#&gt; 6  2013     1     1      554      558      -4     740     728      12 UA     
-#&gt; # … with 51,949 more rows, 9 more variables: flight &lt;int&gt;, tailnum &lt;chr&gt;,
-#&gt; #   origin &lt;chr&gt;, dest &lt;chr&gt;, air_time &lt;dbl&gt;, distance &lt;dbl&gt;, hour &lt;dbl&gt;,
-#&gt; #   minute &lt;dbl&gt;, time_hour &lt;dttm&gt;, and abbreviated variable names
-#&gt; #   ¹​sched_dep_time, ²​dep_delay, ³​arr_time, ⁴​sched_arr_time, ⁵​arr_delay</pre>
+#&gt;    year month   day dep_time sched_dep_time dep_delay arr_time sched_arr_time
+#&gt;   &lt;int&gt; &lt;int&gt; &lt;int&gt;    &lt;int&gt;          &lt;int&gt;     &lt;dbl&gt;    &lt;int&gt;          &lt;int&gt;
+#&gt; 1  2013     1     1      517            515         2      830            819
+#&gt; 2  2013     1     1      533            529         4      850            830
+#&gt; 3  2013     1     1      542            540         2      923            850
+#&gt; 4  2013     1     1      544            545        -1     1004           1022
+#&gt; 5  2013     1     1      554            600        -6      812            837
+#&gt; 6  2013     1     1      554            558        -4      740            728
+#&gt; # … with 51,949 more rows, and 11 more variables: arr_delay &lt;dbl&gt;,
+#&gt; #   carrier &lt;chr&gt;, flight &lt;int&gt;, tailnum &lt;chr&gt;, origin &lt;chr&gt;, dest &lt;chr&gt;,
+#&gt; #   air_time &lt;dbl&gt;, distance &lt;dbl&gt;, hour &lt;dbl&gt;, minute &lt;dbl&gt;,
+#&gt; #   time_hour &lt;dttm&gt;</pre>
 </div>
 <p>We’ll come back to these comparisons and logical operators in more detail in <a href="#chp-logicals" data-type="xref">#chp-logicals</a>.</p>
 <p>When you run <code><a href="https://dplyr.tidyverse.org/reference/filter.html">filter()</a></code> dplyr executes the filtering operation, creating a new data frame, and then prints it. It doesn’t modify the existing <code>flights</code> dataset because dplyr functions never modify their inputs. To save the result, you need to use the assignment operator, <code>&lt;-</code>:</p>
@@ -189,36 +215,36 @@ Common mistakes</h2>
 <pre data-type="programlisting" data-code-language="r">flights |&gt; 
   arrange(year, month, day, dep_time)
 #&gt; # A tibble: 336,776 × 19
-#&gt;    year month   day dep_time sched_…¹ dep_d…² arr_t…³ sched…⁴ arr_d…⁵ carrier
-#&gt;   &lt;int&gt; &lt;int&gt; &lt;int&gt;    &lt;int&gt;    &lt;int&gt;   &lt;dbl&gt;   &lt;int&gt;   &lt;int&gt;   &lt;dbl&gt; &lt;chr&gt;  
-#&gt; 1  2013     1     1      517      515       2     830     819      11 UA     
-#&gt; 2  2013     1     1      533      529       4     850     830      20 UA     
-#&gt; 3  2013     1     1      542      540       2     923     850      33 AA     
-#&gt; 4  2013     1     1      544      545      -1    1004    1022     -18 B6     
-#&gt; 5  2013     1     1      554      600      -6     812     837     -25 DL     
-#&gt; 6  2013     1     1      554      558      -4     740     728      12 UA     
-#&gt; # … with 336,770 more rows, 9 more variables: flight &lt;int&gt;, tailnum &lt;chr&gt;,
-#&gt; #   origin &lt;chr&gt;, dest &lt;chr&gt;, air_time &lt;dbl&gt;, distance &lt;dbl&gt;, hour &lt;dbl&gt;,
-#&gt; #   minute &lt;dbl&gt;, time_hour &lt;dttm&gt;, and abbreviated variable names
-#&gt; #   ¹​sched_dep_time, ²​dep_delay, ³​arr_time, ⁴​sched_arr_time, ⁵​arr_delay</pre>
+#&gt;    year month   day dep_time sched_dep_time dep_delay arr_time sched_arr_time
+#&gt;   &lt;int&gt; &lt;int&gt; &lt;int&gt;    &lt;int&gt;          &lt;int&gt;     &lt;dbl&gt;    &lt;int&gt;          &lt;int&gt;
+#&gt; 1  2013     1     1      517            515         2      830            819
+#&gt; 2  2013     1     1      533            529         4      850            830
+#&gt; 3  2013     1     1      542            540         2      923            850
+#&gt; 4  2013     1     1      544            545        -1     1004           1022
+#&gt; 5  2013     1     1      554            600        -6      812            837
+#&gt; 6  2013     1     1      554            558        -4      740            728
+#&gt; # … with 336,770 more rows, and 11 more variables: arr_delay &lt;dbl&gt;,
+#&gt; #   carrier &lt;chr&gt;, flight &lt;int&gt;, tailnum &lt;chr&gt;, origin &lt;chr&gt;, dest &lt;chr&gt;,
+#&gt; #   air_time &lt;dbl&gt;, distance &lt;dbl&gt;, hour &lt;dbl&gt;, minute &lt;dbl&gt;,
+#&gt; #   time_hour &lt;dttm&gt;</pre>
 </div>
 <p>You can use <code><a href="https://dplyr.tidyverse.org/reference/desc.html">desc()</a></code> to re-order by a column in descending order. For example, this code shows the most delayed flights:</p>
 <div class="cell">
 <pre data-type="programlisting" data-code-language="r">flights |&gt; 
   arrange(desc(dep_delay))
 #&gt; # A tibble: 336,776 × 19
-#&gt;    year month   day dep_time sched_…¹ dep_d…² arr_t…³ sched…⁴ arr_d…⁵ carrier
-#&gt;   &lt;int&gt; &lt;int&gt; &lt;int&gt;    &lt;int&gt;    &lt;int&gt;   &lt;dbl&gt;   &lt;int&gt;   &lt;int&gt;   &lt;dbl&gt; &lt;chr&gt;  
-#&gt; 1  2013     1     9      641      900    1301    1242    1530    1272 HA     
-#&gt; 2  2013     6    15     1432     1935    1137    1607    2120    1127 MQ     
-#&gt; 3  2013     1    10     1121     1635    1126    1239    1810    1109 MQ     
-#&gt; 4  2013     9    20     1139     1845    1014    1457    2210    1007 AA     
-#&gt; 5  2013     7    22      845     1600    1005    1044    1815     989 MQ     
-#&gt; 6  2013     4    10     1100     1900     960    1342    2211     931 DL     
-#&gt; # … with 336,770 more rows, 9 more variables: flight &lt;int&gt;, tailnum &lt;chr&gt;,
-#&gt; #   origin &lt;chr&gt;, dest &lt;chr&gt;, air_time &lt;dbl&gt;, distance &lt;dbl&gt;, hour &lt;dbl&gt;,
-#&gt; #   minute &lt;dbl&gt;, time_hour &lt;dttm&gt;, and abbreviated variable names
-#&gt; #   ¹​sched_dep_time, ²​dep_delay, ³​arr_time, ⁴​sched_arr_time, ⁵​arr_delay</pre>
+#&gt;    year month   day dep_time sched_dep_time dep_delay arr_time sched_arr_time
+#&gt;   &lt;int&gt; &lt;int&gt; &lt;int&gt;    &lt;int&gt;          &lt;int&gt;     &lt;dbl&gt;    &lt;int&gt;          &lt;int&gt;
+#&gt; 1  2013     1     9      641            900      1301     1242           1530
+#&gt; 2  2013     6    15     1432           1935      1137     1607           2120
+#&gt; 3  2013     1    10     1121           1635      1126     1239           1810
+#&gt; 4  2013     9    20     1139           1845      1014     1457           2210
+#&gt; 5  2013     7    22      845           1600      1005     1044           1815
+#&gt; 6  2013     4    10     1100           1900       960     1342           2211
+#&gt; # … with 336,770 more rows, and 11 more variables: arr_delay &lt;dbl&gt;,
+#&gt; #   carrier &lt;chr&gt;, flight &lt;int&gt;, tailnum &lt;chr&gt;, origin &lt;chr&gt;, dest &lt;chr&gt;,
+#&gt; #   air_time &lt;dbl&gt;, distance &lt;dbl&gt;, hour &lt;dbl&gt;, minute &lt;dbl&gt;,
+#&gt; #   time_hour &lt;dttm&gt;</pre>
 </div>
 <p>You can combine <code><a href="https://dplyr.tidyverse.org/reference/arrange.html">arrange()</a></code> and <code><a href="https://dplyr.tidyverse.org/reference/filter.html">filter()</a></code> to solve more complex problems. For example, we could look for the flights that were most delayed on arrival that left on roughly on time:</p>
 <div class="cell">
@@ -226,19 +252,59 @@ Common mistakes</h2>
   filter(dep_delay &lt;= 10 &amp; dep_delay &gt;= -10) |&gt; 
   arrange(desc(arr_delay))
 #&gt; # A tibble: 239,109 × 19
-#&gt;    year month   day dep_time sched_…¹ dep_d…² arr_t…³ sched…⁴ arr_d…⁵ carrier
-#&gt;   &lt;int&gt; &lt;int&gt; &lt;int&gt;    &lt;int&gt;    &lt;int&gt;   &lt;dbl&gt;   &lt;int&gt;   &lt;int&gt;   &lt;dbl&gt; &lt;chr&gt;  
-#&gt; 1  2013    11     1      658      700      -2    1329    1015     194 VX     
-#&gt; 2  2013     4    18      558      600      -2    1149     850     179 AA     
-#&gt; 3  2013     7     7     1659     1700      -1    2050    1823     147 US     
-#&gt; 4  2013     7    22     1606     1615      -9    2056    1831     145 DL     
-#&gt; 5  2013     9    19      648      641       7    1035     810     145 UA     
-#&gt; 6  2013     4    18      655      700      -5    1213     950     143 AA     
-#&gt; # … with 239,103 more rows, 9 more variables: flight &lt;int&gt;, tailnum &lt;chr&gt;,
-#&gt; #   origin &lt;chr&gt;, dest &lt;chr&gt;, air_time &lt;dbl&gt;, distance &lt;dbl&gt;, hour &lt;dbl&gt;,
-#&gt; #   minute &lt;dbl&gt;, time_hour &lt;dttm&gt;, and abbreviated variable names
-#&gt; #   ¹​sched_dep_time, ²​dep_delay, ³​arr_time, ⁴​sched_arr_time, ⁵​arr_delay</pre>
+#&gt;    year month   day dep_time sched_dep_time dep_delay arr_time sched_arr_time
+#&gt;   &lt;int&gt; &lt;int&gt; &lt;int&gt;    &lt;int&gt;          &lt;int&gt;     &lt;dbl&gt;    &lt;int&gt;          &lt;int&gt;
+#&gt; 1  2013    11     1      658            700        -2     1329           1015
+#&gt; 2  2013     4    18      558            600        -2     1149            850
+#&gt; 3  2013     7     7     1659           1700        -1     2050           1823
+#&gt; 4  2013     7    22     1606           1615        -9     2056           1831
+#&gt; 5  2013     9    19      648            641         7     1035            810
+#&gt; 6  2013     4    18      655            700        -5     1213            950
+#&gt; # … with 239,103 more rows, and 11 more variables: arr_delay &lt;dbl&gt;,
+#&gt; #   carrier &lt;chr&gt;, flight &lt;int&gt;, tailnum &lt;chr&gt;, origin &lt;chr&gt;, dest &lt;chr&gt;,
+#&gt; #   air_time &lt;dbl&gt;, distance &lt;dbl&gt;, hour &lt;dbl&gt;, minute &lt;dbl&gt;,
+#&gt; #   time_hour &lt;dttm&gt;</pre>
 </div>
+</section>
+
+<section id="distinct" data-type="sect2">
+<h2>
+<code>distinct()</code>
+</h2>
+<p><code><a href="https://dplyr.tidyverse.org/reference/distinct.html">distinct()</a></code> finds all the unique rows in a dataset, so in a technical sense, it primarily operates on the rows. Most of the time, however, you’ll want to the distinct combination of some variables, so you can also optionally supply column names:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="r"># This would remove any duplicate rows if there were any
+flights |&gt; 
+  distinct()
+#&gt; # A tibble: 336,776 × 19
+#&gt;    year month   day dep_time sched_dep_time dep_delay arr_time sched_arr_time
+#&gt;   &lt;int&gt; &lt;int&gt; &lt;int&gt;    &lt;int&gt;          &lt;int&gt;     &lt;dbl&gt;    &lt;int&gt;          &lt;int&gt;
+#&gt; 1  2013     1     1      517            515         2      830            819
+#&gt; 2  2013     1     1      533            529         4      850            830
+#&gt; 3  2013     1     1      542            540         2      923            850
+#&gt; 4  2013     1     1      544            545        -1     1004           1022
+#&gt; 5  2013     1     1      554            600        -6      812            837
+#&gt; 6  2013     1     1      554            558        -4      740            728
+#&gt; # … with 336,770 more rows, and 11 more variables: arr_delay &lt;dbl&gt;,
+#&gt; #   carrier &lt;chr&gt;, flight &lt;int&gt;, tailnum &lt;chr&gt;, origin &lt;chr&gt;, dest &lt;chr&gt;,
+#&gt; #   air_time &lt;dbl&gt;, distance &lt;dbl&gt;, hour &lt;dbl&gt;, minute &lt;dbl&gt;,
+#&gt; #   time_hour &lt;dttm&gt;
+
+# This finds all unique origin and destination pairs.
+flights |&gt; 
+  distinct(origin, dest)
+#&gt; # A tibble: 224 × 2
+#&gt;   origin dest 
+#&gt;   &lt;chr&gt;  &lt;chr&gt;
+#&gt; 1 EWR    IAH  
+#&gt; 2 LGA    IAH  
+#&gt; 3 JFK    MIA  
+#&gt; 4 JFK    BQN  
+#&gt; 5 LGA    ATL  
+#&gt; 6 EWR    ORD  
+#&gt; # … with 218 more rows</pre>
+</div>
+<p>Note that if you want to find the number of duplicates, or rows that weren’t duplicated, you’re better off swapping <code><a href="https://dplyr.tidyverse.org/reference/distinct.html">distinct()</a></code> for <code><a href="https://dplyr.tidyverse.org/reference/count.html">count()</a></code> and then filtering as needed.</p>
 </section>
 
 <section id="exercises" data-type="sect2">
@@ -255,15 +321,16 @@ Exercises</h2>
 </ol></li>
 <li><p>Sort <code>flights</code> to find the flights with longest departure delays. Find the flights that left earliest in the morning.</p></li>
 <li><p>Sort <code>flights</code> to find the fastest flights (Hint: try sorting by a calculation).</p></li>
-<li><p>Which flights traveled the farthest? Which traveled the shortest?</p></li>
-<li><p>Does it matter what order you used <code><a href="https://dplyr.tidyverse.org/reference/filter.html">filter()</a></code> and <code><a href="https://dplyr.tidyverse.org/reference/arrange.html">arrange()</a></code> in if you’re using both? Why/why not? Think about the results and how much work the functions would have to do.</p></li>
+<li><p>Was there a flight on every day of 2013?</p></li>
+<li><p>Which flights traveled the farthest distance? Which traveled the least distance?</p></li>
+<li><p>Does it matter what order you used <code><a href="https://dplyr.tidyverse.org/reference/filter.html">filter()</a></code> and <code><a href="https://dplyr.tidyverse.org/reference/arrange.html">arrange()</a></code> if you’re using both? Why/why not? Think about the results and how much work the functions would have to do.</p></li>
 </ol></section>
 </section>
 
 <section id="columns" data-type="sect1">
 <h1>
 Columns</h1>
-<p>There are four important verbs that affect the columns without changing the rows: <code><a href="https://dplyr.tidyverse.org/reference/mutate.html">mutate()</a></code>, <code><a href="https://dplyr.tidyverse.org/reference/select.html">select()</a></code>, <code><a href="https://dplyr.tidyverse.org/reference/rename.html">rename()</a></code>, and <code><a href="https://dplyr.tidyverse.org/reference/relocate.html">relocate()</a></code>. <code><a href="https://dplyr.tidyverse.org/reference/mutate.html">mutate()</a></code> creates new columns that are functions of the existing columns; <code><a href="https://dplyr.tidyverse.org/reference/select.html">select()</a></code>, <code><a href="https://dplyr.tidyverse.org/reference/rename.html">rename()</a></code>, and <code><a href="https://dplyr.tidyverse.org/reference/relocate.html">relocate()</a></code> change which columns are present, their names, or their positions.</p>
+<p>There are four important verbs that affect the columns without changing the rows: <code><a href="https://dplyr.tidyverse.org/reference/mutate.html">mutate()</a></code>, <code><a href="https://dplyr.tidyverse.org/reference/select.html">select()</a></code>, <code><a href="https://dplyr.tidyverse.org/reference/rename.html">rename()</a></code>, and <code><a href="https://dplyr.tidyverse.org/reference/relocate.html">relocate()</a></code>. <code><a href="https://dplyr.tidyverse.org/reference/mutate.html">mutate()</a></code> creates new columns that are functions of the existing columns; <code><a href="https://dplyr.tidyverse.org/reference/select.html">select()</a></code>, <code><a href="https://dplyr.tidyverse.org/reference/rename.html">rename()</a></code>, and <code><a href="https://dplyr.tidyverse.org/reference/relocate.html">relocate()</a></code> change which columns are present, their names, or their positions. We’ll also discuss <code><a href="https://dplyr.tidyverse.org/reference/pull.html">pull()</a></code> since it allows you to get a column out of data frame.</p>
 
 <section id="sec-mutate" data-type="sect2">
 <h2>
@@ -277,19 +344,18 @@ Columns</h1>
     speed = distance / air_time * 60
   )
 #&gt; # A tibble: 336,776 × 21
-#&gt;    year month   day dep_time sched_…¹ dep_d…² arr_t…³ sched…⁴ arr_d…⁵ carrier
-#&gt;   &lt;int&gt; &lt;int&gt; &lt;int&gt;    &lt;int&gt;    &lt;int&gt;   &lt;dbl&gt;   &lt;int&gt;   &lt;int&gt;   &lt;dbl&gt; &lt;chr&gt;  
-#&gt; 1  2013     1     1      517      515       2     830     819      11 UA     
-#&gt; 2  2013     1     1      533      529       4     850     830      20 UA     
-#&gt; 3  2013     1     1      542      540       2     923     850      33 AA     
-#&gt; 4  2013     1     1      544      545      -1    1004    1022     -18 B6     
-#&gt; 5  2013     1     1      554      600      -6     812     837     -25 DL     
-#&gt; 6  2013     1     1      554      558      -4     740     728      12 UA     
-#&gt; # … with 336,770 more rows, 11 more variables: flight &lt;int&gt;, tailnum &lt;chr&gt;,
-#&gt; #   origin &lt;chr&gt;, dest &lt;chr&gt;, air_time &lt;dbl&gt;, distance &lt;dbl&gt;, hour &lt;dbl&gt;,
-#&gt; #   minute &lt;dbl&gt;, time_hour &lt;dttm&gt;, gain &lt;dbl&gt;, speed &lt;dbl&gt;, and abbreviated
-#&gt; #   variable names ¹​sched_dep_time, ²​dep_delay, ³​arr_time, ⁴​sched_arr_time,
-#&gt; #   ⁵​arr_delay</pre>
+#&gt;    year month   day dep_time sched_dep_time dep_delay arr_time sched_arr_time
+#&gt;   &lt;int&gt; &lt;int&gt; &lt;int&gt;    &lt;int&gt;          &lt;int&gt;     &lt;dbl&gt;    &lt;int&gt;          &lt;int&gt;
+#&gt; 1  2013     1     1      517            515         2      830            819
+#&gt; 2  2013     1     1      533            529         4      850            830
+#&gt; 3  2013     1     1      542            540         2      923            850
+#&gt; 4  2013     1     1      544            545        -1     1004           1022
+#&gt; 5  2013     1     1      554            600        -6      812            837
+#&gt; 6  2013     1     1      554            558        -4      740            728
+#&gt; # … with 336,770 more rows, and 13 more variables: arr_delay &lt;dbl&gt;,
+#&gt; #   carrier &lt;chr&gt;, flight &lt;int&gt;, tailnum &lt;chr&gt;, origin &lt;chr&gt;, dest &lt;chr&gt;,
+#&gt; #   air_time &lt;dbl&gt;, distance &lt;dbl&gt;, hour &lt;dbl&gt;, minute &lt;dbl&gt;,
+#&gt; #   time_hour &lt;dttm&gt;, gain &lt;dbl&gt;, speed &lt;dbl&gt;</pre>
 </div>
 <p>By default, <code><a href="https://dplyr.tidyverse.org/reference/mutate.html">mutate()</a></code> adds new columns on the right hand side of your dataset, which makes it difficult to see what’s happening here. We can use the <code>.before</code> argument to instead add the variables to the left hand side<span data-type="footnote">Remember that in RStudio, the easiest way to see a dataset with many columns is <code><a href="https://rdrr.io/r/utils/View.html">View()</a></code>.</span>:</p>
 <div class="cell">
@@ -300,21 +366,20 @@ Columns</h1>
     .before = 1
   )
 #&gt; # A tibble: 336,776 × 21
-#&gt;    gain speed  year month   day dep_time sched_dep_…¹ dep_d…² arr_t…³ sched…⁴
-#&gt;   &lt;dbl&gt; &lt;dbl&gt; &lt;int&gt; &lt;int&gt; &lt;int&gt;    &lt;int&gt;        &lt;int&gt;   &lt;dbl&gt;   &lt;int&gt;   &lt;int&gt;
-#&gt; 1    -9  370.  2013     1     1      517          515       2     830     819
-#&gt; 2   -16  374.  2013     1     1      533          529       4     850     830
-#&gt; 3   -31  408.  2013     1     1      542          540       2     923     850
-#&gt; 4    17  517.  2013     1     1      544          545      -1    1004    1022
-#&gt; 5    19  394.  2013     1     1      554          600      -6     812     837
-#&gt; 6   -16  288.  2013     1     1      554          558      -4     740     728
-#&gt; # … with 336,770 more rows, 11 more variables: arr_delay &lt;dbl&gt;,
-#&gt; #   carrier &lt;chr&gt;, flight &lt;int&gt;, tailnum &lt;chr&gt;, origin &lt;chr&gt;, dest &lt;chr&gt;,
-#&gt; #   air_time &lt;dbl&gt;, distance &lt;dbl&gt;, hour &lt;dbl&gt;, minute &lt;dbl&gt;,
-#&gt; #   time_hour &lt;dttm&gt;, and abbreviated variable names ¹​sched_dep_time,
-#&gt; #   ²​dep_delay, ³​arr_time, ⁴​sched_arr_time</pre>
+#&gt;    gain speed  year month   day dep_time sched_dep_time dep_delay arr_time
+#&gt;   &lt;dbl&gt; &lt;dbl&gt; &lt;int&gt; &lt;int&gt; &lt;int&gt;    &lt;int&gt;          &lt;int&gt;     &lt;dbl&gt;    &lt;int&gt;
+#&gt; 1    -9  370.  2013     1     1      517            515         2      830
+#&gt; 2   -16  374.  2013     1     1      533            529         4      850
+#&gt; 3   -31  408.  2013     1     1      542            540         2      923
+#&gt; 4    17  517.  2013     1     1      544            545        -1     1004
+#&gt; 5    19  394.  2013     1     1      554            600        -6      812
+#&gt; 6   -16  288.  2013     1     1      554            558        -4      740
+#&gt; # … with 336,770 more rows, and 12 more variables: sched_arr_time &lt;int&gt;,
+#&gt; #   arr_delay &lt;dbl&gt;, carrier &lt;chr&gt;, flight &lt;int&gt;, tailnum &lt;chr&gt;,
+#&gt; #   origin &lt;chr&gt;, dest &lt;chr&gt;, air_time &lt;dbl&gt;, distance &lt;dbl&gt;, hour &lt;dbl&gt;,
+#&gt; #   minute &lt;dbl&gt;, time_hour &lt;dttm&gt;</pre>
 </div>
-<p>The <code>.</code> is a sign that <code>.before</code> is an argument to the function, not the name of a new variable. You can also use <code>.after</code> to add after a variable, and in both <code>.before</code> and <code>.after</code> you can the name of a variable name instead of a position. For example, we could add the new variables after <code>day:</code></p>
+<p>The <code>.</code> is a sign that <code>.before</code> is an argument to the function, not the name of a new variable. You can also use <code>.after</code> to add after a variable, and in both <code>.before</code> and <code>.after</code> you can use the variable name instead of a position. For example, we could add the new variables after <code>day:</code></p>
 <div class="cell">
 <pre data-type="programlisting" data-code-language="r">flights |&gt; 
   mutate(
@@ -323,19 +388,18 @@ Columns</h1>
     .after = day
   )
 #&gt; # A tibble: 336,776 × 21
-#&gt;    year month   day  gain speed dep_time sched_dep_…¹ dep_d…² arr_t…³ sched…⁴
-#&gt;   &lt;int&gt; &lt;int&gt; &lt;int&gt; &lt;dbl&gt; &lt;dbl&gt;    &lt;int&gt;        &lt;int&gt;   &lt;dbl&gt;   &lt;int&gt;   &lt;int&gt;
-#&gt; 1  2013     1     1    -9  370.      517          515       2     830     819
-#&gt; 2  2013     1     1   -16  374.      533          529       4     850     830
-#&gt; 3  2013     1     1   -31  408.      542          540       2     923     850
-#&gt; 4  2013     1     1    17  517.      544          545      -1    1004    1022
-#&gt; 5  2013     1     1    19  394.      554          600      -6     812     837
-#&gt; 6  2013     1     1   -16  288.      554          558      -4     740     728
-#&gt; # … with 336,770 more rows, 11 more variables: arr_delay &lt;dbl&gt;,
-#&gt; #   carrier &lt;chr&gt;, flight &lt;int&gt;, tailnum &lt;chr&gt;, origin &lt;chr&gt;, dest &lt;chr&gt;,
-#&gt; #   air_time &lt;dbl&gt;, distance &lt;dbl&gt;, hour &lt;dbl&gt;, minute &lt;dbl&gt;,
-#&gt; #   time_hour &lt;dttm&gt;, and abbreviated variable names ¹​sched_dep_time,
-#&gt; #   ²​dep_delay, ³​arr_time, ⁴​sched_arr_time</pre>
+#&gt;    year month   day  gain speed dep_time sched_dep_time dep_delay arr_time
+#&gt;   &lt;int&gt; &lt;int&gt; &lt;int&gt; &lt;dbl&gt; &lt;dbl&gt;    &lt;int&gt;          &lt;int&gt;     &lt;dbl&gt;    &lt;int&gt;
+#&gt; 1  2013     1     1    -9  370.      517            515         2      830
+#&gt; 2  2013     1     1   -16  374.      533            529         4      850
+#&gt; 3  2013     1     1   -31  408.      542            540         2      923
+#&gt; 4  2013     1     1    17  517.      544            545        -1     1004
+#&gt; 5  2013     1     1    19  394.      554            600        -6      812
+#&gt; 6  2013     1     1   -16  288.      554            558        -4      740
+#&gt; # … with 336,770 more rows, and 12 more variables: sched_arr_time &lt;int&gt;,
+#&gt; #   arr_delay &lt;dbl&gt;, carrier &lt;chr&gt;, flight &lt;int&gt;, tailnum &lt;chr&gt;,
+#&gt; #   origin &lt;chr&gt;, dest &lt;chr&gt;, air_time &lt;dbl&gt;, distance &lt;dbl&gt;, hour &lt;dbl&gt;,
+#&gt; #   minute &lt;dbl&gt;, time_hour &lt;dttm&gt;</pre>
 </div>
 <p>Alternatively, you can control which variables are kept with the <code>.keep</code> argument. A particularly useful argument is <code>"used"</code> which allows you to see the inputs and outputs from your calculations:</p>
 <div class="cell">
@@ -397,18 +461,17 @@ flights |&gt;
 flights |&gt; 
   select(!year:day)
 #&gt; # A tibble: 336,776 × 16
-#&gt;   dep_time sched_dep…¹ dep_d…² arr_t…³ sched…⁴ arr_d…⁵ carrier flight tailnum
-#&gt;      &lt;int&gt;       &lt;int&gt;   &lt;dbl&gt;   &lt;int&gt;   &lt;int&gt;   &lt;dbl&gt; &lt;chr&gt;    &lt;int&gt; &lt;chr&gt;  
-#&gt; 1      517         515       2     830     819      11 UA        1545 N14228 
-#&gt; 2      533         529       4     850     830      20 UA        1714 N24211 
-#&gt; 3      542         540       2     923     850      33 AA        1141 N619AA 
-#&gt; 4      544         545      -1    1004    1022     -18 B6         725 N804JB 
-#&gt; 5      554         600      -6     812     837     -25 DL         461 N668DN 
-#&gt; 6      554         558      -4     740     728      12 UA        1696 N39463 
-#&gt; # … with 336,770 more rows, 7 more variables: origin &lt;chr&gt;, dest &lt;chr&gt;,
-#&gt; #   air_time &lt;dbl&gt;, distance &lt;dbl&gt;, hour &lt;dbl&gt;, minute &lt;dbl&gt;,
-#&gt; #   time_hour &lt;dttm&gt;, and abbreviated variable names ¹​sched_dep_time,
-#&gt; #   ²​dep_delay, ³​arr_time, ⁴​sched_arr_time, ⁵​arr_delay
+#&gt;   dep_time sched_dep_time dep_delay arr_time sched_arr_time arr_delay carrier
+#&gt;      &lt;int&gt;          &lt;int&gt;     &lt;dbl&gt;    &lt;int&gt;          &lt;int&gt;     &lt;dbl&gt; &lt;chr&gt;  
+#&gt; 1      517            515         2      830            819        11 UA     
+#&gt; 2      533            529         4      850            830        20 UA     
+#&gt; 3      542            540         2      923            850        33 AA     
+#&gt; 4      544            545        -1     1004           1022       -18 B6     
+#&gt; 5      554            600        -6      812            837       -25 DL     
+#&gt; 6      554            558        -4      740            728        12 UA     
+#&gt; # … with 336,770 more rows, and 9 more variables: flight &lt;int&gt;,
+#&gt; #   tailnum &lt;chr&gt;, origin &lt;chr&gt;, dest &lt;chr&gt;, air_time &lt;dbl&gt;, distance &lt;dbl&gt;,
+#&gt; #   hour &lt;dbl&gt;, minute &lt;dbl&gt;, time_hour &lt;dttm&gt;
 
 # Select all columns that are characters
 flights |&gt; 
@@ -433,7 +496,7 @@ flights |&gt;
 <code>contains("ijk")</code>: matches names that contain “ijk”.</li>
 <li>
 <code>num_range("x", 1:3)</code>: matches <code>x1</code>, <code>x2</code> and <code>x3</code>.</li>
-</ul><p>See <code><a href="https://dplyr.tidyverse.org/reference/select.html">?select</a></code> for more details. Once you know regular expressions (the topic of <a href="#chp-regexps" data-type="xref">#chp-regexps</a>) you’ll also be use <code><a href="https://tidyselect.r-lib.org/reference/starts_with.html">matches()</a></code> to select variables that match a pattern.</p>
+</ul><p>See <code><a href="https://dplyr.tidyverse.org/reference/select.html">?select</a></code> for more details. Once you know regular expressions (the topic of <a href="#chp-regexps" data-type="xref">#chp-regexps</a>) you’ll also be able to use <code><a href="https://tidyselect.r-lib.org/reference/starts_with.html">matches()</a></code> to select variables that match a pattern.</p>
 <p>You can rename variables as you <code><a href="https://dplyr.tidyverse.org/reference/select.html">select()</a></code> them by using <code>=</code>. The new name appears on the left hand side of the <code>=</code>, and the old variable appears on the right hand side:</p>
 <div class="cell">
 <pre data-type="programlisting" data-code-language="r">flights |&gt; 
@@ -460,18 +523,18 @@ flights |&gt;
 <pre data-type="programlisting" data-code-language="r">flights |&gt; 
   rename(tail_num = tailnum)
 #&gt; # A tibble: 336,776 × 19
-#&gt;    year month   day dep_time sched_…¹ dep_d…² arr_t…³ sched…⁴ arr_d…⁵ carrier
-#&gt;   &lt;int&gt; &lt;int&gt; &lt;int&gt;    &lt;int&gt;    &lt;int&gt;   &lt;dbl&gt;   &lt;int&gt;   &lt;int&gt;   &lt;dbl&gt; &lt;chr&gt;  
-#&gt; 1  2013     1     1      517      515       2     830     819      11 UA     
-#&gt; 2  2013     1     1      533      529       4     850     830      20 UA     
-#&gt; 3  2013     1     1      542      540       2     923     850      33 AA     
-#&gt; 4  2013     1     1      544      545      -1    1004    1022     -18 B6     
-#&gt; 5  2013     1     1      554      600      -6     812     837     -25 DL     
-#&gt; 6  2013     1     1      554      558      -4     740     728      12 UA     
-#&gt; # … with 336,770 more rows, 9 more variables: flight &lt;int&gt;, tail_num &lt;chr&gt;,
-#&gt; #   origin &lt;chr&gt;, dest &lt;chr&gt;, air_time &lt;dbl&gt;, distance &lt;dbl&gt;, hour &lt;dbl&gt;,
-#&gt; #   minute &lt;dbl&gt;, time_hour &lt;dttm&gt;, and abbreviated variable names
-#&gt; #   ¹​sched_dep_time, ²​dep_delay, ³​arr_time, ⁴​sched_arr_time, ⁵​arr_delay</pre>
+#&gt;    year month   day dep_time sched_dep_time dep_delay arr_time sched_arr_time
+#&gt;   &lt;int&gt; &lt;int&gt; &lt;int&gt;    &lt;int&gt;          &lt;int&gt;     &lt;dbl&gt;    &lt;int&gt;          &lt;int&gt;
+#&gt; 1  2013     1     1      517            515         2      830            819
+#&gt; 2  2013     1     1      533            529         4      850            830
+#&gt; 3  2013     1     1      542            540         2      923            850
+#&gt; 4  2013     1     1      544            545        -1     1004           1022
+#&gt; 5  2013     1     1      554            600        -6      812            837
+#&gt; 6  2013     1     1      554            558        -4      740            728
+#&gt; # … with 336,770 more rows, and 11 more variables: arr_delay &lt;dbl&gt;,
+#&gt; #   carrier &lt;chr&gt;, flight &lt;int&gt;, tail_num &lt;chr&gt;, origin &lt;chr&gt;, dest &lt;chr&gt;,
+#&gt; #   air_time &lt;dbl&gt;, distance &lt;dbl&gt;, hour &lt;dbl&gt;, minute &lt;dbl&gt;,
+#&gt; #   time_hour &lt;dttm&gt;</pre>
 </div>
 <p>It works exactly the same way as <code><a href="https://dplyr.tidyverse.org/reference/select.html">select()</a></code>, but keeps all the variables that aren’t explicitly selected.</p>
 <p>If you have a bunch of inconsistently named columns and it would be painful to fix them all by hand, check out <code><a href="https://rdrr.io/pkg/janitor/man/clean_names.html">janitor::clean_names()</a></code> which provides some useful automated cleaning.</p>
@@ -486,51 +549,51 @@ flights |&gt;
 <pre data-type="programlisting" data-code-language="r">flights |&gt; 
   relocate(time_hour, air_time)
 #&gt; # A tibble: 336,776 × 19
-#&gt;   time_hour           air_time  year month   day dep_time sched_dep…¹ dep_d…²
-#&gt;   &lt;dttm&gt;                 &lt;dbl&gt; &lt;int&gt; &lt;int&gt; &lt;int&gt;    &lt;int&gt;       &lt;int&gt;   &lt;dbl&gt;
-#&gt; 1 2013-01-01 05:00:00      227  2013     1     1      517         515       2
-#&gt; 2 2013-01-01 05:00:00      227  2013     1     1      533         529       4
-#&gt; 3 2013-01-01 05:00:00      160  2013     1     1      542         540       2
-#&gt; 4 2013-01-01 05:00:00      183  2013     1     1      544         545      -1
-#&gt; 5 2013-01-01 06:00:00      116  2013     1     1      554         600      -6
-#&gt; 6 2013-01-01 05:00:00      150  2013     1     1      554         558      -4
-#&gt; # … with 336,770 more rows, 11 more variables: arr_time &lt;int&gt;,
-#&gt; #   sched_arr_time &lt;int&gt;, arr_delay &lt;dbl&gt;, carrier &lt;chr&gt;, flight &lt;int&gt;,
-#&gt; #   tailnum &lt;chr&gt;, origin &lt;chr&gt;, dest &lt;chr&gt;, distance &lt;dbl&gt;, hour &lt;dbl&gt;,
-#&gt; #   minute &lt;dbl&gt;, and abbreviated variable names ¹​sched_dep_time, ²​dep_delay</pre>
+#&gt;   time_hour           air_time  year month   day dep_time sched_dep_time
+#&gt;   &lt;dttm&gt;                 &lt;dbl&gt; &lt;int&gt; &lt;int&gt; &lt;int&gt;    &lt;int&gt;          &lt;int&gt;
+#&gt; 1 2013-01-01 05:00:00      227  2013     1     1      517            515
+#&gt; 2 2013-01-01 05:00:00      227  2013     1     1      533            529
+#&gt; 3 2013-01-01 05:00:00      160  2013     1     1      542            540
+#&gt; 4 2013-01-01 05:00:00      183  2013     1     1      544            545
+#&gt; 5 2013-01-01 06:00:00      116  2013     1     1      554            600
+#&gt; 6 2013-01-01 05:00:00      150  2013     1     1      554            558
+#&gt; # … with 336,770 more rows, and 12 more variables: dep_delay &lt;dbl&gt;,
+#&gt; #   arr_time &lt;int&gt;, sched_arr_time &lt;int&gt;, arr_delay &lt;dbl&gt;, carrier &lt;chr&gt;,
+#&gt; #   flight &lt;int&gt;, tailnum &lt;chr&gt;, origin &lt;chr&gt;, dest &lt;chr&gt;, distance &lt;dbl&gt;,
+#&gt; #   hour &lt;dbl&gt;, minute &lt;dbl&gt;</pre>
 </div>
 <p>But you can use the same <code>.before</code> and <code>.after</code> arguments as <code><a href="https://dplyr.tidyverse.org/reference/mutate.html">mutate()</a></code> to choose where to put them:</p>
 <div class="cell">
 <pre data-type="programlisting" data-code-language="r">flights |&gt; 
   relocate(year:dep_time, .after = time_hour)
 #&gt; # A tibble: 336,776 × 19
-#&gt;   sched…¹ dep_d…² arr_t…³ sched…⁴ arr_d…⁵ carrier flight tailnum origin dest 
-#&gt;     &lt;int&gt;   &lt;dbl&gt;   &lt;int&gt;   &lt;int&gt;   &lt;dbl&gt; &lt;chr&gt;    &lt;int&gt; &lt;chr&gt;   &lt;chr&gt;  &lt;chr&gt;
-#&gt; 1     515       2     830     819      11 UA        1545 N14228  EWR    IAH  
-#&gt; 2     529       4     850     830      20 UA        1714 N24211  LGA    IAH  
-#&gt; 3     540       2     923     850      33 AA        1141 N619AA  JFK    MIA  
-#&gt; 4     545      -1    1004    1022     -18 B6         725 N804JB  JFK    BQN  
-#&gt; 5     600      -6     812     837     -25 DL         461 N668DN  LGA    ATL  
-#&gt; 6     558      -4     740     728      12 UA        1696 N39463  EWR    ORD  
-#&gt; # … with 336,770 more rows, 9 more variables: air_time &lt;dbl&gt;,
-#&gt; #   distance &lt;dbl&gt;, hour &lt;dbl&gt;, minute &lt;dbl&gt;, time_hour &lt;dttm&gt;, year &lt;int&gt;,
-#&gt; #   month &lt;int&gt;, day &lt;int&gt;, dep_time &lt;int&gt;, and abbreviated variable names
-#&gt; #   ¹​sched_dep_time, ²​dep_delay, ³​arr_time, ⁴​sched_arr_time, ⁵​arr_delay
+#&gt;   sched_dep_time dep_delay arr_time sched_arr_time arr_delay carrier flight
+#&gt;            &lt;int&gt;     &lt;dbl&gt;    &lt;int&gt;          &lt;int&gt;     &lt;dbl&gt; &lt;chr&gt;    &lt;int&gt;
+#&gt; 1            515         2      830            819        11 UA        1545
+#&gt; 2            529         4      850            830        20 UA        1714
+#&gt; 3            540         2      923            850        33 AA        1141
+#&gt; 4            545        -1     1004           1022       -18 B6         725
+#&gt; 5            600        -6      812            837       -25 DL         461
+#&gt; 6            558        -4      740            728        12 UA        1696
+#&gt; # … with 336,770 more rows, and 12 more variables: tailnum &lt;chr&gt;,
+#&gt; #   origin &lt;chr&gt;, dest &lt;chr&gt;, air_time &lt;dbl&gt;, distance &lt;dbl&gt;, hour &lt;dbl&gt;,
+#&gt; #   minute &lt;dbl&gt;, time_hour &lt;dttm&gt;, year &lt;int&gt;, month &lt;int&gt;, day &lt;int&gt;,
+#&gt; #   dep_time &lt;int&gt;
 flights |&gt; 
   relocate(starts_with("arr"), .before = dep_time)
 #&gt; # A tibble: 336,776 × 19
-#&gt;    year month   day arr_time arr_de…¹ dep_t…² sched…³ dep_d…⁴ sched…⁵ carrier
-#&gt;   &lt;int&gt; &lt;int&gt; &lt;int&gt;    &lt;int&gt;    &lt;dbl&gt;   &lt;int&gt;   &lt;int&gt;   &lt;dbl&gt;   &lt;int&gt; &lt;chr&gt;  
-#&gt; 1  2013     1     1      830       11     517     515       2     819 UA     
-#&gt; 2  2013     1     1      850       20     533     529       4     830 UA     
-#&gt; 3  2013     1     1      923       33     542     540       2     850 AA     
-#&gt; 4  2013     1     1     1004      -18     544     545      -1    1022 B6     
-#&gt; 5  2013     1     1      812      -25     554     600      -6     837 DL     
-#&gt; 6  2013     1     1      740       12     554     558      -4     728 UA     
-#&gt; # … with 336,770 more rows, 9 more variables: flight &lt;int&gt;, tailnum &lt;chr&gt;,
-#&gt; #   origin &lt;chr&gt;, dest &lt;chr&gt;, air_time &lt;dbl&gt;, distance &lt;dbl&gt;, hour &lt;dbl&gt;,
-#&gt; #   minute &lt;dbl&gt;, time_hour &lt;dttm&gt;, and abbreviated variable names
-#&gt; #   ¹​arr_delay, ²​dep_time, ³​sched_dep_time, ⁴​dep_delay, ⁵​sched_arr_time</pre>
+#&gt;    year month   day arr_time arr_delay dep_time sched_dep_time dep_delay
+#&gt;   &lt;int&gt; &lt;int&gt; &lt;int&gt;    &lt;int&gt;     &lt;dbl&gt;    &lt;int&gt;          &lt;int&gt;     &lt;dbl&gt;
+#&gt; 1  2013     1     1      830        11      517            515         2
+#&gt; 2  2013     1     1      850        20      533            529         4
+#&gt; 3  2013     1     1      923        33      542            540         2
+#&gt; 4  2013     1     1     1004       -18      544            545        -1
+#&gt; 5  2013     1     1      812       -25      554            600        -6
+#&gt; 6  2013     1     1      740        12      554            558        -4
+#&gt; # … with 336,770 more rows, and 11 more variables: sched_arr_time &lt;int&gt;,
+#&gt; #   carrier &lt;chr&gt;, flight &lt;int&gt;, tailnum &lt;chr&gt;, origin &lt;chr&gt;, dest &lt;chr&gt;,
+#&gt; #   air_time &lt;dbl&gt;, distance &lt;dbl&gt;, hour &lt;dbl&gt;, minute &lt;dbl&gt;,
+#&gt; #   time_hour &lt;dttm&gt;</pre>
 </div>
 </section>
 
@@ -574,27 +637,27 @@ Groups</h1>
   group_by(month)
 #&gt; # A tibble: 336,776 × 19
 #&gt; # Groups:   month [12]
-#&gt;    year month   day dep_time sched_…¹ dep_d…² arr_t…³ sched…⁴ arr_d…⁵ carrier
-#&gt;   &lt;int&gt; &lt;int&gt; &lt;int&gt;    &lt;int&gt;    &lt;int&gt;   &lt;dbl&gt;   &lt;int&gt;   &lt;int&gt;   &lt;dbl&gt; &lt;chr&gt;  
-#&gt; 1  2013     1     1      517      515       2     830     819      11 UA     
-#&gt; 2  2013     1     1      533      529       4     850     830      20 UA     
-#&gt; 3  2013     1     1      542      540       2     923     850      33 AA     
-#&gt; 4  2013     1     1      544      545      -1    1004    1022     -18 B6     
-#&gt; 5  2013     1     1      554      600      -6     812     837     -25 DL     
-#&gt; 6  2013     1     1      554      558      -4     740     728      12 UA     
-#&gt; # … with 336,770 more rows, 9 more variables: flight &lt;int&gt;, tailnum &lt;chr&gt;,
-#&gt; #   origin &lt;chr&gt;, dest &lt;chr&gt;, air_time &lt;dbl&gt;, distance &lt;dbl&gt;, hour &lt;dbl&gt;,
-#&gt; #   minute &lt;dbl&gt;, time_hour &lt;dttm&gt;, and abbreviated variable names
-#&gt; #   ¹​sched_dep_time, ²​dep_delay, ³​arr_time, ⁴​sched_arr_time, ⁵​arr_delay</pre>
+#&gt;    year month   day dep_time sched_dep_time dep_delay arr_time sched_arr_time
+#&gt;   &lt;int&gt; &lt;int&gt; &lt;int&gt;    &lt;int&gt;          &lt;int&gt;     &lt;dbl&gt;    &lt;int&gt;          &lt;int&gt;
+#&gt; 1  2013     1     1      517            515         2      830            819
+#&gt; 2  2013     1     1      533            529         4      850            830
+#&gt; 3  2013     1     1      542            540         2      923            850
+#&gt; 4  2013     1     1      544            545        -1     1004           1022
+#&gt; 5  2013     1     1      554            600        -6      812            837
+#&gt; 6  2013     1     1      554            558        -4      740            728
+#&gt; # … with 336,770 more rows, and 11 more variables: arr_delay &lt;dbl&gt;,
+#&gt; #   carrier &lt;chr&gt;, flight &lt;int&gt;, tailnum &lt;chr&gt;, origin &lt;chr&gt;, dest &lt;chr&gt;,
+#&gt; #   air_time &lt;dbl&gt;, distance &lt;dbl&gt;, hour &lt;dbl&gt;, minute &lt;dbl&gt;,
+#&gt; #   time_hour &lt;dttm&gt;</pre>
 </div>
-<p><code><a href="https://dplyr.tidyverse.org/reference/group_by.html">group_by()</a></code> doesn’t change the data but, if you look closely at the output, you’ll notice that it’s now “grouped by” month. This means subsequent operations will now work “by month”.</p>
+<p><code><a href="https://dplyr.tidyverse.org/reference/group_by.html">group_by()</a></code> doesn’t change the data but, if you look closely at the output, you’ll notice that it’s now “grouped by” month. This means subsequent operations will now work “by month”. <code><a href="https://dplyr.tidyverse.org/reference/group_by.html">group_by()</a></code> doesn’t do anything by itself; instead it changes the behavior of the subsequent verbs.</p>
 </section>
 
 <section id="sec-summarize" data-type="sect2">
 <h2>
 <code>summarize()</code>
 </h2>
-<p>The most important grouped operation is a summary. It collapses each group to a single row<span data-type="footnote">This is a slightly simplification; later on you’ll learn how to use <code><a href="https://dplyr.tidyverse.org/reference/summarise.html">summarize()</a></code> to produce multiple summary rows for each group.</span>. Here we compute the average departure delay by month:</p>
+<p>The most important grouped operation is a summary, which collapses each group to a single row. In dplyr, this is operation is performed by <code><a href="https://dplyr.tidyverse.org/reference/summarise.html">summarize()</a></code><span data-type="footnote">Or <code><a href="https://dplyr.tidyverse.org/reference/summarise.html">summarise()</a></code>, if you prefer British English.</span>, as shown by the following example, which computes the average departure delay by month:</p>
 <div class="cell">
 <pre data-type="programlisting" data-code-language="r">flights |&gt; 
   group_by(month) |&gt; 
@@ -665,7 +728,7 @@ The<code>slice_</code> functions</h2>
 <li>
 <code>df |&gt; slice_max(x, n = 1)</code> takes the row with the largest value of <code>x</code>.</li>
 <li>
-<code>df |&gt; slice_sample(x, n = 1)</code> takes one random row.</li>
+<code>df |&gt; slice_sample(n = 1)</code> takes one random row.</li>
 </ul><p>You can vary <code>n</code> to select more than one row, or instead of <code>n =</code>, you can use <code>prop = 0.1</code> to select (e.g.) 10% of the rows in each group. For example, the following code finds the most delayed flight to each destination:</p>
 <div class="cell">
 <pre data-type="programlisting" data-code-language="r">flights |&gt; 
@@ -673,18 +736,18 @@ The<code>slice_</code> functions</h2>
   slice_max(arr_delay, n = 1)
 #&gt; # A tibble: 108 × 19
 #&gt; # Groups:   dest [105]
-#&gt;    year month   day dep_time sched_…¹ dep_d…² arr_t…³ sched…⁴ arr_d…⁵ carrier
-#&gt;   &lt;int&gt; &lt;int&gt; &lt;int&gt;    &lt;int&gt;    &lt;int&gt;   &lt;dbl&gt;   &lt;int&gt;   &lt;int&gt;   &lt;dbl&gt; &lt;chr&gt;  
-#&gt; 1  2013     7    22     2145     2007      98     132    2259     153 B6     
-#&gt; 2  2013     7    23     1139      800     219    1250     909     221 B6     
-#&gt; 3  2013     1    25      123     2000     323     229    2101     328 EV     
-#&gt; 4  2013     8    17     1740     1625      75    2042    2003      39 UA     
-#&gt; 5  2013     7    22     2257      759     898     121    1026     895 DL     
-#&gt; 6  2013     7    10     2056     1505     351    2347    1758     349 UA     
-#&gt; # … with 102 more rows, 9 more variables: flight &lt;int&gt;, tailnum &lt;chr&gt;,
-#&gt; #   origin &lt;chr&gt;, dest &lt;chr&gt;, air_time &lt;dbl&gt;, distance &lt;dbl&gt;, hour &lt;dbl&gt;,
-#&gt; #   minute &lt;dbl&gt;, time_hour &lt;dttm&gt;, and abbreviated variable names
-#&gt; #   ¹​sched_dep_time, ²​dep_delay, ³​arr_time, ⁴​sched_arr_time, ⁵​arr_delay</pre>
+#&gt;    year month   day dep_time sched_dep_time dep_delay arr_time sched_arr_time
+#&gt;   &lt;int&gt; &lt;int&gt; &lt;int&gt;    &lt;int&gt;          &lt;int&gt;     &lt;dbl&gt;    &lt;int&gt;          &lt;int&gt;
+#&gt; 1  2013     7    22     2145           2007        98      132           2259
+#&gt; 2  2013     7    23     1139            800       219     1250            909
+#&gt; 3  2013     1    25      123           2000       323      229           2101
+#&gt; 4  2013     8    17     1740           1625        75     2042           2003
+#&gt; 5  2013     7    22     2257            759       898      121           1026
+#&gt; 6  2013     7    10     2056           1505       351     2347           1758
+#&gt; # … with 102 more rows, and 11 more variables: arr_delay &lt;dbl&gt;,
+#&gt; #   carrier &lt;chr&gt;, flight &lt;int&gt;, tailnum &lt;chr&gt;, origin &lt;chr&gt;, dest &lt;chr&gt;,
+#&gt; #   air_time &lt;dbl&gt;, distance &lt;dbl&gt;, hour &lt;dbl&gt;, minute &lt;dbl&gt;,
+#&gt; #   time_hour &lt;dttm&gt;</pre>
 </div>
 <p>This is similar to computing the max delay with <code><a href="https://dplyr.tidyverse.org/reference/summarise.html">summarize()</a></code>, but you get the whole row instead of the single summary:</p>
 <div class="cell">
@@ -692,7 +755,7 @@ The<code>slice_</code> functions</h2>
   group_by(dest) |&gt; 
   summarize(max_delay = max(arr_delay, na.rm = TRUE))
 #&gt; Warning: There was 1 warning in `summarize()`.
-#&gt; ℹ In argument `max_delay = max(arr_delay, na.rm = TRUE)`.
+#&gt; ℹ In argument: `max_delay = max(arr_delay, na.rm = TRUE)`.
 #&gt; ℹ In group 52: `dest = "LGA"`.
 #&gt; Caused by warning in `max()`:
 #&gt; ! no non-missing arguments to max; returning -Inf
@@ -719,18 +782,18 @@ Grouping by multiple variables</h2>
 daily
 #&gt; # A tibble: 336,776 × 19
 #&gt; # Groups:   year, month, day [365]
-#&gt;    year month   day dep_time sched_…¹ dep_d…² arr_t…³ sched…⁴ arr_d…⁵ carrier
-#&gt;   &lt;int&gt; &lt;int&gt; &lt;int&gt;    &lt;int&gt;    &lt;int&gt;   &lt;dbl&gt;   &lt;int&gt;   &lt;int&gt;   &lt;dbl&gt; &lt;chr&gt;  
-#&gt; 1  2013     1     1      517      515       2     830     819      11 UA     
-#&gt; 2  2013     1     1      533      529       4     850     830      20 UA     
-#&gt; 3  2013     1     1      542      540       2     923     850      33 AA     
-#&gt; 4  2013     1     1      544      545      -1    1004    1022     -18 B6     
-#&gt; 5  2013     1     1      554      600      -6     812     837     -25 DL     
-#&gt; 6  2013     1     1      554      558      -4     740     728      12 UA     
-#&gt; # … with 336,770 more rows, 9 more variables: flight &lt;int&gt;, tailnum &lt;chr&gt;,
-#&gt; #   origin &lt;chr&gt;, dest &lt;chr&gt;, air_time &lt;dbl&gt;, distance &lt;dbl&gt;, hour &lt;dbl&gt;,
-#&gt; #   minute &lt;dbl&gt;, time_hour &lt;dttm&gt;, and abbreviated variable names
-#&gt; #   ¹​sched_dep_time, ²​dep_delay, ³​arr_time, ⁴​sched_arr_time, ⁵​arr_delay</pre>
+#&gt;    year month   day dep_time sched_dep_time dep_delay arr_time sched_arr_time
+#&gt;   &lt;int&gt; &lt;int&gt; &lt;int&gt;    &lt;int&gt;          &lt;int&gt;     &lt;dbl&gt;    &lt;int&gt;          &lt;int&gt;
+#&gt; 1  2013     1     1      517            515         2      830            819
+#&gt; 2  2013     1     1      533            529         4      850            830
+#&gt; 3  2013     1     1      542            540         2      923            850
+#&gt; 4  2013     1     1      544            545        -1     1004           1022
+#&gt; 5  2013     1     1      554            600        -6      812            837
+#&gt; 6  2013     1     1      554            558        -4      740            728
+#&gt; # … with 336,770 more rows, and 11 more variables: arr_delay &lt;dbl&gt;,
+#&gt; #   carrier &lt;chr&gt;, flight &lt;int&gt;, tailnum &lt;chr&gt;, origin &lt;chr&gt;, dest &lt;chr&gt;,
+#&gt; #   air_time &lt;dbl&gt;, distance &lt;dbl&gt;, hour &lt;dbl&gt;, minute &lt;dbl&gt;,
+#&gt; #   time_hour &lt;dttm&gt;</pre>
 </div>
 <p>When you summarize a tibble grouped by more than one variable, each summary peels off the last group. In hindsight, this wasn’t great way to make this function work, but it’s difficult to change without breaking existing code. To make it obvious what’s happening, dplyr displays a message that tells you how you can change this behavior:</p>
 <div class="cell">
@@ -779,6 +842,66 @@ Exercises</h2>
 <li><p>How do delays vary over the course of the day. Illustrate your answer with a plot.</p></li>
 <li><p>What happens if you supply a negative <code>n</code> to <code><a href="https://dplyr.tidyverse.org/reference/slice.html">slice_min()</a></code> and friends?</p></li>
 <li><p>Explain what <code><a href="https://dplyr.tidyverse.org/reference/count.html">count()</a></code> does in terms of the dplyr verbs you just learn. What does the <code>sort</code> argument to <code><a href="https://dplyr.tidyverse.org/reference/count.html">count()</a></code> do?</p></li>
+<li>
+<p>Suppose we have the following tiny data frame:</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="r">df &lt;- tibble(
+  x = 1:5,
+  y = c("a", "b", "a", "a", "b"),
+  z = c("K", "K", "L", "L", "K")
+)</pre>
+</div>
+<ol type="a"><li>
+<p>What does the following code do? Run it, analyze the result, and describe what <code><a href="https://dplyr.tidyverse.org/reference/group_by.html">group_by()</a></code> does.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="r">df |&gt;
+  group_by(y)</pre>
+</div>
+</li>
+<li>
+<p>What does the following code do? Run it, analyze the result, and describe what <code><a href="https://dplyr.tidyverse.org/reference/arrange.html">arrange()</a></code> does. Also comment on how it’s different from the <code><a href="https://dplyr.tidyverse.org/reference/group_by.html">group_by()</a></code> in part (a)?</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="r">df |&gt;
+  arrange(y)</pre>
+</div>
+</li>
+<li>
+<p>What does the following code do? Run it, analyze the result, and describe what the pipeline does.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="r">df |&gt;
+  group_by(y) |&gt;
+  summarize(mean_x = mean(x))</pre>
+</div>
+</li>
+<li>
+<p>What does the following code do? Run it, analyze the result, and describe what the pipeline does. Then, comment on what the message says.</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="r">df |&gt;
+  group_by(y, z) |&gt;
+  summarize(mean_x = mean(x))</pre>
+</div>
+</li>
+<li>
+<p>What does the following code do? Run it, analyze the result, and describe what the pipeline does. How is the output different from the one in part (d).</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="r">df |&gt;
+  group_by(y, z) |&gt;
+  summarize(mean_x = mean(x), .groups = "drop")</pre>
+</div>
+</li>
+<li>
+<p>What do the following pipelines do? Run both, analyze the results, and describe what each pipeline does. How are the outputs of the two pipelines different?</p>
+<div class="cell">
+<pre data-type="programlisting" data-code-language="r">df |&gt;
+  group_by(y, z) |&gt;
+  summarize(mean_x = mean(x))
+
+df |&gt;
+  group_by(y, z) |&gt;
+  mutate(mean_x = mean(x))</pre>
+</div>
+</li>
+</ol></li>
 </ol></section>
 </section>
 
@@ -795,18 +918,18 @@ Case study: aggregates and sample size</h1>
     n = n()
   )
 
-ggplot(delays, aes(delay)) + 
+ggplot(delays, aes(x = delay)) + 
   geom_freqpoly(binwidth = 10)</pre>
 <div class="cell-output-display">
-<p><img src="data-transform_files/figure-html/unnamed-chunk-36-1.png" class="img-fluid" alt="A frequency histogram showing the distribution of flight delays. The distribution is unimodal, with a large spike around 0, and asymmetric: very few flights leave more than 30 minutes early, but flights are delayed up to 5 hours." width="576"/></p>
+<p><img src="data-transform_files/figure-html/unnamed-chunk-45-1.png" class="img-fluid" alt="A frequency histogram showing the distribution of flight delays. The distribution is unimodal, with a large spike around 0, and asymmetric: very few flights leave more than 30 minutes early, but flights are delayed up to 5 hours." width="576"/></p>
 </div>
 </div>
 <p>Wow, there are some planes that have an <em>average</em> delay of 5 hours (300 minutes)! That seems pretty surprising, so lets draw a scatterplot of number of flights vs. average delay:</p>
 <div class="cell">
-<pre data-type="programlisting" data-code-language="r">ggplot(delays, aes(n, delay)) + 
+<pre data-type="programlisting" data-code-language="r">ggplot(delays, aes(x = n, y = delay)) + 
   geom_point(alpha = 1/10)</pre>
 <div class="cell-output-display">
-<p><img src="data-transform_files/figure-html/unnamed-chunk-37-1.png" class="img-fluid" alt="A scatterplot showing number of flights versus after delay. Delays for planes with very small number of flights have very high variability (from -50 to ~300), but the variability rapidly decreases as the number of flights increases." width="576"/></p>
+<p><img src="data-transform_files/figure-html/unnamed-chunk-46-1.png" class="img-fluid" alt="A scatterplot showing number of flights versus after delay. Delays for planes with very small number of flights have very high variability (from -50 to ~300), but the variability rapidly decreases as the number of flights increases." width="576"/></p>
 </div>
 </div>
 <p>Not surprisingly, there is much greater variation in the average delay when there are few flights for a given plane. The shape of this plot is very characteristic: whenever you plot a mean (or other summary) vs. group size, you’ll see that the variation decreases as the sample size increases<span data-type="footnote">*cough* the central limit theorem *cough*.</span>.</p>
@@ -814,11 +937,11 @@ ggplot(delays, aes(delay)) +
 <div class="cell">
 <pre data-type="programlisting" data-code-language="r">delays |&gt;  
   filter(n &gt; 25) |&gt; 
-  ggplot(aes(n, delay)) + 
+  ggplot(aes(x = n, y = delay)) + 
   geom_point(alpha = 1/10) + 
   geom_smooth(se = FALSE)</pre>
 <div class="cell-output-display">
-<p><img src="data-transform_files/figure-html/unnamed-chunk-38-1.png" class="img-fluid" alt="Now that the y-axis (average delay) is smaller (-20 to 60 minutes), we can see a more complicated story. The smooth line suggests an initial decrease in average delay from 10 minutes to 0 minutes as number of flights per plane increases from 25 to 100. This is followed by a gradual increase up to 10 minutes for 250 flights, then a gradual decrease to ~5 minutes at 500 flights." width="576"/></p>
+<p><img src="data-transform_files/figure-html/unnamed-chunk-47-1.png" class="img-fluid" alt="Now that the y-axis (average delay) is smaller (-20 to 60 minutes), we can see a more complicated story. The smooth line suggests an initial decrease in average delay from 10 minutes to 0 minutes as number of flights per plane increases from 25 to 100. This is followed by a gradual increase up to 10 minutes for 250 flights, then a gradual decrease to ~5 minutes at 500 flights." width="576"/></p>
 </div>
 </div>
 <p>Note the handy pattern for combining ggplot2 and dplyr. It’s a bit annoying that you have to switch from <code>|&gt;</code> to <code>+</code>, but it’s not too much of a hassle once you get the hang of it.</p>
@@ -848,11 +971,11 @@ batters
 </ol><div class="cell">
 <pre data-type="programlisting" data-code-language="r">batters |&gt; 
   filter(n &gt; 100) |&gt; 
-  ggplot(aes(n, perf)) +
+  ggplot(aes(x = n, y = perf)) +
     geom_point(alpha = 1 / 10) + 
     geom_smooth(se = FALSE)</pre>
 <div class="cell-output-display">
-<p><img src="data-transform_files/figure-html/unnamed-chunk-40-1.png" class="img-fluid" alt="A scatterplot of number of batting opportunites vs batting performance overlaid with a smoothed line. Average performance increases sharply from 0.2 at when n is 1 to 0.25 when n is ~1000. Average performance continues to increase linearly at a much shallower slope reaching ~0.3 when n is ~15,000." width="576"/></p>
+<p><img src="data-transform_files/figure-html/unnamed-chunk-49-1.png" class="img-fluid" alt="A scatterplot of number of batting opportunites vs. batting performance overlaid with a smoothed line. Average performance increases sharply from 0.2 at when n is 1 to 0.25 when n is ~1000. Average performance continues to increase linearly at a much shallower slope reaching ~0.3 when n is ~15,000." width="576"/></p>
 </div>
 </div>
 <p>This also has important implications for ranking. If you naively sort on <code>desc(ba)</code>, the people with the best batting averages are clearly lucky, not skilled:</p>
@@ -876,7 +999,7 @@ batters
 <section id="summary" data-type="sect1">
 <h1>
 Summary</h1>
-<p>In this chapter, you’ve learned the tools that dplyr provides for working with data frames. The tools are roughly grouped into three categories: those that manipulate the rows (like <code><a href="https://dplyr.tidyverse.org/reference/filter.html">filter()</a></code> and <code><a href="https://dplyr.tidyverse.org/reference/arrange.html">arrange()</a></code>, those that manipulate the columns (like <code><a href="https://dplyr.tidyverse.org/reference/select.html">select()</a></code> and <code><a href="https://dplyr.tidyverse.org/reference/mutate.html">mutate()</a></code>), and those that manipulate groups (like <code><a href="https://dplyr.tidyverse.org/reference/group_by.html">group_by()</a></code> and <code><a href="https://dplyr.tidyverse.org/reference/summarise.html">summarise()</a></code>). In this chapter, we’ve focused on these “whole data frame” tools, but you haven’t yet learned much about what you can do with the individual variable. We’ll come back to that in the Transform part of the book, where each chapter will give you tools for a specific type of variable.</p>
+<p>In this chapter, you’ve learned the tools that dplyr provides for working with data frames. The tools are roughly grouped into three categories: those that manipulate the rows (like <code><a href="https://dplyr.tidyverse.org/reference/filter.html">filter()</a></code> and <code><a href="https://dplyr.tidyverse.org/reference/arrange.html">arrange()</a></code>, those that manipulate the columns (like <code><a href="https://dplyr.tidyverse.org/reference/select.html">select()</a></code> and <code><a href="https://dplyr.tidyverse.org/reference/mutate.html">mutate()</a></code>), and those that manipulate groups (like <code><a href="https://dplyr.tidyverse.org/reference/group_by.html">group_by()</a></code> and <code><a href="https://dplyr.tidyverse.org/reference/summarise.html">summarize()</a></code>). In this chapter, we’ve focused on these “whole data frame” tools, but you haven’t yet learned much about what you can do with the individual variable. We’ll come back to that in the Transform part of the book, where each chapter will give you tools for a specific type of variable.</p>
 <p>For now, we’ll pivot back to workflow, and in the next chapter you’ll learn more about the pipe, <code>|&gt;</code>, why we recommend it, and a little of the history that lead from magrittr’s <code>%&gt;%</code> to base R’s <code>|&gt;</code>.</p>
 
 
