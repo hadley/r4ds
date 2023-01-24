@@ -13,7 +13,8 @@ knitr::opts_chunk$set(
 options(
   dplyr.print_min = 6,
   dplyr.print_max = 6,
-  stringr.view_n = 10,
+  pillar.max_footer_lines = 2,
+  stringr.view_n = 6,
   # Activate crayon output - temporarily disabled for quarto
   # crayon.enabled = TRUE,
   pillar.bold = TRUE,
