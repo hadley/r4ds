@@ -164,17 +164,7 @@ In this chapter, we'll focus on unnesting list-columns out into regular variable
 
 The default print method just displays a rough summary of the contents.
 The list column could be arbitrarily complex, so there's no good way to print it.
-If you want to see it, you'll need to pull the list-column out and apply one of the techniques that you've learned above:
-
-```{r}
-df |> 
-  filter(x == 1) |> 
-  pull(z) |> 
-  str()
-```
-
-Similarly, if you `View()` a data frame in RStudio, you'll get the standard tabular view, which doesn't allow you to selectively expand list columns.
-To explore those fields you'll need to `pull()` and view, e.g. `df |> pull(z) |> View()`.
+If you want to see it, you'll need to pull the list-column out and apply one of the techniques that you've learned above, like `df |> pull(z) |> str()` or `df |> pull(z) |> View()`.
 
 ::: callout-note
 ## Base R
@@ -250,14 +240,6 @@ df1 |>
   unnest_wider(y, names_sep = "_")
 ```
 
-We can also use `unnest_wider()` with unnamed list-columns, as in `df2`.
-Since columns require names but the list lacks them, `unnest_wider()` will label them with consecutive integers:
-
-```{r}
-df2 |> 
-  unnest_wider(y, names_sep = "_")
-```
-
 You'll notice that `unnest_wider()`, much like `pivot_wider()`, turns implicit missing values in to explicit missing values.
 
 ### `unnest_longer()`
@@ -283,24 +265,7 @@ df6 |> unnest_longer(y)
 ```
 
 We get zero rows in the output, so the row effectively disappears.
-Once <https://github.com/tidyverse/tidyr/issues/1339> is fixed, you'll be able to keep this row, replacing `y` with `NA` by setting `keep_empty = TRUE`.
-
-You can also unnest named list-columns, like `df1$y`, into rows.
-Because the elements are named, and those names might be useful data, tidyr puts them in a new column with the suffix `_id`:
-
-```{r}
-df1 |> 
-  unnest_longer(y)
-```
-
-If you don't want these `ids`, you can suppress them with `indices_include = FALSE`.
-On the other hand, sometimes the positions of the elements is meaningful, and even if the elements are unnamed, you might still want to track their indices.
-You can do this with `indices_include = TRUE`:
-
-```{r}
-df2 |> 
-  unnest_longer(y, indices_include = TRUE)
-```
+If you want to preserve that row, adding add `NA` in `y` by setting `keep_empty = TRUE`.
 
 ### Inconsistent types
 
@@ -310,8 +275,8 @@ For example, take the following dataset where the list-column `y` contains two n
 ```{r}
 df4 <- tribble(
   ~x, ~y,
-  "a", list(1, "a"),
-  "b", list(TRUE, factor("a"), 5)
+  "a", list(1),
+  "b", list("a", TRUE, 5)
 )
 ```
 
@@ -326,37 +291,10 @@ df4 |>
 
 As you can see, the output contains a list-column, but every element of the list-column contains a single element.
 Because `unnest_longer()` can't find a common type of vector, it keeps the original types in a list-column.
-You might wonder if this breaks the commandment that every element of a column must be the same type --- not quite: every element is a still a list, even though the contents of each element is a different type.
+You might wonder if this breaks the commandment that every element of a column must be the same type.
+It doesn't: every element is a list, even though the contents are of different types.
 
-What happens if you find this problem in a dataset you're trying to rectangle?
-There are two basic options.
-You could use the `transform` argument to coerce all inputs to a common type.
-However, it's not particularly useful here because there's only really one class that these five class can be converted to character.
-
-```{r}
-df4 |> 
-  unnest_longer(y, transform = as.character)
-```
-
-Another option would be to filter down to the rows that have values of a specific type:
-
-```{r}
-df4 |> 
-  unnest_longer(y) |> 
-  filter(map_lgl(y, is.numeric))
-```
-
-Then you can call `unnest_longer()` once more.
-This gives us a rectangular dataset of just the numeric values.
-
-```{r}
-df4 |> 
-  unnest_longer(y) |> 
-  filter(map_lgl(y, is.numeric)) |> 
-  unnest_longer(y)
-```
-
-You'll learn more about `map_lgl()` in @sec-iteration.
+Dealing with inconsistent types is challenging and the details depend on the precise nature of the problem and your goals, but you'll mostly likely need tools from @sec-iteration.
 
 ### Other functions
 
@@ -370,7 +308,14 @@ These functions are good to know about as you might encounter them when reading 
 
 ### Exercises
 
-1.  From time-to-time you encounter data frames with multiple list-columns with aligned values.
+1.  What happens when you use `unnest_wider()` with unnamed list-columns like `df2`?
+    What argument is now necessary?
+
+2.  What happens when you use `unnest_longer()` with named list-columns like `df1`?
+    What additional information do you get in the output?
+    How can you suppress that extra detail?
+
+3.  From time-to-time you encounter data frames with multiple list-columns with aligned values.
     For example, in the following data frame, the values of `y` and `z` are aligned (i.e. `y` and `z` will always have the same length within a row, and the first value of `y` corresponds to the first value of `z`).
     What happens if you apply two `unnest_longer()` calls to this data frame?
     How can you preserve the relationship between `x` and `y`?
@@ -387,7 +332,7 @@ These functions are good to know about as you might encounter them when reading 
 ## Case studies
 
 The main difference between the simple examples we used above and real data is that real data typically contains multiple levels of nesting that require multiple calls to `unnest_longer()` and/or `unnest_wider()`.
-This section will work through four real rectangling challenges using datasets from the repurrrsive package, inspired by datasets that we've encountered in the wild.
+To show that in action, this section works through three real rectangling challenges using datasets from the repurrrsive package.
 
 ### Very wide data
 
@@ -395,7 +340,7 @@ We'll start with `gh_repos`.
 This is a list that contains data about a collection of GitHub repositories retrieved using the GitHub API. It's a very deeply nested list so it's difficult to show the structure in this book; we recommend exploring a little on your own with `View(gh_repos)` before we continue.
 
 `gh_repos` is a list, but our tools work with list-columns, so we'll begin by putting it into a tibble.
-We call the column `json` for reasons we'll get to later.
+We call this column `json` for reasons we'll get to later.
 
 ```{r}
 repos <- tibble(json = gh_repos)
@@ -431,7 +376,7 @@ repos |>
   head(10)
 ```
 
-Let's select a few that look interesting:
+Let's pull out a few that look interesting:
 
 ```{r}
 repos |> 
@@ -453,10 +398,8 @@ repos |>
   unnest_wider(owner)
 ```
 
-<!--# TODO: https://github.com/tidyverse/tidyr/issues/1390 -->
-
 Uh oh, this list column also contains an `id` column and we can't have two `id` columns in the same data frame.
-Rather than following the advice to use `names_repair` (which would also work), we'll instead use `names_sep`:
+As suggested, lets use `names_sep` to resolve the problem:
 
 ```{r}
 repos |> 
@@ -466,12 +409,12 @@ repos |>
   unnest_wider(owner, names_sep = "_")
 ```
 
-This gives another wide dataset, but you can see that `owner` appears to contain a lot of additional data about the person who "owns" the repository.
+This gives another wide dataset, but you can get the sense that `owner` appears to contain a lot of additional data about the person who "owns" the repository.
 
 ### Relational data
 
-Nested data is sometimes used to represent data that we'd usually spread out into multiple data frames.
-For example, take `got_chars` which contains data about characters that appear in Game of Thrones.
+Nested data is sometimes used to represent data that we'd usually spread across multiple data frames.
+For example, take `got_chars` which contains data about characters that appear in the Game of Thrones books and TV series.
 Like `gh_repos` it's a list, so we start by turning it into a list-column of a tibble:
 
 ```{r}
@@ -495,7 +438,7 @@ characters <- chars |>
 characters
 ```
 
-There are also many list-columns:
+This dataset contains also many list-columns:
 
 ```{r}
 chars |> 
@@ -514,7 +457,7 @@ chars |>
 ```
 
 You might expect to see this data in its own table because it would be easy to join to the characters data as needed.
-To do so, we'll do a little cleaning: removing the rows containing empty strings and renaming `titles` to `title` since each row now only contains a single title.
+Let's do that, which requires little cleaning: removing the rows containing empty strings and renaming `titles` to `title` since each row now only contains a single title.
 
 ```{r}
 titles <- chars |> 
@@ -538,49 +481,6 @@ characters |>
 ```
 
 You could imagine creating a table like this for each of the list-columns, then using joins to combine them with the character data as you need it.
-
-### A dash of text analysis
-
-Sticking with the same data, what if we wanted to find the most common words in the title?
-One simple approach starts by using `str_split()` to break each element of `title` up into words by splitting on `" "`:
-
-```{r}
-titles |> 
-  mutate(word = str_split(title, " "), .keep = "unused")
-```
-
-This creates an unnamed variable length list-column, so we can use `unnest_longer()`:
-
-```{r}
-titles |> 
-  mutate(word = str_split(title, " "), .keep = "unused") |> 
-  unnest_longer(word)
-```
-
-And then we can count that column to find the most common words:
-
-```{r}
-titles |> 
-  mutate(word = str_split(title, " "), .keep = "unused") |> 
-  unnest_longer(word) |> 
-  count(word, sort = TRUE)
-```
-
-Some of those words are not very interesting so we could create a list of common words to drop.
-In text analysis these are commonly called stop words.
-
-```{r}
-stop_words <- tibble(word = c("of", "the"))
-
-titles |> 
-  mutate(word = str_split(title, " "), .keep = "unused") |> 
-  unnest_longer(word) |> 
-  anti_join(stop_words) |> 
-  count(word, sort = TRUE)
-```
-
-Breaking up text into individual fragments is a powerful idea that underlies much of text analysis.
-If this sounds interesting, a good place to learn more is [Text Mining with R](https://www.tidytextmining.com) by Julia Silge and David Robinson.
 
 ### Deeply nested
 
@@ -670,6 +570,7 @@ This is where `hoist()`, mentioned earlier in the chapter, can be useful.
 Once you've discovered the path to get to the components you're interested in, you can extract them directly using `hoist()`:
 
 ```{r}
+#| results: false
 locations |> 
   select(city, formatted_address, geometry) |> 
   hoist(
@@ -692,7 +593,9 @@ If these case studies have whetted your appetite for more real-life rectangling,
     Can you construct a `owners` data frame that contains one row for each owner?
     (Hint: does `distinct()` work with `list-cols`?)
 
-3.  Explain the following code line-by-line.
+3.  Follow the steps used for `titles` to create similar tables for the aliases, allegiances, books, and TV series for the Game of Thrones characters.
+
+4.  Explain the following code line-by-line.
     Why is it interesting?
     Why does it work for `got_chars` but might not work in general?
 
@@ -709,7 +612,7 @@ If these case studies have whetted your appetite for more real-life rectangling,
       unnest_longer(value)
     ```
 
-4.  In `gmaps_cities`, what does `address_components` contain?
+5.  In `gmaps_cities`, what does `address_components` contain?
     Why does the length vary between rows?
     Unnest it appropriately to figure it out.
     (Hint: `types` always appears to contain two elements. Does `unnest_wider()` make it easier to work with than `unnest_longer()`?)
@@ -742,6 +645,10 @@ For example `[1, 2, 3]` is an array containing 3 numbers, and `[null, 1, "string
 An **object** is like a named list, and is written with `{}`.
 The names (keys in JSON terminology) are strings, so must be surrounded by quotes.
 For example, `{"x": 1, "y": 2}` is an object that maps `x` to 1 and `y` to 2.
+
+Note that JSON doesn't have any native way to represent dates or date-times, so they're often stored as strings, and you'll need to use `readr::parse_date()` or `readr::parse_datetime()` to turn them into the correct data structure.
+Similarly, JSON's rules for representing floating point numbers in JSON are a little imprecise, so you'll also sometimes find numbers stored in strings.
+Apply `readr::parse_double()` as needed to the get correct variable type.
 
 ### jsonlite
 
@@ -819,12 +726,6 @@ df <- tibble(results = parse_json(json)$results)
 df |> 
   unnest_wider(results)
 ```
-
-### Translation challenges
-
-Since JSON doesn't have any way to represent dates or date-times, they're often stored as ISO8601 date times in strings, and you'll need to use `readr::parse_date()` or `readr::parse_datetime()` to turn them into the correct data structure.
-Similarly, JSON's rules for representing floating point numbers in JSON are a little imprecise, so you'll also sometimes find numbers stored in strings.
-Apply `readr::parse_double()` as needed to the get correct variable type.
 
 ### Exercises
 
