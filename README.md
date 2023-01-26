@@ -52,7 +52,8 @@ devtools::install_github("hadley/r4ds")
 To generate book for O'Reilly, build the book then:
 
 ```{r}
-devtools::load_all("../minibook/"); process_book()
+# pak::pak("hadley/htmlbook")
+htmlbook::convert_book()
 
 html <- list.files("oreilly", pattern = "[.]html$", full.names = TRUE)
 file.copy(html, "../r-for-data-science-2e/", overwrite = TRUE)
@@ -62,6 +63,8 @@ dest <- gsub("oreilly", "../r-for-data-science-2e/", pngs)
 fs::dir_create(unique(dirname(dest)))
 file.copy(pngs, dest, overwrite = TRUE)
 ```
+
+Then commit and push to atlas.
 
 ## Code of Conduct
 

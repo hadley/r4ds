@@ -1,12 +1,12 @@
 <section data-type="chapter" id="chp-databases">
 <h1><span id="sec-import-databases" class="quarto-section-identifier d-none d-lg-block"><span class="chapter-title">Databases</span></span></h1>
-<section id="introduction" data-type="sect1">
+<section id="databases-introduction" data-type="sect1">
 <h1>
 Introduction</h1>
 <p>A huge amount of data lives in databases, so it’s essential that you know how to access it. Sometimes you can ask someone to download a snapshot into a <code>.csv</code> for you, but this gets painful quickly: every time you need to make a change you’ll have to communicate with another human. You want to be able to reach into the database directly to get the data you need, when you need it.</p>
 <p>In this chapter, you’ll first learn the basics of the DBI package: how to use it to connect to a database and then retrieve data with a SQL<span data-type="footnote">SQL is either pronounced “s”-“q”-“l” or “sequel”.</span> query. <strong>SQL</strong>, short for <strong>s</strong>tructured <strong>q</strong>uery <strong>l</strong>anguage, is the lingua franca of databases, and is an important language for all data scientists to learn. That said, we’re not going to start with SQL, but instead we’ll teach you dbplyr, which can translate your dplyr code to the SQL. We’ll use that as way to teach you some of the most important features of SQL. You won’t become a SQL master by the end of the chapter, but you will be able to identify the most important components and understand what they do.</p>
 
-<section id="prerequisites" data-type="sect2">
+<section id="databases-prerequisites" data-type="sect2">
 <h2>
 Prerequisites</h2>
 <p>In this chapter, we’ll introduce DBI and dbplyr. DBI is a low-level interface that connects to databases and executes SQL; dbplyr is a high-level interface that translates your dplyr code to SQL queries then executes them with DBI.</p>
@@ -148,7 +148,7 @@ as_tibble(dbGetQuery(con, sql))
 <p>You’ll need to be a little careful with <code><a href="https://dbi.r-dbi.org/reference/dbGetQuery.html">dbGetQuery()</a></code> since it can potentially return more data than you have memory. We won’t discuss it further here, but if you’re dealing with very large datasets it’s possible to deal with a “page” of data at a time by using <code><a href="https://dbi.r-dbi.org/reference/dbSendQuery.html">dbSendQuery()</a></code> to get a “result set” which you can page through by calling <code><a href="https://dbi.r-dbi.org/reference/dbFetch.html">dbFetch()</a></code> until <code><a href="https://dbi.r-dbi.org/reference/dbHasCompleted.html">dbHasCompleted()</a></code> returns <code>TRUE</code>.</p>
 </section>
 
-<section id="other-functions" data-type="sect2">
+<section id="databases-other-functions" data-type="sect2">
 <h2>
 Other functions</h2>
 <p>There are lots of other functions in DBI that you might find useful if you’re managing your own data (like <code><a href="https://dbi.r-dbi.org/reference/dbWriteTable.html">dbWriteTable()</a></code> which we used in <a href="#sec-load-data" data-type="xref">#sec-load-data</a>), but we’re going to skip past them in the interest of staying focused on working with data that already lives in a database.</p>
@@ -164,7 +164,7 @@ dbplyr basics</h1>
 <pre data-type="programlisting" data-code-language="r">diamonds_db &lt;- tbl(con, "diamonds")
 diamonds_db
 #&gt; # Source:   table&lt;diamonds&gt; [?? x 10]
-#&gt; # Database: DuckDB 0.6.1 [root@Darwin 22.1.0:R 4.2.1/:memory:]
+#&gt; # Database: DuckDB 0.6.1 [root@Darwin 22.2.0:R 4.2.1/:memory:]
 #&gt;   carat cut       color clarity depth table price     x     y     z
 #&gt;   &lt;dbl&gt; &lt;fct&gt;     &lt;fct&gt; &lt;fct&gt;   &lt;dbl&gt; &lt;dbl&gt; &lt;int&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt;
 #&gt; 1  0.23 Ideal     E     SI2      61.5    55   326  3.95  3.98  2.43
@@ -175,25 +175,24 @@ diamonds_db
 #&gt; 6  0.24 Very Good J     VVS2     62.8    57   336  3.94  3.96  2.48
 #&gt; # … with more rows</pre>
 </div>
-<div data-type="note"><div class="callout-body d-flex">
+<div data-type="note">
+<div class="callout-body d-flex">
 <div class="callout-icon-container">
 <i class="callout-icon"/>
 </div>
 
-</div>
-
-<p>There are two other common ways to interact with a database. First, many corporate databases are very large so you need some hierarchy to keep all the tables organised. In that case you might need to supply a schema, or a catalog and a schema, in order to pick the table you’re interested in:</p><div class="cell">
+<p>There are two other common ways to interact with a database. First, many corporate databases are very large so you need some hierarchy to keep all the tables organised. In that case you might need to supply a schema, or a catalog and a schema, in order to pick the table you’re interested in:</p>
+<div class="cell">
 <pre data-type="programlisting" data-code-language="r">diamonds_db &lt;- tbl(con, in_schema("sales", "diamonds"))
 diamonds_db &lt;- tbl(con, in_catalog("north_america", "sales", "diamonds"))</pre>
-</div><p>Other times you might want to use your own SQL query as a starting point:</p><div class="cell">
+</div>
+<p>Other times you might want to use your own SQL query as a starting point:</p>
+<div class="cell">
 <pre data-type="programlisting" data-code-language="r">diamonds_db &lt;- tbl(con, sql("SELECT * FROM diamonds"))</pre>
 </div>
 
-<p>Note that while SQL is a standard, it is extremely complex and no database follows it exactly. While the main components that we’ll focus on in this book are very similar between DBMSs, there are many minor variations. Fortunately, dbplyr is designed to handle this problem and generates different translations for different databases. It’s not perfect, but it’s continually improving, and if you hit a problem you can file an issue <a href="https://github.com/tidyverse/dbplyr/issues/">on GitHub</a> to help us do better.</p>
-
-<p>In the examples above note that <code>"year"</code> and <code>"type"</code> are wrapped in double quotes. That’s because these are <strong>reserved words</strong> in duckdb, so dbplyr quotes them to avoid any potential confusion between column/table names and SQL operators.</p><p>When working with other databases you’re likely to see every variable name quotes because only a handful of client packages, like duckdb, know what all the reserved words are, so they quote everything to be safe.</p><pre data-type="programlisting" data-code-language="sql">SELECT "tailnum", "type", "manufacturer", "model", "year"
-FROM "planes"</pre><p>Some other database systems use backticks instead of quotes:</p><pre data-type="programlisting" data-code-language="sql">SELECT `tailnum`, `type`, `manufacturer`, `model`, `year`
-FROM `planes`</pre></div>
+</div>
+</div>
 
 <p>This object is <strong>lazy</strong>; when you use dplyr verbs on it, dplyr doesn’t do any work: it just records the sequence of operations that you want to perform and only performs them when needed. For example, take the following pipeline:</p>
 <div class="cell">
@@ -203,7 +202,7 @@ FROM `planes`</pre></div>
 
 big_diamonds_db
 #&gt; # Source:   SQL [?? x 5]
-#&gt; # Database: DuckDB 0.6.1 [root@Darwin 22.1.0:R 4.2.1/:memory:]
+#&gt; # Database: DuckDB 0.6.1 [root@Darwin 22.2.0:R 4.2.1/:memory:]
 #&gt;   carat cut       color clarity price
 #&gt;   &lt;dbl&gt; &lt;fct&gt;     &lt;fct&gt; &lt;fct&gt;   &lt;int&gt;
 #&gt; 1  1.54 Premium   E     VS2     15002
@@ -304,25 +303,16 @@ planes |&gt; show_query()
 <ul><li>In SQL, case doesn’t matter: you can write <code>select</code>, <code>SELECT</code>, or even <code>SeLeCt</code>. In this book we’ll stick with the common convention of writing SQL keywords in uppercase to distinguish them from table or variables names.</li>
 <li>In SQL, order matters: you must always write the clauses in the order <code>SELECT</code>, <code>FROM</code>, <code>WHERE</code>, <code>GROUP BY</code>, <code>ORDER BY</code>. Confusingly, this order doesn’t match how the clauses actually evaluated which is first <code>FROM</code>, then <code>WHERE</code>, <code>GROUP BY</code>, <code>SELECT</code>, and <code>ORDER BY</code>.</li>
 </ul><p>The following sections explore each clause in more detail.</p>
-<div data-type="note"><div class="callout-body d-flex">
+<div data-type="note">
+<div class="callout-body d-flex">
 <div class="callout-icon-container">
 <i class="callout-icon"/>
 </div>
 
-</div>
-
-<p>There are two other common ways to interact with a database. First, many corporate databases are very large so you need some hierarchy to keep all the tables organised. In that case you might need to supply a schema, or a catalog and a schema, in order to pick the table you’re interested in:</p><div class="cell">
-<pre data-type="programlisting" data-code-language="r">diamonds_db &lt;- tbl(con, in_schema("sales", "diamonds"))
-diamonds_db &lt;- tbl(con, in_catalog("north_america", "sales", "diamonds"))</pre>
-</div><p>Other times you might want to use your own SQL query as a starting point:</p><div class="cell">
-<pre data-type="programlisting" data-code-language="r">diamonds_db &lt;- tbl(con, sql("SELECT * FROM diamonds"))</pre>
-</div>
-
 <p>Note that while SQL is a standard, it is extremely complex and no database follows it exactly. While the main components that we’ll focus on in this book are very similar between DBMSs, there are many minor variations. Fortunately, dbplyr is designed to handle this problem and generates different translations for different databases. It’s not perfect, but it’s continually improving, and if you hit a problem you can file an issue <a href="https://github.com/tidyverse/dbplyr/issues/">on GitHub</a> to help us do better.</p>
 
-<p>In the examples above note that <code>"year"</code> and <code>"type"</code> are wrapped in double quotes. That’s because these are <strong>reserved words</strong> in duckdb, so dbplyr quotes them to avoid any potential confusion between column/table names and SQL operators.</p><p>When working with other databases you’re likely to see every variable name quotes because only a handful of client packages, like duckdb, know what all the reserved words are, so they quote everything to be safe.</p><pre data-type="programlisting" data-code-language="sql">SELECT "tailnum", "type", "manufacturer", "model", "year"
-FROM "planes"</pre><p>Some other database systems use backticks instead of quotes:</p><pre data-type="programlisting" data-code-language="sql">SELECT `tailnum`, `type`, `manufacturer`, `model`, `year`
-FROM `planes`</pre></div>
+</div>
+</div>
 
 </section>
 
@@ -356,25 +346,22 @@ planes |&gt;
 #&gt; FROM planes</pre>
 </div>
 <p>This example also shows you how SQL does renaming. In SQL terminology renaming is called <strong>aliasing</strong> and is done with <code>AS</code>. Note that unlike <code><a href="https://dplyr.tidyverse.org/reference/mutate.html">mutate()</a></code>, the old name is on the left and the new name is on the right.</p>
-<div data-type="note"><div class="callout-body d-flex">
+<div data-type="note">
+<div class="callout-body d-flex">
 <div class="callout-icon-container">
 <i class="callout-icon"/>
 </div>
 
+<p>In the examples above note that <code>"year"</code> and <code>"type"</code> are wrapped in double quotes. That’s because these are <strong>reserved words</strong> in duckdb, so dbplyr quotes them to avoid any potential confusion between column/table names and SQL operators.</p>
+<p>When working with other databases you’re likely to see every variable name quotes because only a handful of client packages, like duckdb, know what all the reserved words are, so they quote everything to be safe.</p>
+<pre data-type="programlisting" data-code-language="sql">SELECT "tailnum", "type", "manufacturer", "model", "year"
+FROM "planes"</pre>
+<p>Some other database systems use backticks instead of quotes:</p>
+<pre data-type="programlisting" data-code-language="sql">SELECT `tailnum`, `type`, `manufacturer`, `model`, `year`
+FROM `planes`</pre>
+
 </div>
-
-<p>There are two other common ways to interact with a database. First, many corporate databases are very large so you need some hierarchy to keep all the tables organised. In that case you might need to supply a schema, or a catalog and a schema, in order to pick the table you’re interested in:</p><div class="cell">
-<pre data-type="programlisting" data-code-language="r">diamonds_db &lt;- tbl(con, in_schema("sales", "diamonds"))
-diamonds_db &lt;- tbl(con, in_catalog("north_america", "sales", "diamonds"))</pre>
-</div><p>Other times you might want to use your own SQL query as a starting point:</p><div class="cell">
-<pre data-type="programlisting" data-code-language="r">diamonds_db &lt;- tbl(con, sql("SELECT * FROM diamonds"))</pre>
 </div>
-
-<p>Note that while SQL is a standard, it is extremely complex and no database follows it exactly. While the main components that we’ll focus on in this book are very similar between DBMSs, there are many minor variations. Fortunately, dbplyr is designed to handle this problem and generates different translations for different databases. It’s not perfect, but it’s continually improving, and if you hit a problem you can file an issue <a href="https://github.com/tidyverse/dbplyr/issues/">on GitHub</a> to help us do better.</p>
-
-<p>In the examples above note that <code>"year"</code> and <code>"type"</code> are wrapped in double quotes. That’s because these are <strong>reserved words</strong> in duckdb, so dbplyr quotes them to avoid any potential confusion between column/table names and SQL operators.</p><p>When working with other databases you’re likely to see every variable name quotes because only a handful of client packages, like duckdb, know what all the reserved words are, so they quote everything to be safe.</p><pre data-type="programlisting" data-code-language="sql">SELECT "tailnum", "type", "manufacturer", "model", "year"
-FROM "planes"</pre><p>Some other database systems use backticks instead of quotes:</p><pre data-type="programlisting" data-code-language="sql">SELECT `tailnum`, `type`, `manufacturer`, `model`, `year`
-FROM `planes`</pre></div>
 
 <p>The translations for <code><a href="https://dplyr.tidyverse.org/reference/mutate.html">mutate()</a></code> are similarly straightforward: each variable becomes a new expression in <code>SELECT</code>:</p>
 <div class="cell">
@@ -461,7 +448,7 @@ flights |&gt;
 #&gt; Use `na.rm = TRUE` to silence this warning
 #&gt; This warning is displayed once every 8 hours.
 #&gt; # Source:   SQL [?? x 2]
-#&gt; # Database: DuckDB 0.6.1 [root@Darwin 22.1.0:R 4.2.1/:memory:]
+#&gt; # Database: DuckDB 0.6.1 [root@Darwin 22.2.0:R 4.2.1/:memory:]
 #&gt;   dest   delay
 #&gt;   &lt;chr&gt;  &lt;dbl&gt;
 #&gt; 1 ATL   11.3  
@@ -552,7 +539,7 @@ Subqueries</h2>
 <p>Sometimes dbplyr will create a subquery where it’s not needed because it doesn’t yet know how to optimize that translation. As dbplyr improves over time, these cases will get rarer but will probably never go away.</p>
 </section>
 
-<section id="joins" data-type="sect2">
+<section id="databases-joins" data-type="sect2">
 <h2>
 Joins</h2>
 <p>If you’re familiar with dplyr’s joins, SQL joins are very similar. Here’s a simple example:</p>
@@ -597,7 +584,7 @@ Other verbs</h2>
 <p>dbplyr also translates other verbs like <code><a href="https://dplyr.tidyverse.org/reference/distinct.html">distinct()</a></code>, <code>slice_*()</code>, and <code><a href="https://generics.r-lib.org/reference/setops.html">intersect()</a></code>, and a growing selection of tidyr functions like <code><a href="https://tidyr.tidyverse.org/reference/pivot_longer.html">pivot_longer()</a></code> and <code><a href="https://tidyr.tidyverse.org/reference/pivot_wider.html">pivot_wider()</a></code>. The easiest way to see the full set of what’s currently available is to visit the dbplyr website: <a href="https://dbplyr.tidyverse.org/reference/" class="uri">https://dbplyr.tidyverse.org/reference/</a>.</p>
 </section>
 
-<section id="exercises" data-type="sect2">
+<section id="databases-exercises" data-type="sect2">
 <h2>
 Exercises</h2>
 <ol type="1"><li><p>What is <code><a href="https://dplyr.tidyverse.org/reference/distinct.html">distinct()</a></code> translated to? How about <code><a href="https://rdrr.io/r/utils/head.html">head()</a></code>?</p></li>
@@ -731,7 +718,7 @@ flights |&gt;
 <p>dbplyr also translates common string and date-time manipulation functions, which you can learn about in <code><a href="https://dbplyr.tidyverse.org/articles/translation-function.html">vignette("translation-function", package = "dbplyr")</a></code>. dbplyr’s translations are certainly not perfect, and there are many R functions that aren’t translated yet, but dbplyr does a surprisingly good job covering the functions that you’ll use most of the time.</p>
 </section>
 
-<section id="summary" data-type="sect1">
+<section id="databases-summary" data-type="sect1">
 <h1>
 Summary</h1>
 <p>In this chapter you learned how to access data from databases. We focused on dbplyr, a dplyr “backend” that allows you to write the dplyr code you’re familiar with, and have it be automatically translated to SQL. We used that translation to teach you a little SQL; it’s important to learn some SQL because it’s <em>the</em> most commonly used language for working with data and knowing some will it easier for you to communicate with other data folks who don’t use R. If you’ve finished this chapter and would like to learn more about SQL. We have two recommendations:</p>

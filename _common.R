@@ -16,8 +16,9 @@ options(
   pillar.max_footer_lines = 2,
   pillar.min_chars = 15,
   stringr.view_n = 6,
-  # Activate crayon output - temporarily disabled for quarto
-  # crayon.enabled = TRUE,
+  # Temporarily deactivate cli output for quarto
+  cli.num_colors = 0,
+  cli.hyperlink = FALSE,
   pillar.bold = TRUE,
   width = 77 # 80 - 3 for #> comment
 )
