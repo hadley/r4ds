@@ -262,43 +262,10 @@ flights |>
 
 ### Logarithms
 
-Logarithms are an incredibly useful transformation for dealing with data that ranges across multiple orders of magnitude.
-They also convert exponential growth to linear growth.
-For example, take compounding interest --- the amount of money you have at `year + 1` is the amount of money you had at `year` multiplied by the interest rate.
-That gives a formula like `money = starting * interest ^ year`:
-
-```{r}
-starting <- 100
-interest <- 1.05
-
-money <- tibble(
-  year = 1:50,
-  money = starting * interest ^ year
-)
-```
-
-If you plot this data, you'll get an exponential curve showing how your money grows year by year at an interest rate of 1.05:
-
-```{r}
-ggplot(money, aes(x = year, y = money)) +
-  geom_line()
-```
-
-Log transforming the y-axis gives a straight line:
-
-```{r}
-ggplot(money, aes(x = year, y = money)) +
-  geom_line() + 
-  scale_y_log10()
-```
-
-This a straight line because a little algebra reveals that `log10(money) = log10(interest) * year + log10(starting)`, which matches the pattern for a line, `y = m * x + b`.
-This is a useful pattern: if you see a (roughly) straight line after log-transforming the y-axis, you know that there's underlying exponential growth.
-
-If you're log-transforming your data with dplyr you have a choice of three logarithms provided by base R: `log()` (the natural log, base e), `log2()` (base 2), and `log10()` (base 10).
+Logarithms are an incredibly useful transformation for dealing with data that ranges across multiple orders of magnitude and convert exponential growth to linear growth.
+In R, you have a choice of three logarithms: `log()` (the natural log, base e), `log2()` (base 2), and `log10()` (base 10).
 We recommend using `log2()` or `log10()`.
 `log2()` is easy to interpret because a difference of 1 on the log scale corresponds to doubling on the original scale and a difference of -1 corresponds to halving; whereas `log10()` is easy to back-transform because (e.g.) 3 is 10\^3 = 1000.
-
 The inverse of `log()` is `exp()`; to compute the inverse of `log2()` or `log10()` you'll need to use `2^` or `10^`.
 
 ### Rounding {#sec-rounding}
@@ -406,20 +373,6 @@ cumsum(x)
 ```
 
 If you need more complex rolling or sliding aggregates, try the [slider](https://davisvaughan.github.io/slider/) package by Davis Vaughan.
-The following example illustrates some of its features.
-
-```{r}
-library(slider)
-
-# Same as a cumulative sum
-slide_vec(x, sum, .before = Inf)
-# Sum the current element and the one before it
-slide_vec(x, sum, .before = 1)
-# Sum the current element and the two before and after it
-slide_vec(x, sum, .before = 2, .after = 2)
-# Only compute if the window is complete
-slide_vec(x, sum, .before = 2, .after = 2, .complete = TRUE)
-```
 
 ### Exercises
 
@@ -430,9 +383,10 @@ slide_vec(x, sum, .before = 2, .after = 2, .complete = TRUE)
     Do they use degrees or radians?
 
 3.  Currently `dep_time` and `sched_dep_time` are convenient to look at, but hard to compute with because they're not really continuous numbers.
-    You can see the basic problem in this plot: there's a gap between each hour.
+    You can see the basic problem by running the code below: there's a gap between each hour.
 
     ```{r}
+    #| eval: false
     flights |> 
       filter(month == 1, day == 1) |> 
       ggplot(aes(x = sched_dep_time, y = dep_delay)) +
@@ -625,7 +579,7 @@ An alternative is to use the `median()`, which finds a value that lies in the "m
 Depending on the shape of the distribution of the variable you're interested in, mean or median might be a better measure of center.
 For example, for symmetric distributions we generally report the mean while for skewed distributions we usually report the median.
 
-@fig-mean-vs-median compares the mean vs. the median when looking at the hourly vs. median departure delay.
+@fig-mean-vs-median compares the mean vs. the median when looking at the hourly vs. median departure delay for each destination.
 The median delay is always smaller than the mean delay because flights sometimes leave multiple hours late, but never leave multiple hours early.
 
 ```{r}
@@ -709,12 +663,13 @@ The distribution is so skewed that we have to zoom in to see the bulk of the dat
 This suggests that the mean is unlikely to be a good summary and we might prefer the median instead.
 
 ```{r}
+#| echo: false
 #| label: fig-flights-dist
 #| fig-cap: >
-#|   The distribution of `dep_delay` appears highly skewed to the right in 
-#|   both histograms.
-#| fig-subcap: ["Histogram shows the full range of delays.", 
-#|   "Histogram is zoomed in to show delays less than 2 hours."]
+#|   (Left) The histogram of the full data is extremely skewed making it
+#|   hard to get any details. (Right) Zooming into delays of less than two
+#|   hours makes it possible to see what's happening with the bulk of the
+#|   observations.
 #| fig-alt: >
 #|   Two histograms of `dep_delay`. On the left, it's very hard to see
 #|   any pattern except that there's a very large spike around zero, the
@@ -724,18 +679,19 @@ This suggests that the mean is unlikely to be a good summary and we might prefer
 #|   see that the spike occurs slightly below zero (i.e. most flights
 #|   leave a couple of minutes early), but there's still a very steep
 #|   decay after that.
-#| layout-ncol: 2
-#| fig-width: 4
-#| fig-height: 2
+#| fig-asp: 0.5
+library(patchwork)
 
-flights |>
+full <- flights |>
   ggplot(aes(x = dep_delay)) + 
-  geom_histogram(binwidth = 15)
+  geom_histogram(binwidth = 15, na.rm = TRUE)
 
-flights |>
+delayed120 <- flights |>
   filter(dep_delay < 120) |> 
   ggplot(aes(x = dep_delay)) + 
   geom_histogram(binwidth = 5)
+
+full + delayed120
 ```
 
 It's also a good idea to check that distributions for subgroups resemble the whole.
