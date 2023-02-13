@@ -201,20 +201,6 @@ clamp <- function(x, min, max) {
 clamp(1:10, min = 3, max = 7)
 ```
 
-Or maybe you'd rather mark those values as `NA`s:
-
-```{r}
-na_outside <- function(x, min, max) {
-  case_when(
-    x < min ~ NA,
-    x > max ~ NA,
-    .default = x
-  )
-}
-
-na_outside(1:10, min = 3, max = 7)
-```
-
 Of course functions don't just need to work with numeric variables.
 You might want to do some repeated string manipulation.
 Maybe you need to make the first character upper case:
@@ -257,26 +243,6 @@ fix_na <- function(x) {
 
 We've focused on examples that take a single vector because we think they're the most common.
 But there's no reason that your function can't take multiple vector inputs.
-For example, you might want to compute the distance between two locations on the globe using the haversine formula.
-This requires four vectors:
-
-```{r}
-# https://twitter.com/RosanaFerrero/status/1574722120428539906/photo/1
-haversine <- function(long1, lat1, long2, lat2, round = 3) {
-  # convert to radians
-  long1 <- long1 * pi / 180
-  lat1  <- lat1  * pi / 180
-  long2 <- long2 * pi / 180
-  lat2  <- lat2  * pi / 180
-  
-  R <- 6371 # Earth mean radius in km
-  a <- sin((lat2 - lat1) / 2)^2 + 
-    cos(lat1) * cos(lat2) * sin((long2 - long1) / 2)^2
-  d <- R * 2 * asin(sqrt(a))
-  
-  round(d, round)
-}
-```
 
 ### Summary functions
 
@@ -445,7 +411,7 @@ grouped_mean <- function(df, group_var, mean_var) {
     summarize(mean({{ mean_var }}))
 }
 
-diamonds |> grouped_mean(cut, carat)
+df |> grouped_mean(group, x)
 ```
 
 Success!
@@ -548,8 +514,6 @@ flights_sub <- function(rows, cols) {
     filter({{ rows }}) |> 
     select(time_hour, carrier, flight, {{ cols }})
 }
-
-flights_sub(dest == "IAH", contains("time"))
 ```
 
 ### Data-masking vs. tidy-selection
@@ -600,7 +564,6 @@ count_wide <- function(data, rows, cols) {
     )
 }
 
-diamonds |> count_wide(clarity, cut)
 diamonds |> count_wide(c(clarity, color), cut)
 ```
 
@@ -743,12 +706,12 @@ Since the bar chart is vertical, we also need to reverse the usual order to get 
 ```{r}
 sorted_bars <- function(df, var) {
   df |> 
-    mutate({{ var }} := fct_rev(fct_infreq({{ var }}))) |> 
-    ggplot(aes(y = {{ var }})) + 
+    mutate({{ var }} := fct_rev(fct_infreq({{ var }})))  |>
+    ggplot(aes(y = {{ var }})) +
     geom_bar()
 }
 
-diamonds |> sorted_bars(cut)
+diamonds |> sorted_bars(clarity)
 ```
 
 We have to use a new operator here, `:=`, because we are generating the variable name based on user-supplied data.
@@ -769,77 +732,10 @@ diamonds |> conditional_bars(cut == "Good", clarity)
 ```
 
 You can also get creative and display data summaries in other ways.
-For example, this code uses the axis labels to display the highest value.
+You can find a cool application at <https://gist.github.com/GShotwell/b19ef520b6d56f61a830fabb3454965b>; it uses the axis labels to display the highest value.
 As you learn more about ggplot2, the power of your functions will continue to increase.
 
-```{r}
-# https://gist.github.com/GShotwell/b19ef520b6d56f61a830fabb3454965b
-fancy_ts <- function(df, val, group) {
-  labs <- df |> 
-    group_by({{ group }}) |> 
-    summarize(breaks = max({{ val }}))
-  
-  df |> 
-    ggplot(aes(x = date, y = {{ val }}, group = {{ group }}, color = {{ group }})) +
-    geom_path() +
-    scale_y_continuous(
-      breaks = labs$breaks, 
-      labels = scales::label_comma(),
-      minor_breaks = NULL,
-      guide = guide_axis(position = "right")
-    ) 
-}
-
-df <- tibble(
-  dist1 = sort(rnorm(50, 5, 2)), 
-  dist2 = sort(rnorm(50, 8, 3)),
-  dist4 = sort(rnorm(50, 15, 1)),
-  date = seq.Date(as.Date("2022-01-01"), as.Date("2022-04-10"), by = "2 days")
-)
-
-df <- pivot_longer(df, cols = -date, names_to = "dist_name", values_to = "value")
-
-fancy_ts(df, value, dist_name)
-```
-
-Next we'll discuss two more complicated cases: faceting and automatic labeling.
-
-### Faceting
-
-Unfortunately, programming with faceting is a special challenge, because faceting was implemented before we understood what tidy evaluation was and how it should work.
-So you have to learn a new syntax.
-When programming with facets, instead of writing `~ x`, you need to write `vars(x)` and instead of `~ x + y` you need to write `vars(x, y)`.
-The only advantage of this syntax is that `vars()` uses tidy evaluation so you can embrace within it:
-
-```{r}
-# https://twitter.com/sharoz/status/1574376332821204999
-foo <- function(x) {
-  ggplot(mtcars, aes(x = mpg, y = disp)) +
-    geom_point() +
-    facet_wrap(vars({{ x }}))
-}
-
-foo(cyl)
-```
-
-As with data frame functions, it can be useful to make your plotting functions tightly coupled to a specific dataset, or even a specific variable.
-For example, the following function makes it particularly easy to interactively explore the conditional distribution of `carat` from the diamonds dataset.
-
-```{r}
-#| fig.show: hide
-
-# https://twitter.com/yutannihilat_en/status/1574387230025875457
-density <- function(color, facets, binwidth = 0.1) {
-  diamonds |> 
-    ggplot(aes(x = carat, y = after_stat(density), color = {{ color }})) +
-    geom_freqpoly(binwidth = binwidth) +
-    facet_wrap(vars({{ facets }}))
-}
-
-density()
-density(cut)
-density(cut, clarity)
-```
+We'll finish with a more complicated case: labelling the plots you create.
 
 ### Labeling
 

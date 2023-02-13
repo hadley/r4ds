@@ -9,12 +9,6 @@
 This repository contains the source of [R for Data Science](http://r4ds.hadley.nz) book.
 The book is built using [Quarto](https://quarto.org/).
 
-The R packages used in this book can be installed via
-
-```{r}
-devtools::install_github("hadley/r4ds")
-```
-
 ## Images
 
 ### Omnigraffle drawings
