@@ -91,7 +91,7 @@ This means that it only works inside dplyr verbs:
 n()
 ```
 
-There are a couple of variants of `n()` that you might find useful:
+There are a couple of variants of `n()` and `count()` that you might find useful:
 
 -   `n_distinct(x)` counts the number of distinct (unique) values of one or more variables.
     For example, we could figure out which destinations are served by the most carriers:
@@ -216,7 +216,7 @@ df |>
 
 ### Modular arithmetic
 
-Modular arithmetic is the technical name for the type of math you did before you learned about real numbers, i.e. division that yields a whole number and a remainder.
+Modular arithmetic is the technical name for the type of math you did before you learned about decimal places, i.e. division that yields a whole number and a remainder.
 In R, `%/%` does integer division and `%%` computes the remainder:
 
 ```{r}
@@ -326,7 +326,7 @@ round(x / 0.25) * 0.25
 
 ### Cutting numbers into ranges
 
-Use `cut()`[^numbers-1] to break up a numeric vector into discrete buckets:
+Use `cut()`[^numbers-1] to break up (aka bin) a numeric vector into discrete buckets:
 
 [^numbers-1]: ggplot2 provides some helpers for common cases in `cut_interval()`, `cut_number()`, and `cut_width()`.
     ggplot2 is an admittedly weird place for these functions to live, but they are useful as part of histogram computation and were written before any other parts of the tidyverse existed.
@@ -395,6 +395,8 @@ If you need more complex rolling or sliding aggregates, try the [slider](https:/
 
     Convert them to a more truthful representation of time (either fractional hours or minutes since midnight).
 
+4.  Round `dep_time` and `arr_time` to the nearest five minutes.
+
 ## General transformations
 
 The following sections describe some general transformations which are often used with numeric vectors, but can be applied to all other column types.
@@ -436,13 +438,13 @@ In this case, it'll give the number of the "current" row.
 When combined with `%%` or `%/%` this can be a useful tool for dividing data into similarly sized groups:
 
 ```{r}
-df <- tibble(x = runif(10))
+df <- tibble(id = 1:10)
 
 df |> 
   mutate(
     row0 = row_number() - 1,
     three_groups = row0 %% 3,
-    three_in_each_group = row0 %/% 3,
+    three_in_each_group = row0 %/% 3
   )
 ```
 
@@ -474,8 +476,7 @@ You can lead or lag by more than one position by using the second argument, `n`.
 ### Consecutive identifiers
 
 Sometimes you want to start a new group every time some event occurs.
-For example, when you're looking at website data, it's common to want to break up events into sessions, where a session is defined as a gap of more than x minutes since the last activity.
-
+For example, when you're looking at website data, it's common to want to break up events into sessions, where you begin a new session after gap of more than `x` minutes since the last activity.
 For example, imagine you have the times when someone visited a website:
 
 ```{r}
@@ -485,23 +486,23 @@ events <- tibble(
 
 ```
 
-And you've the time lag between the events, and figured out if there's a gap that's big enough to qualify:
+And you've computed the time between each events, and figured out if there's a gap that's big enough to qualify:
 
 ```{r}
 events <- events |> 
   mutate(
     diff = time - lag(time, default = first(time)),
-    gap = diff >= 5
+    has_gap = diff >= 5
   )
 events
 ```
 
 But how do we go from that logical vector to something that we can `group_by()`?
-`cumsum()` from @sec-cumulative-and-rolling-aggregates comes to the rescue as each occurring gap, i.e. `gap` is `TRUE`, increments `group` by one (see @sec-numeric-summaries-of-logicals on the numerical interpretation of logicals):
+`cumsum()`, from @sec-cumulative-and-rolling-aggregates, comes to the rescue as gap, i.e. `has_gap` is `TRUE`, will increments `group` by one (@sec-numeric-summaries-of-logicals):
 
 ```{r}
 events |> mutate(
-  group = cumsum(gap)
+  group = cumsum(has_gap)
 )
 ```
 
@@ -513,11 +514,9 @@ df <- tibble(
   x = c("a", "a", "a", "b", "c", "c", "d", "e", "a", "a", "b", "b"),
   y = c(1, 2, 3, 2, 4, 1, 3, 9, 4, 8, 10, 199)
 )
-df
 ```
 
-You want to keep the first row from each repeated `x`.
-That's easier to express with a combination of `consecutive_id()` and `slice_head()`:
+If you want to keep the first row from each repeated `x`, you could use `group_by()`, `consecutive_id()`, and `slice_head()`:
 
 ```{r}
 df |> 
@@ -720,9 +719,7 @@ Finally, don't forget what you learned in @sec-sample-size: whenever creating nu
 
 ### Positions
 
-There's one final type of summary that's useful for numeric vectors, but also works with every other type of value: extracting a value at a specific position.
-You can do this with the base R `[` function, but we're not going to cover it in detail until @sec-subset-many, because it's a very powerful and general function.
-For now we'll introduce three specialized functions that you can use to extract values at a specified position: `first(x)`, `last(x)`, and `nth(x, n)`.
+There's one final type of summary that's useful for numeric vectors, but also works with every other type of value: extracting a value at a specific position: `first(x)`, `last(x)`, and `nth(x, n)`.
 
 For example, we can find the first and last departure for each day:
 
@@ -730,18 +727,16 @@ For example, we can find the first and last departure for each day:
 flights |> 
   group_by(year, month, day) |> 
   summarize(
-    first_dep = first(dep_time), 
-    fifth_dep = nth(dep_time, 5),
-    last_dep = last(dep_time)
+    first_dep = first(dep_time, na_rm = TRUE), 
+    fifth_dep = nth(dep_time, 5, na_rm = TRUE),
+    last_dep = last(dep_time, na_rm = TRUE)
   )
 ```
 
-(These functions currently lack an `na.rm` argument but will hopefully be fixed by the time you read this book: <https://github.com/tidyverse/dplyr/issues/6242>).
+(NB: Because dplyr functions use `_` to separate components of function and arguments names, these functions use `na_rm` instead of `na.rm`.)
 
-If you're familiar with `[`, you might wonder if you ever need these functions.
-There are two main reasons: the `default` argument and the `order_by` argument.
-`default` allows you to set a default value that's used if the requested position doesn't exist, e.g. you're trying to get the 3rd element from a two element group.
-`order_by` lets you locally override the existing ordering of the rows, so you can get the element at the position in the ordering by `order_by()`.
+If you're familiar with `[`, which we'll come back to in @sec-subset-many, you might wonder if you ever need these functions.
+There are three reasons: the `default` argument allows you to provide a default if the specified position doesn't exist, the `order_by` argument allows you to locally override the order of the rows, and the `na_rm` argument allows you to drop missing values.
 
 Extracting values at positions is complementary to filtering on ranks.
 Filtering gives you all variables, with each observation in a separate row:
@@ -761,19 +756,17 @@ For example:
 
 -   `x / sum(x)` calculates the proportion of a total.
 -   `(x - mean(x)) / sd(x)` computes a Z-score (standardized to mean 0 and sd 1).
+-   `(x - min(x)) / (max(x) - min(x))` standardizes to range \[0, 1\].
 -   `x / first(x)` computes an index based on the first observation.
 
 ### Exercises
 
 1.  Brainstorm at least 5 different ways to assess the typical delay characteristics of a group of flights.
-    Consider the following scenarios:
-
-    -   A flight is 15 minutes early 50% of the time, and 15 minutes late 50% of the time.
-    -   A flight is always 10 minutes late.
-    -   A flight is 30 minutes early 50% of the time, and 30 minutes late 50% of the time.
-    -   99% of the time a flight is on time. 1% of the time it's 2 hours late.
-
-    Which do you think is more important: arrival delay or departure delay?
+    When is `mean()` useful?
+    When is `median()` useful?
+    When might you want to use something else?
+    Should you use arrival delay or departure delay?
+    Why might you want to use data from `planes`?
 
 2.  Which destinations show the greatest variation in air speed?
 
