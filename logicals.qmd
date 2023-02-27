@@ -137,14 +137,14 @@ NA == NA
 It's easiest to understand why this is true if we artificially supply a little more context:
 
 ```{r}
-# Let x be Mary's age. We don't know how old she is.
-x <- NA
+# We don't know how old Mary is
+age_mary <- NA
 
-# Let y be John's age. We don't know how old he is.
-y <- NA
+# We don't know how old John is
+age_john <- NA
 
 # Are John and Mary the same age?
-x == y
+age_john == age_john
 # We don't know!
 ```
 
@@ -191,13 +191,14 @@ We'll come back to cover missing values in more depth in @sec-missing-values.
 
 ### Exercises
 
-1.  How does `dplyr::near()` work? Type `near` to see the source code.
+1.  How does `dplyr::near()` work? Type `near` to see the source code. Is `sqrt(2)^2` near 2?
 2.  Use `mutate()`, `is.na()`, and `count()` together to describe how the missing values in `dep_time`, `sched_dep_time` and `dep_delay` are connected.
 
 ## Boolean algebra
 
 Once you have multiple logical vectors, you can combine them together using Boolean algebra.
 In R, `&` is "and", `|` is "or", `!` is "not", and `xor()` is exclusive or[^logicals-2].
+For example, `df |> filter(!is.na(x))` finds all rows where `x` is not missing and `df |> filter(x < -10 | x > 0)` finds all rows where `x` is smaller than -10 or bigger than 0.
 @fig-bool-ops shows the complete set of Boolean operations and how they work.
 
 [^logicals-2]: That is, `xor(x, y)` is true if x is true, or y is true, but not both.
@@ -331,14 +332,15 @@ There are two main logical summaries: `any()` and `all()`.
 `all(x)` is equivalent of `&`; it'll return `TRUE` only if all values of `x` are `TRUE`'s.
 Like all summary functions, they'll return `NA` if there are any missing values present, and as usual you can make the missing values go away with `na.rm = TRUE`.
 
-For example, we could use `all()` to find out if there were days where every flight was delayed:
+For example, we could use `all()` and `any()` to find out if every flight was delayed by less than an hour or if any flights was delayed by over 5 hours.
+And using `group_by()` allows us to do that by day:
 
 ```{r}
 flights |> 
   group_by(year, month, day) |> 
   summarize(
-    all_delayed = all(arr_delay >= 0, na.rm = TRUE),
-    any_delayed = any(arr_delay >= 0, na.rm = TRUE),
+    all_delayed = all(dep_delay <= 60, na.rm = TRUE),
+    any_long_delay = any(arr_delay >= 300, na.rm = TRUE),
     .groups = "drop"
   )
 ```
@@ -349,36 +351,18 @@ That leads us to the numeric summaries.
 ### Numeric summaries of logical vectors {#sec-numeric-summaries-of-logicals}
 
 When you use a logical vector in a numeric context, `TRUE` becomes 1 and `FALSE` becomes 0.
-This makes `sum()` and `mean()` very useful with logical vectors because `sum(x)` will give the number of `TRUE`s and `mean(x)` the proportion of `TRUE`s.
-That lets us see the distribution of delays across the days of the year as shown in @fig-prop-delayed-dist
+This makes `sum()` and `mean()` very useful with logical vectors because `sum(x)` gives the number of `TRUE`s and `mean(x)` gives the proportion of `TRUE`s (because `mean()` is just `sum()` divided by `length()`.
 
-```{r}
-#| label: fig-prop-delayed-dist
-#| fig-cap: >
-#|   A histogram showing the proportion of delayed flights each day.
-#| fig-alt: >
-#|   The distribution is unimodal and mildly right skewed. The distribution
-#|   peaks around 30% delayed flights.
-flights |> 
-  group_by(year, month, day) |> 
-  summarize(
-    prop_delayed = mean(arr_delay > 0, na.rm = TRUE),
-    .groups = "drop"
-  ) |> 
-  ggplot(aes(x = prop_delayed)) + 
-  geom_histogram(binwidth = 0.05)
-```
-
-Or we could ask: "How many flights left before 5am?", which are often flights that were delayed from the previous day:
+That, for example, allows us to see the proportion of flights that were delayed by less than 60 minutes and the number of flights that were delayed by over 5 hours:
 
 ```{r}
 flights |> 
   group_by(year, month, day) |> 
   summarize(
-    n_early = sum(dep_time < 500, na.rm = TRUE),
+    all_delayed = mean(dep_delay <= 60, na.rm = TRUE),
+    any_long_delay = sum(arr_delay >= 300, na.rm = TRUE),
     .groups = "drop"
-  ) |> 
-  arrange(desc(n_early))
+  )
 ```
 
 ### Logical subsetting
@@ -573,6 +557,18 @@ Here are the most important cases that are compatible:
 -   `NA`, which is technically a logical vector, is compatible with everything because every vector has some way of representing a missing value.
 
 We don't expect you to memorize these rules, but they should become second nature over time because they are applied consistently throughout the tidyverse.
+
+### Exercises
+
+1.  A number is even if its divisible by two, which in R you can find out with `x %% 2 == 0`.
+    Use this fact and `if_else()` to determine whether each number between 0 and 20 is even or odd.
+
+2.  Given a vector of days like `x <- c("Monday", "Saturday", "Wednesday")`, use an `ifelse()` statement to label them as weekends or weekdays.
+
+3.  Use `ifelse()` to compute the absolute value of a numeric vector called `x`.
+
+4.  Write a `case_when()` statement that uses the `month` and `day` columns from `flights` to label a selection of important US holidays (e.g. New Years Day, 4th of July, Thanksgiving, and Christmas).
+    First create a logical column that is either `TRUE` or `FALSE`, and then create a character column that either gives the name of the holiday or is `NA`.
 
 ## Summary
 
