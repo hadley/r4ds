@@ -48,12 +48,10 @@ The simplest patterns consist of letters and numbers which match those character
 
 ```{r}
 str_view(fruit, "berry")
-
-str_view(fruit, "BERRY")
 ```
 
 Letters and numbers match exactly and are called **literal characters**.
-Punctuation characters like `.`, `+`, `*`, `[`, `]`, `?` have special meanings[^regexps-2] and are called **meta-characters**. For example, `.`
+Most punctuation characters, like `.`, `+`, `*`, `[`, `],` and `?,` have special meanings[^regexps-2] and are called **meta-characters**. For example, `.`
 will match any character[^regexps-3], so `"a."` will match any string that contains an "a" followed by another character
 :
 
@@ -90,27 +88,18 @@ str_view(c("a", "ab", "abb"), "ab*")
 
 **Character classes** are defined by `[]` and let you match a set of characters, e.g. `[abcd]` matches "a", "b", "c", or "d".
 You can also invert the match by starting with `^`: `[^abcd]` matches anything **except** "a", "b", "c", or "d".
-We can use this idea to find the words with three vowels or four consonants in a row:
+We can use this idea to find the words containing an "x" surrounded by vowels, or a "y" surrounded by consonants:
 
 ```{r}
-str_view(words, "[aeiou][aeiou][aeiou]")
-str_view(words, "[^aeiou][^aeiou][^aeiou][^aeiou]")
+str_view(words, "[aeiou]x[aeiou]")
+str_view(words, "[^aeiou]y[^aeiou]")
 ```
 
-You can combine character classes and quantifiers.
-For example, the following regexp looks for two vowels followed by two or more consonants:
+You can use **alternation**, `|`, to pick between one or more alternative patterns.
+For example, the following patterns look for fruits containing "apple", "melon", or "nut", or a repeated vowel.
 
 ```{r}
-str_view(words, "[aeiou][aeiou][^aeiou][^aeiou]+")
-```
-
-(We'll learn more elegant ways to express these ideas in @sec-quantifiers.)
-
-You can use **alternation**, `|` to pick between one or more alternative patterns.
-For example, the following patterns look for fruits containing "apple", "pear", or "banana", or a repeated vowel.
-
-```{r}
-str_view(fruit, "apple|pear|banana")
+str_view(fruit, "apple|melon|nut")
 str_view(fruit, "aa|ee|ii|oo|uu")
 ```
 
@@ -274,7 +263,9 @@ df |>
   separate_wider_regex(
     str,
     patterns = c(
-      "<", name = "[A-Za-z]+", ">-", 
+      "<", 
+      name = "[A-Za-z]+", 
+      ">-", 
       gender = ".", "_", 
       age = "[0-9]+"
     )
@@ -289,7 +280,9 @@ If the match fails, you can use `too_short = "debug"` to figure out what went wr
     What name has the highest proportion of vowels?
     (Hint: what is the denominator?)
 
-2.  Replace all forward slashes in a string with backslashes.
+2.  Replace all forward slashes in `"a/b/c/d/e"` with backslashes.
+    What happens if you attempt to undo the transformation by replacing all backslashes with forward slashes?
+    (We'll discuss the problem very soon.)
 
 3.  Implement a simple version of `str_to_lower()` using `str_replace_all()`.
 
@@ -404,11 +397,10 @@ str_replace_all("abc", c("$", "^", "\\b"), "--")
 ### Character classes
 
 A **character class**, or character **set**, allows you to match any character in a set.
-As we discussed above, you can construct your own sets with `[]`, where `[abc]` matches a, b, or c.
-There are three characters that have special meaning inside of `[]:`
+As we discussed above, you can construct your own sets with `[]`, where `[abc]` matches "a", "b", or "c" and `[^abc]` matches any character except "a", "b", or "c".
+Apart from `^` there are two ther characters that have special meaning inside of `[]:`
 
 -   `-` defines a range, e.g. `[a-z]` matches any lower case letter and `[0-9]` matches any number.
--   `^` takes the inverse of the set, e.g. `[^abc]` matches anything except a, b, or c.
 -   `\` escapes special characters, so `[\^\-\]]` matches `^`, `-`, or `]`.
 
 Here are few examples:
@@ -444,10 +436,10 @@ The following code demonstrates the six shortcuts with a selection of letters, n
 x <- "abcd ABCD 12345 -!@#%."
 str_view(x, "\\d+")
 str_view(x, "\\D+")
-str_view(x, "\\w+")
-str_view(x, "\\W+")
 str_view(x, "\\s+")
 str_view(x, "\\S+")
+str_view(x, "\\w+")
+str_view(x, "\\W+")
 ```
 
 ### Quantifiers {#sec-quantifiers}
@@ -562,7 +554,7 @@ str_match(x, "gr(?:e|a)y")
     g.  Contain at least two vowel-consonant pairs in a row.
     h.  Only consist of repeated vowel-consonant pairs.
 
-4.  Create 11 regular expressions that match the British or American spellings for each of the following words: grey/gray, modelling/modeling, summarize/summarize, aluminium/aluminum, defence/defense, analog/analogue, center/centre, sceptic/skeptic, aeroplane/airplane, arse/ass, doughnut/donut.
+4.  Create 11 regular expressions that match the British or American spellings for each of the following words: airplane/aeroplane, aluminum/aluminium, analog/analogue, ass/arse, center/centre, defense/defence, donut/doughnut, gray/grey, modeling/modelling, skeptic/sceptic, summarize/summarise.
     Try and make the shortest possible regex!
 
 5.  Switch the first and last letters in `words`.
@@ -627,23 +619,19 @@ phone <- regex(
   r"(
     \(?     # optional opening parens
     (\d{3}) # area code
-    [)\ -]? # optional closing parens, space, or dash
+    [)\-]?  # optional closing parens or dash
+    \ ?     # optional space
     (\d{3}) # another three numbers
     [\ -]?  # optional space or dash
-    (\d{3}) # three more numbers
+    (\d{4}) # four more numbers
   )", 
   comments = TRUE
 )
 
-str_match("514-791-8141", phone)
+str_extract(c("514-791-8141", "(123) 456 7890", "123456"), phone)
 ```
 
-If you're using comments and want to match a space, newline, or `#`, you'll need to escape it:
-
-```{r}
-str_view("x x #", regex(r"(x #)", comments = TRUE))
-str_view("x x #", regex(r"(x\ \#)", comments = TRUE))
-```
+If you're using comments and want to match a space, newline, or `#`, you'll need to escape it with `\`.
 
 ### Fixed matches
 
@@ -894,7 +882,7 @@ A good place to start is `vignette("regular-expressions", package = "stringr")`:
 Another useful reference is [https://www.regular-expressions.info/](https://www.regular-expressions.info/tutorial.html).
 It's not R specific, but you can use it to learn about the most advanced features of regexes and how they work under the hood.
 
-It's also good to know that stringr is implemented on top of the stringi package by Marek Gagolewsk.
+It's also good to know that stringr is implemented on top of the stringi package by Marek Gagolewski.
 If you're struggling to find a function that does what you need in stringr, don't be afraid to look in stringi.
 You'll find stringi very easy to pick up because it follows many of the the same conventions as stringr.
 
