@@ -19,6 +19,8 @@ Writing a function has three big advantages over using copy-and-paste:
 
 3.  You eliminate the chance of making incidental mistakes when you copy and paste (i.e. updating a variable name in one place, but not in another).
 
+4.  It makes it easier to reuse work from project-to-project, increasing your productivity over time.
+
 A good rule of thumb is to consider writing a function whenever you've copied and pasted a block of code more than twice (i.e. you now have three copies of the same code).
 In this chapter, you'll learn about three useful types of functions:
 
@@ -327,12 +329,7 @@ Once you start writing functions, there are two RStudio shortcuts that are super
 3.  Given a vector of birthdates, write a function to compute the age in years.
 
 4.  Write your own functions to compute the variance and skewness of a numeric vector.
-    Variance is defined as $$
-    \mathrm{Var}(x) = \frac{1}{n - 1} \sum_{i=1}^n (x_i - \bar{x}) ^2 \text{,}
-    $$ where $\bar{x} = (\sum_i^n x_i) / n$ is the sample mean.
-    Skewness is defined as $$
-    \mathrm{Skew}(x) = \frac{\frac{1}{n-2}\left(\sum_{i=1}^n(x_i - \bar x)^3\right)}{\mathrm{Var}(x)^{3/2}} \text{.}
-    $$
+    You can look up the definitions on Wikipedia or elsewhere.
 
 5.  Write `both_na()`, a summary function that takes two vectors of the same length and returns the number of positions that have an `NA` in both vectors.
 
@@ -340,8 +337,12 @@ Once you start writing functions, there are two RStudio shortcuts that are super
     Why are they useful even though they are so short?
 
     ```{r}
-    is_directory <- function(x) file.info(x)$isdir
-    is_readable <- function(x) file.access(x, 4) == 0
+    is_directory <- function(x) {
+      file.info(x)$isdir
+    }
+    is_readable <- function(x) {
+      file.access(x, 4) == 0
+    }
     ```
 
 ## Data frame functions
@@ -484,7 +485,8 @@ count_prop <- function(df, var, sort = FALSE) {
 diamonds |> count_prop(clarity)
 ```
 
-This function has three arguments: `df`, `var`, and `sort`, and only `var` needs to be embraced because it's passed to `count()` which uses data-masking for all variables in `…`.
+This function has three arguments: `df`, `var`, and `sort`, and only `var` needs to be embraced because it's passed to `count()` which uses data-masking for all variables.
+Note that we use a default value for `sort` so that if the user doesn't supply their own value it will default to `FALSE`.
 
 Or maybe you want to find the sorted unique values of a variable for a subset of the data.
 Rather than supplying a variable and a value to do the filtering, we'll allow the user to supply a condition:
@@ -499,8 +501,6 @@ unique_where <- function(df, condition, var) {
 
 # Find all the destinations in December
 flights |> unique_where(month == 12, dest)
-# Which months did plane N14228 fly in?
-flights |> unique_where(tailnum == "N14228", month)
 ```
 
 Here we embrace `condition` because it's passed to `filter()` and `var` because it's passed to `distinct()` and `arrange()`.
@@ -509,7 +509,7 @@ We've made all these examples to take a data frame as the first argument, but if
 For example, the following function always works with the flights dataset and always selects `time_hour`, `carrier`, and `flight` since they form the compound primary key that allows you to identify a row.
 
 ```{r}
-flights_sub <- function(rows, cols) {
+subset_flights <- function(rows, cols) {
   flights |> 
     filter({{ rows }}) |> 
     select(time_hour, carrier, flight, {{ cols }})
@@ -527,7 +527,10 @@ You might try writing something like:
 count_missing <- function(df, group_vars, x_var) {
   df |> 
     group_by({{ group_vars }}) |> 
-    summarize(n_miss = sum(is.na({{ x_var }})))
+    summarize(
+      n_miss = sum(is.na({{ x_var }})),
+      .groups = "drop"
+    )
 }
 
 flights |> 
@@ -541,7 +544,10 @@ We can work around that problem by using the handy `pick()` function, which allo
 count_missing <- function(df, group_vars, x_var) {
   df |> 
     group_by(pick({{ group_vars }})) |> 
-    summarize(n_miss = sum(is.na({{ x_var }})))
+    summarize(
+      n_miss = sum(is.na({{ x_var }})),
+      .groups = "drop"
+  )
 }
 
 flights |> 
@@ -605,7 +611,7 @@ While our examples have mostly focused on dplyr, tidy evaluation also underpins 
 
         ```{r}
         #| eval: false
-        weather |> standardise_time(sched_dep_time)
+        weather |> standardize_time(sched_dep_time)
         ```
 
 2.  For each of the following functions list all arguments that use tidy evaluation and describe whether they use data-masking or tidy-selection: `distinct()`, `count()`, `group_by()`, `rename_with()`, `slice_min()`, `slice_sample()`.
@@ -697,9 +703,9 @@ hex_plot <- function(df, x, y, z, bins = 20, fun = "mean") {
 diamonds |> hex_plot(carat, price, depth)
 ```
 
-### Combining with dplyr
+### Combining with other tidyverse
 
-Some of the most useful helpers combine a dash of dplyr with ggplot2.
+Some of the most useful helpers combine a dash of data manipulation with ggplot2.
 For example, if you might want to do a vertical bar chart where you automatically sort the bars in frequency order using `fct_infreq()`.
 Since the bar chart is vertical, we also need to reverse the usual order to get the highest values at the top:
 
@@ -839,7 +845,7 @@ This makes it very obvious that something unusual is happening.
 
     ```{r}
     f1 <- function(string, prefix) {
-      substr(string, 1, nchar(prefix)) == prefix
+      str_sub(string, 1, str_length(prefix)) == prefix
     }
 
     f3 <- function(x, y) {
@@ -851,6 +857,7 @@ This makes it very obvious that something unusual is happening.
 
 3.  Make a case for why `norm_r()`, `norm_d()` etc. would be better than `rnorm()`, `dnorm()`.
     Make a case for the opposite.
+    How could you make the names even clearer?
 
 ## Summary
 
