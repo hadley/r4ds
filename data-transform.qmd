@@ -14,7 +14,7 @@ Often you'll need to create some new variables or summaries to see the most impo
 You'll learn how to do all that (and more!) in this chapter, which will introduce you to data transformation using the **dplyr** package and a new dataset on flights that departed New York City in 2013.
 
 The goal of this chapter is to give you an overview of all the key tools for transforming a data frame.
-We'll start with functions that operate on rows and then columns of a data frame.
+We'll start with functions that operate on rows and then columns of a data frame, then circle back to talk more about the pipe, an important tool that you use to combine verbs.
 We will then introduce the ability to work with groups.
 We will end the chapter with a case study that showcases these functions in action and we'll come back to the functions in more detail in later chapters, as we start to dig into specific types of data (e.g. numbers, strings, dates).
 
@@ -71,8 +71,8 @@ But before we discuss their individual differences, it's worth stating what they
 
 3.  The result is always a new data frame.
 
-Because the first argument is a data frame and the output is a data frame, dplyr verbs work well with the pipe, `|>`.
-The pipe takes the thing on its left and passes it along to the function on its right so that `x |> f(y)` is equivalent to `f(x, y)`, and `x |> f(y) |> g(z)` is equivalent to into `g(f(x, y), z)`.
+Since each verb is quite simple, solving complex problems will usually require combining multiple verbs, and we'll do so with the pipe, `|>`.
+We'll come back to discuss the pipe more in @the-pipe, but in brief, the pipe takes the thing on its left and passes it along to the function on its right so that `x |> f(y)` is equivalent to `f(x, y)`, and `x |> f(y) |> g(z)` is equivalent to into `g(f(x, y), z)`.
 The easiest way to pronounce the pipe is "then".
 That makes it possible to get a sense of the following code even though you haven't yet learned the details:
 
@@ -87,11 +87,8 @@ flights |>
   )
 ```
 
-The code starts with the `flights` dataset, then filters it, then groups it, then summarizes it.
-We'll come back to the pipe and its alternatives in @sec-pipes.
-
 dplyr's verbs are organized into four groups based on what they operate on: **rows**, **columns**, **groups**, or **tables**.
-In the following sections you'll learn the most important verbs for rows, columns, and groups, then we'll come back to verbs that work on tables in @sec-joins.
+In the following sections you'll learn the most important verbs for rows, columns, and groups, then we'll come back to the job verbs that work on tables in @sec-joins.
 Let's dive in!
 
 ## Rows
@@ -191,15 +188,6 @@ flights |>
   arrange(desc(dep_delay))
 ```
 
-You can combine `arrange()` and `filter()` to solve more complex problems.
-For example, we could filter for the flights that left roughly on time, then arrange the results to see which flights were most delayed on arrival:
-
-```{r}
-flights |> 
-  filter(dep_delay <= 10 & dep_delay >= -10) |> 
-  arrange(desc(arr_delay))
-```
-
 ### `distinct()`
 
 `distinct()` finds all the unique rows in a dataset, so in a technical sense, it primarily operates on the rows.
@@ -281,6 +269,7 @@ You can also use `.after` to add after a variable, and in both `.before` and `.a
 For example, we could add the new variables after `day`:
 
 ```{r}
+#| results: false
 flights |> 
   mutate(
     gain = dep_delay - arr_delay,
@@ -290,9 +279,11 @@ flights |>
 ```
 
 Alternatively, you can control which variables are kept with the `.keep` argument.
-A particularly useful argument is `"used"` which allows you to see the inputs and outputs from your calculations:
+A particularly useful argument is `"used"` which allows you to see the inputs and outputs from your calculations.
+For example, the followingc output will contain only the variables `dep_delay`, `arr_delay`, `air_time`, `gain`, `hours`, and `gain_per_hour`.
 
 ```{r}
+#| results: false
 flights |> 
   mutate(
     gain = dep_delay - arr_delay,
@@ -309,23 +300,37 @@ In this situation, the first challenge is often just focusing on the variables y
 `select()` allows you to rapidly zoom in on a useful subset using operations based on the names of the variables.
 `select()` is not terribly useful with the `flights` data because we only have 19 variables, but you can still get the general idea of how it works:
 
-```{r}
-# Select columns by name
-flights |> 
-  select(year, month, day)
+-   Select columns by name:
 
-# Select all columns between year and day (inclusive)
-flights |> 
-  select(year:day)
+    ```{r}
+    #| results: false
+    flights |> 
+      select(year, month, day)
+    ```
 
-# Select all columns except those from year to day (inclusive)
-flights |> 
-  select(!year:day)
+-   Select all columns between year and day (inclusive):
 
-# Select all columns that are characters
-flights |> 
-  select(where(is.character))
-```
+    ```{r}
+    #| results: false
+    flights |> 
+      select(year:day)
+    ```
+
+-   Select all columns except those from year to day (inclusive):
+
+    ```{r}
+    #| results: false
+    flights |> 
+      select(!year:day)
+    ```
+
+-   Select all columns that are characters:
+
+    ```{r}
+    #| results: false
+    flights |> 
+      select(where(is.character))
+    ```
 
 There are a number of helper functions you can use within `select()`:
 
@@ -372,6 +377,8 @@ flights |>
 But you can use the same `.before` and `.after` arguments as `mutate()` to choose where to put them:
 
 ```{r}
+#| results: false
+
 flights |> 
   relocate(year:dep_time, .after = time_hour)
 flights |> 
@@ -423,6 +430,93 @@ ggplot(flights, aes(x = air_time - airtime2)) + geom_histogram()
 
 6.  Rename `air_time` to `air_time_min` to indicate units of measurement and move it to the beginning of the data frame.
 
+## The pipe {#the-pipe}
+
+We've shown you simple examples of the pipe above, but its real power arises when you start to combine multiple verbs.
+For example, imagine that you wanted to find the fast flights to Houston's IAH airport: you need to combine `filter()`, `mutate()`, `select()`, and `arrange()`:
+
+```{r}
+flights |> 
+  filter(dest == "IAH") |> 
+  mutate(speed = distance / air_time * 60) |> 
+  select(year:day, dep_time, carrier, flight, speed) |> 
+  arrange(desc(speed))
+```
+
+Even though this pipe has four steps, it's easy to skim because the verbs come at the start of each line: start with the `flights` data, then filter, then group, then summarize.
+
+What would happen if we didn't have the pipe?
+We could nest each function call inside the previous call:
+
+```{r}
+#| results: false
+
+arrange(
+  select(
+    mutate(
+      filter(
+        flights, 
+        dest == "IAH"
+      ),
+      speed = distance / air_time * 60
+    ),
+    year:day, dep_time, carrier, flight, speed
+  ),
+  desc(speed)
+)
+```
+
+Or we could use a bunch of intermediate variables:
+
+```{r}
+#| results: false
+
+flights1 <- filter(flights, dest == "IAH")
+flights2 <- mutate(flights1, speed = distance / air_time * 60)
+flights3 <- select(flights2, year:day, dep_time, carrier, flight, speed)
+arrange(flights3, desc(speed))
+```
+
+While both forms have their time and place, the pipe generally produces data analysis code that is easier to write and read.
+
+To add the pipe to your code, we recommend using the build-in keyboard shortcut Ctrl/Cmd + Shift + M.
+You'll need to make one change to your RStudio options to use `|>` instead of `%>%` as shown in @fig-pipe-options; more on `%>%` shortly.
+
+```{r}
+#| label: fig-pipe-options
+#| echo: false
+#| fig-cap: >
+#|   To insert `|>`, make sure the "Use native pipe operator" option is checked.
+#| fig-alt: > 
+#|   Screenshot showing the "Use native pipe operator" option which can
+#|   be found on the "Editing" panel of the "Code" options.
+
+knitr::include_graphics("screenshots/rstudio-pipe-options.png")
+```
+
+::: callout-note
+## magrittr
+
+If you've been using the tidyverse for a while, you might be familiar with the `%>%` pipe provided by the **magrittr** package.
+The magrittr package is included in the core tidyverse, so you can use `%>%` whenever you load the tidyverse:
+
+```{r}
+#| eval: false
+
+library(tidyverse)
+
+mtcars %>% 
+  group_by(cyl) %>%
+  summarize(n = n())
+```
+
+For simple cases, `|>` and `%>%` behave identically.
+So why do we recommend the base pipe?
+Firstly, because it's part of base R, it's always available for you to use, even when you're not using the tidyverse.
+Secondly, `|>` is quite a bit simpler than `%>%`: in the time between the invention of `%>%` in 2014 and the inclusion of `|>` in R 4.1.0 in 2021, we gained a better understanding of the pipe.
+This allowed the base implementation to jettison infrequently used and less important features.
+:::
+
 ## Groups
 
 So far you've learned about functions that work with rows and columns.
@@ -459,7 +553,7 @@ flights |>
 
 Uhoh!
 Something has gone wrong and all of our results are `NA` (pronounced "N-A"), R's symbol for missing value.
-We'll come back to discuss missing values in @sec-missing-values, but for now we'll remove them by using `na.rm = TRUE`:
+We'll come back to discuss missing values in detail in @sec-missing-values, but for now we'll remove them by using `na.rm = TRUE`:
 
 ```{r}
 flights |> 
@@ -502,13 +596,7 @@ flights |>
   slice_max(arr_delay, n = 1)
 ```
 
-This is similar to computing the max delay with `summarize()`, but you get the whole row instead of the single summary:
-
-```{r}
-flights |> 
-  group_by(dest) |> 
-  summarize(max_delay = max(arr_delay, na.rm = TRUE))
-```
+This is similar to computing the max delay with `summarize()`, but you get the whole row instead of the single summary.
 
 ### Grouping by multiple variables
 
