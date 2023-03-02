@@ -200,8 +200,7 @@ Surrogate keys can be particular useful when communicating to other humans: it's
 ## Basic joins {#sec-mutating-joins}
 
 Now that you understand how data frames are connected via keys, we can start using joins to better understand the `flights` dataset.
-dplyr provides six join functions: `left_join()`, `inner_join()`, `right_join()`, `semi_join()`, `anti_join(), and full_join()`.
-They all have the same interface: they take a pair of data frames (`x` and `y`) and return a data frame.
+dplyr provides six join functions: `left_join()`, `inner_join()`, `right_join()`, `full_join()`, `semi_join()`, and `anti_join().` They all have the same interface: they take a pair of data frames (`x` and `y`) and return a data frame.
 The order of the rows and columns in the output is primarily determined by `x`.
 
 In this section, you'll learn how to use one mutating join, `left_join()`, and two filtering joins, `semi_join()` and `anti_join()`.
@@ -304,6 +303,10 @@ In older code you might see a different way of specifying the join keys, using a
 -   `by = c("a" = "x")` corresponds to `join_by(a == x)`.
 
 Now that it exists, we prefer `join_by()` since it provides a clearer and more flexible specification.
+
+`inner_join()`, `right_join()`, `full_join()` have the same interface as `left_join()`.
+The difference is which rows they keep: left join keeps all the rows in `x`, the right join keeps all rows in `y`, the full join keeps all rows in either `x` or `y`, and the inner join only keeps rows that occur in both `x` and `y`.
+We'll come back to these in more detail later.
 
 ### Filtering joins
 
@@ -409,8 +412,7 @@ flights2 |>
 ## How do joins work?
 
 Now that you've used joins a few times it's time to learn more about how they work, focusing on how each row in `x` matches rows in `y`.
-We'll begin by using @fig-join-setup to introduce a visual representation of the two simple tibbles defined below.
-In these examples we'll use a single key called `key` and a single value column (`val_x` and `val_y`), but the ideas all generalize to multiple keys and multiple values.
+We'll begin by introducing a visual representation of joins, using the simple tibbles defined below and shown in @fig-join-setup. In these examples we'll use a single key called `key` and a single value column (`val_x` and `val_y`), but the ideas all generalize to multiple keys and multiple values.
 
 ```{r}
 x <- tribble(
@@ -443,7 +445,8 @@ y <- tribble(
 knitr::include_graphics("diagrams/join/setup.png", dpi = 270)
 ```
 
-@fig-join-setup2 shows all potential matches between `x` and `y` as the intersection between lines drawn from each row of `x` and each row of `y`.
+@fig-join-setup2 introduces the foundation for our visual representation.
+It shows all potential matches between `x` and `y` as the intersection between lines drawn from each row of `x` and each row of `y`.
 The rows and columns in the output are primarily determined by `x`, so the `x` table is horizontal and lines up with the output.
 
 ```{r}
@@ -462,11 +465,9 @@ The rows and columns in the output are primarily determined by `x`, so the `x` t
 knitr::include_graphics("diagrams/join/setup2.png", dpi = 270)
 ```
 
-In an actual join, matches will be indicated with dots, as in @fig-join-inner.
-The number of dots equals the number of matches, which in turn equals the number of rows in the output, a new data frame that contains the key, the x values, and the y values.
-The join shown here is a so-called **equi** **inner join**, where rows match if the keys are equal, so that the output contains only the rows with keys that appear in both `x` and `y`.
-Equi-joins are the most common type of join, so we'll typically omit the equi prefix, and just call it an inner join.
-We'll come back to non-equi joins in @sec-non-equi-joins.
+To describe a specific type of join, we indicate matches with dots.
+The matches determine the rows in the output, a new data frame that contains the key, the x values, and the y values.
+For example, @fig-join-inner shows an inner join, where rows are retained if and only if the keys are equal.
 
 ```{r}
 #| label: fig-join-inner
@@ -484,7 +485,7 @@ We'll come back to non-equi joins in @sec-non-equi-joins.
 knitr::include_graphics("diagrams/join/inner.png", dpi = 270)
 ```
 
-An **outer join** keeps observations that appear in at least one of the data frames.
+We can apply the same principles to explain the **outer joins**, which keep observations that appear in at least one of the data frames.
 These joins work by adding an additional "virtual" observation to each data frame.
 This observation has a key that matches if no other key matches, and values filled with `NA`.
 There are three types of outer joins:
@@ -572,6 +573,10 @@ However, this is not a great representation because while it might jog your memo
 knitr::include_graphics("diagrams/join/venn.png", dpi = 270)
 ```
 
+The joins shown here are the so-called **equi** **joins**, where rows match if the keys are equal.
+Equi-joins are the most common type of join, so we'll typically omit the equi prefix, and just say "inner join" rather than "equi inner join".
+We'll come back to non-equi joins in @sec-non-equi-joins.
+
 ### Row matching
 
 So far we've explored what happens if a row in `x` matches zero or one rows in `y`.
@@ -602,80 +607,26 @@ There are three possible outcomes for a row in `x`:
 -   If it matches 1 row in `y`, it's preserved.
 -   If it matches more than 1 row in `y`, it's duplicated once for each match.
 
-In principle, this means that there's no guaranteed correspondence between the rows in the output and the rows in the `x`:
-
--   There might be fewer rows if some rows in `x` don't match any rows in `y`.
--   There might be more rows if some rows in `x` match multiple rows in `y`.
--   There might be the same number of rows if every row in `x` matches one row in `y`.
--   There might be the same number of rows if some rows don't match any rows, and exactly the same number of rows match two rows in `y`!!
-
-Row expansion is a fundamental property of joins, but it's dangerous because it might happen without you realizing it.
-To avoid this problem, dplyr will warn whenever there are multiple matches:
+In principle, this means that there's no guaranteed correspondence between the rows in the output and the rows in `x`, but in practice, this rarely causes problems.
+There is, however, one particularly dangerous case which can cause a combinatorial explosion of rows.
+Imagine joining the following two tables:
 
 ```{r}
-df1 <- tibble(key = c(1, 2, 3), val_x = c("x1", "x2", "x3"))
+df1 <- tibble(key = c(1, 2, 2), val_x = c("x1", "x2", "x3"))
 df2 <- tibble(key = c(1, 2, 2), val_y = c("y1", "y2", "y3"))
+```
 
+While the first row in `df1` only matches one row in `df2`, the second and third rows both match two rows.
+This is sometimes called a `many-to-many` join, and will cause dplyr to emit a warning:
+
+```{r}
 df1 |> 
   inner_join(df2, join_by(key))
 ```
 
-This is one reason we like `left_join()` --- if it runs without warning, you know that each row of the output matches the row in the same position in `x`.
+If you are doing this deliberately, you can set `relationship = "many-to-many"`, as the warning suggests.
 
-You can gain further control over row matching with two arguments:
 
--   `unmatched` controls what happens when a row in `x` fails to match any rows in `y`. It defaults to `"drop"` which will silently drop any unmatched rows.
--   `multiple` controls what happens when a row in `x` matches more than one row in `y`. For equi-joins, it defaults to `"warn"` which emits a warning message if any rows have multiple matches.
-
-There are two common cases in which you might want to override these defaults: enforcing a one-to-one mapping or deliberately allowing the rows to increase.
-
-### One-to-one mapping
-
-Both `unmatched` and `multiple` can take value `"error"` which means that the join will fail unless each row in `x` matches exactly one row in `y`:
-
-```{r}
-#| error: true
-df1 <- tibble(x = 1)
-df2 <- tibble(x = c(1, 1))
-df3 <- tibble(x = 3)
-
-df1 |> 
-  inner_join(df2, join_by(x), unmatched = "error", multiple = "error")
-df1 |> 
-  inner_join(df3, join_by(x), unmatched = "error", multiple = "error")
-```
-
-Note that `unmatched = "error"` is not useful with `left_join()` because, as described above, every row in `x` has a fallback match to a virtual row in `y`.
-
-### Allow multiple rows
-
-Sometimes it's useful to deliberately expand the number of rows in the output.
-This can come about naturally if you "flip" the direction of the question you're asking.
-For example, as we've seen above, it's natural to supplement the `flights` data with information about the plane that flew each flight:
-
-```{r}
-#| results: false
-flights2 |> 
-  left_join(planes, by = "tailnum")
-```
-
-But it's also reasonable to ask what flights did each plane fly:
-
-```{r}
-plane_flights <- planes |> 
-  select(tailnum, type, engines, seats) |> 
-  left_join(flights2, by = "tailnum")
-```
-
-Since this duplicates rows in `x` (the planes), we need to explicitly say that we're ok with the multiple matches by setting `multiple = "all"`:
-
-```{r}
-plane_flights <- planes |> 
-  select(tailnum, type, engines, seats) |> 
-  left_join(flights2, by = "tailnum", multiple = "all")
-
-plane_flights
-```
 
 ### Filtering joins {#sec-non-equi-joins}
 
@@ -850,7 +801,7 @@ That leads to the following party days:
 ```{r}
 parties <- tibble(
   q = 1:4,
-  party = lubridate::ymd(c("2022-01-10", "2022-04-04", "2022-07-11", "2022-10-03"))
+  party = ymd(c("2022-01-10", "2022-04-04", "2022-07-11", "2022-10-03"))
 )
 ```
 
@@ -859,7 +810,7 @@ Now imagine that you have a table of employee birthdays:
 ```{r}
 employees <- tibble(
   name = sample(babynames::babynames$name, 100),
-  birthday = lubridate::ymd("2022-01-01") + (sample(365, 100, replace = TRUE) - 1)
+  birthday = ymd("2022-01-01") + (sample(365, 100, replace = TRUE) - 1)
 )
 employees
 ```
@@ -896,9 +847,9 @@ So it might be better to to be explicit about the date ranges that each party sp
 ```{r}
 parties <- tibble(
   q = 1:4,
-  party = lubridate::ymd(c("2022-01-10", "2022-04-04", "2022-07-11", "2022-10-03")),
-  start = lubridate::ymd(c("2022-01-01", "2022-04-04", "2022-07-11", "2022-10-03")),
-  end = lubridate::ymd(c("2022-04-03", "2022-07-11", "2022-10-02", "2022-12-31"))
+  party = ymd(c("2022-01-10", "2022-04-04", "2022-07-11", "2022-10-03")),
+  start = ymd(c("2022-01-01", "2022-04-04", "2022-07-11", "2022-10-03")),
+  end = ymd(c("2022-04-03", "2022-07-11", "2022-10-02", "2022-12-31"))
 )
 parties
 ```
@@ -917,9 +868,9 @@ Ooops, there is an overlap, so let's fix that problem and continue:
 ```{r}
 parties <- tibble(
   q = 1:4,
-  party = lubridate::ymd(c("2022-01-10", "2022-04-04", "2022-07-11", "2022-10-03")),
-  start = lubridate::ymd(c("2022-01-01", "2022-04-04", "2022-07-11", "2022-10-03")),
-  end = lubridate::ymd(c("2022-04-03", "2022-07-10", "2022-10-02", "2022-12-31"))
+  party = ymd(c("2022-01-10", "2022-04-04", "2022-07-11", "2022-10-03")),
+  start = ymd(c("2022-01-01", "2022-04-04", "2022-07-11", "2022-10-03")),
+  end = ymd(c("2022-04-03", "2022-07-10", "2022-10-02", "2022-12-31"))
 )
 ```
 
