@@ -3,6 +3,7 @@
 ```{r}
 #| results: "asis"
 #| echo: false
+
 source("_common.R")
 status("complete")
 ```
@@ -30,13 +31,15 @@ library(tidyverse)
 
 ## Reading data from a file
 
-To begin, we'll focus on the most rectangular data file type: CSV, which is short for comma-separated values.
+To begin, we'll focus on the most common rectangular data file type: CSV, which is short for comma-separated values.
 Here is what a simple CSV file looks like.
 The first row, commonly called the header row, gives the column names, and the following six rows provide the data.
+The columns are separated, in other words delimited, by commas.
 
 ```{r}
 #| echo: false
 #| message: false
+#| comment: ""
 
 read_lines("data/students.csv") |> cat(sep = "\n")
 ```
@@ -54,12 +57,23 @@ read_csv("data/students.csv") |>
 ```
 
 We can read this file into R using `read_csv()`.
-The first argument is the most important: it's the path to the file.
+The first argument is the most important: the path to the file.
+You can think about the path as the address of the file.
+The following says that the file is called `students.csv` and that it's in the `data` folder.
 
 ```{r}
 #| message: true
 
 students <- read_csv("data/students.csv")
+```
+
+The code above will work if you have the `students.csv` file in a `data` folder in your project.
+You can download the `students.csv` file from <https://pos.it/r4ds-students-csv> or you can read it directly from that URL with:
+
+```{r}
+#| eval: false
+
+students <- read_csv("https://pos.it/r4ds-students-csv")
 ```
 
 When you run `read_csv()`, it prints out a message telling you the number of rows and columns of data, the delimiter that was used, and the column specifications (names of columns organized by the type of data the column contains).
@@ -71,8 +85,13 @@ This message is an integral part of readr, and we'll return to it in @sec-col-ty
 Once you read data in, the first step usually involves transforming it in some way to make it easier to work with in the rest of your analysis.
 Let's take another look at the `students` data with that in mind.
 
+```{r}
+students
+```
+
 In the `favourite.food` column, there are a bunch of food items, and then the character string `N/A`, which should have been a real `NA` that R will recognize as "not available".
 This is something we can address using the `na` argument.
+By default `read_csv()` only recognizes empty strings (`""`) as `NA`s, we want it to also recognize the character string `"N/A`
 
 ```{r}
 #| message: false
@@ -82,8 +101,8 @@ students
 ```
 
 You might also notice that the `Student ID` and `Full Name` columns are surrounded by backticks.
-That's because they contain spaces, breaking R's usual rules for variable names.
-To refer to them, you need to use those backticks:
+That's because they contain spaces, breaking R's usual rules for variable names; they're **non-syntactic** names.
+To refer to these variables, you need to surround them with backticks, `` ` ``:
 
 ```{r}
 students |> 
@@ -117,8 +136,8 @@ students |>
 Note that the values in the `meal_plan` variable have stayed the same, but the type of variable denoted underneath the variable name has changed from character (`<chr>`) to factor (`<fct>`).
 You'll learn more about factors in @sec-factors.
 
-Before you analyze these data, you'll probably want to fix the `age` column.
-Currently, it's a character variable because one of the observations is typed out as `five` instead of a numeric `5`.
+Before you analyze these data, you'll probably want to fix the `age` and `id` columns.
+Currently, `age` is a character variable because one of the observations is typed out as `five` instead of a numeric `5`.
 We discuss the details of fixing this issue in @sec-import-spreadsheets.
 
 ```{r}
@@ -134,7 +153,7 @@ students
 
 ### Other arguments
 
-There are a couple of other important arguments that we need to mention, and they'll be easier to demonstrate if we first show you a handy trick: `read_csv()` can read CSV files that you've created in a string:
+There are a couple of other important arguments that we need to mention, and they'll be easier to demonstrate if we first show you a handy trick: `read_csv()` can read text strings that you've created and formatted like a CSV file:
 
 ```{r}
 #| message: false
@@ -300,7 +319,7 @@ One of the most common causes for this is a missing value, recorded using someth
 Take this simple 1 column CSV file as an example:
 
 ```{r}
-csv <- "
+simple_csv <- "
   x
   10
   .
@@ -312,16 +331,19 @@ csv <- "
 If we read it without any additional arguments, `x` becomes a character column:
 
 ```{r}
-df <- read_csv(csv)
+df <- read_csv(simple_csv)
 ```
 
 In this very small case, you can easily see the missing value `.`.
 But what happens if you have thousands of rows with only a few missing values represented by `.`s speckled among them?
 One approach is to tell readr that `x` is a numeric column, and then see where it fails.
-You can do that with the `col_types` argument, which takes a named list:
+You can do that with the `col_types` argument, which takes a named list where the names match the column names in the CSV file:
 
 ```{r}
-df <- read_csv(csv, col_types = list(x = col_double()))
+df <- read_csv(
+  simple_csv, 
+  col_types = list(x = col_double())
+  )
 ```
 
 Now `read_csv()` reports that there was a problem, and tells us we can find out more with `problems()`:
@@ -335,7 +357,7 @@ That suggests this dataset uses `.` for missing values.
 So then we set `na = "."`, the automatic guessing succeeds, giving us the numeric column that we want:
 
 ```{r}
-df <- read_csv(csv, na = ".")
+df <- read_csv(simple_csv, na = ".")
 ```
 
 ### Column types
@@ -344,19 +366,22 @@ readr provides a total of nine column types for you to use:
 
 -   `col_logical()` and `col_double()` read logicals and real numbers. They're relatively rarely needed (except as above), since readr will usually guess them for you.
 -   `col_integer()` reads integers. We distinguish integers and doubles in this book because they're functionally equivalent, but reading integers explicitly can occasionally be useful because they occupy half the memory of doubles.
--   `col_character()` reads strings. This is sometimes useful to specify explicitly when you have a column that is a numeric identifier, i.e. long series of digits that identifies some object, but it doesn't make sense to (e.g.) divide it in half.
+-   `col_character()` reads strings. This is sometimes useful to specify explicitly when you have a column that is a numeric identifier, i.e. long series of digits that identifies some object, but it doesn't make sense to (e.g.) divide it in half, for example a phone number, social security number, credit card number, etc.
 -   `col_factor()`, `col_date()`, and `col_datetime()` create factors, dates, and date-times respectively; you'll learn more about those when we get to those data types in @sec-factors and @sec-dates-and-times.
 -   `col_number()` is a permissive numeric parser that will ignore non-numeric components, and is particularly useful for currencies. You'll learn more about it in @sec-numbers.
--   `col_skip()` skips a column so it's not included in the result.
+-   `col_skip()` skips a column so it's not included in the result, which can be useful for speeding up reading the data if you have a large CSV file and you only want to use some of the columns.
 
 It's also possible to override the default column by switching from `list()` to `cols()`:
 
 ```{r}
-csv <- "
+another_csv <- "
 x,y,z
 1,2,3"
 
-read_csv(csv, col_types = cols(.default = col_character()))
+read_csv(
+  another_csv, 
+  col_types = cols(.default = col_character())
+  )
 ```
 
 Another useful helper is `cols_only()` which will read in only the columns you specify:
@@ -377,6 +402,20 @@ With `read_csv()` you can read these data in at once and stack them on top of ea
 
 ```{r}
 sales_files <- c("data/01-sales.csv", "data/02-sales.csv", "data/03-sales.csv")
+read_csv(sales_files, id = "file")
+```
+
+Once again, the code above will work if you have the CSV files in a `data` folder in your project.
+You can download these files from <https://pos.it/r4ds-01-sales>, <https://pos.it/r4ds-02-sales>, and <https://pos.it/r4ds-03-sales> or you can read them directly with:
+
+```{r}
+#| eval: false
+
+sales_files <- c(
+  "https://pos.it/r4ds-01-sales",
+  "https://pos.it/r4ds-02-sales",
+  "https://pos.it/r4ds-03-sales"
+)
 read_csv(sales_files, id = "file")
 ```
 
@@ -407,7 +446,7 @@ write_csv(students, "students.csv")
 ```
 
 Now let's read that csv file back in.
-Note that the type information is lost when you save to csv:
+Note that the variable type information that you just set up is lost when you save to CSV because you're starting over with reading from a plain text file again:
 
 ```{r}
 #| warning: false
@@ -422,7 +461,8 @@ This makes CSVs a little unreliable for caching interim results---you need to re
 There are two main alternative:
 
 1.  `write_rds()` and `read_rds()` are uniform wrappers around the base functions `readRDS()` and `saveRDS()`.
-    These store data in R's custom binary format called RDS:
+    These store data in R's custom binary format called RDS.
+    This means that when you reload the object, you are loading the *exact same* R object that you stored.
 
     ```{r}
     write_rds(students, "students.rds")
@@ -495,8 +535,6 @@ tribble(
   "g", 5, 0.60,
 )
 ```
-
-We'll use `tibble()` and `tribble()` later in the book to construct small examples to demonstrate how various functions work.
 
 ## Summary
 
