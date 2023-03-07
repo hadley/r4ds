@@ -10,9 +10,8 @@ status("complete")
 
 ## Introduction
 
-So far, you have learned about importing data from plain text files, e.g. `.csv` and `.tsv` files.
-Sometimes you need to analyze data that lives in a spreadsheet.
-This chapter will introduce you to tools for working with data in Excel spreadsheets and Google Sheets.
+In @sec-data-import you learned about importing data from plain text files like `.csv` and `.tsv`.
+Now it's time to learn how to get data out of a spreadsheet, either an Excel spreadsheets or a Google Sheet.
 This will build on much of what you've learned in @sec-data-import, but we will also discuss additional considerations and complexities when working with data from spreadsheets.
 
 If you or your collaborators are using spreadsheets for organizing data, we strongly recommend reading the paper "Data Organization in Spreadsheets" by Karl Broman and Kara Woo: <https://doi.org/10.1080/00031305.2017.1375989>.
@@ -24,18 +23,16 @@ The best practices presented in this paper will save you much headache when you 
 
 In this section, you'll learn how to load data from Excel spreadsheets in R with the **readxl** package.
 This package is non-core tidyverse, so you need to load it explicitly, but it is installed automatically when you install the tidyverse package.
+Later, we'll also use the writexl package, which allows us to create Excel spreadsheets.
 
 ```{r}
 #| message: false
 
 library(readxl)
 library(tidyverse)
-```
 
-**openxlsx**, **xlsx**, and **XLConnect** can also be used for reading data from and writing data to Excel spreadsheets.
-We will discuss openxlsx in @sec-writing-to-excel.
-The latter two packages require Java installed on your machine and the rJava package.
-Due to potential challenges with installation, we recommend using alternative packages we're introducing in this chapter.
+library(writexl)
+```
 
 ### Getting started
 
@@ -201,6 +198,7 @@ knitr::include_graphics("screenshots/import-spreadsheets-penguins-islands.png")
 ```
 
 You can read a single worksheet from a spreadsheet with the `sheet` argument in `read_excel()`.
+The default, which we've been relying on up until now, is the first sheet.
 
 ```{r}
 read_excel("data/penguins.xlsx", sheet = "Torgersen Island")
@@ -280,45 +278,19 @@ deaths
 ```
 
 The top three rows and the bottom four rows are not part of the data frame.
-
-We could skip the top three rows with `skip`.
-Note that we set `skip = 4` since the fourth row contains column names, not the data.
-
-```{r}
-read_excel(deaths_path, skip = 4)
-```
-
-We could also set `n_max` to omit the extraneous rows at the bottom.
-
-```{r}
-read_excel(deaths_path, skip = 4, n_max = 10)
-```
-
-Another approach is using cell ranges.
+It's possible to eliminate these extraneous rows using the `skip` and `n_max` arguments, but we recommend using cell ranges.
 In Excel, the top left cell is `A1`.
 As you move across columns to the right, the cell label moves down the alphabet, i.e.
 `B1`, `C1`, etc.
 And as you move down a column, the number in the cell label increases, i.e.
 `A2`, `A3`, etc.
 
-The data we want to read in starts in cell `A5` and ends in cell `F15`.
-In spreadsheet notation, this is `A5:F15`.
+Here the data we want to read in starts in cell `A5` and ends in cell `F15`.
+In spreadsheet notation, this is `A5:F15`, which we supply to the `range` argument:
 
--   Supply this information to the `range` argument:
-
-    ```{r}
-    #| results: "hide"
-
-    read_excel(deaths_path, range = "A5:F15")
-    ```
-
--   Specify rows:
-
-    ```{r}
-    #| results: "hide"
-
-    read_excel(deaths_path, range = cell_rows(c(5, 15)))
-    ```
+```{r}
+read_excel(deaths_path, range = "A5:F15")
+```
 
 ### Data types
 
@@ -326,17 +298,17 @@ In CSV files, all values are strings.
 This is not particularly true to the data, but it is simple: everything is a string.
 
 The underlying data in Excel spreadsheets is more complex.
-A cell can be one of five things:
+A cell can be one of four things:
 
--   A boolean, like TRUE, FALSE, or NA
+-   A boolean, like `TRUE`, `FALSE`, or `NA`.
 
--   A number, like "10" or "10.5"
+-   A number, like "10" or "10.5".
 
--   A datetime, which can also include time like "11/1/21" or "11/1/21 3:00 PM"
+-   A datetime, which can also include time like "11/1/21" or "11/1/21 3:00 PM".
 
--   A text string, like "ten"
+-   A text string, like "ten".
 
-When working with spreadsheet data, it's important to keep in mind that how the underlying data is stored can be very different than what you see in the cell.
+When working with spreadsheet data, it's important to keep in mind that the underlying data can be very different than what you see in the cell.
 For example, Excel has no notion of an integer.
 All numbers are stored as floating points, but you can choose to display the data with a customizable number of decimal points.
 Similarly, dates are actually stored as numbers, specifically the number of seconds since January 1, 1970.
@@ -353,8 +325,8 @@ In these cases you can set the type for this column to `"list"`, which will load
 
 ### Data not in cell values
 
-**tidyxl** is useful for importing non-tabular data from Excel files into R.
-For example, tidyxl doesn't coerce a pivot table into a data frame.
+Sometimes data is stored in more exotic ways, like the color of the cell background, or whether or not the text is bold.
+In such cases, you might find the [tidyxl package](https://nacnudus.github.io/tidyxl/) useful.
 See <https://nacnudus.github.io/spreadsheet-munging-strategies/> for more on strategies for working with non-tabular data from Excel.
 
 ### Writing to Excel {#sec-writing-to-excel}
@@ -371,12 +343,11 @@ bake_sale <- tibble(
 bake_sale
 ```
 
-You can write data back to disk as an Excel file using the `write_xlsx()` from the **writexl** package.
+You can write data back to disk as an Excel file using the `write_xlsx()` from the [writexl package](https://docs.ropensci.org/writexl/):
 
 ```{r}
 #| eval: false
 
-library(writexl)
 write_xlsx(bake_sale, path = "data/bake-sale.xlsx")
 ```
 
@@ -406,7 +377,7 @@ read_excel("data/bake-sale.xlsx")
 
 ### Formatted output
 
-The writexl package is a light-weight solution for writing a simple Excel spreadsheet, but if you're interested in additional features like writing to sheets within a spreadsheet and styling, you will want to use the **openxlsx** package.
+The writexl package is a light-weight solution for writing a simple Excel spreadsheet, but if you're interested in additional features like writing to sheets within a spreadsheet and styling, you will want to use the [openxlsx package](https://ycphs.github.io/openxlsx).
 We won't go into the details of using this package here, but we recommend reading <https://ycphs.github.io/openxlsx/articles/Formatting.html> for an extensive discussion on further formatting functionality for data written from R to Excel with openxlsx.
 
 Note that this package is not part of the tidyverse so the functions and workflows may feel unfamiliar.
@@ -578,8 +549,7 @@ This is the same dataset as in @fig-students-excel, except it's stored in a Goog
 knitr::include_graphics("screenshots/import-googlesheets-students.png")
 ```
 
-The first argument to `read_sheet()` is the URL of the file to read.
-You can also access this file via <https://pos.it/r4ds-students>, however note that at the time of writing this book you can't read a sheet directly from a short link.
+The first argument to `read_sheet()` is the URL of the file to read, and it returns a tibble:
 
 ```{r}
 #| include: false
@@ -590,11 +560,6 @@ gs4_deauth()
 ```{r}
 students_url <- "https://docs.google.com/spreadsheets/d/1V1nPp1tzOuutXFLb3G9Eyxi3qxeEhnOXUzL5_BcCQ0w"
 students <- read_sheet(students_url)
-```
-
-`read_sheet()` will read the file in as a tibble.
-
-```{r}
 students
 ```
 
@@ -606,12 +571,8 @@ students <- read_sheet(
   col_names = c("student_id", "full_name", "favourite_food", "meal_plan", "age"),
   skip = 1,
   na = c("", "N/A"),
-  col_types = c("dcccc")
-) |>
-  mutate(
-    age = if_else(age == "five", "5", age),
-    age = parse_number(age)
-  )
+  col_types = "dcccc"
+)
 
 students
 ```
@@ -620,7 +581,7 @@ Note that we defined column types a bit differently here, using short codes.
 For example, "dcccc" stands for "double, character, character, character, character".
 
 It's also possible to read individual sheets from Google Sheets as well.
-Let's read the penguins Google Sheet at <https://pos.it/r4ds-penguins>, and specifically the "Torgersen Island" sheet in it.
+Let's read the "Torgersen Island" sheet from the [penguins Google Sheet](https://pos.it/r4ds-penguins):
 
 ```{r}
 penguins_url <- "https://docs.google.com/spreadsheets/d/1aFu8lnD_g0yjF5O-K6SFgSEWiHPpgvFCF0NY9D6LXnY"
@@ -644,7 +605,8 @@ deaths
 
 ### Write sheets
 
-You can write from R to Google Sheets with `write_sheet()`:
+You can write from R to Google Sheets with `write_sheet()`.
+The first argument is the data frame to write, and the second argument is the name (or other identifier) of the Google Sheet to write to:
 
 ```{r}
 #| eval: false
