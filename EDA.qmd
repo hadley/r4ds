@@ -25,7 +25,7 @@ During the initial phases of EDA you should feel free to investigate every idea 
 Some of these ideas will pan out, and some will be dead ends.
 As your exploration continues, you will home in on a few particularly productive insights that you'll eventually write up and communicate to others.
 
-EDA is an important part of any data analysis, even if the questions are handed to you on a platter, because you always need to investigate the quality of your data.
+EDA is an important part of any data analysis, even if the primary research questions are handed to you on a platter, because you always need to investigate the quality of your data.
 Data cleaning is just one application of EDA: you ask questions about whether your data meets your expectations or not.
 To do data cleaning, you'll need to deploy all the tools of EDA: visualization, transformation, and modelling.
 
@@ -66,22 +66,6 @@ You can loosely word these questions as:
 
 The rest of this chapter will look at these two questions.
 We'll explain what variation and covariation are, and we'll show you several ways to answer each question.
-To make the discussion easier, let's define some terms:
-
--   A **variable** is a quantity, quality, or property that you can measure.
-
--   A **value** is the state of a variable when you measure it.
-    The value of a variable may change from measurement to measurement.
-
--   An **observation** is a set of measurements made under similar conditions (you usually make all of the measurements in an observation at the same time and on the same object).
-    An observation will contain several values, each associated with a different variable.
-    We'll sometimes refer to an observation as a data point.
-
--   **Tabular data** is a set of values, each associated with a variable and an observation.
-    Tabular data is *tidy* if each value is placed in its own "cell", each variable in its own column, and each observation in its own row.
-
-So far, all of the data that you've seen has been tidy.
-In real-life, most data isn't tidy, so we'll come back to these ideas again in @sec-rectangling.
 
 ## Variation
 
@@ -130,11 +114,7 @@ To turn this information into useful questions, look for anything unexpected:
 -   Can you see any unusual patterns?
     What might explain them?
 
-As an example, the histogram below suggests several interesting questions:
-
--   Why are there more diamonds at whole carats and common fractions of carats?
-
--   Why are there more diamonds slightly to the right of each peak than there are slightly to the left of each peak?
+Let's take a look at the distribution of `carat` for smaller diamonds.
 
 ```{r}
 #| fig-alt: >
@@ -151,10 +131,16 @@ ggplot(smaller, aes(x = carat)) +
   geom_histogram(binwidth = 0.01)
 ```
 
-Clusters of similar values suggest that subgroups exist in your data.
+This histogram suggests several interesting questions:
+
+-   Why are there more diamonds at whole carats and common fractions of carats?
+
+-   Why are there more diamonds slightly to the right of each peak than there are slightly to the left of each peak?
+
+Visualizations can also reveal clusters, which suggest that subgroups exist in your data.
 To understand the subgroups, ask:
 
--   How are the observations within each cluster similar to each other?
+-   How are the observations within each subgroup similar to each other?
 
 -   How are the observations in separate clusters different from each other?
 
@@ -162,35 +148,23 @@ To understand the subgroups, ask:
 
 -   Why might the appearance of clusters be misleading?
 
-The histogram below shows the length (in minutes) of 272 eruptions of the Old Faithful Geyser in Yellowstone National Park.
-Eruption times appear to be clustered into two groups: there are short eruptions (of around 2 minutes) and long eruptions (4-5 minutes), but little in between.
-
-```{r}
-#| fig-alt: >
-#|   A histogram of eruption times. The x-axis ranges from roughly 1.5 to 5,
-#|   and the y-axis ranges from 0 to roughly 40. The distribution is bimodal 
-#|   with peaks around 1.75 and 4.5.
-
-ggplot(faithful, aes(x = eruptions)) + 
-  geom_histogram(binwidth = 0.25)
-```
-
-Many of the questions above will prompt you to explore a relationship *between* variables, for example, to see if the values of one variable can explain the behavior of another variable.
+Some of these questions can be answered with the data while some will require domain expertise about the data.
+Many of them will prompt you to explore a relationship *between* variables, for example, to see if the values of one variable can explain the behavior of another variable.
 We'll get to that shortly.
 
 ### Unusual values
 
 Outliers are observations that are unusual; data points that don't seem to fit the pattern.
-Sometimes outliers are data entry errors; other times outliers suggest important new discoveries.
+Sometimes outliers are data entry errors, sometimes they are simply values at the extremes that happened to be observed in this data collection, and other times they suggest important new discoveries.
 When you have a lot of data, outliers are sometimes difficult to see in a histogram.
 For example, take the distribution of the `y` variable from the diamonds dataset.
 The only evidence of outliers is the unusually wide limits on the x-axis.
 
 ```{r}
 #| fig-alt: >
-#|   A histogram of lengths of diamonds. The x-axis ranges from 0 to 60 and the 
-#|   y-axis ranges from 0 to 12000. There is a peak around 5, and the data 
-#|   appear to be completely clustered around the peak.
+#|   A histogram of lengths of diamonds. The x-axis ranges from 0 to 60 and 
+#|   the y-axis ranges from 0 to 12000. There is a peak around 5, and the 
+#|   data appear to be completely clustered around the peak.
 
 ggplot(diamonds, aes(x = y)) + 
   geom_histogram(binwidth = 0.5)
@@ -240,6 +214,8 @@ options(old)
 
 The `y` variable measures one of the three dimensions of these diamonds, in mm.
 We know that diamonds can't have a width of 0mm, so these values must be incorrect.
+By doing EDA, we have discovered missing data that was coded as 0, which we never would have found by simply searching for `NA`s.
+Going forward we might choose to re-code these values as `NA`s in order to prevent misleading calculations.
 We might also suspect that measurements of 32mm and 59mm are implausible: those diamonds are over an inch long, but don't cost hundreds of thousands of dollars!
 
 It's good practice to repeat your analysis with and without the outliers.
@@ -278,7 +254,7 @@ If you've encountered unusual values in your dataset, and simply want to move on
       filter(between(y, 3, 20))
     ```
 
-    We don't recommend this option because just because one measurement is invalid, doesn't mean all the measurements are.
+    We don't recommend this option because, for a given observation, just because the value for one variable is invalid doesn't mean the values for all variables are.
     Additionally, if you have low quality data, by the time that you've applied this approach to every variable you might find that you don't have any data left!
 
 2.  Instead, we recommend replacing the unusual values with missing values.
@@ -289,13 +265,6 @@ If you've encountered unusual values in your dataset, and simply want to move on
     diamonds2 <- diamonds |> 
       mutate(y = if_else(y < 3 | y > 20, NA, y))
     ```
-
-`if_else()` has three arguments.
-The first argument `test` should be a logical vector.
-The result will contain the value of the second argument, `yes`, when `test` is `TRUE`, and the value of the third argument, `no`, when it is false.
-Alternatively to `if_else()`, use `case_when()`.
-`case_when()` is particularly useful inside mutate when you want to create a new variable that relies on a complex combination of existing variables or would otherwise require multiple `if_else()` statements nested inside one another.
-You will learn more about logical vectors in @sec-logicals.
 
 It's not obvious where you should plot missing values, so ggplot2 doesn't include them in the plot, but it does warn that they've been removed:
 
@@ -323,7 +292,7 @@ ggplot(diamonds2, aes(x = x, y = y)) +
 Other times you want to understand what makes observations with missing values different to observations with recorded values.
 For example, in `nycflights13::flights`[^eda-1], missing values in the `dep_time` variable indicate that the flight was cancelled.
 So you might want to compare the scheduled departure times for cancelled and non-cancelled times.
-You can do this by making a new variable with `is.na()`.
+You can do this by making a new variable, using `is.na()` to check if `dep_time` is missing.
 
 [^eda-1]: Remember that when we need to be explicit about where a function (or dataset) comes from, we'll use the special form `package::function()` or `package::dataset`.
 
@@ -356,6 +325,10 @@ In the next section we'll explore some techniques for improving this comparison.
 
 2.  What does `na.rm = TRUE` do in `mean()` and `sum()`?
 
+3.  Recreate the frequency plot of `scheduled_dep_time` colored by whether the flight was cancelled or not.
+    Also facet by the `cancelled` variable.
+    Experiment with different values of the `scales` variable in the faceting function to mitigate the effect of more non-cancelled flights than cancelled flights.
+
 ## Covariation
 
 If variation describes the behavior *within* a variable, covariation describes the behavior *between* variables.
@@ -379,17 +352,7 @@ ggplot(diamonds, aes(x = price)) +
   geom_freqpoly(aes(color = cut), binwidth = 500, linewidth = 0.75)
 ```
 
-The default appearance of `geom_freqpoly()` is not that useful for that sort of comparison because the height is given by the count and the overall counts of `cut` in differ so much, making it hard to see the differences in the shapes of their distributions:
-
-```{r}
-#| fig-alt: >
-#|   Bar chart of cuts of diamonds showing large variability between the 
-#|   frequencies of various cuts. Fair diamonds have the lowest frequency, 
-#|   then Good, then Very Good, then Premium, and then Ideal.
-
-ggplot(diamonds, aes(x = cut)) + 
-  geom_bar()
-```
+The default appearance of `geom_freqpoly()` is not that useful for that sort of comparison because the height is given by the count and the overall counts of `cut` in differ so much, making it hard to see the differences in the shapes of their distributions.
 
 To make the comparison easier we need to swap what is displayed on the y-axis.
 Instead of displaying count, we'll display the **density**, which is the count standardized so that the area under each frequency polygon is one.
@@ -477,7 +440,7 @@ ggplot(mpg, aes(x = hwy, y = fct_reorder(class, hwy, median))) +
 
 1.  Use what you've learned to improve the visualization of the departure times of cancelled vs. non-cancelled flights.
 
-2.  What variable in the diamonds dataset is most important for predicting the price of a diamond?
+2.  Based on EDA, what variable in the diamonds dataset appears to be most important for predicting the price of a diamond?
     How is that variable correlated with cut?
     Why does the combination of those two relationships lead to lower quality diamonds being more expensive?
 
@@ -490,11 +453,11 @@ ggplot(mpg, aes(x = hwy, y = fct_reorder(class, hwy, median))) +
     What do you learn?
     How do you interpret the plots?
 
-5.  Create a visualization of diamond prices vs. a categorical variable from the `diamonds` dataset using `geom_violin()`, then a faceted `geom_histogram()`, and then a colored `geom_freqpoly()`.
-    Compare and contrast the three plots.
+5.  Create a visualization of diamond prices vs. a categorical variable from the `diamonds` dataset using `geom_violin()`, then a faceted `geom_histogram()`, then a colored `geom_freqpoly()`, and then a colored `geom_density()`.
+    Compare and contrast the four plots.
     What are the pros and cons of each method of visualizing the distribution of a numerical variable based on the levels of a categorical variable?
 
-6.  If you have a small dataset, it's sometimes useful to use `geom_jitter()` to see the relationship between a continuous and categorical variable.
+6.  If you have a small dataset, it's sometimes useful to use `geom_jitter()` to avoid overplotting to more easily see the relationship between a continuous and categorical variable.
     The ggbeeswarm package provides a number of methods similar to `geom_jitter()`.
     List them and briefly describe what each one does.
 
@@ -548,7 +511,7 @@ For larger plots, you might want to try the heatmaply package, which creates int
 
 1.  How could you rescale the count dataset above to more clearly show the distribution of cut within color, or color within cut?
 
-2.  How does the segmented bar chart change if color is mapped to the `x` aesthetic and `cut` is mapped to the `fill` aesthetic?
+2.  What different data insights do you get with a segmented bar chart if color is mapped to the `x` aesthetic and `cut` is mapped to the `fill` aesthetic?
     Calculate the counts that fall into each of the segments.
 
 3.  Use `geom_tile()` together with dplyr to explore how average flight departure delays vary by destination and month of year.
@@ -561,7 +524,8 @@ For larger plots, you might want to try the heatmaply package, which creates int
 
 You've already seen one great way to visualize the covariation between two numerical variables: draw a scatterplot with `geom_point()`.
 You can see covariation as a pattern in the points.
-For example, you can see an exponential relationship between the carat size and price of a diamond:
+For example, you can see a positive relationship between the carat size and price of a diamond: diamonds with more carats have a higher price.
+The relationship is exponential.
 
 ```{r}
 #| dev: "png"
@@ -575,7 +539,7 @@ ggplot(smaller, aes(x = carat, y = price)) +
 
 (In this section we'll use the `smaller` dataset to stay focused on the bulk of the diamonds that are smaller than 3 carats)
 
-Scatterplots become less useful as the size of your dataset grows, because points begin to overplot, and pile up into areas of uniform black (as above).
+Scatterplots become less useful as the size of your dataset grows, because points begin to overplot, and pile up into areas of uniform black, making it hard to see the trend.
 You've already seen one way to fix the problem: using the `alpha` aesthetic to add transparency.
 
 ```{r}
@@ -602,7 +566,6 @@ You will need to install the hexbin package to use `geom_hex()`.
 
 ```{r}
 #| layout-ncol: 2
-#| eval: false
 #| fig-alt: >
 #|   Plot 1: A binned density plot of price vs. carat. Plot 2: A hexagonal bin 
 #|   plot of price vs. carat. Both plots show that the highest density of 
@@ -675,7 +638,6 @@ One way to show that is to make the width of the boxplot proportional to the num
 
 ## Patterns and models
 
-Patterns in your data provide clues about relationships.
 If a systematic relationship exists between two variables it will appear as a pattern in the data.
 If you spot a pattern, ask yourself:
 
@@ -689,22 +651,7 @@ If you spot a pattern, ask yourself:
 
 -   Does the relationship change if you look at individual subgroups of the data?
 
-A scatterplot of Old Faithful eruption lengths versus the wait time between eruptions shows a pattern: longer wait times are associated with longer eruptions.
-The scatterplot also displays the two clusters that we noticed above.
-
-```{r}
-#| fig-height: 2
-#| fig-alt: >
-#|   A scatterplot of eruption time vs. waiting time to next eruption of the 
-#|   Old Faithful geyser. There are two clusters of points: one with low 
-#|   eruption times and short waiting times and one with long eruption times and 
-#|   long waiting times.
-
-ggplot(faithful, aes(x = eruptions, y = waiting)) + 
-  geom_point()
-```
-
-Patterns provide one of the most useful tools for data scientists because they reveal covariation.
+Patterns in your data provide clues about relationships, i.e., they reveal covariation.
 If you think of variation as a phenomenon that creates uncertainty, covariation is a phenomenon that reduces it.
 If two variables covary, you can use the values of one variable to make better predictions about the values of the second.
 If the covariation is due to a causal relationship (a special case), then you can use the value of one variable to control the value of the second.
