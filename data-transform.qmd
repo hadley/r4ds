@@ -10,7 +10,7 @@ status("complete")
 
 ## Introduction
 
-Visualization is an important tool for generating insight, but it's rare that you get the data in exactly the right form you need to visualize it.
+Visualization is an important tool for generating insight, but it's rare that you get the data in exactly the right form you need to make the graph you want.
 Often you'll need to create some new variables or summaries to answer your questions with your data, or maybe you just want to rename the variables or reorder the observations to make the data a little easier to work with.
 #TODO please consider stating somewhere briefly what the letters "dplyr" stand for.
 You'll learn how to do all that (and more!) in this chapter, which will introduce you to data transformation using the **dplyr** package and a new dataset on flights that departed New York City in 2013.
@@ -70,7 +70,7 @@ But before we discuss their individual differences, it's worth stating what they
 
 2.  The subsequent arguments typically describe which columns to operate on, using the variable names (without quotes).
 
-3.  The result is always a new data frame.
+3.  The output is always a new data frame.
 
 Because each verb does one thing well, solving complex problems will usually require combining multiple verbs, and we'll do so with the pipe, `|>`.
 #TODO broken ref
@@ -114,7 +114,7 @@ flights |>
 ```
 
 As well as `>` (greater than), you can use `>=` (greater than or equal to), `<` (less than), `<=` (less than or equal to), `==` (equal to), and `!=` (not equal to).
-You can also use `&` (and) or `|` (or) to combine multiple conditions:
+You can also combine conditions with `&` or `,` to indicate "and" (check for both conditions) or with `|` to indicate "or" (check for either condition):
 
 ```{r}
 # Flights that departed on January 1
@@ -183,8 +183,8 @@ flights |>
   arrange(year, month, day, dep_time)
 ```
 
-You can use `desc()` to re-order the data frame based a column, in descending order.
-For example, this code shows the most delayed flights first:
+You can use `desc()` on a column inside of `arrange()` to re-order the data frame based on that column in descending (big-to-small) order.
+For example, this code orders flights from most to least delayed:
 
 ```{r}
 flights |> 
@@ -199,16 +199,31 @@ Note that the number of rows has not changed -- we're only arranging the data, w
 Most of the time, however, you'll want the distinct combination of some variables, so you can also optionally supply column names:
 
 ```{r}
-# This would remove any duplicate rows if there were any
+# Remove duplicate rows, if any
 flights |> 
   distinct()
 
-# This finds all unique origin and destination pairs
+# Find all unique origin and destination pairs
 flights |> 
   distinct(origin, dest)
 ```
 
-Note that if you want to find the number of duplicates, or rows that weren't duplicated, you're better off swapping `distinct()` for `count()`, which will give the number of observations per unique level, and then filtering as needed.
+Alternatively, if you want to the keep other columns when filtering for unique rows, you can use the `.keep_all = TRUE` option.
+
+```{r}
+flights |> 
+  distinct(origin, dest, .keep_all = TRUE)
+```
+
+It's not a coincidence that all of these distinct flights are on January 1: `distinct()` will find the first occurrence of a unique row in the dataset and discard the rest.
+
+If you want to find the number of occurrences instead, you're better off swapping `distinct()` for `count()`, and with the `sort = TRUE` argument you can arrange them in descending order of number of occurrences.
+You'll learn more about count in @sec-counts.
+
+```{r}
+flights |>
+  count(origin, dest, sort = TRUE)
+```
 
 ### Exercises
 
@@ -284,7 +299,7 @@ flights |>
 ```
 
 Alternatively, you can control which variables are kept with the `.keep` argument.
-A particularly useful argument is `"used"` which allows you to keep only the inputs and outputs from your calculations.
+A particularly useful argument is `"used"` which specifies that we only keep the columns that were involved or created in the `mutate()` step.
 For example, the following output will contain only the variables `dep_delay`, `arr_delay`, `air_time`, `gain`, `hours`, and `gain_per_hour`.
 
 ```{r}
@@ -338,6 +353,8 @@ In this situation, the first challenge is often just focusing on the variables y
     flights |> 
       select(!year:day)
     ```
+
+    You can also use `-` instead of `!` (and you're likely to see that in the wild); we recommend `!` because it reads as "not", and combines well with `&` and `|`.
 
 -   Select all columns that are characters:
 
@@ -423,7 +440,7 @@ ggplot(flights, aes(x = air_time - airtime2)) + geom_histogram()
 
 2.  Brainstorm as many ways as possible to select `dep_time`, `dep_delay`, `arr_time`, and `arr_delay` from `flights`.
 
-3.  What happens if you specify the name of a variable multiple times in a `select()` call?
+3.  What happens if you specify the name of the same variable multiple times in a `select()` call?
 
 4.  What does the `any_of()` function do?
     Why might it be helpful in conjunction with this vector?
@@ -556,9 +573,9 @@ flights |>
   group_by(month)
 ```
 
-`group_by()` doesn't change the data but, if you look closely at the output, you'll notice that it's now "grouped by" month.
+`group_by()` doesn't change the data but, if you look closely at the output, you'll notice that the output indicates that it is "grouped by" month (`Groups: month [12]`).
 This means subsequent operations will now work "by month".
-`group_by()` doesn't do anything by itself; instead it changes the behavior of the subsequent verbs.
+`group_by()` adds this grouped feature (referred to as class) to the data frame, which changes the behavior of the subsequent verbs applied to the data.
 
 ### `summarize()` {#sec-summarize}
 
@@ -622,12 +639,17 @@ flights |>
   relocate(dest)
 ```
 
-This is similar to computing the max delay with `summarize()`, but you get the whole corresponding row instead of the single summary statistic.
+Note that there are 105 destinations but we get 108 rows here.
+What's up?
+`slice_min()` and `slice_max()` keep tied values so `n = 1` means give me all rows with the highest value.
+If you want exactly one row per group you can set `keep_ties = FALSE`.
+
+This is similar to computing the max delay with `summarize()`, but you get the whole corresponding row (or rows if there's a tie) instead of the single summary statistic.
 
 ### Grouping by multiple variables
 
 You can create groups using more than one variable.
-For example, we could make a group for each day.
+For example, we could make a group for each date.
 
 ```{r}
 daily <- flights |>  
@@ -680,6 +702,39 @@ daily |>
 ```
 
 You get a single row back because dplyr treats all the rows in an ungrouped data frame as belonging to one group.
+
+### `.by`
+
+dplyr 1.1.0 includes an new, experimental, syntax for per-operation grouping, the `.by` argument.
+`group_by()` and `ungroup()` aren't going away, but you can now also use the `.by` argument to group within a single operation:
+
+```{r}
+#| results: false
+flights |> 
+  summarize(
+    delay = mean(dep_delay, na.rm = TRUE), 
+    n = n(),
+    .by = month
+  )
+```
+
+Or if you want to group by multiple variables:
+
+```{r}
+#| results: false
+flights |> 
+  summarize(
+    delay = mean(dep_delay, na.rm = TRUE), 
+    n = n(),
+    .by = c(origin, dest)
+  )
+```
+
+`.by` works with all verbs and has the advantage that you don't need to use the `.groups` argument to suppress the grouping message or `ungroup()` when you're done.
+
+We didn't focus on this syntax in this chapter because it was very new when wrote the book.
+We did want to mention it because we think it has a lot of promise and it's likely to be quite popular.
+You can learn more about it in the [dplyr 1.1.0 blog post](https://www.tidyverse.org/blog/2023/02/dplyr-1-1-0-per-operation-grouping/).
 
 ### Exercises
 
@@ -796,7 +851,7 @@ When we plot the skill of the batter (measured by the batting average, `performa
 1.  The variation in `performance` is larger among players with fewer at-bats.
     The shape of this plot is very characteristic: whenever you plot a mean (or other summary statistics) vs. group size, you'll see that the variation decreases as the sample size increases[^data-transform-4].
 
-2.  There's a positive correlation between skill (`perf`) and opportunities to hit the ball (`n`) because teams want to give their best batters the most opportunities to hit the ball.
+2.  There's a positive correlation between skill (`performance`) and opportunities to hit the ball (`n`) because teams want to give their best batters the most opportunities to hit the ball.
 
 [^data-transform-4]: \*cough\* the law of large numbers \*cough\*.
 
@@ -820,7 +875,7 @@ Note the handy pattern for combining ggplot2 and dplyr.
 You just have to remember to switch from `|>`, for dataset processing, to `+` for adding layers to your plot.
 
 This also has important implications for ranking.
-If you naively sort on `desc(performance)`, the people with the best batting averages are clearly lucky, not skilled:
+If you naively sort on `desc(performance)`, the people with the best batting averages are clearly the ones who tried to put the ball in play very few times and happened to get a hit, they're not necessarily the most skilled players:
 
 ```{r}
 batters |> 
