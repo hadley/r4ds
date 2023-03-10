@@ -383,7 +383,7 @@ Note that `breaks` is in the original scale of the data.
 
 ```{r}
 #| layout-ncol: 2
-#| fig-width: 3
+#| fig-width: 4
 #| fig-alt: >
 #|   Two side-by-side box plots of price versus cut of diamonds. The outliers 
 #|   are transparent. On both plots the x-axis labels are formatted as dollars.
@@ -454,19 +454,23 @@ The theme setting `legend.position` controls where the legend is drawn:
 
 ```{r}
 #| layout-ncol: 2
-#| fig-width: 3
+#| fig-width: 4
 #| fig-alt: >
 #|   Four scatterplots of highway fuel efficiency versus engine size of cars 
 #|   where points are colored based on class of car. Clockwise, the legend 
-#|   is placed on the left, top, bottom, and right of the plot.
+#|   is placed on the right, left, top, and bottom of the plot.
 
 base <- ggplot(mpg, aes(x = displ, y = hwy)) +
   geom_point(aes(color = class))
 
-base + theme(legend.position = "left")
-base + theme(legend.position = "top")
-base + theme(legend.position = "bottom")
 base + theme(legend.position = "right") # the default
+base + theme(legend.position = "left")
+base + 
+  theme(legend.position = "top") +
+  guides(col = guide_legend(nrow = 3))
+base + 
+  theme(legend.position = "bottom") +
+  guides(col = guide_legend(nrow = 3))
 ```
 
 If your plot is short and wide, place the legend at the legend at the top or bottom, and if it's tall and narrow, place the legend at the left or right.
@@ -669,36 +673,59 @@ There are three ways to control the plot limits:
 2.  Setting the limits in each scale.
 3.  Setting `xlim` and `ylim` in `coord_cartesian()`.
 
-To zoom in on a region of the plot, it's generally best to use `coord_cartesian()`.
-Compare the following two plots:
+We'll demonstrate these options in a series of plots.
+The plot on the left shows the relationship between engine size and fuel efficiency, colored by type of drive train.
+The plot on the right shows the same variables, but subsets the data that are plotted.
+Subsetting the data has affected the x and y scales as well as the smooth curve.
 
 ```{r}
 #| layout-ncol: 2
-#| fig-width: 3
+#| fig-width: 4
 #| message: false
 
 # Left
 ggplot(mpg, aes(x = displ, y = hwy)) +
-  geom_point(aes(color = class)) +
-  geom_smooth() +
-  coord_cartesian(xlim = c(5, 6), ylim = c(10, 30))
+  geom_point(aes(color = drv)) +
+  geom_smooth()
 
 # Right
 mpg |>
-  filter(displ >= 5, displ <= 6, hwy >= 10, hwy <= 30) |>
+  filter(displ >= 5 & displ <= 6 & hwy >= 10 & hwy <= 25) |>
   ggplot(aes(x = displ, y = hwy)) +
-  geom_point(aes(color = class)) +
+  geom_point(aes(color = drv)) +
   geom_smooth()
 ```
 
-You can also set the `limits` on individual scales.
-Reducing the limits is basically equivalent to subsetting the data.
-It is generally more useful if you want to *expand* the limits, for example, to match scales across different plots.
+Let's compare these to the two plots below where the plot on the left sets the `limits` on individual scales and the plot on the right sets them in `coord_cartesian()`.
+We can see that reducing the limits is equivalent to subsetting the data.
+Therefore, to zoom in on a region of the plot, it's generally best to use `coord_cartesian()`.
+
+```{r}
+#| layout-ncol: 2
+#| fig-width: 4
+#| message: false
+#| warning: false
+
+# Left
+ggplot(mpg, aes(x = displ, y = hwy)) +
+  geom_point(aes(color = drv)) +
+  geom_smooth() +
+  scale_x_continuous(limits = c(5, 6)) +
+  scale_y_continuous(limits = c(10, 25))
+
+# Right
+ggplot(mpg, aes(x = displ, y = hwy)) +
+  geom_point(aes(color = drv)) +
+  geom_smooth() +
+  coord_cartesian(xlim = c(5, 6), ylim = c(10, 25))
+```
+
+On the other hand, setting the `limits` on individual scales is generally more useful if you want to *expand* the limits, e.g., to match scales across different plots.
 For example, if we extract two classes of cars and plot them separately, it's difficult to compare the plots because all three scales (the x-axis, the y-axis, and the color aesthetic) have different ranges.
 
 ```{r}
 #| layout-ncol: 2
-#| fig-width: 3
+#| fig-width: 4
 
 suv <- mpg |> filter(class == "suv")
 compact <- mpg |> filter(class == "compact")
@@ -716,7 +743,7 @@ One way to overcome this problem is to share scales across multiple plots, train
 
 ```{r}
 #| layout-ncol: 2
-#| fig-width: 3
+#| fig-width: 4
 
 x_scale <- scale_x_continuous(limits = range(mpg$displ))
 y_scale <- scale_y_continuous(limits = range(mpg$hwy))
@@ -768,14 +795,11 @@ In this particular case, you could have simply used faceting, but this technique
     d.  Adding informative plot labels.
     e.  Placing breaks every 4 years (this is trickier than it seems!).
 
-4.  Use `override.aes` to make the legend on the following plot easier to see.
+4.  First, create the following plot.
+    Then, modify the code using `override.aes` to make the legend easier to see.
 
     ```{r}
-    #| fig-format: "png"
-    #| out-width: "50%"
-    #| fig-alt: >
-    #|   Scatterplot of price versus carat of diamonds. The points are colored 
-    #|   by cut of the diamonds and they're very transparent.
+    #| fig-show: hide
 
     ggplot(diamonds, aes(x = carat, y = price)) +
       geom_point(aes(color = cut), alpha = 1/20)
@@ -840,13 +864,13 @@ A few other helpful `theme()` components are used to change the placement for fo
 #|   economy' with the caption pointing to the source of the data, fueleconomy.gov.
 #|   The caption and title are left justified, the legend is inside of the plot
 #|   with a black border.
-#|   
+
 ggplot(mpg, aes(x = displ, y = hwy, color = drv)) +
   geom_point() +
   labs(
     title = "Larger engine sizes tend to have lower fuel economy",
     caption = "Source: https://fueleconomy.gov."
-    ) +
+  ) +
   theme(
     legend.position = c(0.6, 0.7),
     legend.direction = "horizontal",
@@ -855,7 +879,7 @@ ggplot(mpg, aes(x = displ, y = hwy, color = drv)) +
     plot.title.position = "plot",
     plot.caption.position = "plot",
     plot.caption = element_text(hjust = 0)
-    )
+  )
 ```
 
 For an overview of all `theme()` components, see help with `?theme`.
@@ -878,6 +902,8 @@ Note that you first need to create the plots and save them as objects (in the fo
 Then, you place them next to each other with `+`.
 
 ```{r}
+#| fig-width: 6
+#| fig-asp: 0.5
 #| fig-alt: >
 #|   Two plots (a scatterplot of highway mileage versus engine size and a 
 #|   side-by-side boxplots of highway mileage versus drive train) placed next 
@@ -899,6 +925,8 @@ You can also create complex plot layouts with patchwork.
 In the following, `|` places the `p1` and `p3` next to each other and `/` moves `p2` to the next line.
 
 ```{r}
+#| fig-width: 6
+#| fig-asp: 0.8
 #| fig-alt: >
 #|   Three plots laid out such that first and third plot are next to each other 
 #|   and the second plot stretched beneath them. The first plot is a 
@@ -923,7 +951,8 @@ Finally, we have also customized the heights of the various components of our pa
 Patchwork divides up the area you have allotted for your plot using this scale and places the components accordingly.
 
 ```{r}
-#| fig-width: 10
+#| fig-width: 8
+#| fig-asp: 1
 #| fig-alt: >
 #|   Five plots laid out such that first two plots are next to each other. Plots 
 #|   three and four are underneath them. And the fifth plot stretches under them. 
@@ -975,7 +1004,7 @@ If you'd like to learn more about combining and layout out multiple plots with p
     Can you explain why this happens?
 
     ```{r}
-    #| results: hide
+    #| fig-show: hide
 
     p1 <- ggplot(mpg, aes(x = displ, y = hwy)) + 
       geom_point() + 
@@ -993,6 +1022,8 @@ If you'd like to learn more about combining and layout out multiple plots with p
 2.  Using the three plots from the previous exercise, recreate the following patchwork.
 
     ```{r}
+    #| fig-width: 7
+    #| fig-asp: 0.8
     #| echo: false
     #| fig-alt: >
     #|   Three plots: Plot 1 is a scatterplot of highway mileage versus engine size. 
