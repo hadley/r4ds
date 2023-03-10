@@ -494,35 +494,36 @@ This gives us the output that we're looking for.
 
 ### How does `pivot_wider()` work?
 
-To understand how `pivot_wider()` works, let's again start with a very simple dataset:
+To understand how `pivot_wider()` works, let's again start with a very simple dataset.
+This time we have two patients with `id`s A and B, we have three blood pressure measurements on patient A and two on patient B:
 
 ```{r}
 df <- tribble(
-  ~id, ~name, ~value,
-  "A", "x", 1,
-  "B", "y", 2,
-  "B", "x", 3, 
-  "A", "y", 4,
-  "A", "z", 5,
+  ~id, ~measurement, ~value,
+  "A",        "bp1",    100,
+  "B",        "bp1",    140,
+  "B",        "bp2",    115, 
+  "A",        "bp2",    120,
+  "A",        "bp3",    105
 )
 ```
 
-We'll take the values from the `value` column and the names from the `name` column:
+We'll take the values from the `value` column and the names from the `measurement` column:
 
 ```{r}
 df |> 
   pivot_wider(
-    names_from = name,
+    names_from = measurement,
     values_from = value
   )
 ```
 
 To begin the process `pivot_wider()` needs to first figure out what will go in the rows and columns.
-Finding the new column names is easy: it's just the unique values of `name`.
+The new column names will be the unique values of `measurement`.
 
 ```{r}
 df |> 
-  distinct(name) |> 
+  distinct(measurement) |> 
   pull()
 ```
 
@@ -532,7 +533,7 @@ Here there is only one column, but in general there can be any number.
 
 ```{r}
 df |> 
-  select(-name, -value) |> 
+  select(-measurement, -value) |> 
   distinct()
 ```
 
@@ -540,45 +541,46 @@ df |>
 
 ```{r}
 df |> 
-  select(-name, -value) |> 
+  select(-measurement, -value) |> 
   distinct() |> 
   mutate(x = NA, y = NA, z = NA)
 ```
 
 It then fills in all the missing values using the data in the input.
-In this case, not every cell in the output has corresponding value in the input as there's no entry for id "B" and name "z", so that cell remains missing.
+In this case, not every cell in the output has a corresponding value in the input as there's no third blood pressure measurement for patient B, so that cell remains missing.
 We'll come back to this idea that `pivot_wider()` can "make" missing values in @sec-missing-values.
 
 You might also wonder what happens if there are multiple rows in the input that correspond to one cell in the output.
-The example below has two rows that correspond to id "A" and name "x":
+The example below has two rows that correspond to id "A" and name "bp1":
 
 ```{r}
 df <- tribble(
-  ~id, ~name, ~value,
-  "A", "x", 1,
-  "A", "x", 2,
-  "A", "y", 3,
-  "B", "x", 4, 
-  "B", "y", 5, 
+  ~id, ~measurement, ~value,
+  "A",        "bp1",    100,
+  "A",        "bp1",    102,
+  "A",        "bp2",    120,
+  "B",        "bp1",    140, 
+  "B",        "bp2",    115
 )
 ```
 
 If we attempt to pivot this we get an output that contains list-columns, which you'll learn more about in @sec-rectangling:
 
 ```{r}
-df |> pivot_wider(
-  names_from = name,
-  values_from = value
-)
+df |>
+  pivot_wider(
+    names_from = measurement,
+    values_from = value
+  )
 ```
 
 Since you don't know how to work with this sort of data yet, you'll want to follow the hint in the warning to figure out where the problem is:
 
 ```{r}
 df |> 
-  group_by(id, name) |> 
+  group_by(id, measurement) |> 
   summarize(n = n(), .groups = "drop") |> 
-  filter(n > 1L) 
+  filter(n > 1)
 ```
 
 It's then up to you to figure out what's gone wrong with your data and either repair the underlying damage or use your grouping and summarizing skills to ensure that each combination of row and column values only has a single row.
