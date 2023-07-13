@@ -25,6 +25,7 @@ options(
 
 ggplot2::theme_set(ggplot2::theme_gray(12))
 
+# use results: "asis" when setting a status for a chapter
 status <- function(type) {
   status <- switch(type,
     polishing = "should be readable but is currently undergoing final polishing",
