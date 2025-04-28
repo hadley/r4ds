@@ -2,13 +2,34 @@ library(farver)
 library(dplyr, warn.conflicts = FALSE)
 
 oreilly <- tribble(
-  ~ name, ~r, ~g, ~b,
-  "blue", 0, 113, 188,
-  "orange", 247, 147, 30,
-  "red", 193, 39, 45,
-  "green", 0, 146, 68,
-  "yellow", 255, 222, 0,
-  "purple", 153, 0, 204
+  ~name,
+  ~r,
+  ~g,
+  ~b,
+  "blue",
+  0,
+  113,
+  188,
+  "orange",
+  247,
+  147,
+  30,
+  "red",
+  193,
+  39,
+  45,
+  "green",
+  0,
+  146,
+  68,
+  "yellow",
+  255,
+  222,
+  0,
+  "purple",
+  153,
+  0,
+  204
 )
 oreilly$col <- encode_colour(oreilly[c("r", "g", "b")])
 
@@ -18,7 +39,7 @@ tint <- function(col, tint) {
   white_Lab <- decode_colour(white, to = "Lab")
 
   encode_colour(
-    col_Lab[rep(1,n), ] * tint + white_Lab[rep(1,n), ] * (1 - tint),
+    col_Lab[rep(1, n), ] * tint + white_Lab[rep(1, n), ] * (1 - tint),
     from = "Lab"
   )
 }
