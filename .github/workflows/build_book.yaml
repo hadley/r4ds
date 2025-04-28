@@ -7,16 +7,16 @@ on:
   workflow_dispatch:
   schedule:
     # run every day at 11 PM
-    - cron: '0 23 * * *'
+    - cron: "0 23 * * *"
 
-name: Render and deploy Book to Netlify
+name: build_book.yaml
 
 env:
   isExtPR: ${{ github.event.pull_request.head.repo.fork == true }}
   RUST_BACKTRACE: 1
 
 jobs:
-  build-deploy:
+  build:
     runs-on: ubuntu-latest
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
@@ -42,19 +42,25 @@ jobs:
         run: |
           quarto render
 
-      - name: Deploy to Netlify
-        if: contains(env.isExtPR, 'false')
-        id: netlify-deploy
-        uses: nwtgck/actions-netlify@v1.1
+      - name: Upload website artifact
+        if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' }}
+        uses: actions/upload-pages-artifact@v3
         with:
-          publish-dir: './_book'
-          production-branch: main
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          deploy-message:
-            'Deploy from GHA: ${{ github.event.pull_request.title || github.event.head_commit.message }} (${{ github.sha }})'
-          enable-pull-request-comment: false
-          enable-commit-comment: false
-        env:
-          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
-          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID_2E }}
-        timeout-minutes: 1
+          path: "_book"
+
+  deploy:
+    needs: build
+
+    permissions:
+      pages: write # to deploy to Pages
+      id-token: write # to verify the deployment originates from an appropriate source
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,5 +1,6 @@
 library(tidyverse)
-contribs_all_json <- gh::gh("/repos/:owner/:repo/contributors",
+contribs_all_json <- gh::gh(
+  "/repos/:owner/:repo/contributors",
   owner = "hadley",
   repo = "r4ds",
   .limit = Inf
