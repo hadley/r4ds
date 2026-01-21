@@ -17,6 +17,11 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+
+    # R paketlerinin kurulacağı tek bir ortak kütüphane klasörü
+    env:
+      R_LIBS_USER: ${{ runner.temp }}/R/library
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -27,9 +32,25 @@ jobs:
       - name: Setup R
         uses: r-lib/actions/setup-r@v2
 
-      - name: Install R packages
+      - name: Prepare R library dir
         run: |
-          Rscript -e 'options(repos = c(CRAN = "https://cloud.r-project.org")); install.packages(c("tidyverse","palmerpenguins","ggrepel","gapminder","knitr","rmarkdown"))'
+          mkdir -p "${R_LIBS_USER}"
+
+      # renv varsa restore, yoksa tidyverse + gerekenler
+      - name: Install/Restore R packages
+        run: |
+          set -e
+          if [ -f renv.lock ]; then
+            Rscript -e 'options(repos=c(CRAN="https://cloud.r-project.org")); install.packages("renv", lib=Sys.getenv("R_LIBS_USER"))'
+            Rscript -e 'renv::restore(prompt = FALSE)'
+          else
+            Rscript -e 'options(repos=c(CRAN="https://cloud.r-project.org")); install.packages(c("tidyverse","palmerpenguins","ggrepel","gapminder","knitr","rmarkdown"), lib=Sys.getenv("R_LIBS_USER"))'
+          fi
+
+      # Debug: tidyverse gerçekten var mı?
+      - name: Verify tidyverse
+        run: |
+          Rscript -e 'cat("LIBPATHS:\n"); print(.libPaths()); library(tidyverse); packageVersion("tidyverse")'
 
       - name: Render book
         run: |
