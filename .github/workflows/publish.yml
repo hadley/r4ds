@@ -1,9 +1,8 @@
-name: Quarto Book → GitHub Pages
+name: Build & Deploy Quarto Book to GitHub Pages
 
 on:
   push:
-    branches:
-      - translate-tr
+    branches: [ translate-tr ]
   workflow_dispatch:
 
 permissions:
@@ -12,12 +11,16 @@ permissions:
   id-token: write
 
 concurrency:
-  group: "pages"
+  group: pages
   cancel-in-progress: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      R_LIBS_USER: $HOME/R/library
+      R_REPO: https://cloud.r-project.org
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -28,15 +31,27 @@ jobs:
       - name: Setup R
         uses: r-lib/actions/setup-r@v2
 
-      - name: Install R packages
+      - name: Create R library folder
         run: |
-          Rscript -e 'install.packages(
-            c("tidyverse","rmarkdown","knitr","palmerpenguins","ggrepel","gapminder"),
-            repos="https://cloud.r-project.org"
-          )'
+          mkdir -p "$HOME/R/library"
+
+      - name: Install/Restore R packages
+        run: |
+          set -e
+          if [ -f renv.lock ]; then
+            Rscript -e 'options(repos=c(CRAN=Sys.getenv("R_REPO"))); install.packages("renv", lib=Sys.getenv("R_LIBS_USER"))'
+            Rscript -e 'renv::restore(prompt = FALSE)'
+          else
+            Rscript -e 'options(repos=c(CRAN=Sys.getenv("R_REPO"))); install.packages(c("tidyverse","palmerpenguins","ggrepel","gapminder","knitr","rmarkdown"), lib=Sys.getenv("R_LIBS_USER"))'
+          fi
+
+      - name: Verify tidyverse is available
+        run: |
+          Rscript -e 'cat("LIBPATHS:\n"); print(.libPaths()); library(tidyverse); cat("tidyverse:", as.character(packageVersion("tidyverse")), "\n")'
 
       - name: Render book
-        run: quarto render
+        run: |
+          quarto render
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
