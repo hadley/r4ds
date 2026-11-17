@@ -24,6 +24,11 @@ options(
 )
 
 ggplot2::theme_set(ggplot2::theme_gray(12))
+ggplot2::theme_update(
+  panel.background = ggplot2::element_rect(
+    fill = rgb(207, 207, 207, maxColorValue = 255)
+  )
+)
 
 # use results: "asis" when setting a status for a chapter
 status <- function(type) {
